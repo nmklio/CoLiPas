@@ -188,6 +188,33 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
     }
   }, [auditEntries, focusTraceId, onTraceFilterChange, onTraceFocused]);
 
+  useEffect(() => {
+    if (!activeTraceId || auditEntries.some((entry) => entry.correlationId === activeTraceId)) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    let attempts = 0;
+    let timeoutId: number | undefined;
+
+    const refreshMissingTrace = async () => {
+      attempts += 1;
+      await refreshSecurityData().catch(() => undefined);
+      if (!cancelled && attempts < 4) {
+        timeoutId = window.setTimeout(refreshMissingTrace, 650);
+      }
+    };
+
+    timeoutId = window.setTimeout(refreshMissingTrace, 350);
+
+    return () => {
+      cancelled = true;
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [activeTraceId, auditEntries]);
+
   async function refreshSecurityData() {
     setLoading(true);
     setLoadError('');
