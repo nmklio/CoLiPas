@@ -1042,7 +1042,7 @@ function buildOperationAuditTrace(
   locale: string,
 ): OperationAuditTrace | null {
   const action = selectedAudit.action.toUpperCase();
-  if (action !== 'OPERATIONS_PREFLIGHT' && action !== 'OPERATIONS_TASK') {
+  if (!isCorrelatableAuditAction(action)) {
     return null;
   }
 
@@ -1105,13 +1105,13 @@ function getRelatedOperationAuditEntries(
 ) {
   if (selectedAudit.correlationId) {
     return auditEntries.filter((entry) => (
-      (entry.action === 'OPERATIONS_PREFLIGHT' || entry.action === 'OPERATIONS_TASK')
+      isCorrelatableAuditAction(entry.action.toUpperCase())
       && entry.correlationId === selectedAudit.correlationId
     ));
   }
 
   return auditEntries
-    .filter((entry) => entry.action === 'OPERATIONS_PREFLIGHT' || entry.action === 'OPERATIONS_TASK')
+    .filter((entry) => isCorrelatableAuditAction(entry.action.toUpperCase()))
     .filter((entry) => {
       const entryTime = new Date(entry.createdAt).getTime();
       if (Number.isNaN(entryTime) || Math.abs(entryTime - selectedTime) > 15 * 60 * 1000) {
@@ -1144,6 +1144,15 @@ function getOperationAuditSignature(entry: AuditEntry) {
   return { taskType, targetKey };
 }
 
+function isCorrelatableAuditAction(action: string) {
+  return (
+    action === 'OPERATIONS_PREFLIGHT'
+    || action === 'OPERATIONS_TASK'
+    || action === 'SERVER_ACTION'
+    || action === 'SERVER_SSH_COMMAND'
+  );
+}
+
 function normalizeAuditTarget(target: string) {
   return target
     .split(',')
@@ -1165,7 +1174,7 @@ function formatAuditDuration(start: number, end: number, locale: string) {
 }
 
 function shortenOperationCorrelationId(value: string) {
-  return value.replace(/^ops-trace-/, '').slice(0, 8);
+  return value.replace(/^(ops|srv)-trace-/, '').slice(0, 8);
 }
 
 function formatAuditTime(value: string, locale: string) {

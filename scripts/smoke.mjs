@@ -1260,7 +1260,11 @@ if (!commandResponse.ok) {
   throw new Error(`/api/servers/commands returned HTTP ${commandResponse.status}`);
 }
 const commandBody = await commandResponse.json();
-if (commandBody.serverId !== connectedServer.id || !commandBody.output?.includes('simulated$ uptime')) {
+if (
+  commandBody.serverId !== connectedServer.id
+  || !commandBody.output?.includes('simulated$ uptime')
+  || !/^srv-trace-[a-f0-9-]{36}$/.test(commandBody.correlationId)
+) {
   throw new Error('/api/servers/commands returned unexpected payload');
 }
 console.log('ok /api/servers/commands');
@@ -1330,7 +1334,7 @@ if (shellResponse.status !== 201) {
   throw new Error(`/api/servers/shells returned HTTP ${shellResponse.status}`);
 }
 const shellBody = await shellResponse.json();
-if (shellBody.serverId !== connectedServer.id || !shellBody.sessionId) {
+if (shellBody.serverId !== connectedServer.id || !shellBody.sessionId || !/^srv-trace-[a-f0-9-]{36}$/.test(shellBody.correlationId)) {
   throw new Error('/api/servers/shells returned unexpected payload');
 }
 const shellWriteResponse = await fetch(`${baseUrl}/api/servers/shells/${shellBody.sessionId}/input`, {
@@ -1374,7 +1378,12 @@ if (actionResponse.status !== 202) {
   throw new Error(`/api/servers/actions returned HTTP ${actionResponse.status}`);
 }
 const actionBody = await actionResponse.json();
-if (actionBody.status !== 'executed' || actionBody.serverId !== connectedServer.id || actionBody.action !== 'reboot') {
+if (
+  actionBody.status !== 'executed'
+  || actionBody.serverId !== connectedServer.id
+  || actionBody.action !== 'reboot'
+  || !/^srv-trace-[a-f0-9-]{36}$/.test(actionBody.correlationId)
+) {
   throw new Error('/api/servers/actions returned unexpected payload');
 }
 console.log('ok /api/servers/actions');
@@ -1786,6 +1795,23 @@ if (
   || !sensitiveSshAuditEntry.detail.includes('[redacted]')
 ) {
   throw new Error('/api/audit/events leaked sensitive SSH command detail');
+}
+const commandAuditEntry = auditBody.items.find((item) => (
+  item.action === 'SERVER_SSH_COMMAND'
+  && item.detail?.includes('SSH command executed')
+  && item.detail?.includes('uptime')
+  && item.target === connectedServer.id
+));
+if (!commandAuditEntry || commandAuditEntry.correlationId !== commandBody.correlationId) {
+  throw new Error('/api/audit/events did not preserve server SSH command correlation ID');
+}
+const shellAuditEntry = auditBody.items.find((item) => item.action === 'SERVER_SSH_COMMAND' && item.detail?.includes('SSH shell opened') && item.target === connectedServer.id);
+if (!shellAuditEntry || shellAuditEntry.correlationId !== shellBody.correlationId) {
+  throw new Error('/api/audit/events did not preserve SSH shell correlation ID');
+}
+const actionAuditEntry = auditBody.items.find((item) => item.action === 'SERVER_ACTION' && item.correlationId === actionBody.correlationId);
+if (!actionAuditEntry || actionAuditEntry.correlationId !== actionBody.correlationId) {
+  throw new Error('/api/audit/events did not preserve server action correlation ID');
 }
 const auditPayload = JSON.stringify(auditBody);
 if (auditPayload.includes(smokePrivateKeyMarker) || auditPayload.includes(smokePrivateKeyPassphrase)) {
@@ -3140,8 +3166,11 @@ function assertSecurityAuditRelationsAreSpecific() {
     'selectedOperationTrace',
     'buildOperationAuditTrace(selectedAudit, auditEntries, copy, locale)',
     'function buildOperationAuditTrace(',
-    "action !== 'OPERATIONS_PREFLIGHT' && action !== 'OPERATIONS_TASK'",
+    'if (!isCorrelatableAuditAction(action))',
     'getRelatedOperationAuditEntries(selectedAudit, auditEntries, selectedTime, selectedSignature)',
+    'isCorrelatableAuditAction(entry.action.toUpperCase())',
+    "action === 'SERVER_ACTION'",
+    "action === 'SERVER_SSH_COMMAND'",
     'entry.correlationId === selectedAudit.correlationId',
     'shortenOperationCorrelationId(selectedAudit.correlationId)',
     'operationTraceCorrelation',
@@ -3261,6 +3290,8 @@ function assertSecurityAuditRelationsAreSpecific() {
 function assertOperationsTargetSelectionGuards() {
   const operationsSource = fs.readFileSync(new URL('../src/modules/operations/OperationsCenter.tsx', import.meta.url), 'utf8');
   const serviceSource = fs.readFileSync(new URL('../src/server/services/operationsService.ts', import.meta.url), 'utf8');
+  const inventorySource = fs.readFileSync(new URL('../src/server/services/inventoryService.ts', import.meta.url), 'utf8');
+  const serverActionsSource = fs.readFileSync(new URL('../src/server/services/serverActions.ts', import.meta.url), 'utf8');
   const auditServiceSource = fs.readFileSync(new URL('../src/server/services/auditService.ts', import.meta.url), 'utf8');
   const appSource = fs.readFileSync(new URL('../src/server/app.ts', import.meta.url), 'utf8');
   const apiClientSource = fs.readFileSync(new URL('../src/services/apiClient.ts', import.meta.url), 'utf8');
@@ -3325,6 +3356,20 @@ function assertOperationsTargetSelectionGuards() {
   }
   if (!auditServiceSource.includes('correlationId?: string')) {
     throw new Error('Audit entries must preserve optional operation correlation IDs');
+  }
+
+  const serverCorrelationRequired = [
+    'export function buildServerAuditCorrelationId()',
+    "return `srv-trace-${crypto.randomUUID()}`",
+    'correlationId: serverAuditCorrelationSchema',
+    'const correlationId = parsed.correlationId || buildServerAuditCorrelationId()',
+    "z.string().trim().regex(/^srv-trace-[a-f0-9-]{36}$/).optional()",
+    'correlationId,',
+  ];
+  const serverCorrelationCombined = `${inventorySource}\n${serverActionsSource}`;
+  const missingServerCorrelation = serverCorrelationRequired.filter((fragment) => !serverCorrelationCombined.includes(fragment));
+  if (missingServerCorrelation.length) {
+    throw new Error(`Server action/SSH audit correlation is incomplete: ${missingServerCorrelation.join(', ')}`);
   }
 
   const preflightRouteRequired = [

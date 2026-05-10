@@ -33,6 +33,7 @@ const dataDir = process.env.COLIPAS_DATA_DIR || '.data';
 const inventoryPath = path.resolve(process.cwd(), dataDir, 'inventory.json');
 const credentialsPath = path.resolve(process.cwd(), dataDir, 'credentials.json');
 const persistedCredentials = new Map<string, StoredSshCredential>();
+const serverAuditCorrelationSchema = z.string().trim().regex(/^srv-trace-[a-f0-9-]{36}$/).optional();
 
 function normalizeFilter<T extends string>(value: unknown, allowed: readonly T[], fallback: T) {
   if (typeof value !== 'string') {
@@ -299,7 +300,9 @@ export async function runServerCommand(input: unknown) {
   const parsed = z.object({
     serverId: z.string().min(1),
     command: z.string().trim().min(1).max(2000),
+    correlationId: serverAuditCorrelationSchema,
   }).parse(input);
+  const correlationId = parsed.correlationId || buildServerAuditCorrelationId();
   const { server, credential } = getConnectedServerCredential(parsed.serverId, 'SERVER_SSH_COMMAND');
   const result = await runStoredSshCommand(credential, parsed.command, server.ssh.verifyMode);
 
@@ -309,11 +312,13 @@ export async function runServerCommand(input: unknown) {
     target: server.id,
     status: 'success',
     detail: `SSH command executed on ${server.name}: ${summarizeAuditCommand(parsed.command)}`,
+    correlationId,
   });
 
   return {
     serverId: server.id,
     serverName: server.name,
+    correlationId,
     ...result,
   };
 }
@@ -326,7 +331,9 @@ export async function streamServerCommand(
   const parsed = z.object({
     serverId: z.string().min(1),
     command: z.string().trim().min(1).max(2000),
+    correlationId: serverAuditCorrelationSchema,
   }).parse(input);
+  const correlationId = parsed.correlationId || buildServerAuditCorrelationId();
   const { server, credential } = getConnectedServerCredential(parsed.serverId, 'SERVER_SSH_COMMAND');
   const result = await streamStoredSshCommand(credential, parsed.command, server.ssh.verifyMode, onEvent, options);
 
@@ -336,11 +343,13 @@ export async function streamServerCommand(
     target: server.id,
     status: 'success',
     detail: `SSH command streamed on ${server.name}: ${summarizeAuditCommand(parsed.command)}`,
+    correlationId,
   });
 
   return {
     serverId: server.id,
     serverName: server.name,
+    correlationId,
     ...result,
   };
 }
@@ -350,7 +359,9 @@ export async function openServerShell(input: unknown) {
     serverId: z.string().min(1),
     cols: z.number().int().min(40).max(240).optional(),
     rows: z.number().int().min(12).max(80).optional(),
+    correlationId: serverAuditCorrelationSchema,
   }).parse(input);
+  const correlationId = parsed.correlationId || buildServerAuditCorrelationId();
   const { server, credential } = getConnectedServerCredential(parsed.serverId, 'SERVER_SSH_COMMAND');
   const result = await openStoredSshShell(credential, server.ssh.verifyMode, {
     cols: parsed.cols,
@@ -363,11 +374,13 @@ export async function openServerShell(input: unknown) {
     target: server.id,
     status: 'success',
     detail: `SSH shell opened on ${server.name}`,
+    correlationId,
   });
 
   return {
     serverId: server.id,
     serverName: server.name,
+    correlationId,
     ...result,
   };
 }
@@ -457,6 +470,10 @@ export function getConnectedServerCredential(serverId: string, auditAction: 'SER
 
 function summarizeAuditCommand(command: string) {
   return redactSensitiveText(command).replace(/\s+/g, ' ').slice(0, 160);
+}
+
+export function buildServerAuditCorrelationId() {
+  return `srv-trace-${crypto.randomUUID()}`;
 }
 
 loadPersistedCredentials();

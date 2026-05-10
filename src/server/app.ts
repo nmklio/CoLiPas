@@ -449,6 +449,7 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
         target: request.body?.serverId ?? 'unknown',
         status: 'failed',
         detail: error instanceof Error ? error.message : 'SSH stream command failed',
+        correlationId: typeof request.body?.correlationId === 'string' ? request.body.correlationId : undefined,
       });
 
       if (streamStarted && !response.writableEnded) {

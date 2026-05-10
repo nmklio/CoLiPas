@@ -780,7 +780,7 @@ function createPendingTask(
   const copy = copyByLanguage[language] ?? copyByLanguage.zh;
   return {
     id: `pending-${Date.now()}`,
-    correlationId: `pending-${Date.now()}`,
+    correlationId: `srv-trace-00000000-0000-4000-8000-${String(Date.now()).padStart(12, '0').slice(-12)}`,
     type,
     targetMode,
     status: 'running',

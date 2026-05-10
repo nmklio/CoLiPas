@@ -88,6 +88,8 @@ export type OperationTaskTargetMode = 'allServers' | 'allConnected' | 'selected'
 
 export type OperationTaskStatus = 'queued' | 'running' | 'completed' | 'partial' | 'failed';
 
+export type AuditCorrelationId = string;
+
 export interface OperationTaskRequest {
   type: OperationTaskType;
   targetMode: OperationTaskTargetMode;
@@ -95,7 +97,7 @@ export interface OperationTaskRequest {
   command?: string;
   reason?: string;
   confirmed?: boolean;
-  correlationId?: string;
+  correlationId?: AuditCorrelationId;
 }
 
 export interface OperationTaskPreflightIssue {
@@ -128,7 +130,7 @@ export interface OperationTaskPreflightTarget {
 
 export interface OperationTaskPreflightResponse {
   ok: boolean;
-  correlationId: string;
+  correlationId: AuditCorrelationId;
   type: OperationTaskType;
   targetMode: OperationTaskTargetMode;
   requiresSsh: boolean;
@@ -165,7 +167,7 @@ export interface OperationTaskTargetResult {
 
 export interface OperationTaskResponse {
   id: string;
-  correlationId: string;
+  correlationId: AuditCorrelationId;
   type: OperationTaskType;
   targetMode: OperationTaskTargetMode;
   status: OperationTaskStatus;

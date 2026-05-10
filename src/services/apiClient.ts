@@ -1,6 +1,7 @@
 import { cloudAccounts, operationEvents, servers } from '../data/mockData';
 import {
   AIProviderConfig,
+  AuditCorrelationId,
   CloudProvider,
   CustomApiConfig,
   OperationEvent,
@@ -112,6 +113,7 @@ export interface ServerDiagnosticResponse {
 export interface ServerCommandResponse {
   serverId: string;
   serverName: string;
+  correlationId: AuditCorrelationId;
   command: string;
   output: string;
   executedAt: string;
@@ -130,6 +132,7 @@ export interface ServerCommandStreamEvent {
 export interface ServerShellResponse {
   serverId: string;
   serverName: string;
+  correlationId: AuditCorrelationId;
   sessionId: string;
   mode: SshVerifyMode;
   connectedAt: string;
@@ -149,6 +152,9 @@ export interface ServerActionResponse extends ServerCommandResponse {
   action: 'powerOn' | 'shutdown' | 'reboot';
   status: 'dry-run' | 'executed';
   reason: string;
+  command: string;
+  output: string;
+  executedAt: string;
 }
 
 export interface ServerIdentityResponse {
@@ -621,12 +627,13 @@ export async function executeServerAction(
   action: ServerActionResponse['action'],
   reason: string,
   confirmed = false,
+  correlationId?: AuditCorrelationId,
   fetcher: typeof fetch = fetch,
 ) {
   const response = await fetcher('/api/servers/actions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ serverId, action, reason, confirmed }),
+    body: JSON.stringify({ serverId, action, reason, confirmed, correlationId }),
   });
 
   if (!response.ok) {
@@ -636,11 +643,11 @@ export async function executeServerAction(
   return (await response.json()) as ServerActionResponse;
 }
 
-export async function runServerCommand(serverId: string, command: string, fetcher: typeof fetch = fetch) {
+export async function runServerCommand(serverId: string, command: string, fetcher: typeof fetch = fetch, correlationId?: AuditCorrelationId) {
   const response = await fetcher('/api/servers/commands', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ serverId, command }),
+    body: JSON.stringify({ serverId, command, correlationId }),
   });
 
   if (!response.ok) {
@@ -654,13 +661,13 @@ export async function streamServerCommand(
   serverId: string,
   command: string,
   onEvent: (event: ServerCommandStreamEvent) => void,
-  options: { signal?: AbortSignal; fetcher?: typeof fetch } = {},
+  options: { signal?: AbortSignal; fetcher?: typeof fetch; correlationId?: AuditCorrelationId } = {},
 ): Promise<ServerCommandResponse | null> {
   const fetcher = options.fetcher ?? fetch;
   const response = await fetcher('/api/servers/commands/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ serverId, command }),
+    body: JSON.stringify({ serverId, command, correlationId: options.correlationId }),
     signal: options.signal,
   });
 
@@ -730,11 +737,12 @@ export async function openServerShell(
   serverId: string,
   dimensions: { cols?: number; rows?: number } = {},
   fetcher: typeof fetch = fetch,
+  correlationId?: AuditCorrelationId,
 ) {
   const response = await fetcher('/api/servers/shells', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ serverId, ...dimensions }),
+    body: JSON.stringify({ serverId, ...dimensions, correlationId }),
   });
 
   if (!response.ok) {

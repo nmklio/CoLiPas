@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { z } from 'zod';
 import { HttpError } from '../httpErrors.js';
 import { recordAudit } from './auditService.js';
-import { getConnectedServerCredential, setServerRuntimeStatus } from './inventoryService.js';
+import { buildServerAuditCorrelationId, getConnectedServerCredential, setServerRuntimeStatus } from './inventoryService.js';
 import { runStoredSshCommand } from './sshAccessService.js';
 
 const actionSchema = z.object({
@@ -11,6 +11,7 @@ const actionSchema = z.object({
   reason: z.string().min(4).max(300),
   dryRun: z.boolean().optional().default(false),
   confirmed: z.boolean().optional().default(false),
+  correlationId: z.string().trim().regex(/^srv-trace-[a-f0-9-]{36}$/).optional(),
 });
 
 const actionCommands: Record<'powerOn' | 'shutdown' | 'reboot', string> = {
@@ -21,7 +22,9 @@ const actionCommands: Record<'powerOn' | 'shutdown' | 'reboot', string> = {
 
 export async function executeServerAction(input: unknown) {
   const parsed = actionSchema.parse(input);
+  const correlationId = parsed.correlationId || buildServerAuditCorrelationId();
   const isDangerousAction = parsed.action === 'shutdown' || parsed.action === 'reboot';
+  const command = actionCommands[parsed.action];
   if (parsed.dryRun) {
     const { server } = getConnectedServerCredential(parsed.serverId, 'SERVER_ACTION');
     const task = {
@@ -31,6 +34,9 @@ export async function executeServerAction(input: unknown) {
       action: parsed.action,
       status: 'dry-run',
       reason: parsed.reason,
+      command,
+      output: `Dry-run accepted: ${parsed.action} would run on ${server.name}`,
+      executedAt: new Date().toISOString(),
     };
 
     recordAudit({
@@ -39,9 +45,10 @@ export async function executeServerAction(input: unknown) {
       target: server.id,
       status: 'success',
       detail: `Dry-run ${parsed.action} accepted for ${server.name}`,
+      correlationId,
     });
 
-    return task;
+    return { ...task, correlationId };
   }
 
   const { server, credential } = getConnectedServerCredential(parsed.serverId, 'SERVER_ACTION');
@@ -52,11 +59,11 @@ export async function executeServerAction(input: unknown) {
       target: server.id,
       status: 'blocked',
       detail: `Blocked ${parsed.action} for ${server.name}: missing operator confirmation`,
+      correlationId,
     });
     throw new HttpError(409, `Operator confirmation is required before ${parsed.action}`, 'SERVER_ACTION_CONFIRMATION_REQUIRED');
   }
 
-  const command = actionCommands[parsed.action];
   const commandResult = await runStoredSshCommand(credential, command, server.ssh.verifyMode);
   const nextStatus = parsed.action === 'shutdown' ? 'stopped' : 'running';
   setServerRuntimeStatus(server.id, nextStatus);
@@ -70,6 +77,7 @@ export async function executeServerAction(input: unknown) {
     reason: parsed.reason,
     command,
     output: commandResult.output,
+    executedAt: commandResult.executedAt,
     serverStatus: nextStatus,
   };
 
@@ -79,7 +87,8 @@ export async function executeServerAction(input: unknown) {
     target: server.id,
     status: 'success',
     detail: `Executed ${parsed.action} for ${server.name}`,
+    correlationId,
   });
 
-  return task;
+  return { ...task, correlationId };
 }
