@@ -25,6 +25,7 @@ assertOperationsTargetSelectionGuards();
 assertCustomApiProxySecurityGuards();
 assertSqlitePersistenceGuards();
 assertBuildChunkingGuards();
+assertRepositoryPreviewAssetGuards();
 
 const unauthenticatedOverviewResponse = await fetch(`${baseUrl}/api/overview`);
 if (unauthenticatedOverviewResponse.status !== 401) {
@@ -1963,6 +1964,25 @@ function assertBuildChunkingGuards() {
   }
 
   console.log('ok production build splits React, map, and icon vendors');
+}
+
+function assertRepositoryPreviewAssetGuards() {
+  const readmeSource = fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+  const githubPreviewUrl = new URL('../.github/assets/colipas-dashboard-preview.svg', import.meta.url);
+  const publicPreviewUrl = new URL('../public/colipas-dashboard-preview.svg', import.meta.url);
+  const previewSource = fs.readFileSync(githubPreviewUrl, 'utf8');
+
+  if (!readmeSource.includes('.github/assets/colipas-dashboard-preview.svg')) {
+    throw new Error('README preview image must point to .github/assets, not deployed public assets');
+  }
+  if (readmeSource.includes('public/colipas-dashboard-preview.svg') || fs.existsSync(publicPreviewUrl)) {
+    throw new Error('Repository preview image must not be copied into the production public directory');
+  }
+  if (!previewSource.includes('PUBLIC PREVIEW') || !previewSource.includes('deployment opens login console only')) {
+    throw new Error('Repository preview image must clearly describe sanitized public preview and deployment behavior');
+  }
+
+  console.log('ok repository preview asset stays outside deployed public assets');
 }
 
 function assertOverviewMapInteractionGuards() {

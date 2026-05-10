@@ -27,7 +27,7 @@
   <a href="#project-layout">Project layout</a>
 </p>
 
-<img src="public/colipas-dashboard-preview.svg" alt="CoLiPas sanitized multi-region dashboard preview" width="980" />
+<img src=".github/assets/colipas-dashboard-preview.svg" alt="CoLiPas sanitized multi-region dashboard preview" width="980" />
 
 <sub>The preview image uses fictional providers and RFC 5737 documentation IP ranges only. It does not contain user servers, real IP addresses, SSH credentials, or runtime data.</sub>
 
@@ -53,7 +53,7 @@ CoLiPas is designed for teams that manage a mix of public cloud, private cloud, 
 | Workflow automation | Targeted operation tasks for asset sync, health checks, patching, backup verification, and SSH-connected server workflows. |
 | Custom API lab | Allowlisted backend proxy for testing provider APIs without exposing browser-side secrets or private network targets. |
 | Security audit | Auth events, blocked API calls, SSH actions, remediation flows, risk relation cards, and audit trail persistence. |
-| Operator experience | Login page, editable profile/avatar, password change, Chinese/English/Japanese language switch, responsive dashboard, and marketing entry page. |
+| Operator experience | Login page, editable profile/avatar, password change, Chinese/English/Japanese language switch, and responsive authenticated dashboard. |
 
 ## Highlights
 
@@ -179,7 +179,7 @@ Before internet exposure, replace all default secrets, restrict `CORS_ORIGIN`, p
 
 ```text
 src/
-  app/                  React shell, login, and marketing page
+  app/                  React shell, login, and authenticated console entry
   modules/
     ai/                 Streaming AI operations console
     cloud/              Cloud account cards and sync state
@@ -193,7 +193,8 @@ src/
   shared/               Shared validation and prompt helpers
 deploy/                 systemd and nginx examples
 scripts/                Smoke and production verification scripts
-public/                 Repository preview assets
+.github/assets/         Repository preview assets for GitHub only
+public/                 Static files copied into production builds
 ```
 
 ## Verification
