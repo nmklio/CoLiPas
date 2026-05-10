@@ -3388,6 +3388,18 @@ function assertSecurityAuditRelationsAreSpecific() {
     '.map-tooltip.pinned',
     'Mobile map pinned tooltip disappeared before users could interact with it',
     'mobile map to servers linkage',
+    'assertMobileModuleLayoutSweep',
+    'assertMobileSection',
+    'assertSingleColumnStack',
+    'assertElementHorizontallyWithinViewport',
+    '.server-workspace-row',
+    '.connect-form.open',
+    '.ops-builder',
+    '.api-template-grid',
+    '.api-config-panel',
+    '.security-control-grid',
+    '.security-audit-detail-card',
+    'mobile servers, operations, custom API, and security layout linkage',
   ];
   const missingBrowserFragments = browserRequiredFragments.filter((fragment) => !browserE2eSource.includes(fragment));
   if (missingBrowserFragments.length) {

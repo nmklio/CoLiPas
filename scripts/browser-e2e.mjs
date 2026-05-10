@@ -31,6 +31,7 @@ try {
   temporaryServerId = '';
 
   await assertMobileConsoleAndMap();
+  await assertMobileModuleLayoutSweep();
 
   if (consoleProblems.length > 0) {
     throw new Error(`Browser console had problems:\n${consoleProblems.join('\n')}`);
@@ -282,6 +283,75 @@ async function assertMobileConsoleAndMap() {
   }
 }
 
+async function assertMobileModuleLayoutSweep() {
+  const mobilePage = await createE2ePage({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+  });
+  let mobileServerId = '';
+
+  try {
+    await openAndLogin(mobilePage, `${baseUrl}/admin/#overview`);
+    mobileServerId = (await createTemporaryAssetServer(mobilePage, 'browser-e2e-mobile-sweep')).id;
+    await mobilePage.reload({ waitUntil: 'networkidle' });
+
+    await assertMobileSection(mobilePage, /^Servers$/i, /#servers$/, [
+      '.server-summary-grid',
+      '.server-filter-row',
+      '.server-workspace-row',
+    ]);
+    await assertSingleColumnStack(mobilePage, '.server-workspace-row', 'mobile server inventory row');
+    await mobilePage.locator('.module-section .section-header .tool-button.primary').first().click();
+    await mobilePage.locator('.connect-form.open').waitFor({ timeout: 5000 });
+    await assertElementHorizontallyWithinViewport(mobilePage, '.connect-form.open', 'mobile server connect form');
+    await mobilePage.locator('.connect-form.open .icon-button').first().click();
+    await mobilePage.locator('.connect-form.open').waitFor({ state: 'hidden', timeout: 5000 });
+
+    await assertMobileSection(mobilePage, /^Operations$/i, /#operations$/, [
+      '.ops-summary-grid',
+      '.ops-layout',
+      '.ops-queue-panel',
+      '.ops-result-panel',
+    ]);
+    await mobilePage.getByRole('button', { name: /new task/i }).click();
+    await mobilePage.locator('.ops-builder').waitFor({ timeout: 5000 });
+    await assertElementHorizontallyWithinViewport(mobilePage, '.ops-builder', 'mobile operations builder');
+    await assertSingleColumnStack(mobilePage, '.ops-type-grid', 'mobile operations task cards');
+
+    await assertMobileSection(mobilePage, /^Custom API$/i, /#api$/, [
+      '.api-status-strip',
+      '.api-template-grid',
+      '.api-workbench-layout',
+      '.api-config-panel',
+      '.api-debug-panel',
+      '.api-integration-list',
+    ]);
+    await assertSingleColumnStack(mobilePage, '.api-template-grid', 'mobile custom API templates');
+    await assertSingleColumnStack(mobilePage, '.api-config-panel', 'mobile custom API form');
+
+    await assertMobileSection(mobilePage, /^Security$/i, /#security$/, [
+      '.security-readiness-card',
+      '.security-kpi-grid',
+      '.security-control-grid',
+      '.security-remediation-card',
+      '.security-audit-workspace',
+    ]);
+    await assertSingleColumnStack(mobilePage, '.security-readiness-card', 'mobile security readiness card');
+    await assertSingleColumnStack(mobilePage, '.security-control-grid', 'mobile security control grid');
+    await mobilePage.locator('.security-audit-row').first().click();
+    await mobilePage.locator('.security-audit-detail-card').waitFor({ timeout: 5000 });
+    await assertElementHorizontallyWithinViewport(mobilePage, '.security-audit-detail-card', 'mobile security audit detail');
+    await assertNoHorizontalOverflow(mobilePage, 'mobile module layout sweep');
+
+    console.log('ok browser e2e covers mobile servers, operations, custom API, and security layout linkage');
+  } finally {
+    if (mobileServerId) {
+      await deleteTemporaryAssetServer(mobilePage, mobileServerId).catch(() => undefined);
+    }
+    await mobilePage.close();
+  }
+}
+
 async function waitForAuditEvents(targetPage, expectedTraceId) {
   const startedAt = Date.now();
   let lastCount = 0;
@@ -302,6 +372,19 @@ async function waitForAuditEvents(targetPage, expectedTraceId) {
   }
 
   throw new Error(`Timed out waiting for audit records with ${expectedTraceId}, last count ${lastCount}`);
+}
+
+async function assertMobileSection(targetPage, navName, expectedHashPattern, selectors) {
+  await targetPage.getByRole('button', { name: /open navigation/i }).click();
+  await targetPage.getByRole('button', { name: navName }).click();
+  await targetPage.waitForURL(expectedHashPattern, { timeout: 10000 });
+  await targetPage.locator('.module-section').first().waitFor({ timeout: 10000 });
+
+  for (const selector of selectors) {
+    await targetPage.locator(selector).first().waitFor({ timeout: 10000 });
+    await targetPage.locator(selector).first().scrollIntoViewIfNeeded();
+    await assertNoHorizontalOverflow(targetPage, `mobile ${String(navName)} section ${selector}`);
+  }
 }
 
 async function assertElementWithinViewport(targetPage, selector, label) {
@@ -329,6 +412,27 @@ async function assertNoHorizontalOverflow(targetPage, label) {
   }));
   if (metrics.scrollWidth > metrics.viewportWidth + 1) {
     throw new Error(`${label} has horizontal document overflow: ${metrics.scrollWidth}px > ${metrics.viewportWidth}px`);
+  }
+}
+
+async function assertElementHorizontallyWithinViewport(targetPage, selector, label) {
+  const viewport = targetPage.viewportSize();
+  const box = await targetPage.locator(selector).first().boundingBox();
+  if (!viewport || !box) {
+    throw new Error(`${label} was not rendered with a measurable viewport box`);
+  }
+
+  const tolerance = 1;
+  if (box.x < -tolerance || box.x + box.width > viewport.width + tolerance) {
+    throw new Error(`${label} overflows viewport width ${viewport.width}px: ${JSON.stringify(box)}`);
+  }
+}
+
+async function assertSingleColumnStack(targetPage, selector, label) {
+  const columns = await targetPage.locator(selector).first().evaluate((element) => getComputedStyle(element).gridTemplateColumns);
+  const columnCount = columns.split(' ').filter(Boolean).length;
+  if (columnCount !== 1) {
+    throw new Error(`${label} should collapse to one grid column on mobile, got ${columns}`);
   }
 }
 
