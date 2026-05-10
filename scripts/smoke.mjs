@@ -1735,6 +1735,12 @@ const auditBody = await auditResponse.json();
 if (!Array.isArray(auditBody.items) || !auditBody.items.some((item) => item.action === 'OPERATIONS_TASK')) {
   throw new Error('/api/audit/events returned unexpected payload');
 }
+if (!auditBody.items.some((item) => item.action === 'OPERATIONS_PREFLIGHT' && item.status === 'success' && item.detail?.includes('Plan:'))) {
+  throw new Error('/api/audit/events did not include successful operations preflight plan evidence');
+}
+if (!auditBody.items.some((item) => item.action === 'OPERATIONS_PREFLIGHT' && item.status === 'blocked' && item.detail?.includes('blocking issue'))) {
+  throw new Error('/api/audit/events did not include blocked operations preflight evidence');
+}
 if (!auditBody.items.some((item) => item.action === 'CUSTOM_API_TEST' && item.status === 'blocked')) {
   throw new Error('/api/audit/events did not include blocked custom API evidence');
 }
@@ -1767,6 +1773,9 @@ if (
 const auditPayload = JSON.stringify(auditBody);
 if (auditPayload.includes(smokePrivateKeyMarker) || auditPayload.includes(smokePrivateKeyPassphrase)) {
   throw new Error('/api/audit/events leaked SSH private key material');
+}
+if (auditPayload.includes(operationPreflightCommandSecret)) {
+  throw new Error('/api/audit/events leaked sensitive operations preflight command preview');
 }
 if (!auditBody.items.some((item) => item.action === 'SERVER_ACTION' && item.status === 'blocked')) {
   throw new Error('/api/audit/events did not include blocked server action evidence');
@@ -3216,6 +3225,7 @@ function assertSecurityAuditRelationsAreSpecific() {
 function assertOperationsTargetSelectionGuards() {
   const operationsSource = fs.readFileSync(new URL('../src/modules/operations/OperationsCenter.tsx', import.meta.url), 'utf8');
   const serviceSource = fs.readFileSync(new URL('../src/server/services/operationsService.ts', import.meta.url), 'utf8');
+  const auditServiceSource = fs.readFileSync(new URL('../src/server/services/auditService.ts', import.meta.url), 'utf8');
   const appSource = fs.readFileSync(new URL('../src/server/app.ts', import.meta.url), 'utf8');
   const apiClientSource = fs.readFileSync(new URL('../src/services/apiClient.ts', import.meta.url), 'utf8');
   const frontendRequired = [
@@ -3259,12 +3269,18 @@ function assertOperationsTargetSelectionGuards() {
     'buildPreflightPlan(parsed',
     'sanitizeCommandPreview(task.command)',
     'riskSummary',
+    "action: 'OPERATIONS_PREFLIGHT'",
+    'buildPreflightAuditDetail(response)',
     'status: \'missing\'',
     'runnable: false',
   ];
   const missingService = serviceRequired.filter((fragment) => !serviceSource.includes(fragment));
   if (missingService.length) {
     throw new Error(`Operations service selected target guard is incomplete: ${missingService.join(', ')}`);
+  }
+
+  if (!auditServiceSource.includes("| 'OPERATIONS_PREFLIGHT'")) {
+    throw new Error('Operations preflight audit action is not registered');
   }
 
   const preflightRouteRequired = [

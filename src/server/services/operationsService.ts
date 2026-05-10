@@ -238,7 +238,7 @@ export function preflightOperationTask(input: unknown): OperationTaskPreflightRe
     ...missingPreflightTargets,
   ];
 
-  return {
+  const response: OperationTaskPreflightResponse = {
     ok: !issues.some((issue) => issue.severity === 'block'),
     type: parsed.type,
     targetMode: parsed.targetMode,
@@ -263,6 +263,39 @@ export function preflightOperationTask(input: unknown): OperationTaskPreflightRe
     targets: preflightTargets,
     generatedAt: new Date().toISOString(),
   };
+
+  recordAudit({
+    action: 'OPERATIONS_PREFLIGHT',
+    actor: 'operator',
+    target: parsed.targetMode === 'selected' ? summarizeAuditTargets(parsed.serverIds) : parsed.targetMode,
+    status: response.ok ? 'success' : 'blocked',
+    detail: buildPreflightAuditDetail(response),
+  });
+
+  return response;
+}
+
+function buildPreflightAuditDetail(response: OperationTaskPreflightResponse) {
+  const parts = [
+    `Plan: ${response.plan.title}`,
+    response.plan.targetSummary,
+    response.plan.riskSummary,
+    response.plan.impact,
+  ];
+
+  if (response.plan.commandPreview) {
+    parts.push(`Command: ${response.plan.commandPreview}`);
+  }
+
+  return parts.join(' | ').slice(0, 900);
+}
+
+function summarizeAuditTargets(serverIds: string[]) {
+  if (serverIds.length <= 4) {
+    return serverIds.join(',');
+  }
+
+  return `${serverIds.slice(0, 4).join(',')} +${serverIds.length - 4} more`;
 }
 
 function buildPreflightPlan(
