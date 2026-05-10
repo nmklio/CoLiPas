@@ -66,6 +66,20 @@ if (failedLoginResponse.status !== 401) {
 }
 console.log('ok /api/auth/login rejects invalid credentials');
 
+const malformedLoginResponse = await fetch(`${baseUrl}/api/auth/login`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: '}',
+});
+if (malformedLoginResponse.status !== 400) {
+  throw new Error(`/api/auth/login expected 400 with malformed JSON, got ${malformedLoginResponse.status}`);
+}
+const malformedLoginBody = await malformedLoginResponse.json();
+if (malformedLoginBody.error?.code !== 'INVALID_JSON') {
+  throw new Error('/api/auth/login malformed JSON returned unexpected error payload');
+}
+console.log('ok /api/auth/login rejects malformed JSON without 500');
+
 const loginResponse = await fetch(`${baseUrl}/api/auth/login`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },

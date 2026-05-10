@@ -599,6 +599,16 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
 }
 
 const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
+  if (isJsonParseError(error)) {
+    response.status(400).json({
+      error: {
+        code: 'INVALID_JSON',
+        message: 'Invalid JSON request body',
+      },
+    });
+    return;
+  }
+
   if (error instanceof ZodError) {
     response.status(400).json({
       error: {
@@ -629,6 +639,17 @@ function getAttemptedUsername(input: unknown) {
 
 function flushSse(response: express.Response) {
   (response as express.Response & { flush?: () => void }).flush?.();
+}
+
+function isJsonParseError(error: unknown) {
+  return Boolean(
+    error
+      && typeof error === 'object'
+      && 'type' in error
+      && (error as { type?: unknown }).type === 'entity.parse.failed'
+      && 'status' in error
+      && (error as { status?: unknown }).status === 400,
+  );
 }
 
 function sanitizeAuditTarget(value: unknown) {

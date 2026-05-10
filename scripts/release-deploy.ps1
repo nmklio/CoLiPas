@@ -159,7 +159,8 @@ function Push-GitHub {
   Write-Warning "GitHub API produced commit $($newCommit.sha) for local HEAD $head. The tree matches, so aligning the local branch to the published ref."
   git fetch origin $Branch
   if ($LASTEXITCODE -ne 0) {
-    throw "Unable to fetch published GitHub API commit."
+    Write-Warning "Unable to fetch published GitHub API commit; continuing because GitHub ref already points to a matching tree."
+    return
   }
 
   $publishedTree = (git rev-parse "origin/$Branch^{tree}").Trim()
