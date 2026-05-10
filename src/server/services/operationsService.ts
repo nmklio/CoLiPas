@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { z } from 'zod';
 import { servers } from '../../data/mockData.js';
 import type {
@@ -47,7 +48,7 @@ export async function createOperationTask(input: unknown): Promise<OperationTask
   const parsed = operationTaskSchema.parse(input) satisfies OperationTaskRequest;
   const startedAt = new Date().toISOString();
   const targets = resolveTargets(parsed);
-  const taskId = `ops-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+  const taskId = `ops-${crypto.randomUUID()}`;
 
   if (parsed.targetMode === 'selected') {
     const foundIds = new Set(targets.map((server) => server.id));

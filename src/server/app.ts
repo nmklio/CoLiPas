@@ -11,7 +11,7 @@ import { isHttpError } from './httpErrors.js';
 import { analyzeOperations, listAiModels, streamAiAnalysis, testAiConnection } from './services/aiService.js';
 import { buildConfigSummary } from './services/configSummary.js';
 import { listAuditEntries, recordAudit, remediateSecurityRisk } from './services/auditService.js';
-import { buildAccountPayload, changeAdminPassword, getCurrentSession, login, logout, requireSession, updateConsoleProfile } from './services/authService.js';
+import { buildAccountPayload, changeAdminPassword, getCurrentSession, getLoginThrottleStatus, login, logout, requireSession, updateConsoleProfile } from './services/authService.js';
 import { executeCustomApiProxy } from './services/customApiProxy.js';
 import { getDatabasePath } from './services/database.js';
 import { createOperationTask } from './services/operationsService.js';
@@ -80,7 +80,7 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
 
   app.post('/api/auth/login', (request, response, next) => {
     try {
-      const session = login(request.body, response, config);
+      const session = login(request.body, request, response, config);
       recordAudit({
         action: 'AUTH_LOGIN',
         actor: session.user.username,
@@ -97,6 +97,10 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
         status: 'failed',
         detail: error instanceof Error ? error.message : 'Operator sign-in failed',
       });
+      const throttle = getLoginThrottleStatus(request.body, request);
+      if (throttle.throttled) {
+        response.setHeader('Retry-After', String(throttle.retryAfterSeconds));
+      }
       next(error);
     }
   });

@@ -1,4 +1,5 @@
 import net from 'node:net';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { cloudAccounts, operationEvents, servers } from '../../data/mockData.js';
@@ -147,7 +148,7 @@ export async function connectServer(input: unknown) {
         ssh,
       })
     : {
-        id: `manual-${Date.now()}`,
+        id: `manual-${crypto.randomUUID()}`,
         name: parsed.name,
         provider: parsed.provider,
         region: identity.region,

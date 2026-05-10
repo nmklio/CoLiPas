@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { z } from 'zod';
 import { HttpError } from '../httpErrors.js';
 import { recordAudit } from './auditService.js';
@@ -24,7 +25,7 @@ export async function executeServerAction(input: unknown) {
   if (parsed.dryRun) {
     const { server } = getConnectedServerCredential(parsed.serverId, 'SERVER_ACTION');
     const task = {
-      id: `task-${Date.now()}`,
+      id: `task-${crypto.randomUUID()}`,
       serverId: server.id,
       serverName: server.name,
       action: parsed.action,
@@ -61,7 +62,7 @@ export async function executeServerAction(input: unknown) {
   setServerRuntimeStatus(server.id, nextStatus);
 
   const task = {
-    id: `task-${Date.now()}`,
+    id: `task-${crypto.randomUUID()}`,
     serverId: server.id,
     serverName: server.name,
     action: parsed.action,

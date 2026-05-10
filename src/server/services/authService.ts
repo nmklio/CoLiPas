@@ -29,6 +29,8 @@ const passwordChangeSchema = z.object({
 const cookieName = 'colipas_session';
 const accountSettingId = 'admin-account';
 const profileSettingId = 'console-profile';
+const loginFailureWindowMs = 10 * 60 * 1000;
+const maxLoginFailuresPerWindow = 8;
 
 interface StoredPassword {
   algorithm: 'scrypt';
@@ -55,7 +57,14 @@ interface SessionRecord {
   expiresAt: number;
 }
 
+interface LoginFailureRecord {
+  count: number;
+  firstFailedAt: number;
+  lockedUntil: number;
+}
+
 const sessions = new Map<string, SessionRecord>();
+const loginFailures = new Map<string, LoginFailureRecord>();
 const fallbackProfile: ConsoleProfile = {
   displayName: 'CoLiPas',
   avatarText: 'CP',
@@ -66,10 +75,17 @@ export function getSessionCookieName() {
   return cookieName;
 }
 
-export function login(input: unknown, response: Response, config: RuntimeConfig) {
+export function login(input: unknown, request: Request, response: Response, config: RuntimeConfig) {
   const parsed = loginSchema.parse(input);
+  const limiterKey = buildLoginLimiterKey(parsed.username, request);
+  assertLoginAllowed(limiterKey);
+
   const account = getStoredAccount(config);
   if (!safeEqual(parsed.username, account.username) || !verifyPassword(parsed.password, account.password)) {
+    const retryAfterSeconds = recordLoginFailure(limiterKey);
+    if (retryAfterSeconds > 0) {
+      throw new HttpError(429, 'Too many failed login attempts. Please retry later.', 'AUTH_RATE_LIMITED');
+    }
     throw new HttpError(401, '用户名或密码错误', 'AUTH_INVALID_CREDENTIALS');
   }
 
@@ -82,9 +98,25 @@ export function login(input: unknown, response: Response, config: RuntimeConfig)
   };
 
   sessions.set(session.id, session);
+  clearLoginFailures(limiterKey);
   setSessionCookie(response, session, config);
 
   return buildSessionPayload(session, now);
+}
+
+export function getLoginThrottleStatus(input: unknown, request: Request) {
+  const username = input && typeof input === 'object' && 'username' in input && typeof (input as { username?: unknown }).username === 'string'
+    ? (input as { username: string }).username
+    : 'anonymous';
+  const record = getActiveLoginFailureRecord(buildLoginLimiterKey(username, request));
+  const retryAfterSeconds = record?.lockedUntil && record.lockedUntil > Date.now()
+    ? Math.ceil((record.lockedUntil - Date.now()) / 1000)
+    : 0;
+
+  return {
+    throttled: retryAfterSeconds > 0,
+    retryAfterSeconds,
+  };
 }
 
 export function logout(request: Request, response: Response) {
@@ -234,6 +266,74 @@ function clearOtherSessions(sessionId: string) {
       sessions.delete(id);
     }
   }
+}
+
+function buildLoginLimiterKey(username: string, request: Request) {
+  return `${username.trim().toLowerCase()}:${resolveClientAddress(request)}`;
+}
+
+function resolveClientAddress(request: Request) {
+  const forwardedFor = request.headers['x-forwarded-for'];
+  const forwardedValue = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
+  const firstForwarded = forwardedValue?.split(',')[0]?.trim();
+  const socketAddress = request.socket.remoteAddress || '';
+  if (firstForwarded && (process.env.TRUST_PROXY_LOGIN_LIMIT === '1' || isLoopbackAddress(socketAddress))) {
+    return firstForwarded;
+  }
+
+  return request.ip || socketAddress || 'unknown';
+}
+
+function assertLoginAllowed(key: string) {
+  const record = getActiveLoginFailureRecord(key);
+  if (record?.lockedUntil && record.lockedUntil > Date.now()) {
+    throw new HttpError(429, 'Too many failed login attempts. Please retry later.', 'AUTH_RATE_LIMITED');
+  }
+}
+
+function recordLoginFailure(key: string) {
+  const now = Date.now();
+  const current = getActiveLoginFailureRecord(key);
+  const next: LoginFailureRecord = current
+    ? {
+        count: current.count + 1,
+        firstFailedAt: current.firstFailedAt,
+        lockedUntil: current.lockedUntil,
+      }
+    : {
+        count: 1,
+        firstFailedAt: now,
+        lockedUntil: 0,
+      };
+
+  if (next.count >= maxLoginFailuresPerWindow) {
+    next.lockedUntil = now + loginFailureWindowMs;
+  }
+  loginFailures.set(key, next);
+  return next.lockedUntil > now ? Math.ceil((next.lockedUntil - now) / 1000) : 0;
+}
+
+function clearLoginFailures(key: string) {
+  loginFailures.delete(key);
+}
+
+function getActiveLoginFailureRecord(key: string) {
+  const record = loginFailures.get(key);
+  if (!record) {
+    return null;
+  }
+
+  const now = Date.now();
+  if (now - record.firstFailedAt > loginFailureWindowMs && record.lockedUntil <= now) {
+    loginFailures.delete(key);
+    return null;
+  }
+
+  return record;
+}
+
+function isLoopbackAddress(value: string) {
+  return value === '127.0.0.1' || value === '::1' || value === '::ffff:127.0.0.1';
 }
 
 function readJsonSetting<T>(id: string) {

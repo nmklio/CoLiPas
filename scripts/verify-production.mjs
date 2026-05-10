@@ -81,6 +81,13 @@ try {
       SMOKE_BASE_URL: baseUrl,
     },
   });
+  await run(process.execPath, ['scripts/concurrency-check.mjs'], {
+    env: {
+      ...process.env,
+      SMOKE_BASE_URL: baseUrl,
+      SMOKE_ADMIN_PASSWORD: 'NextPassword123',
+    },
+  });
 } finally {
   await stopServer(server);
   removeVerifyDataDir();
