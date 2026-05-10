@@ -62,6 +62,8 @@ const defaultFilters: ServerFilters = {
   status: 'all',
   region: 'all',
 };
+const avatarMaxBytes = 2 * 1024 * 1024;
+const settingsMessageTtlMs = 2800;
 
 const fallbackOverview: OverviewResponse = {
   cloudAccounts: fallbackCloudAccounts,
@@ -105,6 +107,7 @@ export function App() {
   const appMountedRef = useRef(true);
   const sessionAuthenticatedRef = useRef(false);
   const overviewRefreshInFlightRef = useRef(false);
+  const settingsMessageTimerRef = useRef<number | null>(null);
 
   async function refreshOverview() {
     if ((!session?.authenticated && !sessionAuthenticatedRef.current) || overviewRefreshInFlightRef.current) {
@@ -162,6 +165,12 @@ export function App() {
     };
   }, []);
 
+  useEffect(() => () => {
+    if (settingsMessageTimerRef.current) {
+      window.clearTimeout(settingsMessageTimerRef.current);
+    }
+  }, []);
+
   useEffect(() => {
     sessionAuthenticatedRef.current = Boolean(session?.authenticated);
   }, [session?.authenticated]);
@@ -186,6 +195,29 @@ export function App() {
 
     return () => window.clearInterval(timer);
   }, [session?.authenticated]);
+
+  useEffect(() => {
+    if (!settingsError && !settingsSuccess) {
+      return undefined;
+    }
+
+    if (settingsMessageTimerRef.current) {
+      window.clearTimeout(settingsMessageTimerRef.current);
+    }
+
+    settingsMessageTimerRef.current = window.setTimeout(() => {
+      setSettingsError('');
+      setSettingsSuccess('');
+      settingsMessageTimerRef.current = null;
+    }, settingsMessageTtlMs);
+
+    return () => {
+      if (settingsMessageTimerRef.current) {
+        window.clearTimeout(settingsMessageTimerRef.current);
+        settingsMessageTimerRef.current = null;
+      }
+    };
+  }, [settingsError, settingsSuccess]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'auto' });
@@ -319,7 +351,7 @@ export function App() {
       return;
     }
 
-    if (file.size > 96 * 1024) {
+    if (file.size > avatarMaxBytes) {
       setSettingsError(t('account.avatarImageTooLarge'));
       if (avatarUploadRef.current) {
         avatarUploadRef.current.value = '';

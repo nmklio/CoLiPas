@@ -1493,45 +1493,13 @@ button:disabled {
 .content {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 356px);
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
   gap: 16px;
 }
 
 .content.ai-collapsed {
   grid-template-columns: minmax(0, 1fr);
-}
-
-.content:not(.ai-collapsed) .ops-layout,
-.content:not(.ai-collapsed) .ai-layout,
-.content:not(.ai-collapsed) .api-layout,
-.content:not(.ai-collapsed) .security-details,
-.content:not(.ai-collapsed) .server-summary-grid,
-.content:not(.ai-collapsed) .server-workspace-head,
-.content:not(.ai-collapsed) .server-workspace-row,
-.content:not(.ai-collapsed) .ssh-console-body,
-.content:not(.ai-collapsed) .server-filter-row,
-.content:not(.ai-collapsed) .connect-form {
-  grid-template-columns: 1fr;
-}
-
-.content:not(.ai-collapsed) .api-status-strip,
-.content:not(.ai-collapsed) .api-template-grid,
-.content:not(.ai-collapsed) .api-config-panel {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.content:not(.ai-collapsed) .api-workbench-layout,
-.content:not(.ai-collapsed) .api-integration-row {
-  grid-template-columns: 1fr;
-}
-
-.content:not(.ai-collapsed) .api-header {
-  display: grid;
-}
-
-.content:not(.ai-collapsed) .api-header .section-actions {
-  justify-content: flex-start;
 }
 
 .topbar {
@@ -4669,16 +4637,19 @@ pre {
 }
 
 .ai-dock {
-  position: sticky;
-  top: 86px;
-  align-self: start;
-  height: calc(100vh - 104px);
-  margin: 26px 14px 48px 0;
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 46;
+  width: min(392px, calc(100vw - 288px));
+  height: min(590px, calc(100vh - 128px));
+  min-height: 500px;
+  margin: 0;
   border: 1px solid #d5e2e6;
-  border-radius: 8px;
+  border-radius: 12px;
   background:
     linear-gradient(180deg, #ffffff 0, #f7fbfc 100%);
-  box-shadow: 0 12px 28px rgba(26, 43, 51, 0.08);
+  box-shadow: 0 26px 72px rgba(12, 30, 35, 0.18);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
@@ -4686,19 +4657,19 @@ pre {
 
 .ai-launcher {
   position: fixed;
-  right: 22px;
+  right: 28px;
   top: auto;
-  bottom: 24px;
-  z-index: 20;
-  min-width: 58px;
+  bottom: 26px;
+  z-index: 44;
+  min-width: 72px;
   width: auto;
-  height: 42px;
-  min-height: 42px;
+  height: 44px;
+  min-height: 44px;
   border: 1px solid #7fc6bd;
-  border-radius: 8px;
+  border-radius: 999px;
   background: var(--brand);
   color: #ffffff;
-  box-shadow: 0 14px 28px rgba(15, 118, 110, 0.2);
+  box-shadow: 0 14px 32px rgba(15, 118, 110, 0.24);
   display: inline-flex;
   flex-direction: row;
   align-items: center;
@@ -4715,13 +4686,13 @@ pre {
 }
 
 .content.ai-collapsed main {
-  padding-right: 104px;
-  padding-bottom: 108px;
+  padding-right: 28px;
+  padding-bottom: 48px;
 }
 
 .ai-dock-header {
-  min-height: 62px;
-  padding: 11px 12px;
+  min-height: 60px;
+  padding: 10px 12px;
   border-bottom: 1px solid #dce8ec;
   background:
     linear-gradient(135deg, var(--brand-soft), rgba(255, 255, 255, 0.96) 62%, #f5faf9);
@@ -4787,12 +4758,11 @@ pre {
 
 .ai-dock-body {
   min-height: 0;
-  padding: 12px;
-  display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto auto auto;
-  gap: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   overflow: hidden;
-  align-content: stretch;
 }
 
 .ai-context-card,
@@ -4879,12 +4849,12 @@ pre {
 }
 
 .ai-live-strip {
-  min-height: 52px;
-  padding: 9px 10px;
+  min-height: 0;
+  padding: 9px;
   display: grid;
-  grid-template-columns: minmax(108px, 0.7fr) minmax(0, 1.1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   background:
     linear-gradient(180deg, #ffffff, #f8fbfb);
 }
@@ -4911,6 +4881,12 @@ pre {
 }
 
 .ai-live-strip .ai-server-picker {
+  grid-column: 1 / -1;
+  min-height: 36px;
+  padding: 7px;
+  border: 1px solid #dce8ec;
+  border-radius: 8px;
+  background: #fbfdfd;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
@@ -4930,7 +4906,7 @@ pre {
 .ai-session-list {
   display: grid;
   gap: 6px;
-  max-height: 132px;
+  max-height: 116px;
   overflow: auto;
   padding-right: 2px;
 }
@@ -5013,8 +4989,9 @@ pre {
 }
 
 .ai-chat-thread {
-  min-height: 96px;
-  max-height: clamp(150px, 32vh, 310px);
+  flex: 1 1 210px;
+  min-height: 170px;
+  max-height: none;
   overflow: auto;
   display: flex;
   flex-direction: column;
@@ -5121,7 +5098,7 @@ pre {
 }
 
 .ai-empty-panel {
-  min-height: 56px;
+  min-height: 100%;
   padding: 12px;
   display: flex;
   align-items: center;
@@ -5140,6 +5117,7 @@ pre {
 }
 
 .ai-composer {
+  flex: 0 0 auto;
   border: 1px solid #cddfe3;
   border-radius: 8px;
   background:
@@ -5150,12 +5128,12 @@ pre {
 
 .ai-composer textarea {
   width: 100%;
-  min-height: 82px;
-  max-height: 170px;
+  min-height: 68px;
+  max-height: 118px;
   resize: none;
   border: 0;
   outline: 0;
-  padding: 15px;
+  padding: 13px;
   background: transparent;
   color: var(--text);
   caret-color: var(--brand);
@@ -5168,13 +5146,13 @@ pre {
 }
 
 .ai-composer-toolbar {
-  min-height: 46px;
+  min-height: 44px;
   border-top: 1px solid #d9e7ea;
-  padding: 7px 8px;
+  padding: 7px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
+  grid-template-columns: 1fr;
+  align-items: stretch;
+  gap: 7px;
 }
 
 .ai-composer-tools,
@@ -5187,6 +5165,10 @@ pre {
 
 .ai-composer-tools {
   flex-wrap: wrap;
+}
+
+.ai-composer-actions {
+  justify-content: flex-end;
 }
 
 .ai-composer-icon,
@@ -5229,8 +5211,9 @@ pre {
 }
 
 .ai-model-select {
-  min-width: 108px;
-  max-width: 132px;
+  flex: 1 1 126px;
+  min-width: 126px;
+  max-width: none;
   height: 31px;
   border-radius: 8px;
   padding: 0 8px 0 10px;
@@ -5294,7 +5277,7 @@ pre {
 }
 
 .ai-send-orb {
-  min-width: 72px;
+  min-width: 84px;
   height: 32px;
   border-radius: 8px;
   padding: 0 11px;
@@ -5325,7 +5308,8 @@ pre {
 }
 
 .ai-connection-chip {
-  min-height: 34px;
+  flex: 0 0 auto;
+  min-height: 32px;
   padding: 8px 10px;
   display: inline-flex;
   align-items: center;
@@ -6301,22 +6285,16 @@ pre {
     grid-template-columns: 1fr;
   }
 
-  .content {
-    grid-template-columns: 1fr;
-  }
-
-  .content.ai-collapsed {
-    grid-template-columns: 1fr;
-  }
-
   .ai-dock {
-    position: static;
-    height: auto;
-    margin: 0 28px 48px;
+    right: 18px;
+    bottom: 18px;
+    width: min(380px, calc(100vw - 40px));
+    height: min(580px, calc(100vh - 102px));
+    min-height: 480px;
   }
 
   .ai-composer textarea {
-    max-height: 260px;
+    max-height: 126px;
   }
 
   .ai-workbench-grid,
@@ -6509,9 +6487,10 @@ pre {
     left: 12px;
     right: 12px;
     bottom: 12px;
-    z-index: 42;
+    z-index: 46;
     width: auto;
-    height: min(46vh, 360px);
+    height: min(68vh, 560px);
+    min-height: 380px;
     margin: 0;
     border-radius: 10px;
     box-shadow: 0 22px 60px rgba(12, 30, 35, 0.22);
@@ -6523,8 +6502,8 @@ pre {
   }
 
   .ai-chat-thread {
-    min-height: 72px;
-    max-height: 160px;
+    min-height: 120px;
+    max-height: none;
   }
 
   .ai-session-list {
@@ -6622,7 +6601,7 @@ pre {
   }
 
   .content:not(.ai-collapsed) main {
-    padding-bottom: calc(min(46vh, 360px) + 28px);
+    padding-bottom: 34px;
   }
 
   .ai-dock {
@@ -6673,14 +6652,14 @@ pre {
 
   .ai-launcher {
     top: auto;
-    right: 10px;
-    bottom: 10px;
-    min-width: 52px;
+    right: 14px;
+    bottom: 14px;
+    min-width: 64px;
     width: auto;
     min-height: 40px;
     height: 40px;
     border-right: 1px solid #7fc6bd;
-    border-radius: 8px;
+    border-radius: 999px;
     flex-direction: row;
     transform: none;
   }
@@ -6691,7 +6670,7 @@ pre {
 
   .content.ai-collapsed main {
     padding-right: 14px;
-    padding-bottom: 86px;
+    padding-bottom: 72px;
   }
 
   .page-heading,
@@ -6747,7 +6726,7 @@ pre {
   }
 
   .content:not(.ai-collapsed) .cloud-map {
-    margin-bottom: calc(min(46vh, 360px) + 18px);
+    margin-bottom: 0;
   }
 
   .map-transform-layer {
@@ -6777,11 +6756,11 @@ pre {
   }
 
   .content:not(.ai-collapsed) .map-controls {
-    position: fixed;
+    position: absolute;
     top: auto;
-    right: 18px;
-    bottom: calc(min(46vh, 360px) + 24px);
-    z-index: 43;
+    right: 10px;
+    bottom: 9px;
+    z-index: 9;
   }
 
   .map-tooltip {

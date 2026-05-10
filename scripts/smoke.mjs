@@ -148,6 +148,22 @@ if (
 }
 console.log('ok /api/account/profile persists custom avatar and display name');
 
+const twoMbAvatarBytes = 2 * 1024 * 1024;
+const nearLimitAvatarImage = `data:image/png;base64,${Buffer.alloc(twoMbAvatarBytes - 256).toString('base64')}`;
+const nearLimitAvatarResponse = await fetch(`${baseUrl}/api/account/profile`, {
+  method: 'PATCH',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    displayName: 'OpsDesk',
+    avatarText: 'OD',
+    avatarImage: nearLimitAvatarImage,
+  }),
+});
+if (!nearLimitAvatarResponse.ok) {
+  throw new Error(`/api/account/profile should accept near-2MB avatars, got HTTP ${nearLimitAvatarResponse.status}`);
+}
+console.log('ok /api/account/profile accepts near-2MB avatar images');
+
 const invalidAvatarResponse = await fetch(`${baseUrl}/api/account/profile`, {
   method: 'PATCH',
   headers: { ...authHeaders, 'Content-Type': 'application/json' },
@@ -1685,6 +1701,7 @@ function assertAiProviderSecretNotPersisted() {
 function assertAccountUiGuards() {
   const loginSource = fs.readFileSync(new URL('../src/app/LoginPage.tsx', import.meta.url), 'utf8');
   const appSource = fs.readFileSync(new URL('../src/app/App.tsx', import.meta.url), 'utf8');
+  const serverAppSource = fs.readFileSync(new URL('../src/server/app.ts', import.meta.url), 'utf8');
   const authSource = fs.readFileSync(new URL('../src/server/services/authService.ts', import.meta.url), 'utf8');
   const inventorySource = fs.readFileSync(new URL('../src/modules/servers/ServerInventory.tsx', import.meta.url), 'utf8');
   const globalCss = fs.readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
@@ -1704,10 +1721,13 @@ function assertAccountUiGuards() {
     'avatarImage',
     'handleAvatarUpload',
     "new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])",
-    'file.size > 96 * 1024',
+    'file.size > avatarMaxBytes',
+    'const avatarMaxBytes = 2 * 1024 * 1024',
     'readFileAsDataUrl',
     '<AvatarMark profile={profile}',
     'className="avatar-upload-row"',
+    'settingsMessageTtlMs',
+    'setSettingsSuccess(\'\')',
   ];
   const missingAvatar = avatarFragments.filter((fragment) => !appSource.includes(fragment));
   if (missingAvatar.length) {
@@ -1715,12 +1735,15 @@ function assertAccountUiGuards() {
   }
 
   const backendFragments = [
-    'avatarImage: z.string().trim().max(120000)',
+    "express.json({ limit: '3mb' })",
+    'const avatarMaxBytes = 2 * 1024 * 1024',
+    'avatarMaxDataUrlLength',
     'function isSafeAvatarDataUrl',
     'data:image\\/(png|jpeg|webp|gif)',
-    'Buffer.byteLength(match[2], \'base64\') <= 96 * 1024',
+    'Buffer.byteLength(match[2], \'base64\') <= avatarMaxBytes',
   ];
-  const missingBackend = backendFragments.filter((fragment) => !authSource.includes(fragment));
+  const backendSource = `${serverAppSource}\n${authSource}`;
+  const missingBackend = backendFragments.filter((fragment) => !backendSource.includes(fragment));
   if (missingBackend.length) {
     throw new Error(`Account avatar backend safety guards are incomplete: ${missingBackend.join(', ')}`);
   }
@@ -1739,7 +1762,11 @@ function assertAccountUiGuards() {
   const cssFragments = [
     '.brand-mark img',
     '.avatar-upload-row',
-    'max-height: clamp(150px, 32vh, 310px)',
+    'width: min(392px, calc(100vw - 288px))',
+    'box-shadow: 0 26px 72px rgba(12, 30, 35, 0.18)',
+    'display: flex',
+    'flex: 1 1 210px',
+    'border-radius: 999px',
     '.ai-empty-panel',
   ];
   const missingCss = cssFragments.filter((fragment) => !globalCss.includes(fragment));
@@ -2043,9 +2070,9 @@ function assertCustomApiSecretNotPersisted() {
     '.api-integration-list',
     '.api-integration-row',
     '.api-integration-row b',
-    '.content:not(.ai-collapsed) .api-layout',
-    '.content:not(.ai-collapsed) .api-workbench-layout',
-    '.content:not(.ai-collapsed) .api-header .section-actions',
+    'grid-template-columns: minmax(0, 1fr)',
+    'width: min(392px, calc(100vw - 288px))',
+    'height: min(590px, calc(100vh - 128px))',
   ];
   for (const fragment of requiredStyleFragments) {
     if (!globalStyleSource.includes(fragment)) {
@@ -2308,9 +2335,10 @@ function assertOverviewMapInteractionGuards() {
     'inset: 34px 8px 58px',
     'bottom: 9px',
     '.content:not(.ai-collapsed) .cloud-map',
-    'margin-bottom: calc(min(46vh, 360px) + 18px)',
+    'margin-bottom: 0',
     '.content:not(.ai-collapsed) .map-controls',
-    'bottom: calc(min(46vh, 360px) + 24px)',
+    'position: absolute',
+    'z-index: 9',
     'width: max-content',
     'max-width: calc(100% - 20px)',
     'backdrop-filter: blur(8px)',
@@ -2697,13 +2725,13 @@ function assertMobileTopbarKeepsCoreActions() {
     '.ai-dock',
     'position: fixed',
     'top: auto',
-    'height: min(46vh, 360px)',
+    'height: min(68vh, 560px)',
     '.content:not(.ai-collapsed) main',
-    'padding-bottom: calc(min(46vh, 360px) + 28px)',
+    'padding-bottom: 34px',
     '.content:not(.ai-collapsed) .map-controls',
-    'position: fixed',
-    'bottom: calc(min(46vh, 360px) + 24px)',
-    'z-index: 43',
+    'position: absolute',
+    'bottom: 9px',
+    'z-index: 9',
     '.ai-launcher',
   ];
   const missing = requiredFragments.filter((fragment) => !mobileSection.includes(fragment));

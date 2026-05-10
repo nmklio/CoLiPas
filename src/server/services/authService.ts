@@ -5,6 +5,9 @@ import type { RuntimeConfig } from '../config.js';
 import { HttpError } from '../httpErrors.js';
 import { readAppSetting, writeAppSetting } from './database.js';
 
+const avatarMaxBytes = 2 * 1024 * 1024;
+const avatarMaxDataUrlLength = Math.ceil(avatarMaxBytes * 4 / 3) + 64;
+
 const loginSchema = z.object({
   username: z.string().trim().min(1).max(80),
   password: z.string().min(1).max(200),
@@ -13,9 +16,9 @@ const loginSchema = z.object({
 const profileSchema = z.object({
   displayName: z.string().trim().min(1).max(32),
   avatarText: z.string().trim().min(1).max(4).regex(/^[\p{L}\p{N}]+$/u, '头像只能包含字母或数字'),
-  avatarImage: z.string().trim().max(120000).optional().default('').refine(
+  avatarImage: z.string().trim().max(avatarMaxDataUrlLength).optional().default('').refine(
     (value) => value === '' || isSafeAvatarDataUrl(value),
-    '头像图片仅支持 96KB 内的 PNG、JPEG、WebP 或 GIF',
+    '头像图片仅支持 2MB 内的 PNG、JPEG、WebP 或 GIF',
   ),
 });
 
@@ -394,7 +397,7 @@ function isSafeAvatarDataUrl(value: string) {
     return false;
   }
 
-  return Buffer.byteLength(match[2], 'base64') <= 96 * 1024;
+  return Buffer.byteLength(match[2], 'base64') <= avatarMaxBytes;
 }
 
 function signToken(sessionId: string, secret: string) {
