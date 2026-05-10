@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { Client, type ClientChannel } from 'ssh2';
+import ssh2, { Client, type ClientChannel } from 'ssh2';
 import { z } from 'zod';
 import type { SshAuthType, SshVerifyMode } from '../../types.js';
 import { HttpError } from '../httpErrors.js';
@@ -13,6 +13,8 @@ const sshReadyTimeoutMs = 5000;
 const sshShellReadyTimeoutMs = 10000;
 const sshShellIdleTimeoutMs = 20 * 60 * 1000;
 const sshShellHistoryLimit = 120;
+const privateKeyBlockPattern = /^-----BEGIN (?:OPENSSH PRIVATE KEY|RSA PRIVATE KEY|EC PRIVATE KEY|DSA PRIVATE KEY|PRIVATE KEY)-----[\s\S]+-----END (?:OPENSSH PRIVATE KEY|RSA PRIVATE KEY|EC PRIVATE KEY|DSA PRIVATE KEY|PRIVATE KEY)-----$/;
+const puttyPrivateKeyPattern = /^PuTTY-User-Key-File-2: ssh-(?:rsa|dss)\r?\nEncryption: (?:aes256-cbc|none)\r?\nComment: [^\r\n]*\r?\nPublic-Lines: \d+\r?\n[\s\S]+?\r?\nPrivate-Lines: \d+\r?\n[\s\S]+?\r?\nPrivate-MAC: [^\r\n]+/;
 
 export const sshCredentialSchema = z
   .object({
@@ -21,7 +23,7 @@ export const sshCredentialSchema = z
     username: z.string().min(1).max(80),
     authType: z.enum(['password', 'privateKey']),
     password: z.string().max(2000).optional().default(''),
-    privateKey: z.string().max(20000).optional().default(''),
+    privateKey: z.string().max(64 * 1024).optional().default(''),
     passphrase: z.string().max(2000).optional().default(''),
     verifyMode: z.enum(['assetOnly', 'real', 'simulate']).optional().default('assetOnly'),
   })
@@ -38,16 +40,37 @@ export const sshCredentialSchema = z
       });
     }
 
-    if (value.authType === 'privateKey' && !value.privateKey) {
-      context.addIssue({
-        code: 'custom',
-        path: ['privateKey'],
-        message: 'SSH private key is required',
-      });
+    if (value.authType === 'privateKey') {
+      if (!value.privateKey) {
+        context.addIssue({
+          code: 'custom',
+          path: ['privateKey'],
+          message: 'SSH private key is required',
+        });
+        return;
+      }
+
+      if (!isSupportedPrivateKey(value.privateKey, value.passphrase)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['privateKey'],
+          message: 'SSH private key must be a PEM/OpenSSH/PPK private key block',
+        });
+      }
     }
   });
 
 export type SshCredentialInput = z.infer<typeof sshCredentialSchema>;
+
+function isSupportedPrivateKey(value: string, passphrase?: string) {
+  const normalized = value.trim();
+  if (!privateKeyBlockPattern.test(normalized) && !puttyPrivateKeyPattern.test(normalized)) {
+    return false;
+  }
+
+  const parsed = ssh2.utils.parseKey(normalized, passphrase || undefined);
+  return !(parsed instanceof Error) && parsed.isPrivateKey();
+}
 
 export interface StoredSshCredential {
   host: string;

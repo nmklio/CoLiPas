@@ -1,5 +1,6 @@
 import http from 'node:http';
 import fs from 'node:fs';
+import { generateKeyPairSync } from 'node:crypto';
 
 const baseUrl = process.env.SMOKE_BASE_URL ?? 'http://127.0.0.1:8080';
 const authHeaders = {};
@@ -19,6 +20,7 @@ assertOverviewServerFilterLinkage();
 assertServerIdentityDetectionGuards();
 assertServerStatusLifecycleGuards();
 assertSshTerminalRealtimeGuards();
+assertSshKeyAuthenticationGuards();
 assertMobileTopbarKeepsCoreActions();
 assertSecurityAuditRelationsAreSpecific();
 assertOperationsTargetSelectionGuards();
@@ -745,6 +747,42 @@ if (runtimeConfig?.customApiAllowedHosts?.includes('127.0.0.1')) {
   console.log('skip /api/custom-apis/test success path; 127.0.0.1 is not allowlisted');
 }
 
+const smokePrivateKeyMarker = `smoke-private-key-${Date.now()}`;
+const smokePrivateKeyPassphrase = `smoke-key-passphrase-${Date.now()}`;
+const smokePrivateKey = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ format: 'pem', type: 'pkcs1' }).toString();
+
+const invalidPrivateKeyResponse = await fetch(`${baseUrl}/api/servers`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    name: `invalid-key-server-${Date.now()}`,
+    provider: 'Custom',
+    region: 'smoke-region',
+    publicIp: '203.0.113.14',
+    privateIp: '',
+    os: 'Ubuntu 24.04',
+    tags: ['smoke'],
+    ssh: {
+      port: 22,
+      username: 'root',
+      authType: 'privateKey',
+      privateKey: 'not-a-private-key',
+      verifyMode: 'simulate',
+    },
+  }),
+});
+if (invalidPrivateKeyResponse.status !== 400) {
+  throw new Error(`/api/servers expected 400 for invalid SSH private key, got ${invalidPrivateKeyResponse.status}`);
+}
+const invalidPrivateKeyBody = await invalidPrivateKeyResponse.json();
+if (
+  invalidPrivateKeyBody.error?.code !== 'VALIDATION_ERROR'
+  || !invalidPrivateKeyBody.error.details?.some((item) => item.path === 'ssh.privateKey')
+) {
+  throw new Error('/api/servers invalid SSH private key returned unexpected validation payload');
+}
+console.log('ok /api/servers rejects invalid SSH private key');
+
 const failedSshConnectResponse = await fetch(`${baseUrl}/api/servers`, {
   method: 'POST',
   headers: { ...authHeaders, 'Content-Type': 'application/json' },
@@ -931,6 +969,50 @@ if (blockedActionResponse.status !== 409) {
   throw new Error(`/api/servers/actions expected 409 without SSH, got ${blockedActionResponse.status}`);
 }
 console.log('ok /api/servers/actions blocks inventory-only server');
+
+const keyConnectResponse = await fetch(`${baseUrl}/api/servers`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    name: `key-auth-server-${Date.now()}`,
+    provider: 'Custom',
+    region: 'smoke-region',
+    publicIp: '203.0.113.15',
+    privateIp: '10.0.0.15',
+    os: 'Ubuntu 24.04',
+    tags: ['smoke', 'key-auth'],
+    ssh: {
+      port: 22,
+      username: 'root',
+      authType: 'privateKey',
+      privateKey: smokePrivateKey,
+      passphrase: smokePrivateKeyPassphrase,
+      verifyMode: 'simulate',
+    },
+  }),
+});
+if (keyConnectResponse.status !== 201) {
+  throw new Error(`/api/servers private-key SSH connect returned HTTP ${keyConnectResponse.status}`);
+}
+const keyConnectedServer = await keyConnectResponse.json();
+const keyConnectedPayload = JSON.stringify(keyConnectedServer);
+if (
+  !keyConnectedServer.id
+  || keyConnectedServer.ssh?.connected !== true
+  || keyConnectedServer.ssh?.authType !== 'privateKey'
+  || keyConnectedServer.status !== 'running'
+  || keyConnectedPayload.includes(smokePrivateKeyMarker)
+  || keyConnectedPayload.includes(smokePrivateKeyPassphrase)
+) {
+  throw new Error('/api/servers private-key SSH connect returned unexpected or sensitive payload');
+}
+console.log('ok /api/servers SSH private-key connect');
+
+const deleteKeyConnectedServerResponse = await fetch(`${baseUrl}/api/servers/${keyConnectedServer.id}`, { method: 'DELETE', headers: authHeaders });
+if (!deleteKeyConnectedServerResponse.ok) {
+  throw new Error(`/api/servers/:serverId DELETE private-key smoke server returned HTTP ${deleteKeyConnectedServerResponse.status}`);
+}
+console.log('ok /api/servers/:serverId DELETE private-key smoke server');
 
 const connectResponse = await fetch(`${baseUrl}/api/servers`, {
   method: 'POST',
@@ -1431,6 +1513,10 @@ if (
   || !sensitiveSshAuditEntry.detail.includes('[redacted]')
 ) {
   throw new Error('/api/audit/events leaked sensitive SSH command detail');
+}
+const auditPayload = JSON.stringify(auditBody);
+if (auditPayload.includes(smokePrivateKeyMarker) || auditPayload.includes(smokePrivateKeyPassphrase)) {
+  throw new Error('/api/audit/events leaked SSH private key material');
 }
 if (!auditBody.items.some((item) => item.action === 'SERVER_ACTION' && item.status === 'blocked')) {
   throw new Error('/api/audit/events did not include blocked server action evidence');
@@ -2440,6 +2526,55 @@ function assertSshTerminalRealtimeGuards() {
   }
 
   console.log('ok SSH terminal uses live PTY shell streaming and keeps input responsive');
+}
+
+function assertSshKeyAuthenticationGuards() {
+  const inventorySource = fs.readFileSync(new URL('../src/modules/servers/ServerInventory.tsx', import.meta.url), 'utf8');
+  const sshServiceSource = fs.readFileSync(new URL('../src/server/services/sshAccessService.ts', import.meta.url), 'utf8');
+  const i18nSource = fs.readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
+  const globalCss = fs.readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
+
+  const frontendFragments = [
+    'privateKeyFileRef',
+    'importPrivateKeyFile',
+    'type="file"',
+    'accept=".pem,.key,.txt,.ppk"',
+    'spellCheck={false}',
+    "t('servers.importPrivateKey')",
+    "t('servers.privateKeyFileTooLarge')",
+  ];
+  const missingFrontend = frontendFragments.filter((fragment) => !inventorySource.includes(fragment));
+  if (missingFrontend.length) {
+    throw new Error(`SSH key-auth frontend guards are incomplete: ${missingFrontend.join(', ')}`);
+  }
+
+  const backendFragments = [
+    'privateKey: z.string().max(64 * 1024)',
+    'privateKeyBlockPattern',
+    'puttyPrivateKeyPattern',
+    'function isSupportedPrivateKey',
+    'ssh2.utils.parseKey(normalized',
+    'SSH private key must be a PEM/OpenSSH/PPK private key block',
+  ];
+  const missingBackend = backendFragments.filter((fragment) => !sshServiceSource.includes(fragment));
+  if (missingBackend.length) {
+    throw new Error(`SSH key-auth backend validation guards are incomplete: ${missingBackend.join(', ')}`);
+  }
+
+  const cssFragments = ['.connect-form-label-row', '.inline-import-button', '.visually-hidden'];
+  const missingCss = cssFragments.filter((fragment) => !globalCss.includes(fragment));
+  if (missingCss.length) {
+    throw new Error(`SSH key-auth import CSS is incomplete: ${missingCss.join(', ')}`);
+  }
+
+  for (const key of ['servers.importPrivateKey', 'servers.privateKeyImported', 'servers.privateKeyImportFailed', 'servers.privateKeyFileTooLarge']) {
+    const count = (i18nSource.match(new RegExp(key.replace('.', '\\.'), 'g')) ?? []).length;
+    if (count < 3) {
+      throw new Error(`SSH key-auth i18n key is missing languages: ${key}`);
+    }
+  }
+
+  console.log('ok SSH private-key authentication supports file import, validation, and i18n coverage');
 }
 
 function assertMobileTopbarKeepsCoreActions() {

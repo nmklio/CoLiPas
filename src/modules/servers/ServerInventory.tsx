@@ -1,5 +1,5 @@
 import { FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronUp, Cpu, Database, Edit3, Globe2, KeyRound, Plus, Power, PowerOff, RotateCcw, Search, Server, ShieldCheck, Terminal, Trash2, X } from 'lucide-react';
+import { ChevronUp, Cpu, Database, Edit3, FileKey2, Globe2, KeyRound, Plus, Power, PowerOff, RotateCcw, Search, Server, ShieldCheck, Terminal, Trash2, X } from 'lucide-react';
 import { Language, useI18n } from '../../i18n';
 import {
   closeServerShell,
@@ -107,6 +107,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const terminalShellStreamRef = useRef<EventSource | null>(null);
   const terminalCommandBufferRef = useRef('');
   const formRef = useRef(form);
+  const privateKeyFileRef = useRef<HTMLInputElement | null>(null);
   const identityRequestSeqRef = useRef(0);
   const identityInFlightRef = useRef<{ key: string; promise: Promise<ServerIdentityResponse> } | null>(null);
   const identityCacheRef = useRef<Map<string, ServerIdentityResponse>>(new Map());
@@ -455,8 +456,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
             <label>
               {t('servers.authType')}
               <select value={form.ssh.authType} onChange={(event) => setSshField('authType', event.target.value as SshAuthType)}>
-                <option value="password">{t('servers.sshPassword')}</option>
-                <option value="privateKey">{t('servers.privateKey')}</option>
+                <option value="password">{t('servers.passwordAuth')}</option>
+                <option value="privateKey">{t('servers.keyAuth')}</option>
               </select>
             </label>
             {form.ssh.authType === 'password' ? (
@@ -474,9 +475,24 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
             ) : (
               <>
                 <label className="connect-form-wide">
-                  {t('servers.privateKey')}
+                  <span className="connect-form-label-row">
+                    {t('servers.privateKey')}
+                    <button type="button" className="inline-import-button" onClick={() => privateKeyFileRef.current?.click()}>
+                      <FileKey2 size={14} />
+                      {t('servers.importPrivateKey')}
+                    </button>
+                  </span>
+                  <input
+                    ref={privateKeyFileRef}
+                    className="visually-hidden"
+                    type="file"
+                    accept=".pem,.key,.txt,.ppk"
+                    onChange={(event) => importPrivateKeyFile(event.currentTarget.files?.[0])}
+                    aria-label={t('servers.importPrivateKey')}
+                  />
                   <textarea
                     required
+                    spellCheck={false}
                     value={form.ssh.privateKey}
                     onChange={(event) => setSshField('privateKey', event.target.value)}
                     placeholder={t('servers.privateKeyPlaceholder')}
@@ -697,6 +713,32 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
         [key]: value,
       },
     }));
+  }
+
+  async function importPrivateKeyFile(file: File | undefined) {
+    if (!file) {
+      return;
+    }
+
+    if (file.size > 64 * 1024) {
+      setActionMessage(t('servers.privateKeyFileTooLarge'));
+      if (privateKeyFileRef.current) {
+        privateKeyFileRef.current.value = '';
+      }
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      setSshField('privateKey', text.trim());
+      setActionMessage(t('servers.privateKeyImported', { name: file.name }));
+    } catch {
+      setActionMessage(t('servers.privateKeyImportFailed'));
+    } finally {
+      if (privateKeyFileRef.current) {
+        privateKeyFileRef.current.value = '';
+      }
+    }
   }
 
   function updateProviderMode(value: string) {
