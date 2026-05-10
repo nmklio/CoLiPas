@@ -2,6 +2,7 @@ import { operationEvents, servers } from '../../data/mockData.js';
 import type {
   ReleaseReadinessCheck,
   ReleaseReadinessHistory,
+  ReleaseReadinessReportResponse,
   ReleaseReadinessResponse,
   ReleaseReadinessSnapshot,
   ReleaseReadinessSnapshotResponse,
@@ -151,6 +152,56 @@ export function recordReleaseReadinessSnapshot(config: RuntimeConfig): ReleaseRe
   };
 }
 
+export function buildReleaseReadinessReport(config: RuntimeConfig): ReleaseReadinessReportResponse {
+  const readiness = buildReleaseReadiness(config);
+  const generatedAt = new Date().toISOString();
+  const trend = readiness.history.trend;
+  const latestSnapshots = readiness.history.snapshots.slice(0, 5);
+  const markdown = [
+    '# CoLiPas Release Readiness Report',
+    '',
+    `- Generated at: ${generatedAt}`,
+    `- Score: ${readiness.score}`,
+    `- Status: ${readiness.status}`,
+    `- Checks: ${readiness.summary.passed}/${readiness.summary.totalChecks} passed`,
+    `- Findings: ${readiness.summary.failures} blockers / ${readiness.summary.warnings} warnings`,
+    `- Trend: ${formatTrend(trend.direction, trend.deltaScore, trend.previousScore)}`,
+    `- Snapshot count: ${trend.snapshotCount}`,
+    '',
+    '## Next Best Action',
+    '',
+    `- ${readiness.nextBestAction}`,
+    '',
+    '## Blockers',
+    '',
+    ...formatReportBlockers(readiness.blockers),
+    '',
+    '## Checks',
+    '',
+    ...readiness.checks.map((check) => [
+      `### ${check.label}`,
+      '',
+      `- Severity: ${check.severity}`,
+      `- Passed: ${check.passed ? 'yes' : 'no'}`,
+      `- Value: ${sanitizeReportText(check.value)}`,
+      `- Evidence: ${sanitizeReportText(check.evidence)}`,
+      `- Recommended action: ${sanitizeReportText(check.recommendedAction)}`,
+      `- Related module: ${check.relatedModule}`,
+      '',
+    ].join('\n')),
+    '## Recent Snapshots',
+    '',
+    ...formatReportSnapshots(latestSnapshots),
+  ].join('\n');
+
+  return {
+    generatedAt,
+    filename: `colipas-readiness-${generatedAt.slice(0, 10)}.md`,
+    contentType: 'text/markdown',
+    markdown,
+  };
+}
+
 export function getActiveAuditIssues() {
   const auditEntries = listAuditEntries();
   const lastAuditReview = getLastRemediationTime(auditEntries, 'audit-errors');
@@ -165,6 +216,46 @@ export function getActiveAuditIssues() {
 
     return entry.status === 'blocked' || entry.status === 'failed';
   });
+}
+
+function formatReportBlockers(blockers: ReleaseReadinessCheck[]) {
+  if (blockers.length === 0) {
+    return ['- No blocking readiness checks.'];
+  }
+
+  return blockers.map((blocker) => `- ${blocker.label}: ${sanitizeReportText(blocker.evidence)} Next: ${sanitizeReportText(blocker.recommendedAction)}`);
+}
+
+function formatReportSnapshots(snapshots: ReleaseReadinessSnapshot[]) {
+  if (snapshots.length === 0) {
+    return ['- No recorded snapshots yet.'];
+  }
+
+  return snapshots.map((snapshot) => `- ${snapshot.createdAt}: score ${snapshot.score}, status ${snapshot.status}, blockers ${snapshot.blockerLabels.length ? snapshot.blockerLabels.map(sanitizeReportText).join(', ') : 'none'}`);
+}
+
+function formatTrend(direction: ReleaseReadinessTrend['direction'], deltaScore: number, previousScore?: number) {
+  if (direction === 'new') {
+    return 'no previous snapshot';
+  }
+
+  const previous = typeof previousScore === 'number' ? ` from ${previousScore}` : '';
+  if (direction === 'up') {
+    return `up ${deltaScore} point(s)${previous}`;
+  }
+  if (direction === 'down') {
+    return `down ${Math.abs(deltaScore)} point(s)${previous}`;
+  }
+  return `flat${previous}`;
+}
+
+function sanitizeReportText(value: string) {
+  return value
+    .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, '[redacted-private-key]')
+    .replace(/\bsk-[A-Za-z0-9_-]{12,}\b/g, '[redacted-api-key]')
+    .replace(/\b(password|passwd|pwd|token|secret|api[_-]?key)=([^\s&]+)/gi, '$1=[redacted]')
+    .replace(/\/\/([^/\s:@]+):([^@\s/]+)@/g, '//[redacted]@')
+    .slice(0, 1000);
 }
 
 function createSnapshot(input: {

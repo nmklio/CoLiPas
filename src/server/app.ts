@@ -15,7 +15,7 @@ import { buildAccountPayload, changeAdminPassword, getCurrentSession, getLoginTh
 import { executeCustomApiProxy } from './services/customApiProxy.js';
 import { getDatabasePath } from './services/database.js';
 import { createOperationTask } from './services/operationsService.js';
-import { buildReleaseReadiness, recordReleaseReadinessSnapshot } from './services/releaseReadinessService.js';
+import { buildReleaseReadiness, buildReleaseReadinessReport, recordReleaseReadinessSnapshot } from './services/releaseReadinessService.js';
 import {
   closeServerShell,
   connectServer,
@@ -547,6 +547,10 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
 
   app.post('/api/audit/readiness/snapshots', (_request, response) => {
     response.status(201).json(recordReleaseReadinessSnapshot(config));
+  });
+
+  app.get('/api/audit/readiness/report', (_request, response) => {
+    response.json(buildReleaseReadinessReport(config));
   });
 
   app.post('/api/audit/remediate', (request, response, next) => {

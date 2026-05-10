@@ -269,6 +269,15 @@ const getChecks = [
       !JSON.stringify(body).includes('admin123456'),
   ],
   [
+    '/api/audit/readiness/report',
+    (body) =>
+      body.contentType === 'text/markdown' &&
+      body.filename?.startsWith('colipas-readiness-') &&
+      body.markdown?.includes('# CoLiPas Release Readiness Report') &&
+      body.markdown?.includes('## Checks') &&
+      !body.markdown.includes('admin123456'),
+  ],
+  [
     '/api/overview',
     (body) =>
       Array.isArray(body.cloudAccounts) &&
@@ -1649,6 +1658,30 @@ if (JSON.stringify(secondReadinessSnapshotBody).includes(sensitiveAuditSecret) |
 }
 console.log('ok /api/audit/readiness/snapshots records trend evidence without secrets');
 
+const readinessReportResponse = await fetch(`${baseUrl}/api/audit/readiness/report`, { headers: authHeaders });
+if (!readinessReportResponse.ok) {
+  throw new Error(`/api/audit/readiness/report returned HTTP ${readinessReportResponse.status}`);
+}
+const readinessReportBody = await readinessReportResponse.json();
+if (
+  readinessReportBody.contentType !== 'text/markdown'
+  || !readinessReportBody.markdown?.includes('## Blockers')
+  || !readinessReportBody.markdown?.includes('## Recent Snapshots')
+  || !readinessReportBody.markdown?.includes('Audit failures')
+) {
+  throw new Error('/api/audit/readiness/report returned incomplete Markdown report');
+}
+if (
+  readinessReportBody.markdown.includes(sensitiveAuditSecret)
+  || readinessReportBody.markdown.includes(sensitiveSshSecret)
+  || readinessReportBody.markdown.includes(smokePrivateKeyMarker)
+  || readinessReportBody.markdown.includes(smokePrivateKeyPassphrase)
+  || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(readinessReportBody.markdown)
+) {
+  throw new Error('/api/audit/readiness/report leaked sensitive material');
+}
+console.log('ok /api/audit/readiness/report exports sanitized Markdown evidence');
+
 const remediationResponse = await fetch(`${baseUrl}/api/audit/remediate`, {
   method: 'POST',
   headers: { ...authHeaders, 'Content-Type': 'application/json' },
@@ -2864,8 +2897,10 @@ function assertSecurityAuditRelationsAreSpecific() {
     'security-readiness-card',
     'applyReadinessFilter(check)',
     'recordReleaseReadinessSnapshot()',
+    'fetchReleaseReadinessReport()',
     'copy.readinessTrend(readiness.history.trend.direction, readiness.history.trend.deltaScore)',
     'copy.snapshotRecorded(result.snapshot.score)',
+    'copy.reportExported',
   ];
   const missing = requiredFragments.filter((fragment) => !securitySource.includes(fragment));
   if (missing.length) {
@@ -2911,14 +2946,19 @@ function assertSecurityAuditRelationsAreSpecific() {
   const remediationFragments = [
     "app.get('/api/audit/readiness'",
     "app.post('/api/audit/readiness/snapshots'",
+    "app.get('/api/audit/readiness/report'",
     'buildReleaseReadiness(config)',
+    'buildReleaseReadinessReport(config)',
     'recordReleaseReadinessSnapshot(config)',
     'export function buildReleaseReadiness(config',
+    'export function buildReleaseReadinessReport(config',
+    'sanitizeReportText',
     'writeAppSetting(readinessHistorySettingId',
     'getLastRemediationTime(auditEntries, \'audit-errors\')',
     'nextBestAction',
     "fetcher('/api/audit/readiness'",
     "fetcher('/api/audit/readiness/snapshots'",
+    "fetcher('/api/audit/readiness/report'",
     "app.post('/api/audit/remediate'",
     'remediateSecurityRisk(request.body, session.user.username)',
     "z.enum(['acknowledgeCheck', 'acknowledgeAuditFailures', 'closeOpenEvents', 'reviewRuntime'])",

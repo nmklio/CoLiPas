@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { getLocale, useI18n } from '../../i18n';
 import { OperationEvent } from '../../types';
-import { fetchReleaseReadiness, recordReleaseReadinessSnapshot, remediateSecurityRisk } from '../../services/apiClient';
+import { fetchReleaseReadiness, fetchReleaseReadinessReport, recordReleaseReadinessSnapshot, remediateSecurityRisk } from '../../services/apiClient';
 import type { SecurityRemediationResponse } from '../../services/apiClient';
 import type { ReleaseReadinessResponse } from '../../types';
 
@@ -106,6 +106,7 @@ export function SecurityPanel({ events, onNavigate, onRemediated }: SecurityPane
   const [remediatingId, setRemediatingId] = useState('');
   const [readiness, setReadiness] = useState<ReleaseReadinessResponse | null>(null);
   const [recordingSnapshot, setRecordingSnapshot] = useState(false);
+  const [exportingReadinessReport, setExportingReadinessReport] = useState(false);
 
   const filteredAudits = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -281,6 +282,28 @@ export function SecurityPanel({ events, onNavigate, onRemediated }: SecurityPane
     }
   }
 
+  async function exportReadinessReport() {
+    setExportingReadinessReport(true);
+    setRemediationMessage('');
+    setRemediationError(false);
+    try {
+      const report = await fetchReleaseReadinessReport();
+      const blob = new Blob([report.markdown], { type: `${report.contentType};charset=utf-8` });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = report.filename;
+      link.click();
+      URL.revokeObjectURL(url);
+      setRemediationMessage(copy.reportExported);
+    } catch (error) {
+      setRemediationMessage(error instanceof Error ? error.message : copy.reportFailed);
+      setRemediationError(true);
+    } finally {
+      setExportingReadinessReport(false);
+    }
+  }
+
   return (
     <section className="module-section security-workbench" aria-labelledby="security-title">
       <div className="section-header security-header">
@@ -350,6 +373,10 @@ export function SecurityPanel({ events, onNavigate, onRemediated }: SecurityPane
             <button type="button" className="tool-button" onClick={handleRecordReadinessSnapshot} disabled={recordingSnapshot || !readiness}>
               <Clock3 size={15} />
               {recordingSnapshot ? copy.snapshotRecording : copy.snapshotRecord}
+            </button>
+            <button type="button" className="tool-button" onClick={exportReadinessReport} disabled={exportingReadinessReport || !readiness}>
+              <Download size={15} />
+              {exportingReadinessReport ? copy.reportExporting : copy.reportExport}
             </button>
           </div>
         </div>
@@ -983,6 +1010,10 @@ interface SecurityCopy {
   snapshotRecord: string;
   snapshotRecording: string;
   snapshotFailed: string;
+  reportExport: string;
+  reportExporting: string;
+  reportExported: string;
+  reportFailed: string;
   goConfigureAi: string;
   goConfigureApi: string;
   goServers: string;
@@ -1091,6 +1122,10 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     snapshotRecord: '记录本轮快照',
     snapshotRecording: '记录中',
     snapshotFailed: '快照记录失败',
+    reportExport: '导出巡检报告',
+    reportExporting: '导出中',
+    reportExported: '巡检报告已生成',
+    reportFailed: '巡检报告导出失败',
     goConfigureAi: '去配置 AI',
     goConfigureApi: '去配置 API',
     goServers: '去服务器',
@@ -1211,6 +1246,10 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     snapshotRecord: 'Record snapshot',
     snapshotRecording: 'Recording',
     snapshotFailed: 'Snapshot failed',
+    reportExport: 'Export report',
+    reportExporting: 'Exporting',
+    reportExported: 'Readiness report generated',
+    reportFailed: 'Report export failed',
     goConfigureAi: 'Configure AI',
     goConfigureApi: 'Configure API',
     goServers: 'Open servers',
@@ -1331,6 +1370,10 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     snapshotRecord: 'スナップショットを記録',
     snapshotRecording: '記録中',
     snapshotFailed: 'スナップショット記録に失敗しました',
+    reportExport: 'レポートを書き出す',
+    reportExporting: '書き出し中',
+    reportExported: '準備レポートを生成しました',
+    reportFailed: 'レポート書き出しに失敗しました',
     goConfigureAi: 'AI を設定',
     goConfigureApi: 'API を設定',
     goServers: 'サーバーへ',

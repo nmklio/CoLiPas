@@ -6,6 +6,7 @@ import {
   OperationEvent,
   OperationTaskRequest,
   OperationTaskResponse,
+  ReleaseReadinessReportResponse,
   ReleaseReadinessResponse,
   ReleaseReadinessSnapshotResponse,
   ServerNode,
@@ -518,6 +519,16 @@ export async function recordReleaseReadinessSnapshot(fetcher: typeof fetch = fet
   }
 
   return (await response.json()) as ReleaseReadinessSnapshotResponse;
+}
+
+export async function fetchReleaseReadinessReport(fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/audit/readiness/report');
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as ReleaseReadinessReportResponse;
 }
 
 export async function connectServer(payload: ConnectServerPayload, fetcher: typeof fetch = fetch) {

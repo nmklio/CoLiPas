@@ -187,3 +187,10 @@ export interface ReleaseReadinessSnapshotResponse {
   snapshot: ReleaseReadinessSnapshot;
   readiness: ReleaseReadinessResponse;
 }
+
+export interface ReleaseReadinessReportResponse {
+  generatedAt: string;
+  filename: string;
+  contentType: 'text/markdown';
+  markdown: string;
+}
