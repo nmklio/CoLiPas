@@ -5612,6 +5612,29 @@ pre {
   line-height: 1.5;
 }
 
+.security-readiness-trend,
+.security-readiness-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.security-readiness-trend span {
+  min-height: 24px;
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: #eef5f6;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.security-readiness-actions {
+  justify-content: flex-end;
+}
+
 .security-readiness-blockers {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

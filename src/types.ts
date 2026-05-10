@@ -138,9 +138,37 @@ export interface ReleaseReadinessCheck {
   relatedModule: 'ai' | 'api' | 'audit' | 'database' | 'events' | 'runtime' | 'servers' | 'ssh';
 }
 
+export type ReleaseReadinessStatus = 'ready' | 'review' | 'blocked';
+
+export type ReleaseReadinessTrendDirection = 'up' | 'down' | 'flat' | 'new';
+
+export interface ReleaseReadinessSnapshot {
+  id: string;
+  createdAt: string;
+  score: number;
+  status: ReleaseReadinessStatus;
+  summary: ReleaseReadinessResponse['summary'];
+  blockerIds: string[];
+  blockerLabels: string[];
+  nextBestAction: string;
+}
+
+export interface ReleaseReadinessTrend {
+  direction: ReleaseReadinessTrendDirection;
+  deltaScore: number;
+  previousScore?: number;
+  snapshotCount: number;
+  changedBlockers: string[];
+}
+
+export interface ReleaseReadinessHistory {
+  snapshots: ReleaseReadinessSnapshot[];
+  trend: ReleaseReadinessTrend;
+}
+
 export interface ReleaseReadinessResponse {
   score: number;
-  status: 'ready' | 'review' | 'blocked';
+  status: ReleaseReadinessStatus;
   generatedAt: string;
   summary: {
     totalChecks: number;
@@ -151,4 +179,11 @@ export interface ReleaseReadinessResponse {
   checks: ReleaseReadinessCheck[];
   blockers: ReleaseReadinessCheck[];
   nextBestAction: string;
+  history: ReleaseReadinessHistory;
+}
+
+export interface ReleaseReadinessSnapshotResponse {
+  ok: true;
+  snapshot: ReleaseReadinessSnapshot;
+  readiness: ReleaseReadinessResponse;
 }

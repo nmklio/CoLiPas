@@ -1,16 +1,23 @@
 import { operationEvents, servers } from '../../data/mockData.js';
-import type { ReleaseReadinessCheck, ReleaseReadinessResponse } from '../../types.js';
+import type {
+  ReleaseReadinessCheck,
+  ReleaseReadinessHistory,
+  ReleaseReadinessResponse,
+  ReleaseReadinessSnapshot,
+  ReleaseReadinessSnapshotResponse,
+  ReleaseReadinessTrend,
+} from '../../types.js';
 import { RuntimeConfig } from '../config.js';
-import { getDatabasePath } from './database.js';
+import { getDatabasePath, readAppSetting, writeAppSetting } from './database.js';
 import { listAuditEntries } from './auditService.js';
 import { resolveServerLifecycleStatus } from '../../shared/serverFilters.js';
 
+const readinessHistorySettingId = 'release-readiness-history';
+const maxReadinessSnapshots = 12;
+
 export function buildReleaseReadiness(config: RuntimeConfig): ReleaseReadinessResponse {
   const auditEntries = listAuditEntries();
-  const activeAuditIssues = auditEntries.filter((entry) => (
-    entry.action !== 'SECURITY_REMEDIATION'
-    && (entry.status === 'blocked' || entry.status === 'failed')
-  ));
+  const activeAuditIssues = getActiveAuditIssues();
   const connectedServers = servers.filter((server) => resolveServerLifecycleStatus(server) !== 'unconnected');
   const openEvents = operationEvents.filter((event) => event.status === 'open');
   const databaseName = getDatabasePath().split(/[\\/]/).pop() ?? 'unknown';
@@ -93,19 +100,173 @@ export function buildReleaseReadiness(config: RuntimeConfig): ReleaseReadinessRe
   const passed = checks.filter((check) => check.passed).length;
   const score = Math.max(0, Math.round((passed / checks.length) * 100 - failures * 12 - warnings * 4));
   const blockers = checks.filter((check) => check.severity === 'fail' || (!check.passed && check.relatedModule === 'audit'));
-
-  return {
+  const currentSnapshot = createSnapshot({
     score,
     status: failures > 0 ? 'blocked' : warnings > 0 ? 'review' : 'ready',
-    generatedAt: new Date().toISOString(),
     summary: {
       totalChecks: checks.length,
       passed,
       warnings,
       failures,
     },
-    checks,
     blockers,
     nextBestAction: blockers[0]?.recommendedAction ?? checks.find((check) => !check.passed)?.recommendedAction ?? 'Run the regular smoke suite and publish through the release pipeline.',
+  });
+  const persistedHistory = loadReadinessHistory();
+  const history = buildHistory(currentSnapshot, persistedHistory.snapshots);
+
+  return {
+    score,
+    status: currentSnapshot.status,
+    generatedAt: new Date().toISOString(),
+    summary: currentSnapshot.summary,
+    checks,
+    blockers,
+    nextBestAction: currentSnapshot.nextBestAction,
+    history,
   };
+}
+
+export function recordReleaseReadinessSnapshot(config: RuntimeConfig): ReleaseReadinessSnapshotResponse {
+  const readiness = buildReleaseReadiness(config);
+  const snapshot = createSnapshot({
+    score: readiness.score,
+    status: readiness.status,
+    summary: readiness.summary,
+    blockers: readiness.blockers,
+    nextBestAction: readiness.nextBestAction,
+  });
+  const history = loadReadinessHistory();
+  const snapshots = [snapshot, ...history.snapshots.filter((item) => item.id !== snapshot.id)].slice(0, maxReadinessSnapshots);
+  const savedHistory = buildHistory(snapshot, snapshots);
+  writeAppSetting(readinessHistorySettingId, { snapshots: savedHistory.snapshots });
+
+  return {
+    ok: true,
+    snapshot,
+    readiness: {
+      ...readiness,
+      history: savedHistory,
+    },
+  };
+}
+
+export function getActiveAuditIssues() {
+  const auditEntries = listAuditEntries();
+  const lastAuditReview = getLastRemediationTime(auditEntries, 'audit-errors');
+  return auditEntries.filter((entry) => {
+    if (entry.action === 'SECURITY_REMEDIATION') {
+      return false;
+    }
+
+    if (lastAuditReview && new Date(entry.createdAt).getTime() <= lastAuditReview) {
+      return false;
+    }
+
+    return entry.status === 'blocked' || entry.status === 'failed';
+  });
+}
+
+function createSnapshot(input: {
+  score: number;
+  status: ReleaseReadinessSnapshot['status'];
+  summary: ReleaseReadinessSnapshot['summary'];
+  blockers: ReleaseReadinessCheck[];
+  nextBestAction: string;
+}): ReleaseReadinessSnapshot {
+  const createdAt = new Date().toISOString();
+  return {
+    id: `ready-${createdAt.replace(/[:.]/g, '-')}`,
+    createdAt,
+    score: input.score,
+    status: input.status,
+    summary: input.summary,
+    blockerIds: input.blockers.map((check) => check.id),
+    blockerLabels: input.blockers.map((check) => check.label),
+    nextBestAction: input.nextBestAction,
+  };
+}
+
+function loadReadinessHistory(): ReleaseReadinessHistory {
+  try {
+    const row = readAppSetting(readinessHistorySettingId);
+    if (!row) {
+      return buildHistory(null, []);
+    }
+
+    const parsed = JSON.parse(row.payload) as { snapshots?: ReleaseReadinessSnapshot[] };
+    const snapshots = Array.isArray(parsed.snapshots)
+      ? parsed.snapshots.filter(isReadinessSnapshot).slice(0, maxReadinessSnapshots)
+      : [];
+    return buildHistory(null, snapshots);
+  } catch {
+    return buildHistory(null, []);
+  }
+}
+
+function buildHistory(current: ReleaseReadinessSnapshot | null, snapshots: ReleaseReadinessSnapshot[]): ReleaseReadinessHistory {
+  const orderedSnapshots = snapshots.slice(0, maxReadinessSnapshots);
+  return {
+    snapshots: orderedSnapshots,
+    trend: buildTrend(current ?? orderedSnapshots[0] ?? null, orderedSnapshots),
+  };
+}
+
+function buildTrend(current: ReleaseReadinessSnapshot | null, snapshots: ReleaseReadinessSnapshot[]): ReleaseReadinessTrend {
+  if (!current) {
+    return {
+      direction: 'new',
+      deltaScore: 0,
+      snapshotCount: 0,
+      changedBlockers: [],
+    };
+  }
+
+  const previous = snapshots.find((snapshot) => snapshot.id !== current.id);
+  if (!previous) {
+    return {
+      direction: snapshots.length > 0 ? 'flat' : 'new',
+      deltaScore: 0,
+      snapshotCount: snapshots.length,
+      changedBlockers: [],
+    };
+  }
+
+  const deltaScore = current.score - previous.score;
+  const previousBlockers = new Set(previous.blockerIds);
+  const currentBlockers = new Set(current.blockerIds);
+  const changedBlockers = [
+    ...current.blockerLabels.filter((label, index) => !previousBlockers.has(current.blockerIds[index])),
+    ...previous.blockerLabels.filter((label, index) => !currentBlockers.has(previous.blockerIds[index])),
+  ];
+
+  return {
+    direction: deltaScore > 0 ? 'up' : deltaScore < 0 ? 'down' : 'flat',
+    deltaScore,
+    previousScore: previous.score,
+    snapshotCount: snapshots.length,
+    changedBlockers,
+  };
+}
+
+function getLastRemediationTime(auditEntries: ReturnType<typeof listAuditEntries>, target: string) {
+  const remediation = auditEntries.find((entry) => entry.action === 'SECURITY_REMEDIATION' && entry.target === target);
+  return remediation ? new Date(remediation.createdAt).getTime() : 0;
+}
+
+function isReadinessSnapshot(value: unknown): value is ReleaseReadinessSnapshot {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const snapshot = value as Partial<ReleaseReadinessSnapshot>;
+  return (
+    typeof snapshot.id === 'string'
+    && typeof snapshot.createdAt === 'string'
+    && typeof snapshot.score === 'number'
+    && (snapshot.status === 'ready' || snapshot.status === 'review' || snapshot.status === 'blocked')
+    && Array.isArray(snapshot.blockerIds)
+    && Array.isArray(snapshot.blockerLabels)
+    && typeof snapshot.nextBestAction === 'string'
+  );
 }

@@ -265,6 +265,7 @@ const getChecks = [
       Array.isArray(body.checks) &&
       body.checks.some((check) => check.id === 'api-allowlist') &&
       body.summary?.totalChecks === body.checks.length &&
+      body.history?.trend?.snapshotCount >= 0 &&
       !JSON.stringify(body).includes('admin123456'),
   ],
   [
@@ -1615,6 +1616,39 @@ if (
 }
 console.log('ok /api/audit/readiness aggregates release evidence without secrets');
 
+const readinessSnapshotResponse = await fetch(`${baseUrl}/api/audit/readiness/snapshots`, {
+  method: 'POST',
+  headers: authHeaders,
+});
+if (readinessSnapshotResponse.status !== 201) {
+  throw new Error(`/api/audit/readiness/snapshots returned HTTP ${readinessSnapshotResponse.status}`);
+}
+const readinessSnapshotBody = await readinessSnapshotResponse.json();
+if (
+  readinessSnapshotBody.ok !== true
+  || !readinessSnapshotBody.snapshot?.id
+  || readinessSnapshotBody.snapshot?.score !== readinessBody.score
+  || readinessSnapshotBody.readiness?.history?.trend?.snapshotCount < 1
+) {
+  throw new Error('/api/audit/readiness/snapshots returned unexpected history payload');
+}
+const secondReadinessSnapshotResponse = await fetch(`${baseUrl}/api/audit/readiness/snapshots`, {
+  method: 'POST',
+  headers: authHeaders,
+});
+const secondReadinessSnapshotBody = await secondReadinessSnapshotResponse.json();
+if (
+  !secondReadinessSnapshotResponse.ok
+  || secondReadinessSnapshotBody.readiness?.history?.trend?.snapshotCount < 2
+  || !['flat', 'up', 'down'].includes(secondReadinessSnapshotBody.readiness?.history?.trend?.direction)
+) {
+  throw new Error('/api/audit/readiness/snapshots did not preserve readiness trend history');
+}
+if (JSON.stringify(secondReadinessSnapshotBody).includes(sensitiveAuditSecret) || JSON.stringify(secondReadinessSnapshotBody).includes(sensitiveSshSecret)) {
+  throw new Error('/api/audit/readiness/snapshots leaked sensitive material');
+}
+console.log('ok /api/audit/readiness/snapshots records trend evidence without secrets');
+
 const remediationResponse = await fetch(`${baseUrl}/api/audit/remediate`, {
   method: 'POST',
   headers: { ...authHeaders, 'Content-Type': 'application/json' },
@@ -1635,6 +1669,16 @@ const remediatedAuditResponse = await fetch(`${baseUrl}/api/audit/events`, { hea
 const remediatedAuditBody = await remediatedAuditResponse.json();
 if (!remediatedAuditBody.items?.some((item) => item.action === 'SECURITY_REMEDIATION' && item.target === 'audit-errors' && item.actor === 'admin')) {
   throw new Error('/api/audit/events did not include security remediation evidence');
+}
+const remediatedReadinessResponse = await fetch(`${baseUrl}/api/audit/readiness`, { headers: authHeaders });
+const remediatedReadinessBody = await remediatedReadinessResponse.json();
+const remediatedAuditFailureCheck = remediatedReadinessBody.checks?.find((check) => check.id === 'audit-failures');
+if (
+  !remediatedReadinessResponse.ok
+  || remediatedAuditFailureCheck?.severity !== 'info'
+  || remediatedReadinessBody.blockers?.some((check) => check.id === 'audit-failures')
+) {
+  throw new Error('/api/audit/readiness did not respect audit remediation closure');
 }
 console.log('ok /api/audit/remediate records remediation closure');
 
@@ -2819,6 +2863,9 @@ function assertSecurityAuditRelationsAreSpecific() {
     'fetchReleaseReadiness()',
     'security-readiness-card',
     'applyReadinessFilter(check)',
+    'recordReleaseReadinessSnapshot()',
+    'copy.readinessTrend(readiness.history.trend.direction, readiness.history.trend.deltaScore)',
+    'copy.snapshotRecorded(result.snapshot.score)',
   ];
   const missing = requiredFragments.filter((fragment) => !securitySource.includes(fragment));
   if (missing.length) {
@@ -2847,6 +2894,8 @@ function assertSecurityAuditRelationsAreSpecific() {
     '.security-remediation-item',
     '.security-readiness-card',
     '.security-readiness-meter',
+    '.security-readiness-trend',
+    '.security-readiness-actions',
     '.security-readiness-blocker',
     '.config-state.action',
   ];
@@ -2861,10 +2910,15 @@ function assertSecurityAuditRelationsAreSpecific() {
   const apiClientSource = fs.readFileSync(new URL('../src/services/apiClient.ts', import.meta.url), 'utf8');
   const remediationFragments = [
     "app.get('/api/audit/readiness'",
+    "app.post('/api/audit/readiness/snapshots'",
     'buildReleaseReadiness(config)',
+    'recordReleaseReadinessSnapshot(config)',
     'export function buildReleaseReadiness(config',
+    'writeAppSetting(readinessHistorySettingId',
+    'getLastRemediationTime(auditEntries, \'audit-errors\')',
     'nextBestAction',
     "fetcher('/api/audit/readiness'",
+    "fetcher('/api/audit/readiness/snapshots'",
     "app.post('/api/audit/remediate'",
     'remediateSecurityRisk(request.body, session.user.username)',
     "z.enum(['acknowledgeCheck', 'acknowledgeAuditFailures', 'closeOpenEvents', 'reviewRuntime'])",

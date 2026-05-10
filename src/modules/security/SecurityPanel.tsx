@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { getLocale, useI18n } from '../../i18n';
 import { OperationEvent } from '../../types';
-import { fetchReleaseReadiness, remediateSecurityRisk } from '../../services/apiClient';
+import { fetchReleaseReadiness, recordReleaseReadinessSnapshot, remediateSecurityRisk } from '../../services/apiClient';
 import type { SecurityRemediationResponse } from '../../services/apiClient';
 import type { ReleaseReadinessResponse } from '../../types';
 
@@ -105,6 +105,7 @@ export function SecurityPanel({ events, onNavigate, onRemediated }: SecurityPane
   const [remediationError, setRemediationError] = useState(false);
   const [remediatingId, setRemediatingId] = useState('');
   const [readiness, setReadiness] = useState<ReleaseReadinessResponse | null>(null);
+  const [recordingSnapshot, setRecordingSnapshot] = useState(false);
 
   const filteredAudits = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -264,6 +265,22 @@ export function SecurityPanel({ events, onNavigate, onRemediated }: SecurityPane
     }
   }
 
+  async function handleRecordReadinessSnapshot() {
+    setRecordingSnapshot(true);
+    setRemediationMessage('');
+    setRemediationError(false);
+    try {
+      const result = await recordReleaseReadinessSnapshot();
+      setReadiness(result.readiness);
+      setRemediationMessage(copy.snapshotRecorded(result.snapshot.score));
+    } catch (error) {
+      setRemediationMessage(error instanceof Error ? error.message : copy.snapshotFailed);
+      setRemediationError(true);
+    } finally {
+      setRecordingSnapshot(false);
+    }
+  }
+
   return (
     <section className="module-section security-workbench" aria-labelledby="security-title">
       <div className="section-header security-header">
@@ -304,6 +321,15 @@ export function SecurityPanel({ events, onNavigate, onRemediated }: SecurityPane
             <span>{readiness ? copy.readinessIssues(readiness.summary.failures, readiness.summary.warnings) : copy.readinessCalculating}</span>
           </div>
           <p>{readiness?.nextBestAction ?? copy.readinessCalculating}</p>
+          {readiness && (
+            <div className="security-readiness-trend">
+              <span>{copy.readinessTrend(readiness.history.trend.direction, readiness.history.trend.deltaScore)}</span>
+              <span>{copy.readinessSnapshotCount(readiness.history.trend.snapshotCount)}</span>
+              {readiness.history.trend.changedBlockers.length > 0 && (
+                <span>{copy.readinessChangedBlockers(readiness.history.trend.changedBlockers.length)}</span>
+              )}
+            </div>
+          )}
           {readiness && readiness.blockers.length > 0 && (
             <div className="security-readiness-blockers">
               {readiness.blockers.slice(0, 3).map((check) => (
@@ -320,6 +346,12 @@ export function SecurityPanel({ events, onNavigate, onRemediated }: SecurityPane
               ))}
             </div>
           )}
+          <div className="security-readiness-actions">
+            <button type="button" className="tool-button" onClick={handleRecordReadinessSnapshot} disabled={recordingSnapshot || !readiness}>
+              <Clock3 size={15} />
+              {recordingSnapshot ? copy.snapshotRecording : copy.snapshotRecord}
+            </button>
+          </div>
         </div>
       </article>
 
@@ -948,6 +980,9 @@ interface SecurityCopy {
   noRemediation: string;
   remediating: string;
   remediationFailed: string;
+  snapshotRecord: string;
+  snapshotRecording: string;
+  snapshotFailed: string;
   goConfigureAi: string;
   goConfigureApi: string;
   goServers: string;
@@ -961,6 +996,10 @@ interface SecurityCopy {
   readinessChecks: (passed: number, total: number) => string;
   readinessIssues: (failures: number, warnings: number) => string;
   readinessStatus: (status: ReleaseReadinessResponse['status']) => string;
+  readinessTrend: (direction: ReleaseReadinessResponse['history']['trend']['direction'], deltaScore: number) => string;
+  readinessSnapshotCount: (count: number) => string;
+  readinessChangedBlockers: (count: number) => string;
+  snapshotRecorded: (score: number) => string;
   remediationCount: (count: number) => string;
   remediationDone: (title: string) => string;
   updated: (time: string) => string;
@@ -1049,6 +1088,9 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     noRemediation: '当前没有需要处理的风险项。',
     remediating: '处理中',
     remediationFailed: '处置失败',
+    snapshotRecord: '记录本轮快照',
+    snapshotRecording: '记录中',
+    snapshotFailed: '快照记录失败',
     goConfigureAi: '去配置 AI',
     goConfigureApi: '去配置 API',
     goServers: '去服务器',
@@ -1066,6 +1108,15 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
       review: '需复核',
       blocked: '阻断发布',
     })[status],
+    readinessTrend: (direction, deltaScore) => ({
+      up: `较上轮提升 ${deltaScore} 分`,
+      down: `较上轮下降 ${Math.abs(deltaScore)} 分`,
+      flat: '较上轮持平',
+      new: '暂无历史趋势',
+    })[direction],
+    readinessSnapshotCount: (count) => `${count} 条快照`,
+    readinessChangedBlockers: (count) => `${count} 项阻断变化`,
+    snapshotRecorded: (score) => `已记录上线就绪快照：${score} 分`,
     remediationCount: (count) => `${count} 项可处理`,
     remediationDone: (title) => `已处理：${title}`,
     updated: (time) => `更新 ${time}`,
@@ -1157,6 +1208,9 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     noRemediation: 'No risk item requires action right now.',
     remediating: 'Handling',
     remediationFailed: 'Remediation failed',
+    snapshotRecord: 'Record snapshot',
+    snapshotRecording: 'Recording',
+    snapshotFailed: 'Snapshot failed',
     goConfigureAi: 'Configure AI',
     goConfigureApi: 'Configure API',
     goServers: 'Open servers',
@@ -1174,6 +1228,15 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
       review: 'Needs review',
       blocked: 'Blocked',
     })[status],
+    readinessTrend: (direction, deltaScore) => ({
+      up: `Up ${deltaScore} points from last run`,
+      down: `Down ${Math.abs(deltaScore)} points from last run`,
+      flat: 'Flat against last run',
+      new: 'No trend yet',
+    })[direction],
+    readinessSnapshotCount: (count) => `${count} snapshots`,
+    readinessChangedBlockers: (count) => `${count} blocker changes`,
+    snapshotRecorded: (score) => `Recorded readiness snapshot: ${score}`,
     remediationCount: (count) => `${count} actionable`,
     remediationDone: (title) => `Handled: ${title}`,
     updated: (time) => `Updated ${time}`,
@@ -1265,6 +1328,9 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     noRemediation: '現在対応が必要なリスク項目はありません。',
     remediating: '対応中',
     remediationFailed: '対応に失敗しました',
+    snapshotRecord: 'スナップショットを記録',
+    snapshotRecording: '記録中',
+    snapshotFailed: 'スナップショット記録に失敗しました',
     goConfigureAi: 'AI を設定',
     goConfigureApi: 'API を設定',
     goServers: 'サーバーへ',
@@ -1282,6 +1348,15 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
       review: '確認が必要',
       blocked: 'ブロック中',
     })[status],
+    readinessTrend: (direction, deltaScore) => ({
+      up: `前回より ${deltaScore} 点向上`,
+      down: `前回より ${Math.abs(deltaScore)} 点低下`,
+      flat: '前回と同じ',
+      new: '履歴はまだありません',
+    })[direction],
+    readinessSnapshotCount: (count) => `${count} 件のスナップショット`,
+    readinessChangedBlockers: (count) => `${count} 件のブロッカー変更`,
+    snapshotRecorded: (score) => `リリース準備スナップショットを記録しました: ${score}`,
     remediationCount: (count) => `${count} 件対応可能`,
     remediationDone: (title) => `対応済み: ${title}`,
     updated: (time) => `更新 ${time}`,

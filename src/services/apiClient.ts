@@ -7,6 +7,7 @@ import {
   OperationTaskRequest,
   OperationTaskResponse,
   ReleaseReadinessResponse,
+  ReleaseReadinessSnapshotResponse,
   ServerNode,
   SshAuthType,
   SshVerifyMode,
@@ -505,6 +506,18 @@ export async function fetchReleaseReadiness(fetcher: typeof fetch = fetch) {
   }
 
   return (await response.json()) as ReleaseReadinessResponse;
+}
+
+export async function recordReleaseReadinessSnapshot(fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/audit/readiness/snapshots', {
+    method: 'POST',
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as ReleaseReadinessSnapshotResponse;
 }
 
 export async function connectServer(payload: ConnectServerPayload, fetcher: typeof fetch = fetch) {
