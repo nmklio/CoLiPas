@@ -3903,6 +3903,53 @@ td span,
   font-weight: 800;
 }
 
+.ops-preflight-card {
+  min-width: 0;
+  border: 1px solid #d9e6e8;
+  border-radius: 8px;
+  padding: 11px 12px;
+  background: #ffffff;
+  display: grid;
+  gap: 5px;
+}
+
+.ops-preflight-card.ready {
+  border-color: #b8dfcb;
+  background: #f4fbf7;
+}
+
+.ops-preflight-card.blocked {
+  border-color: #efc0bd;
+  background: #fff7f6;
+}
+
+.ops-preflight-card.warn {
+  border-color: #e6cf8f;
+  background: #fffaf0;
+}
+
+.ops-preflight-card span,
+.ops-preflight-card small {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.ops-preflight-card strong {
+  color: var(--text);
+}
+
+.ops-preflight-card ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .ops-workflow-list {
   padding-top: 2px;
 }

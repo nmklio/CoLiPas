@@ -10,15 +10,17 @@ import {
   PowerOff,
   RotateCcw,
   Server,
+  ShieldCheck,
   Terminal,
   Workflow,
   XCircle,
   type LucideIcon,
 } from 'lucide-react';
 import { useI18n } from '../../i18n';
-import { createOperationTask } from '../../services/apiClient';
+import { createOperationTask, preflightOperationTask } from '../../services/apiClient';
 import {
   OperationEvent,
+  OperationTaskPreflightResponse,
   OperationTaskRequest,
   OperationTaskResponse,
   OperationTaskStatus,
@@ -220,9 +222,48 @@ const copyByLanguage: Record<string, Copy> = {
   },
 };
 
+const preflightCopyByLanguage: Record<string, {
+  title: string;
+  ready: string;
+  blocked: string;
+  warn: string;
+  targets: string;
+  issues: string;
+  unavailable: string;
+}> = {
+  zh: {
+    title: '执行预检',
+    ready: '预检通过，可以执行',
+    blocked: '预检发现阻断项',
+    warn: '需要确认后执行',
+    targets: '目标 / 可执行',
+    issues: '风险项',
+    unavailable: '预检未完成',
+  },
+  en: {
+    title: 'Preflight',
+    ready: 'Ready to run',
+    blocked: 'Blocked by preflight',
+    warn: 'Confirmation required',
+    targets: 'Targets / runnable',
+    issues: 'Issues',
+    unavailable: 'Preflight not run',
+  },
+  ja: {
+    title: '実行前チェック',
+    ready: '実行できます',
+    blocked: 'チェックでブロックされました',
+    warn: '確認後に実行できます',
+    targets: '対象 / 実行可能',
+    issues: 'リスク項目',
+    unavailable: '未チェック',
+  },
+};
+
 export function OperationsCenter({ events, servers, onTaskFinished }: OperationsCenterProps) {
   const { language, t } = useI18n();
   const copy = copyByLanguage[language] ?? copyByLanguage.zh;
+  const preflightCopy = preflightCopyByLanguage[language] ?? preflightCopyByLanguage.zh;
   const providerName = (provider: string) => formatProviderName(provider, t);
   const connectedServers = useMemo(() => servers.filter((server) => server.ssh?.connected), [servers]);
   const warningServers = servers.filter((server) => server.status === 'warning' || server.cpu > 80 || server.disk > 85);
@@ -233,7 +274,9 @@ export function OperationsCenter({ events, servers, onTaskFinished }: Operations
   const [command, setCommand] = useState('hostname && uptime');
   const [reason, setReason] = useState('');
   const [running, setRunning] = useState(false);
+  const [preflighting, setPreflighting] = useState(false);
   const [message, setMessage] = useState('');
+  const [preflight, setPreflight] = useState<OperationTaskPreflightResponse | null>(null);
   const [tasks, setTasks] = useState<OperationTaskResponse[]>([]);
   const [activeTaskId, setActiveTaskId] = useState('');
 
@@ -265,10 +308,33 @@ export function OperationsCenter({ events, servers, onTaskFinished }: Operations
     setSelectedServerIds([eligibleServers[0].id]);
   }, [activeSelectedServerIds.length, eligibleServers, targetMode]);
 
+  useEffect(() => {
+    setPreflight(null);
+  }, [activeSelectedServerIds, command, reason, targetMode, taskType]);
+
   async function runTask() {
     const validation = validateTask();
     if (validation) {
       setMessage(validation);
+      return;
+    }
+
+    const preflightPayload = buildTaskPayload(false);
+    setPreflighting(true);
+    setMessage('');
+    let preflightResult: OperationTaskPreflightResponse;
+    try {
+      preflightResult = await preflightOperationTask(preflightPayload);
+      setPreflight(preflightResult);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : preflightCopy.unavailable);
+      setPreflighting(false);
+      return;
+    }
+    setPreflighting(false);
+
+    if (!preflightResult.ok) {
+      setMessage(preflightResult.issues[0]?.message ?? preflightCopy.blocked);
       return;
     }
 
@@ -277,6 +343,7 @@ export function OperationsCenter({ events, servers, onTaskFinished }: Operations
       return;
     }
 
+    const payload = buildTaskPayload(actionTaskIds.includes(taskType));
     setRunning(true);
     setMessage('');
     const pendingTask = createPendingTask(taskType, targetMode, previewCount, language);
@@ -284,14 +351,6 @@ export function OperationsCenter({ events, servers, onTaskFinished }: Operations
     setActiveTaskId(pendingTask.id);
 
     try {
-      const payload: OperationTaskRequest = {
-        type: taskType,
-        targetMode,
-        serverIds: targetMode === 'selected' ? activeSelectedServerIds : [],
-        command: taskType === 'sshCommand' ? command.trim() : undefined,
-        reason: reason.trim() || `operator requested ${taskType}`,
-        confirmed: actionTaskIds.includes(taskType),
-      };
       const result = await createOperationTask(payload);
       setTasks((current) => current.map((task) => (task.id === pendingTask.id ? result : task)));
       setActiveTaskId(result.id);
@@ -305,6 +364,17 @@ export function OperationsCenter({ events, servers, onTaskFinished }: Operations
     } finally {
       setRunning(false);
     }
+  }
+
+  function buildTaskPayload(confirmed = actionTaskIds.includes(taskType)): OperationTaskRequest {
+    return {
+      type: taskType,
+      targetMode,
+      serverIds: targetMode === 'selected' ? activeSelectedServerIds : [],
+      command: taskType === 'sshCommand' ? command.trim() : undefined,
+      reason: reason.trim() || `operator requested ${taskType}`,
+      confirmed,
+    };
   }
 
   function validateTask() {
@@ -450,10 +520,27 @@ export function OperationsCenter({ events, servers, onTaskFinished }: Operations
                   <span>{copy.preview}</span>
                   <strong>{previewCount} {t('common.servers')}</strong>
                 </div>
-                <button type="button" className="tool-button primary" disabled={running || previewCount === 0} onClick={runTask}>
+                <button type="button" className="tool-button primary" disabled={running || preflighting || previewCount === 0} onClick={runTask}>
                   <PlayCircle size={16} />
-                  {running ? copy.runningTask : copy.run}
+                  {running ? copy.runningTask : preflighting ? preflightCopy.title : copy.run}
                 </button>
+              </div>
+
+              <div className={preflight ? `ops-preflight-card ${preflightTone(preflight)}` : 'ops-preflight-card'}>
+                <span><ShieldCheck size={15} /> {preflightCopy.title}</span>
+                <strong>{preflight ? preflightStatusText(preflight, preflightCopy) : preflightCopy.unavailable}</strong>
+                <small>
+                  {preflight
+                    ? `${preflightCopy.targets}: ${preflight.summary.totalTargets}/${preflight.summary.runnableTargets} · ${preflightCopy.issues}: ${preflight.issues.length}`
+                    : preflightCopy.unavailable}
+                </small>
+                {preflight && preflight.issues.length > 0 && (
+                  <ul>
+                    {preflight.issues.map((issue) => (
+                      <li key={`${issue.code}-${issue.severity}`}>{issue.message}</li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
           )}
@@ -714,6 +801,29 @@ function buildOperationConfirmMessage(type: OperationTaskType, count: number, na
   }
 
   return `${copy.confirm}\n${copy.preview}: ${count}`;
+}
+
+function preflightStatusText(
+  preflight: OperationTaskPreflightResponse,
+  copy: (typeof preflightCopyByLanguage)[string],
+) {
+  if (!preflight.ok) {
+    return copy.blocked;
+  }
+  if (preflight.issues.some((issue) => issue.severity === 'warn')) {
+    return copy.warn;
+  }
+  return copy.ready;
+}
+
+function preflightTone(preflight: OperationTaskPreflightResponse) {
+  if (!preflight.ok) {
+    return 'blocked';
+  }
+  if (preflight.issues.some((issue) => issue.severity === 'warn')) {
+    return 'warn';
+  }
+  return 'ready';
 }
 
 function interpolateCopy(template: string, vars: Record<string, string | number>) {

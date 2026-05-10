@@ -1408,6 +1408,103 @@ if (missingDryRunActionResponse.status !== 404) {
 }
 console.log('ok /api/servers/actions dry-run validates target');
 
+const operationPreflightReadyResponse = await fetch(`${baseUrl}/api/operations/tasks/preflight`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    type: 'healthCheck',
+    targetMode: 'selected',
+    serverIds: [connectedServer.id],
+  }),
+});
+if (!operationPreflightReadyResponse.ok) {
+  throw new Error(`/api/operations/tasks/preflight healthCheck returned HTTP ${operationPreflightReadyResponse.status}`);
+}
+const operationPreflightReadyBody = await operationPreflightReadyResponse.json();
+const operationPreflightReadyPayload = JSON.stringify(operationPreflightReadyBody);
+if (
+  operationPreflightReadyBody.ok !== true
+  || operationPreflightReadyBody.summary?.totalTargets !== 1
+  || operationPreflightReadyBody.summary?.runnableTargets !== 1
+  || operationPreflightReadyBody.summary?.blocked !== 0
+  || operationPreflightReadyBody.targets?.[0]?.id !== connectedServer.id
+  || operationPreflightReadyBody.targets?.[0]?.sshConnected !== true
+  || operationPreflightReadyPayload.includes('"publicIp"')
+  || operationPreflightReadyPayload.includes('"privateIp"')
+  || operationPreflightReadyPayload.includes('smoke-password')
+  || operationPreflightReadyPayload.includes('BEGIN RSA PRIVATE KEY')
+) {
+  throw new Error('/api/operations/tasks/preflight ready path returned unexpected or sensitive payload');
+}
+console.log('ok /api/operations/tasks/preflight allows connected selected targets without leaking secrets');
+
+const operationPreflightUnconnectedResponse = await fetch(`${baseUrl}/api/operations/tasks/preflight`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    type: 'healthCheck',
+    targetMode: 'selected',
+    serverIds: [inventoryOnlyServer.id],
+  }),
+});
+if (!operationPreflightUnconnectedResponse.ok) {
+  throw new Error(`/api/operations/tasks/preflight unconnected target returned HTTP ${operationPreflightUnconnectedResponse.status}`);
+}
+const operationPreflightUnconnectedBody = await operationPreflightUnconnectedResponse.json();
+if (
+  operationPreflightUnconnectedBody.ok !== false
+  || operationPreflightUnconnectedBody.summary?.disconnectedTargets !== 1
+  || !operationPreflightUnconnectedBody.issues?.some((issue) => issue.code === 'OPERATIONS_TARGETS_UNCONNECTED' && issue.severity === 'block')
+) {
+  throw new Error('/api/operations/tasks/preflight did not block selected unconnected targets');
+}
+console.log('ok /api/operations/tasks/preflight blocks unconnected selected targets');
+
+const operationPreflightMissingResponse = await fetch(`${baseUrl}/api/operations/tasks/preflight`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    type: 'healthCheck',
+    targetMode: 'selected',
+    serverIds: [`missing-${Date.now()}`],
+  }),
+});
+if (!operationPreflightMissingResponse.ok) {
+  throw new Error(`/api/operations/tasks/preflight missing target returned HTTP ${operationPreflightMissingResponse.status}`);
+}
+const operationPreflightMissingBody = await operationPreflightMissingResponse.json();
+if (
+  operationPreflightMissingBody.ok !== false
+  || operationPreflightMissingBody.summary?.missingTargets !== 1
+  || !operationPreflightMissingBody.issues?.some((issue) => issue.code === 'OPERATIONS_TARGETS_NOT_FOUND' && issue.severity === 'block')
+) {
+  throw new Error('/api/operations/tasks/preflight did not report missing selected targets');
+}
+console.log('ok /api/operations/tasks/preflight reports missing selected targets');
+
+const operationPreflightRebootWarnResponse = await fetch(`${baseUrl}/api/operations/tasks/preflight`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    type: 'reboot',
+    targetMode: 'selected',
+    serverIds: [connectedServer.id],
+    reason: 'preflight confirmation warning should be visible',
+  }),
+});
+if (!operationPreflightRebootWarnResponse.ok) {
+  throw new Error(`/api/operations/tasks/preflight reboot warning returned HTTP ${operationPreflightRebootWarnResponse.status}`);
+}
+const operationPreflightRebootWarnBody = await operationPreflightRebootWarnResponse.json();
+if (
+  operationPreflightRebootWarnBody.ok !== true
+  || operationPreflightRebootWarnBody.requiresConfirmation !== true
+  || !operationPreflightRebootWarnBody.issues?.some((issue) => issue.code === 'OPERATIONS_CONFIRMATION_REQUIRED' && issue.severity === 'warn')
+) {
+  throw new Error('/api/operations/tasks/preflight did not warn for unconfirmed reboot');
+}
+console.log('ok /api/operations/tasks/preflight warns before destructive actions');
+
 const operationHealthResponse = await fetch(`${baseUrl}/api/operations/tasks`, {
   method: 'POST',
   headers: { ...authHeaders, 'Content-Type': 'application/json' },
@@ -3076,6 +3173,8 @@ function assertSecurityAuditRelationsAreSpecific() {
 function assertOperationsTargetSelectionGuards() {
   const operationsSource = fs.readFileSync(new URL('../src/modules/operations/OperationsCenter.tsx', import.meta.url), 'utf8');
   const serviceSource = fs.readFileSync(new URL('../src/server/services/operationsService.ts', import.meta.url), 'utf8');
+  const appSource = fs.readFileSync(new URL('../src/server/app.ts', import.meta.url), 'utf8');
+  const apiClientSource = fs.readFileSync(new URL('../src/services/apiClient.ts', import.meta.url), 'utf8');
   const frontendRequired = [
     'const sshRequiredTask = taskType !== \'assetSync\'',
     'if (sshRequiredTask && targetMode === \'allServers\')',
@@ -3084,6 +3183,11 @@ function assertOperationsTargetSelectionGuards() {
     'eligibleServerIds',
     'serverIds: targetMode === \'selected\' ? activeSelectedServerIds : []',
     'setSelectedServerIds((current) => current.filter((id) => eligibleServerIds.has(id)))',
+    'preflightOperationTask(preflightPayload)',
+    'buildTaskPayload(false)',
+    'ops-preflight-card',
+    'preflightStatusText',
+    'preflightTone(preflight)',
   ];
   const missingFrontend = frontendRequired.filter((fragment) => !operationsSource.includes(fragment));
   if (missingFrontend.length) {
@@ -3098,10 +3202,25 @@ function assertOperationsTargetSelectionGuards() {
     'selected servers are not SSH-connected',
     'Selected servers must be SSH-connected for this operation',
     'selected servers do not exist',
+    'export function preflightOperationTask(input: unknown)',
+    'requiresConfirmation',
+    'sshConnected: Boolean(server.ssh?.connected)',
   ];
   const missingService = serviceRequired.filter((fragment) => !serviceSource.includes(fragment));
   if (missingService.length) {
     throw new Error(`Operations service selected target guard is incomplete: ${missingService.join(', ')}`);
+  }
+
+  const preflightRouteRequired = [
+    "app.post('/api/operations/tasks/preflight'",
+    'preflightOperationTask(request.body)',
+    "fetcher('/api/operations/tasks/preflight'",
+    'OperationTaskPreflightResponse',
+  ];
+  const routeAndClientSource = `${appSource}\n${apiClientSource}`;
+  const missingPreflightRoute = preflightRouteRequired.filter((fragment) => !routeAndClientSource.includes(fragment));
+  if (missingPreflightRoute.length) {
+    throw new Error(`Operations preflight API route or client is incomplete: ${missingPreflightRoute.join(', ')}`);
   }
 
   console.log('ok operations target selection guards stale and unconnected targets');

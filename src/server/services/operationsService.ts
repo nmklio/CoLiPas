@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { servers } from '../../data/mockData.js';
 import type {
   OperationTaskRequest,
+  OperationTaskPreflightResponse,
   OperationTaskResponse,
   OperationTaskTargetMode,
   OperationTaskTargetResult,
@@ -148,6 +149,87 @@ export async function createOperationTask(input: unknown): Promise<OperationTask
     summary,
     outputs,
     message,
+  };
+}
+
+export function preflightOperationTask(input: unknown): OperationTaskPreflightResponse {
+  const parsed = operationTaskSchema.parse(input) satisfies OperationTaskRequest;
+  const targets = resolveTargets(parsed);
+  const selectedIds = new Set(parsed.serverIds);
+  const foundIds = new Set(targets.map((server) => server.id));
+  const missingTargets = parsed.targetMode === 'selected'
+    ? parsed.serverIds.filter((serverId) => !foundIds.has(serverId))
+    : [];
+  const disconnectedTargets = parsed.type === 'assetSync'
+    ? []
+    : targets.filter((server) => resolveServerLifecycleStatus(server) === 'unconnected');
+  const runnableTargets = parsed.type === 'assetSync'
+    ? targets
+    : targets.filter((server) => resolveServerLifecycleStatus(server) !== 'unconnected');
+  const requiresConfirmation = parsed.type === 'shutdown' || parsed.type === 'reboot';
+  const issues: OperationTaskPreflightResponse['issues'] = [];
+
+  if (missingTargets.length > 0) {
+    issues.push({
+      code: 'OPERATIONS_TARGETS_NOT_FOUND',
+      severity: 'block',
+      message: 'Selected servers do not exist',
+      count: missingTargets.length,
+    });
+  }
+
+  if (parsed.type !== 'assetSync' && targets.length === 0) {
+    issues.push({
+      code: 'OPERATIONS_NO_TARGETS',
+      severity: 'block',
+      message: 'No eligible SSH-connected servers for this operation',
+      count: 0,
+    });
+  }
+
+  if (parsed.type !== 'assetSync' && disconnectedTargets.length > 0) {
+    issues.push({
+      code: 'OPERATIONS_TARGETS_UNCONNECTED',
+      severity: 'block',
+      message: parsed.targetMode === 'selected'
+        ? 'Selected servers must be SSH-connected for this operation'
+        : 'All server targets must be SSH-connected for this operation',
+      count: disconnectedTargets.length,
+    });
+  }
+
+  if (requiresConfirmation && !parsed.confirmed) {
+    issues.push({
+      code: 'OPERATIONS_CONFIRMATION_REQUIRED',
+      severity: 'warn',
+      message: `Operator confirmation is required before ${parsed.type}`,
+      count: runnableTargets.length,
+    });
+  }
+
+  return {
+    ok: !issues.some((issue) => issue.severity === 'block'),
+    type: parsed.type,
+    targetMode: parsed.targetMode,
+    requiresSsh: parsed.type !== 'assetSync',
+    requiresConfirmation,
+    summary: {
+      totalTargets: targets.length,
+      runnableTargets: runnableTargets.length,
+      missingTargets: missingTargets.length,
+      disconnectedTargets: disconnectedTargets.length,
+      blocked: issues.filter((issue) => issue.severity === 'block').length,
+    },
+    issues,
+    targets: targets.map((server) => ({
+      id: server.id,
+      name: server.name,
+      provider: server.provider,
+      region: server.region,
+      status: resolveServerLifecycleStatus(server),
+      sshConnected: Boolean(server.ssh?.connected),
+    })).filter((target) => parsed.targetMode !== 'selected' || selectedIds.has(target.id)),
+    generatedAt: new Date().toISOString(),
   };
 }
 

@@ -15,7 +15,7 @@ import { buildAccountPayload, changeAdminPassword, getCurrentSession, getLoginTh
 import { executeCustomApiProxy } from './services/customApiProxy.js';
 import { getDatabasePath } from './services/database.js';
 import { buildDiagnosticExport } from './services/diagnosticService.js';
-import { createOperationTask } from './services/operationsService.js';
+import { createOperationTask, preflightOperationTask } from './services/operationsService.js';
 import { buildReleaseReadiness, buildReleaseReadinessReport, recordReleaseReadinessSnapshot } from './services/releaseReadinessService.js';
 import {
   closeServerShell,
@@ -262,6 +262,14 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
   app.post('/api/operations/tasks', async (request, response, next) => {
     try {
       response.status(202).json(await createOperationTask(request.body));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post('/api/operations/tasks/preflight', (request, response, next) => {
+    try {
+      response.json(preflightOperationTask(request.body));
     } catch (error) {
       next(error);
     }

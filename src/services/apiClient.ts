@@ -4,6 +4,7 @@ import {
   CloudProvider,
   CustomApiConfig,
   OperationEvent,
+  OperationTaskPreflightResponse,
   OperationTaskRequest,
   OperationTaskResponse,
   DiagnosticExportResponse,
@@ -812,6 +813,20 @@ export async function createOperationTask(payload: OperationTaskRequest, fetcher
   }
 
   return (await response.json()) as OperationTaskResponse;
+}
+
+export async function preflightOperationTask(payload: OperationTaskRequest, fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/operations/tasks/preflight', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as OperationTaskPreflightResponse;
 }
 
 async function readApiError(response: Response) {

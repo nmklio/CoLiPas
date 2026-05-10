@@ -97,6 +97,44 @@ export interface OperationTaskRequest {
   confirmed?: boolean;
 }
 
+export interface OperationTaskPreflightIssue {
+  code:
+    | 'OPERATIONS_CONFIRMATION_REQUIRED'
+    | 'OPERATIONS_NO_TARGETS'
+    | 'OPERATIONS_TARGETS_NOT_FOUND'
+    | 'OPERATIONS_TARGETS_UNCONNECTED';
+  severity: 'warn' | 'block';
+  message: string;
+  count: number;
+}
+
+export interface OperationTaskPreflightTarget {
+  id: string;
+  name: string;
+  provider: CloudProvider;
+  region: string;
+  status: ServerStatus;
+  sshConnected: boolean;
+}
+
+export interface OperationTaskPreflightResponse {
+  ok: boolean;
+  type: OperationTaskType;
+  targetMode: OperationTaskTargetMode;
+  requiresSsh: boolean;
+  requiresConfirmation: boolean;
+  summary: {
+    totalTargets: number;
+    runnableTargets: number;
+    missingTargets: number;
+    disconnectedTargets: number;
+    blocked: number;
+  };
+  issues: OperationTaskPreflightIssue[];
+  targets: OperationTaskPreflightTarget[];
+  generatedAt: string;
+}
+
 export interface OperationTaskTargetResult {
   serverId: string;
   serverName: string;
