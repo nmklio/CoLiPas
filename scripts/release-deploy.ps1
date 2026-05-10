@@ -1,5 +1,5 @@
 param(
-  [string]$RemoteHost = "c.miao7777.com",
+  [string]$RemoteHost = "colipas-prod",
   [string]$RemoteUser = "colipas-deploy",
   [string]$RemoteCommand = "/usr/local/sbin/colipas-update",
   [string]$Branch = "master",

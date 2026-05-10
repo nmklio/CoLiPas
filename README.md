@@ -142,7 +142,7 @@ For repeat releases, install `deploy/server-update.sh` on the server as `/usr/lo
 powershell -ExecutionPolicy Bypass -File scripts/release-deploy.ps1
 ```
 
-The release script runs `npm test` first, requires a clean working tree, pushes GitHub, then triggers the server update command over SSH. Keep `.env`, `.data`, SSH private keys, and deployment credentials outside public web roots and outside Git.
+The release script runs `npm test` first, requires a clean working tree, pushes GitHub, then triggers the server update command over SSH. Configure the SSH target as a private local host alias such as `colipas-prod`; keep `.env`, `.data`, SSH private keys, server IPs, and deployment credentials outside public web roots and outside Git.
 
 ## Server Onboarding
 
