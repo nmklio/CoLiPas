@@ -1424,7 +1424,15 @@ button:disabled {
   background: linear-gradient(135deg, #19a091, var(--brand-strong));
   color: #ffffff;
   font-weight: 800;
+  overflow: hidden;
   box-shadow: 0 10px 24px rgba(7, 95, 88, 0.24);
+}
+
+.brand-mark img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
 }
 
 .brand strong,
@@ -1810,6 +1818,14 @@ button:disabled {
   color: var(--green);
 }
 
+.session-chip .brand-mark.mini {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  font-size: 9px;
+  box-shadow: none;
+}
+
 .topbar-logout {
   color: var(--red);
 }
@@ -1902,6 +1918,18 @@ button:disabled {
 
 .brand-mark.preview {
   flex: 0 0 auto;
+}
+
+.avatar-upload-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.avatar-upload-row .tool-button {
+  flex: 1 1 160px;
+  min-height: 38px;
+  justify-content: center;
 }
 
 .brand-mark.preview.secure {
@@ -4985,7 +5013,8 @@ pre {
 }
 
 .ai-chat-thread {
-  min-height: 190px;
+  min-height: 96px;
+  max-height: clamp(150px, 32vh, 310px);
   overflow: auto;
   display: flex;
   flex-direction: column;
@@ -5092,11 +5121,12 @@ pre {
 }
 
 .ai-empty-panel {
-  min-height: 74px;
+  min-height: 56px;
   padding: 12px;
-  display: grid;
-  place-items: center;
-  gap: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   color: #61737a;
   text-align: center;
   font-size: 12px;
@@ -5303,6 +5333,10 @@ pre {
   color: #52676f;
   font-size: 12px;
   font-weight: 800;
+}
+
+.ai-connection-chip:empty {
+  display: none;
 }
 
 .ai-connection-chip.ok {
@@ -6489,7 +6523,8 @@ pre {
   }
 
   .ai-chat-thread {
-    min-height: 120px;
+    min-height: 72px;
+    max-height: 160px;
   }
 
   .ai-session-list {

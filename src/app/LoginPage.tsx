@@ -10,7 +10,7 @@ interface LoginPageProps {
 
 export function LoginPage({ loading, error, onLogin }: LoginPageProps) {
   const { language, setLanguage, t } = useI18n();
-  const [username, setUsername] = useState('admin');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 

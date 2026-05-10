@@ -184,6 +184,7 @@ export interface AuthSession {
 export interface AccountProfile {
   displayName: string;
   avatarText: string;
+  avatarImage?: string;
 }
 
 export interface AccountPayload {

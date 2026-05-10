@@ -13,6 +13,10 @@ const loginSchema = z.object({
 const profileSchema = z.object({
   displayName: z.string().trim().min(1).max(32),
   avatarText: z.string().trim().min(1).max(4).regex(/^[\p{L}\p{N}]+$/u, '头像只能包含字母或数字'),
+  avatarImage: z.string().trim().max(120000).optional().default('').refine(
+    (value) => value === '' || isSafeAvatarDataUrl(value),
+    '头像图片仅支持 96KB 内的 PNG、JPEG、WebP 或 GIF',
+  ),
 });
 
 const passwordChangeSchema = z.object({
@@ -41,6 +45,7 @@ interface StoredAccountSetting {
 export interface ConsoleProfile {
   displayName: string;
   avatarText: string;
+  avatarImage?: string;
 }
 
 interface SessionRecord {
@@ -54,6 +59,7 @@ const sessions = new Map<string, SessionRecord>();
 const fallbackProfile: ConsoleProfile = {
   displayName: 'CoLiPas',
   avatarText: 'CP',
+  avatarImage: '',
 };
 
 export function getSessionCookieName() {
@@ -117,6 +123,7 @@ export function updateConsoleProfile(input: unknown) {
   const profile: ConsoleProfile = {
     displayName: parsed.displayName,
     avatarText: parsed.avatarText.toUpperCase(),
+    avatarImage: parsed.avatarImage,
   };
   writeAppSetting(profileSettingId, profile);
   return profile;
@@ -279,6 +286,15 @@ function verifyPassword(password: string, stored: StoredPassword) {
   }
   const derived = crypto.scryptSync(password, stored.salt, 32).toString('base64url');
   return safeEqual(derived, stored.key);
+}
+
+function isSafeAvatarDataUrl(value: string) {
+  const match = /^data:image\/(png|jpeg|webp|gif);base64,([A-Za-z0-9+/]+={0,2})$/i.exec(value);
+  if (!match) {
+    return false;
+  }
+
+  return Buffer.byteLength(match[2], 'base64') <= 96 * 1024;
 }
 
 function signToken(sessionId: string, secret: string) {

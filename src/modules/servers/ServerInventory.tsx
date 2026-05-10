@@ -100,6 +100,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const [commandHistory, setCommandHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+  const [formDismissed, setFormDismissed] = useState(false);
   const terminalInputRef = useRef<HTMLInputElement | null>(null);
   const terminalBodyRef = useRef<HTMLDivElement | null>(null);
   const terminalAbortRef = useRef<AbortController | null>(null);
@@ -128,7 +129,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     terminalAbortRef.current?.abort();
     closeActiveShellSession();
   }, []);
-  const formVisible = formOpen || Boolean(editingServerId) || allServers.length === 0;
+  const formVisible = formOpen || Boolean(editingServerId) || (allServers.length === 0 && !formDismissed);
 
   useEffect(() => {
     formRef.current = form;
@@ -271,7 +272,10 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
               </button>
             ))}
           </div>
-          <button type="button" className="tool-button primary" onClick={() => setFormOpen((value) => !value)}>
+          <button type="button" className="tool-button primary" onClick={() => {
+            setFormDismissed(false);
+            setFormOpen((value) => !value);
+          }}>
             {formOpen ? <ChevronUp size={16} /> : <Plus size={16} />}
             {editingServerId ? t('servers.formTitleEdit') : t('servers.formTitleAdd')}
           </button>
@@ -357,6 +361,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
           </div>
           <button type="button" className="icon-button" aria-label={t('common.cancel')} onClick={() => {
             resetForm();
+            setFormDismissed(true);
             setFormOpen(false);
           }}>
             <X size={16} />
@@ -876,6 +881,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     setCustomProviderName(isBaseProvider ? customProvider : server.provider);
     setTagsText(server.tags.join(', '));
     setActionMessage('');
+    setFormDismissed(false);
     setFormOpen(true);
     setForm({
       name: server.name,
@@ -1197,6 +1203,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     setProviderMode(customProviderOption);
     setCustomProviderName(customProvider);
     setEditingServerId('');
+    setFormDismissed(true);
     setFormOpen(false);
     lastAppliedIdentityRef.current = null;
   }

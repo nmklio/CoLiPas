@@ -9,6 +9,7 @@ const initialSmokePassword = process.env.SMOKE_ADMIN_PASSWORD ?? 'admin123456';
 let currentSmokePassword = initialSmokePassword;
 
 assertAiProviderSecretNotPersisted();
+assertAccountUiGuards();
 assertAiStreamingCompatibility();
 assertAiResponseCachingGuards();
 assertAiConsoleI18nCoverage();
@@ -122,21 +123,44 @@ const profileUpdateResponse = await fetch(`${baseUrl}/api/account/profile`, {
   body: JSON.stringify({
     displayName: 'OpsDesk',
     avatarText: 'OD',
+    avatarImage: 'data:image/png;base64,iVBORw0KGgo=',
   }),
 });
 if (!profileUpdateResponse.ok) {
   throw new Error(`/api/account/profile returned HTTP ${profileUpdateResponse.status}`);
 }
 const profileUpdateBody = await profileUpdateResponse.json();
-if (profileUpdateBody.profile?.displayName !== 'OpsDesk' || profileUpdateBody.profile?.avatarText !== 'OD') {
+if (
+  profileUpdateBody.profile?.displayName !== 'OpsDesk'
+  || profileUpdateBody.profile?.avatarText !== 'OD'
+  || profileUpdateBody.profile?.avatarImage !== 'data:image/png;base64,iVBORw0KGgo='
+) {
   throw new Error('/api/account/profile returned unexpected profile');
 }
 const profileSessionResponse = await fetch(`${baseUrl}/api/auth/session`, { headers: authHeaders });
 const profileSessionBody = await profileSessionResponse.json();
-if (profileSessionBody.profile?.displayName !== 'OpsDesk' || profileSessionBody.profile?.avatarText !== 'OD') {
+if (
+  profileSessionBody.profile?.displayName !== 'OpsDesk'
+  || profileSessionBody.profile?.avatarText !== 'OD'
+  || profileSessionBody.profile?.avatarImage !== 'data:image/png;base64,iVBORw0KGgo='
+) {
   throw new Error('/api/auth/session did not expose updated profile');
 }
 console.log('ok /api/account/profile persists custom avatar and display name');
+
+const invalidAvatarResponse = await fetch(`${baseUrl}/api/account/profile`, {
+  method: 'PATCH',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    displayName: 'OpsDesk',
+    avatarText: 'OD',
+    avatarImage: 'data:image/svg+xml;base64,PHN2ZyBvbmxvYWQ9YWxlcnQoMSk+',
+  }),
+});
+if (invalidAvatarResponse.status !== 400) {
+  throw new Error(`/api/account/profile expected 400 for unsafe avatar image, got ${invalidAvatarResponse.status}`);
+}
+console.log('ok /api/account/profile rejects unsafe avatar images');
 
 const weakPasswordResponse = await fetch(`${baseUrl}/api/account/password`, {
   method: 'POST',
@@ -1656,6 +1680,81 @@ function assertAiProviderSecretNotPersisted() {
   }
 
   console.log('ok AI provider localStorage strips API key and guards stale model refreshes');
+}
+
+function assertAccountUiGuards() {
+  const loginSource = fs.readFileSync(new URL('../src/app/LoginPage.tsx', import.meta.url), 'utf8');
+  const appSource = fs.readFileSync(new URL('../src/app/App.tsx', import.meta.url), 'utf8');
+  const authSource = fs.readFileSync(new URL('../src/server/services/authService.ts', import.meta.url), 'utf8');
+  const inventorySource = fs.readFileSync(new URL('../src/modules/servers/ServerInventory.tsx', import.meta.url), 'utf8');
+  const globalCss = fs.readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
+  const i18nSource = fs.readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
+
+  if (loginSource.includes("useState('admin')") || loginSource.includes('value="admin"')) {
+    throw new Error('Login page must not prefill the admin username');
+  }
+  if (appSource.includes("session.user?.username ?? 'admin'") || !appSource.includes('accountDisplayLabel')) {
+    throw new Error('Authenticated account UI must not display admin as a fallback label');
+  }
+  if (!appSource.includes('<span>{accountDisplayLabel}</span>') || !appSource.includes('title={sessionTooltip}')) {
+    throw new Error('Account settings entry must display the custom profile label instead of the raw login username');
+  }
+
+  const avatarFragments = [
+    'avatarImage',
+    'handleAvatarUpload',
+    "new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])",
+    'file.size > 96 * 1024',
+    'readFileAsDataUrl',
+    '<AvatarMark profile={profile}',
+    'className="avatar-upload-row"',
+  ];
+  const missingAvatar = avatarFragments.filter((fragment) => !appSource.includes(fragment));
+  if (missingAvatar.length) {
+    throw new Error(`Account avatar upload UI is incomplete: ${missingAvatar.join(', ')}`);
+  }
+
+  const backendFragments = [
+    'avatarImage: z.string().trim().max(120000)',
+    'function isSafeAvatarDataUrl',
+    'data:image\\/(png|jpeg|webp|gif)',
+    'Buffer.byteLength(match[2], \'base64\') <= 96 * 1024',
+  ];
+  const missingBackend = backendFragments.filter((fragment) => !authSource.includes(fragment));
+  if (missingBackend.length) {
+    throw new Error(`Account avatar backend safety guards are incomplete: ${missingBackend.join(', ')}`);
+  }
+
+  const serverFormFragments = [
+    'const [formDismissed, setFormDismissed] = useState(false)',
+    'allServers.length === 0 && !formDismissed',
+    'setFormDismissed(true)',
+    'setFormDismissed(false)',
+  ];
+  const missingServerForm = serverFormFragments.filter((fragment) => !inventorySource.includes(fragment));
+  if (missingServerForm.length) {
+    throw new Error(`Server connect form hide behavior is incomplete: ${missingServerForm.join(', ')}`);
+  }
+
+  const cssFragments = [
+    '.brand-mark img',
+    '.avatar-upload-row',
+    'max-height: clamp(150px, 32vh, 310px)',
+    '.ai-empty-panel',
+  ];
+  const missingCss = cssFragments.filter((fragment) => !globalCss.includes(fragment));
+  if (missingCss.length) {
+    throw new Error(`Account/AI UI CSS guards are incomplete: ${missingCss.join(', ')}`);
+  }
+
+  for (const key of ['account.avatarImage', 'account.removeAvatarImage', 'account.avatarImageInvalid', 'account.avatarImageTooLarge']) {
+    const count = (i18nSource.match(new RegExp(key.replace('.', '\\.'), 'g')) ?? []).length;
+    if (count < 3) {
+      throw new Error(`Account avatar i18n key is missing languages: ${key}`);
+    }
+  }
+
+  console.log('ok account UI avoids admin prefill, supports safe avatar upload, and keeps server form hideable');
 }
 
 function assertAiStreamingCompatibility() {

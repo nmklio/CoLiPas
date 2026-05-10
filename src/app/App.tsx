@@ -77,6 +77,7 @@ const fallbackOverview: OverviewResponse = {
 const fallbackProfile: AccountProfile = {
   displayName: 'CoLiPas',
   avatarText: 'CP',
+  avatarImage: '',
 };
 
 export function App() {
@@ -92,6 +93,7 @@ export function App() {
   const [settingsSuccess, setSettingsSuccess] = useState('');
   const [profileDraft, setProfileDraft] = useState<AccountProfile>(fallbackProfile);
   const [passwordDraft, setPasswordDraft] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const avatarUploadRef = useRef<HTMLInputElement | null>(null);
   const [activeSection, setActiveSection] = useState<SectionId>('overview');
   const [filters, setFilters] = useState<ServerFilters>(defaultFilters);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -220,6 +222,11 @@ export function App() {
   const busiestServer = [...overview.servers]
     .sort((left, right) => Math.max(right.cpu, right.memory, right.disk) - Math.max(left.cpu, left.memory, left.disk))[0];
   const timeLocale = getLocale(language);
+  const sessionIdentity = session?.user?.username?.trim() ?? '';
+  const accountDisplayLabel = profile.displayName || sessionIdentity || 'CoLiPas';
+  const sessionTooltip = session?.expiresAt
+    ? `${accountDisplayLabel} - ${t('login.expiresAt', { time: new Date(session.expiresAt).toLocaleString(timeLocale) })}`
+    : accountDisplayLabel;
   const activeSectionConfig = sections.find((section) => section.id === activeSection) ?? sections[0];
   const ActiveSectionIcon = activeSectionConfig.icon;
 
@@ -298,6 +305,42 @@ export function App() {
     }
   }
 
+  async function handleAvatarUpload(file: File | undefined) {
+    if (!file) {
+      return;
+    }
+
+    const allowedTypes = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+    if (!allowedTypes.has(file.type)) {
+      setSettingsError(t('account.avatarImageInvalid'));
+      if (avatarUploadRef.current) {
+        avatarUploadRef.current.value = '';
+      }
+      return;
+    }
+
+    if (file.size > 96 * 1024) {
+      setSettingsError(t('account.avatarImageTooLarge'));
+      if (avatarUploadRef.current) {
+        avatarUploadRef.current.value = '';
+      }
+      return;
+    }
+
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      setProfileDraft((current) => ({ ...current, avatarImage: dataUrl }));
+      setSettingsError('');
+      setSettingsSuccess(t('account.avatarImageReady'));
+    } catch {
+      setSettingsError(t('account.avatarImageReadFailed'));
+    } finally {
+      if (avatarUploadRef.current) {
+        avatarUploadRef.current.value = '';
+      }
+    }
+  }
+
   async function handleChangePassword() {
     if (passwordDraft.newPassword !== passwordDraft.confirmPassword) {
       setSettingsError(t('account.passwordMismatch'));
@@ -335,7 +378,7 @@ export function App() {
     <div className="shell" data-build="20260509-i18n-map">
       <aside className={sidebarOpen ? 'sidebar open' : 'sidebar'}>
         <div className="brand">
-          <div className="brand-mark">{profile.avatarText}</div>
+          <AvatarMark profile={profile} />
           <div>
             <strong>{profile.displayName}</strong>
             <span>{t('app.productSubtitle')}</span>
@@ -435,11 +478,11 @@ export function App() {
             <button
               type="button"
               className="session-chip account-settings-trigger"
-              title={session.expiresAt ? `${session.user?.username ?? 'admin'} · ${t('login.expiresAt', { time: new Date(session.expiresAt).toLocaleString(timeLocale) })}` : session.user?.username ?? ''}
+              title={sessionTooltip}
               onClick={openSettings}
             >
-              <ShieldCheck size={14} />
-              <b>{session.user?.username ?? 'admin'}</b>
+              <AvatarMark profile={profile} className="mini" />
+              <b>{accountDisplayLabel}</b>
             </button>
             <button type="button" className="icon-button topbar-logout" aria-label={t('login.logout')} title={t('login.logout')} onClick={handleLogout}>
               <LogOut size={16} />
@@ -576,7 +619,7 @@ export function App() {
             <section className="account-modal" role="dialog" aria-modal="true" aria-labelledby="account-settings-title">
               <header className="account-modal-header">
                 <div>
-                  <span>{session.user?.username ?? 'admin'}</span>
+                  <span>{accountDisplayLabel}</span>
                   <h2 id="account-settings-title">{t('account.title')}</h2>
                 </div>
                 <button type="button" className="icon-button" aria-label={t('account.close')} onClick={() => setSettingsOpen(false)}>
@@ -587,7 +630,7 @@ export function App() {
               <div className="account-settings-grid">
                 <article className="account-settings-card">
                   <div className="account-card-title">
-                    <div className="brand-mark preview">{profileDraft.avatarText || 'CP'}</div>
+                    <AvatarMark profile={profileDraft} className="preview" />
                     <div>
                       <strong>{t('account.profileTitle')}</strong>
                       <span>{t('account.profileDesc')}</span>
@@ -611,6 +654,26 @@ export function App() {
                       placeholder="CP"
                     />
                   </label>
+                  <div className="avatar-upload-row">
+                    <input
+                      ref={avatarUploadRef}
+                      className="visually-hidden"
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/gif"
+                      onChange={(event) => handleAvatarUpload(event.currentTarget.files?.[0])}
+                      aria-label={t('account.avatarImage')}
+                    />
+                    <button type="button" className="tool-button" onClick={() => avatarUploadRef.current?.click()}>
+                      <UserCog size={16} />
+                      {t('account.avatarImage')}
+                    </button>
+                    {profileDraft.avatarImage && (
+                      <button type="button" className="tool-button" onClick={() => setProfileDraft((current) => ({ ...current, avatarImage: '' }))}>
+                        <X size={16} />
+                        {t('account.removeAvatarImage')}
+                      </button>
+                    )}
+                  </div>
                   <button type="button" className="login-submit secondary-action" disabled={settingsSaving} onClick={handleSaveProfile}>
                     <UserCog size={17} />
                     {t('account.saveProfile')}
@@ -672,4 +735,30 @@ export function App() {
       </div>
     </div>
   );
+}
+
+function AvatarMark({ profile, className = '' }: { profile: AccountProfile; className?: string }) {
+  const label = profile.avatarText || 'CP';
+  const classes = ['brand-mark', className].filter(Boolean).join(' ');
+
+  return (
+    <div className={classes}>
+      {profile.avatarImage ? <img src={profile.avatarImage} alt="" aria-hidden="true" /> : label}
+    </div>
+  );
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener('load', () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error('invalid file result'));
+    });
+    reader.addEventListener('error', () => reject(reader.error ?? new Error('file read failed')));
+    reader.readAsDataURL(file);
+  });
 }
