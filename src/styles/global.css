@@ -3950,6 +3950,47 @@ td span,
   line-height: 1.5;
 }
 
+.ops-preflight-plan {
+  border: 1px solid #d5e3e7;
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: rgba(255, 255, 255, 0.78);
+  display: grid;
+  gap: 4px;
+}
+
+.ops-preflight-plan span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.ops-preflight-plan strong {
+  font-size: 13px;
+}
+
+.ops-preflight-plan p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.ops-preflight-plan code {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #d8e5e8;
+  border-radius: 7px;
+  padding: 6px 7px;
+  background: #f6fafb;
+  color: #2d4249;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .ops-preflight-targets {
   display: grid;
   gap: 7px;

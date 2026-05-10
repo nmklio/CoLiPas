@@ -233,6 +233,8 @@ const preflightCopyByLanguage: Record<string, {
   runnable: string;
   blockedTarget: string;
   detailTitle: string;
+  planTitle: string;
+  commandPreview: string;
 }> = {
   zh: {
     title: '执行预检',
@@ -245,6 +247,8 @@ const preflightCopyByLanguage: Record<string, {
     runnable: '可执行',
     blockedTarget: '阻断',
     detailTitle: '目标明细',
+    planTitle: '执行计划',
+    commandPreview: '命令预览',
   },
   en: {
     title: 'Preflight',
@@ -257,6 +261,8 @@ const preflightCopyByLanguage: Record<string, {
     runnable: 'Runnable',
     blockedTarget: 'Blocked',
     detailTitle: 'Target details',
+    planTitle: 'Execution plan',
+    commandPreview: 'Command preview',
   },
   ja: {
     title: '実行前チェック',
@@ -269,6 +275,8 @@ const preflightCopyByLanguage: Record<string, {
     runnable: '実行可能',
     blockedTarget: 'ブロック',
     detailTitle: '対象詳細',
+    planTitle: '実行計画',
+    commandPreview: 'コマンドプレビュー',
   },
 };
 
@@ -552,6 +560,17 @@ export function OperationsCenter({ events, servers, onTaskFinished }: Operations
                       <li key={`${issue.code}-${issue.severity}`}>{issue.message}</li>
                     ))}
                   </ul>
+                )}
+                {preflight && (
+                  <div className="ops-preflight-plan" aria-label={preflightCopy.planTitle}>
+                    <span>{preflightCopy.planTitle}</span>
+                    <strong>{preflight.plan.title}</strong>
+                    <p>{preflight.plan.targetSummary} · {preflight.plan.riskSummary}</p>
+                    <p>{preflight.plan.impact}</p>
+                    {preflight.plan.commandPreview && (
+                      <code>{preflightCopy.commandPreview}: {preflight.plan.commandPreview}</code>
+                    )}
+                  </div>
                 )}
                 {preflight && preflight.targets.length > 0 && (
                   <div className="ops-preflight-targets" aria-label={preflightCopy.detailTitle}>

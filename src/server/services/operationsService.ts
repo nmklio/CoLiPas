@@ -244,6 +244,14 @@ export function preflightOperationTask(input: unknown): OperationTaskPreflightRe
     targetMode: parsed.targetMode,
     requiresSsh: parsed.type !== 'assetSync',
     requiresConfirmation,
+    plan: buildPreflightPlan(parsed, {
+      totalTargets: targets.length + missingTargets.length,
+      runnableTargets: runnableTargets.length,
+      missingTargets: missingTargets.length,
+      disconnectedTargets: disconnectedTargets.length,
+      blocked: issues.filter((issue) => issue.severity === 'block').length,
+      warnings: issues.filter((issue) => issue.severity === 'warn').length,
+    }),
     summary: {
       totalTargets: targets.length + missingTargets.length,
       runnableTargets: runnableTargets.length,
@@ -255,6 +263,85 @@ export function preflightOperationTask(input: unknown): OperationTaskPreflightRe
     targets: preflightTargets,
     generatedAt: new Date().toISOString(),
   };
+}
+
+function buildPreflightPlan(
+  task: ParsedOperationTask,
+  summary: OperationTaskPreflightResponse['summary'] & { warnings: number },
+): OperationTaskPreflightResponse['plan'] {
+  const taskName = formatOperationTaskType(task.type);
+  const targetMode = formatTargetMode(task.targetMode);
+  const riskParts = [
+    summary.blocked > 0 ? `${summary.blocked} blocking issue${summary.blocked > 1 ? 's' : ''}` : '',
+    summary.warnings > 0 ? `${summary.warnings} warning${summary.warnings > 1 ? 's' : ''}` : '',
+  ].filter(Boolean);
+  const commandPreview = task.type === 'sshCommand' ? sanitizeCommandPreview(task.command) : undefined;
+
+  return {
+    title: `${taskName} on ${targetMode}`,
+    targetSummary: `${summary.runnableTargets}/${summary.totalTargets} targets runnable`,
+    impact: buildPreflightImpact(task, summary),
+    commandPreview,
+    riskSummary: riskParts.length > 0 ? riskParts.join(', ') : 'No blocking issues or warnings',
+  };
+}
+
+function buildPreflightImpact(
+  task: ParsedOperationTask,
+  summary: OperationTaskPreflightResponse['summary'],
+) {
+  if (summary.blocked > 0) {
+    return 'Execution is blocked until target issues are fixed';
+  }
+
+  if (task.type === 'shutdown') {
+    return `${summary.runnableTargets} server${summary.runnableTargets === 1 ? '' : 's'} will be powered off after confirmation`;
+  }
+
+  if (task.type === 'reboot') {
+    return `${summary.runnableTargets} server${summary.runnableTargets === 1 ? '' : 's'} will be rebooted after confirmation`;
+  }
+
+  if (task.type === 'powerOn') {
+    return `${summary.runnableTargets} server${summary.runnableTargets === 1 ? '' : 's'} will receive a power-on command`;
+  }
+
+  if (task.type === 'sshCommand') {
+    return `${summary.runnableTargets} server${summary.runnableTargets === 1 ? '' : 's'} will run the prepared SSH command`;
+  }
+
+  if (task.type === 'assetSync') {
+    return `${summary.totalTargets} server${summary.totalTargets === 1 ? '' : 's'} will be included in asset synchronization`;
+  }
+
+  return `${summary.runnableTargets} server${summary.runnableTargets === 1 ? '' : 's'} will run a health check`;
+}
+
+function formatOperationTaskType(type: OperationTaskType) {
+  return {
+    assetSync: 'Asset sync',
+    healthCheck: 'Health check',
+    sshCommand: 'SSH command',
+    powerOn: 'Power on',
+    shutdown: 'Shutdown',
+    reboot: 'Reboot',
+  }[type];
+}
+
+function formatTargetMode(targetMode: OperationTaskTargetMode) {
+  return {
+    allServers: 'all servers',
+    allConnected: 'all SSH-connected servers',
+    selected: 'selected servers',
+  }[targetMode];
+}
+
+function sanitizeCommandPreview(command: string) {
+  return command
+    .replace(/([?&](?:access_token|api_key|apikey|auth|authorization|bearer|client_secret|key|password|secret|signature|token)=)[^&\s"']+/gi, '$1[redacted]')
+    .replace(/\b((?:authorization|x-api-key|api-key)\s*:\s*)[^\s"']+/gi, '$1[redacted]')
+    .replace(/\b(sk-[A-Za-z0-9_-]{8,})\b/g, '[redacted-api-key]')
+    .slice(0, 180);
 }
 
 function buildTargetPreflightIssues(

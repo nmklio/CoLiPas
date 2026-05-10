@@ -131,6 +131,13 @@ export interface OperationTaskPreflightResponse {
   targetMode: OperationTaskTargetMode;
   requiresSsh: boolean;
   requiresConfirmation: boolean;
+  plan: {
+    title: string;
+    targetSummary: string;
+    impact: string;
+    commandPreview?: string;
+    riskSummary: string;
+  };
   summary: {
     totalTargets: number;
     runnableTargets: number;

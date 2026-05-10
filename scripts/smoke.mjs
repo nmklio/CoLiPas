@@ -1427,6 +1427,9 @@ if (
   || operationPreflightReadyBody.summary?.totalTargets !== 1
   || operationPreflightReadyBody.summary?.runnableTargets !== 1
   || operationPreflightReadyBody.summary?.blocked !== 0
+  || !operationPreflightReadyBody.plan?.title?.includes('Health check')
+  || operationPreflightReadyBody.plan?.targetSummary !== '1/1 targets runnable'
+  || operationPreflightReadyBody.plan?.riskSummary !== 'No blocking issues or warnings'
   || operationPreflightReadyBody.targets?.[0]?.id !== connectedServer.id
   || operationPreflightReadyBody.targets?.[0]?.sshConnected !== true
   || operationPreflightReadyBody.targets?.[0]?.runnable !== true
@@ -1517,6 +1520,33 @@ if (
   throw new Error('/api/operations/tasks/preflight did not warn for unconfirmed reboot');
 }
 console.log('ok /api/operations/tasks/preflight warns before destructive actions');
+
+const operationPreflightCommandSecret = `sk-smoke-preflight-${Date.now()}`;
+const operationPreflightCommandResponse = await fetch(`${baseUrl}/api/operations/tasks/preflight`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    type: 'sshCommand',
+    targetMode: 'selected',
+    serverIds: [connectedServer.id],
+    command: `curl "https://example.invalid/check?token=${operationPreflightCommandSecret}" -H "Authorization: Bearer ${operationPreflightCommandSecret}"`,
+    reason: 'preflight command preview should be redacted',
+  }),
+});
+if (!operationPreflightCommandResponse.ok) {
+  throw new Error(`/api/operations/tasks/preflight sshCommand preview returned HTTP ${operationPreflightCommandResponse.status}`);
+}
+const operationPreflightCommandBody = await operationPreflightCommandResponse.json();
+const operationPreflightCommandPreview = operationPreflightCommandBody.plan?.commandPreview ?? '';
+if (
+  operationPreflightCommandBody.ok !== true
+  || !operationPreflightCommandBody.plan?.title?.includes('SSH command')
+  || operationPreflightCommandPreview.includes(operationPreflightCommandSecret)
+  || !operationPreflightCommandPreview.includes('[redacted]')
+) {
+  throw new Error('/api/operations/tasks/preflight command plan did not redact sensitive command preview');
+}
+console.log('ok /api/operations/tasks/preflight builds redacted execution plan');
 
 const operationHealthResponse = await fetch(`${baseUrl}/api/operations/tasks`, {
   method: 'POST',
@@ -3199,7 +3229,10 @@ function assertOperationsTargetSelectionGuards() {
     'preflightOperationTask(preflightPayload)',
     'buildTaskPayload(false)',
     'ops-preflight-card',
+    'ops-preflight-plan',
     'ops-preflight-targets',
+    'preflight.plan.title',
+    'preflight.plan.commandPreview',
     'target.runnable',
     'target.issues.length',
     'preflightStatusText',
@@ -3223,6 +3256,9 @@ function assertOperationsTargetSelectionGuards() {
     'sshConnected: Boolean(server.ssh?.connected)',
     'runnable: parsed.type === \'assetSync\' || resolveServerLifecycleStatus(server) !== \'unconnected\'',
     'buildTargetPreflightIssues(parsed, server, requiresConfirmation)',
+    'buildPreflightPlan(parsed',
+    'sanitizeCommandPreview(task.command)',
+    'riskSummary',
     'status: \'missing\'',
     'runnable: false',
   ];
