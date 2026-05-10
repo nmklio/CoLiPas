@@ -6267,6 +6267,102 @@ pre {
   background: #fff6f6;
 }
 
+.security-audit-trace {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #d6e4e7;
+  border-left: 4px solid var(--brand);
+  border-radius: 8px;
+  padding: 11px;
+  background: #f7fbfb;
+}
+
+.security-audit-trace.blocked,
+.security-audit-trace.orphaned {
+  border-left-color: var(--orange);
+  background: #fff9f0;
+}
+
+.security-audit-trace.failed {
+  border-left-color: var(--red);
+  background: #fff7f7;
+}
+
+.security-audit-trace-head,
+.security-audit-trace-steps {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.security-audit-trace-head span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.security-audit-trace-head b {
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: #e7f5f2;
+  color: var(--brand-strong);
+  font-size: 12px;
+}
+
+.security-audit-trace.blocked .security-audit-trace-head b,
+.security-audit-trace.orphaned .security-audit-trace-head b {
+  background: #fff0dc;
+  color: var(--orange);
+}
+
+.security-audit-trace.failed .security-audit-trace-head b {
+  background: #fbe9e9;
+  color: var(--red);
+}
+
+.security-audit-trace-steps {
+  align-items: stretch;
+}
+
+.security-audit-trace-steps div {
+  min-width: 0;
+  flex: 1;
+  border: 1px solid #d9e6e8;
+  border-radius: 8px;
+  padding: 9px;
+  background: #ffffff;
+  display: grid;
+  gap: 4px;
+}
+
+.security-audit-trace-steps div.missing {
+  border-style: dashed;
+  color: var(--muted);
+}
+
+.security-audit-trace-steps span,
+.security-audit-trace > small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.security-audit-trace-steps strong,
+.security-audit-trace-steps small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.security-audit-trace p {
+  margin: 0;
+  color: #34454c;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .security-audit-detail dl {
   margin: 0;
   display: grid;
@@ -7029,6 +7125,11 @@ pre {
 
   .security-audit-row {
     grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .security-audit-trace-steps {
+    display: grid;
+    grid-template-columns: 1fr;
   }
 
   .api-integration-row {

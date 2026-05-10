@@ -1741,6 +1741,14 @@ if (!auditBody.items.some((item) => item.action === 'OPERATIONS_PREFLIGHT' && it
 if (!auditBody.items.some((item) => item.action === 'OPERATIONS_PREFLIGHT' && item.status === 'blocked' && item.detail?.includes('blocking issue'))) {
   throw new Error('/api/audit/events did not include blocked operations preflight evidence');
 }
+const operationPreflightAudit = auditBody.items.find((item) => item.action === 'OPERATIONS_PREFLIGHT' && item.status === 'success' && item.target === connectedServer.id && item.detail?.includes('Health check'));
+const operationTaskAudit = auditBody.items.find((item) => item.action === 'OPERATIONS_TASK' && item.status === 'success' && item.target === connectedServer.id && item.detail?.includes('healthCheck completed'));
+if (!operationPreflightAudit || !operationTaskAudit) {
+  throw new Error('/api/audit/events did not include linkable operations preflight and execution evidence');
+}
+if (new Date(operationTaskAudit.createdAt).getTime() < new Date(operationPreflightAudit.createdAt).getTime()) {
+  throw new Error('/api/audit/events operation execution audit appeared before its preflight');
+}
 if (!auditBody.items.some((item) => item.action === 'CUSTOM_API_TEST' && item.status === 'blocked')) {
   throw new Error('/api/audit/events did not include blocked custom API evidence');
 }
@@ -3120,8 +3128,19 @@ function assertSecurityAuditRelationsAreSpecific() {
     "return haystack.includes('timeout') || haystack.includes('timed out')",
     'function buildAuditInsight(entry: AuditEntry, copy: SecurityCopy): AuditInsight',
     'security-audit-insight',
+    'selectedOperationTrace',
+    'buildOperationAuditTrace(selectedAudit, auditEntries, copy, locale)',
+    'function buildOperationAuditTrace(',
+    "action !== 'OPERATIONS_PREFLIGHT' && action !== 'OPERATIONS_TASK'",
+    'getOperationAuditSignature(selectedAudit)',
+    '15 * 60 * 1000',
+    'copy.operationTraceElapsed',
+    'security-audit-trace',
+    'operationTraceTitle',
+    'operationTraceNoExecution',
     "action === 'CUSTOM_API_TEST'",
-    "action.startsWith('SERVER_') || action === 'OPERATIONS_TASK'",
+    "action.startsWith('SERVER_') || action === 'OPERATIONS_PREFLIGHT' || action === 'OPERATIONS_TASK'",
+    "action === 'OPERATIONS_PREFLIGHT' || action === 'OPERATIONS_TASK'",
     'auditDomainAuth',
     'auditNextSshRisk',
     'copy.blockedFailedCount(blockedCount, failedCount)',
@@ -3164,6 +3183,10 @@ function assertSecurityAuditRelationsAreSpecific() {
     '.security-audit-insight',
     '.security-audit-insight.medium',
     '.security-audit-insight.high',
+    '.security-audit-trace',
+    '.security-audit-trace-steps',
+    '.security-audit-trace.blocked',
+    '.security-audit-trace.failed',
     '.security-remediation-card',
     '.security-remediation-list',
     '.security-remediation-item',

@@ -81,6 +81,15 @@ interface AuditInsight {
   nextStep: string;
 }
 
+interface OperationAuditTrace {
+  tone: 'ready' | 'blocked' | 'executed' | 'failed' | 'orphaned';
+  statusLabel: string;
+  preflight: AuditEntry | null;
+  execution: AuditEntry | null;
+  elapsedLabel: string;
+  evidence: string;
+}
+
 interface SecurityRiskAction {
   id: string;
   title: string;
@@ -133,6 +142,10 @@ export function SecurityPanel({ events, onNavigate, onRemediated }: SecurityPane
     ?? filteredAudits[0]
     ?? null;
   const selectedAuditInsight = selectedAudit ? buildAuditInsight(selectedAudit, copy) : null;
+  const selectedOperationTrace = useMemo(
+    () => selectedAudit ? buildOperationAuditTrace(selectedAudit, auditEntries, copy, locale) : null,
+    [auditEntries, copy, locale, selectedAudit],
+  );
   const activeAuditIssues = useMemo(() => getActiveAuditIssues(auditEntries), [auditEntries]);
   const checks = useMemo(() => buildSecurityChecks(config, auditEntries, openEvents, copy), [auditEntries, config, openEvents, copy]);
   const riskActions = useMemo(() => buildSecurityRiskActions(checks, auditEntries, openEvents, copy), [auditEntries, checks, openEvents, copy]);
@@ -594,6 +607,31 @@ export function SecurityPanel({ events, onNavigate, onRemediated }: SecurityPane
                   <small>{selectedAuditInsight.nextStep}</small>
                 </div>
               )}
+              {selectedOperationTrace && (
+                <div className={`security-audit-trace ${selectedOperationTrace.tone}`}>
+                  <div className="security-audit-trace-head">
+                    <span>{copy.operationTraceTitle}</span>
+                    <b>{selectedOperationTrace.statusLabel}</b>
+                  </div>
+                  <div className="security-audit-trace-steps">
+                    <div className={selectedOperationTrace.preflight ? 'complete' : 'missing'}>
+                      <span>{copy.operationTracePreflight}</span>
+                      <strong>{selectedOperationTrace.preflight?.status ? copy.auditStatus(selectedOperationTrace.preflight.status) : copy.operationTraceMissing}</strong>
+                      <small>{selectedOperationTrace.preflight ? formatAuditTime(selectedOperationTrace.preflight.createdAt, locale) : copy.operationTraceNoPreflight}</small>
+                    </div>
+                    <div className={selectedOperationTrace.execution ? 'complete' : 'missing'}>
+                      <span>{copy.operationTraceExecution}</span>
+                      <strong>{selectedOperationTrace.execution?.status ? copy.auditStatus(selectedOperationTrace.execution.status) : copy.operationTraceMissing}</strong>
+                      <small>{selectedOperationTrace.execution ? formatAuditTime(selectedOperationTrace.execution.createdAt, locale) : copy.operationTraceNoExecution}</small>
+                    </div>
+                  </div>
+                  <p>{selectedOperationTrace.evidence}</p>
+                  <small>{selectedOperationTrace.elapsedLabel}</small>
+                  <button type="button" className="tool-button" onClick={() => onNavigate('operations')}>
+                    {copy.goOperations}
+                  </button>
+                </div>
+              )}
               <dl>
                 <div>
                   <dt>{copy.actor}</dt>
@@ -797,7 +835,7 @@ function getAuditNavigationTarget(entry: AuditEntry): SecurityRiskAction['naviga
   if (action.startsWith('SERVER_')) {
     return 'servers';
   }
-  if (action === 'OPERATIONS_TASK') {
+  if (action === 'OPERATIONS_PREFLIGHT' || action === 'OPERATIONS_TASK') {
     return 'operations';
   }
   return 'security';
@@ -927,6 +965,8 @@ function isAuditRelated(entry: AuditEntry, relation: SecurityRelationKey, config
     || action === 'SERVER_SSH_DIAGNOSTIC'
     || action === 'SERVER_SSH_COMMAND'
     || action === 'SERVER_ACTION'
+    || action === 'OPERATIONS_PREFLIGHT'
+    || action === 'OPERATIONS_TASK'
     || haystack.includes('ssh')
   );
 }
@@ -975,9 +1015,9 @@ function buildAuditInsight(entry: AuditEntry, copy: SecurityCopy): AuditInsight 
     };
   }
 
-  if (action.startsWith('SERVER_') || action === 'OPERATIONS_TASK') {
+  if (action.startsWith('SERVER_') || action === 'OPERATIONS_PREFLIGHT' || action === 'OPERATIONS_TASK') {
     return {
-      domain: action === 'OPERATIONS_TASK' ? copy.auditDomainOps : copy.auditDomainSsh,
+      domain: action === 'OPERATIONS_PREFLIGHT' || action === 'OPERATIONS_TASK' ? copy.auditDomainOps : copy.auditDomainSsh,
       severity,
       reason: failedOrBlocked ? copy.auditReasonSshRisk : copy.auditReasonSshOk,
       nextStep: failedOrBlocked ? copy.auditNextSshRisk : copy.auditNextSshOk,
@@ -990,6 +1030,115 @@ function buildAuditInsight(entry: AuditEntry, copy: SecurityCopy): AuditInsight 
     reason: failedOrBlocked ? copy.auditReasonRuntimeRisk : copy.auditReasonRuntimeOk,
     nextStep: failedOrBlocked ? copy.auditNextRuntimeRisk : copy.auditNextRuntimeOk,
   };
+}
+
+function buildOperationAuditTrace(
+  selectedAudit: AuditEntry,
+  auditEntries: AuditEntry[],
+  copy: SecurityCopy,
+  locale: string,
+): OperationAuditTrace | null {
+  const action = selectedAudit.action.toUpperCase();
+  if (action !== 'OPERATIONS_PREFLIGHT' && action !== 'OPERATIONS_TASK') {
+    return null;
+  }
+
+  const selectedTime = new Date(selectedAudit.createdAt).getTime();
+  if (Number.isNaN(selectedTime)) {
+    return null;
+  }
+
+  const selectedSignature = getOperationAuditSignature(selectedAudit);
+  const relatedEntries = auditEntries
+    .filter((entry) => entry.action === 'OPERATIONS_PREFLIGHT' || entry.action === 'OPERATIONS_TASK')
+    .filter((entry) => {
+      const entryTime = new Date(entry.createdAt).getTime();
+      if (Number.isNaN(entryTime) || Math.abs(entryTime - selectedTime) > 15 * 60 * 1000) {
+        return false;
+      }
+
+      const entrySignature = getOperationAuditSignature(entry);
+      const sameType = selectedSignature.taskType === 'unknown' || entrySignature.taskType === 'unknown' || selectedSignature.taskType === entrySignature.taskType;
+      const sameTarget = selectedSignature.targetKey === entrySignature.targetKey;
+      return sameType && sameTarget;
+    })
+    .sort((left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime());
+
+  const preflight = action === 'OPERATIONS_PREFLIGHT'
+    ? selectedAudit
+    : getLastOperationAuditBefore(relatedEntries, selectedTime, 'OPERATIONS_PREFLIGHT');
+  const execution = action === 'OPERATIONS_TASK'
+    ? selectedAudit
+    : relatedEntries.find((entry) => entry.action === 'OPERATIONS_TASK' && new Date(entry.createdAt).getTime() >= selectedTime) ?? null;
+
+  const tone: OperationAuditTrace['tone'] = execution
+    ? execution.status === 'failed'
+      ? 'failed'
+      : 'executed'
+    : preflight?.status === 'blocked'
+      ? 'blocked'
+      : 'orphaned';
+
+  const statusLabel = execution
+    ? execution.status === 'success'
+      ? copy.operationTraceExecuted
+      : copy.operationTraceExecutionRisk
+    : preflight?.status === 'blocked'
+      ? copy.operationTraceBlocked
+      : copy.operationTraceWaiting;
+
+  const elapsedLabel = preflight && execution
+    ? copy.operationTraceElapsed(formatAuditDuration(new Date(preflight.createdAt).getTime(), new Date(execution.createdAt).getTime(), locale))
+    : copy.operationTraceWindow;
+  const evidence = [preflight?.detail, execution?.detail].filter(Boolean).join(' -> ') || selectedAudit.detail;
+
+  return {
+    tone,
+    statusLabel,
+    preflight,
+    execution,
+    elapsedLabel,
+    evidence,
+  };
+}
+
+function getLastOperationAuditBefore(entries: AuditEntry[], selectedTime: number, action: 'OPERATIONS_PREFLIGHT' | 'OPERATIONS_TASK') {
+  const matches = entries.filter((entry) => entry.action === action && new Date(entry.createdAt).getTime() <= selectedTime);
+  return matches.length > 0 ? matches[matches.length - 1] : null;
+}
+
+function getOperationAuditSignature(entry: AuditEntry) {
+  const detail = entry.detail.toLowerCase();
+  const taskType = (
+    detail.match(/\b(assetSync|healthCheck|sshCommand|powerOn|shutdown|reboot)\b/i)?.[1]
+    ?? detail.match(/Plan:\s*([^|]+?)\s+on\s+/i)?.[1]
+    ?? 'unknown'
+  )
+    .replace(/\s+/g, '')
+    .toLowerCase();
+  const targetKey = normalizeAuditTarget(entry.target);
+
+  return { taskType, targetKey };
+}
+
+function normalizeAuditTarget(target: string) {
+  return target
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .sort()
+    .join(',');
+}
+
+function formatAuditDuration(start: number, end: number, locale: string) {
+  const seconds = Math.max(0, Math.round((end - start) / 1000));
+  if (seconds < 60) {
+    return new Intl.NumberFormat(locale).format(seconds) + 's';
+  }
+
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${new Intl.NumberFormat(locale).format(minutes)}m ${new Intl.NumberFormat(locale).format(remainingSeconds)}s`;
 }
 
 function formatAuditTime(value: string, locale: string) {
@@ -1069,6 +1218,17 @@ interface SecurityCopy {
   auditReasonRuntimeOk: string;
   auditNextRuntimeRisk: string;
   auditNextRuntimeOk: string;
+  operationTraceTitle: string;
+  operationTracePreflight: string;
+  operationTraceExecution: string;
+  operationTraceExecuted: string;
+  operationTraceExecutionRisk: string;
+  operationTraceBlocked: string;
+  operationTraceWaiting: string;
+  operationTraceMissing: string;
+  operationTraceNoPreflight: string;
+  operationTraceNoExecution: string;
+  operationTraceWindow: string;
   remediationTitle: string;
   remediationClear: string;
   noRemediation: string;
@@ -1112,6 +1272,7 @@ interface SecurityCopy {
   apiHostCount: (count: number) => string;
   corsOriginCount: (count: number) => string;
   timeoutMs: (ms: number) => string;
+  operationTraceElapsed: (duration: string) => string;
   auditStatus: (status: AuditStatusFilter) => string;
 }
 
@@ -1211,6 +1372,17 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     auditReasonRuntimeOk: '运行环境事件已正常记录',
     auditNextRuntimeRisk: '检查服务配置、CORS、超时和系统健康状态。',
     auditNextRuntimeOk: '继续保持周期性巡检。',
+    operationTraceTitle: '运维证据链',
+    operationTracePreflight: '预检',
+    operationTraceExecution: '执行',
+    operationTraceExecuted: '已关联执行',
+    operationTraceExecutionRisk: '执行存在风险',
+    operationTraceBlocked: '预检已阻断',
+    operationTraceWaiting: '等待执行证据',
+    operationTraceMissing: '缺失',
+    operationTraceNoPreflight: '未找到匹配预检',
+    operationTraceNoExecution: '未找到匹配执行',
+    operationTraceWindow: '按 15 分钟窗口匹配同类型、同目标记录',
     remediationTitle: '风险处置',
     remediationClear: '暂无待处置',
     noRemediation: '当前没有需要处理的风险项。',
@@ -1263,6 +1435,7 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     apiHostCount: (count) => `${count} 个允许域名`,
     corsOriginCount: (count) => `${count} 个来源`,
     timeoutMs: (ms) => `${ms} ms`,
+    operationTraceElapsed: (duration) => `预检到执行间隔 ${duration}`,
     auditStatus: (status) => ({
       all: '全部',
       success: '成功',
@@ -1339,6 +1512,17 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     auditReasonRuntimeOk: 'Runtime event was recorded normally',
     auditNextRuntimeRisk: 'Check service config, CORS, timeout, and health status.',
     auditNextRuntimeOk: 'Keep periodic patrol enabled.',
+    operationTraceTitle: 'Operation evidence chain',
+    operationTracePreflight: 'Preflight',
+    operationTraceExecution: 'Execution',
+    operationTraceExecuted: 'Execution linked',
+    operationTraceExecutionRisk: 'Execution risk',
+    operationTraceBlocked: 'Preflight blocked',
+    operationTraceWaiting: 'Waiting for execution',
+    operationTraceMissing: 'Missing',
+    operationTraceNoPreflight: 'No matching preflight',
+    operationTraceNoExecution: 'No matching execution',
+    operationTraceWindow: 'Matched by task type and target within a 15-minute window',
     remediationTitle: 'Risk remediation',
     remediationClear: 'Nothing to handle',
     noRemediation: 'No risk item requires action right now.',
@@ -1391,6 +1575,7 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     apiHostCount: (count) => `${count} allowed hosts`,
     corsOriginCount: (count) => `${count} origins`,
     timeoutMs: (ms) => `${ms} ms`,
+    operationTraceElapsed: (duration) => `Preflight-to-execution gap ${duration}`,
     auditStatus: (status) => ({
       all: 'All',
       success: 'Success',
@@ -1467,6 +1652,17 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     auditReasonRuntimeOk: '実行環境イベントは正常に記録されました',
     auditNextRuntimeRisk: 'サービス設定、CORS、タイムアウト、ヘルス状態を確認します。',
     auditNextRuntimeOk: '定期巡回を継続します。',
+    operationTraceTitle: '運用証跡チェーン',
+    operationTracePreflight: '事前確認',
+    operationTraceExecution: '実行',
+    operationTraceExecuted: '実行に関連付け済み',
+    operationTraceExecutionRisk: '実行リスクあり',
+    operationTraceBlocked: '事前確認でブロック',
+    operationTraceWaiting: '実行証跡待ち',
+    operationTraceMissing: '未検出',
+    operationTraceNoPreflight: '一致する事前確認なし',
+    operationTraceNoExecution: '一致する実行なし',
+    operationTraceWindow: '15分以内の同一タイプ、同一対象で照合',
     remediationTitle: 'リスク対応',
     remediationClear: '対応不要',
     noRemediation: '現在対応が必要なリスク項目はありません。',
@@ -1519,6 +1715,7 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     apiHostCount: (count) => `${count} 件の許可ホスト`,
     corsOriginCount: (count) => `${count} 件のオリジン`,
     timeoutMs: (ms) => `${ms} ms`,
+    operationTraceElapsed: (duration) => `事前確認から実行まで ${duration}`,
     auditStatus: (status) => ({
       all: 'すべて',
       success: '成功',
