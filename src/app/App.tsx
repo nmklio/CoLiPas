@@ -97,6 +97,7 @@ export function App() {
   const [passwordDraft, setPasswordDraft] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const avatarUploadRef = useRef<HTMLInputElement | null>(null);
   const [activeSection, setActiveSection] = useState<SectionId>('overview');
+  const [securityTraceFocusId, setSecurityTraceFocusId] = useState('');
   const [filters, setFilters] = useState<ServerFilters>(defaultFilters);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [aiCollapsed, setAiCollapsed] = useState(true);
@@ -311,6 +312,12 @@ export function App() {
   function openAiWithQuestion(question: string) {
     setAiSeedQuestion(question);
     setAiCollapsed(false);
+  }
+
+  function openSecurityTrace(correlationId: string) {
+    setSecurityTraceFocusId(correlationId);
+    setActiveSection('security');
+    setSidebarOpen(false);
   }
 
   function openSettings() {
@@ -538,13 +545,19 @@ export function App() {
               filters={filters}
               onFiltersChange={setFilters}
               onServerConnected={refreshOverview}
+              onAuditTraceOpen={openSecurityTrace}
               allServers={overview.servers}
               servers={filteredServers}
             />
           )}
 
           {activeSection === 'operations' && (
-            <OperationsCenter events={overview.operationEvents} servers={overview.servers} onTaskFinished={refreshOverview} />
+            <OperationsCenter
+              events={overview.operationEvents}
+              servers={overview.servers}
+              onTaskFinished={refreshOverview}
+              onAuditTraceOpen={openSecurityTrace}
+            />
           )}
 
           {activeSection === 'ai' && (
@@ -628,6 +641,8 @@ export function App() {
                 setSidebarOpen(false);
               }}
               onRemediated={refreshOverview}
+              focusTraceId={securityTraceFocusId}
+              onTraceFocused={() => setSecurityTraceFocusId('')}
             />
           )}
         </main>

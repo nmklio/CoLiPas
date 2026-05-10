@@ -25,6 +25,8 @@ interface SecurityPanelProps {
   events: OperationEvent[];
   onNavigate: (section: 'overview' | 'servers' | 'operations' | 'ai' | 'api' | 'security') => void;
   onRemediated: () => void | Promise<void>;
+  focusTraceId?: string;
+  onTraceFocused?: () => void;
 }
 
 interface ConfigSummary {
@@ -104,7 +106,7 @@ interface SecurityRiskAction {
   note?: string;
 }
 
-export function SecurityPanel({ events, onNavigate, onRemediated }: SecurityPanelProps) {
+export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, onTraceFocused }: SecurityPanelProps) {
   const { language, t } = useI18n();
   const copy = securityCopyByLanguage[language] ?? securityCopyByLanguage.zh;
   const diagnosticCopy = diagnosticCopyByLanguage[language] ?? diagnosticCopyByLanguage.zh;
@@ -167,6 +169,22 @@ export function SecurityPanel({ events, onNavigate, onRemediated }: SecurityPane
   useEffect(() => {
     refreshSecurityData().catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (!focusTraceId) {
+      return;
+    }
+
+    setActiveTraceId(focusTraceId);
+    setRelationFilter(null);
+    setQuery('');
+    setStatusFilter('all');
+    const firstMatchedAudit = auditEntries.find((entry) => entry.correlationId === focusTraceId);
+    setSelectedAuditId(firstMatchedAudit?.id ?? '');
+    if (firstMatchedAudit || auditEntries.length > 0) {
+      onTraceFocused?.();
+    }
+  }, [auditEntries, focusTraceId, onTraceFocused]);
 
   async function refreshSecurityData() {
     setLoading(true);

@@ -3837,6 +3837,14 @@ td span,
   margin: 0;
 }
 
+.ops-result-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .ops-server-choice-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4620,6 +4628,33 @@ pre {
   color: #1e4f85;
   font-size: 13px;
   line-height: 1.45;
+}
+
+.action-trace-box {
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.inline-trace-button {
+  min-height: 30px;
+  border: 1px solid #b9dcd7;
+  border-radius: 7px;
+  padding: 0 9px;
+  background: #ffffff;
+  color: #1d5f58;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.inline-trace-button:hover {
+  border-color: var(--brand-line);
+  background: #edf8f6;
 }
 
 .error-box {

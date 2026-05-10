@@ -34,6 +34,7 @@ interface OperationsCenterProps {
   events: OperationEvent[];
   servers: ServerNode[];
   onTaskFinished?: () => Promise<void> | void;
+  onAuditTraceOpen?: (correlationId: string) => void;
 }
 
 interface TaskMeta {
@@ -85,6 +86,7 @@ type Copy = {
   preview: string;
   activeServers: string;
   serverLoad: string;
+  viewTrace: string;
 };
 
 const taskIds: OperationTaskType[] = ['assetSync', 'healthCheck', 'sshCommand', 'powerOn', 'shutdown', 'reboot'];
@@ -133,6 +135,7 @@ const copyByLanguage: Record<string, Copy> = {
     preview: '预计影响',
     activeServers: '可执行服务器',
     serverLoad: '服务器负载',
+    viewTrace: '查看审计链',
   },
   en: {
     running: 'Running',
@@ -176,6 +179,7 @@ const copyByLanguage: Record<string, Copy> = {
     preview: 'Impact preview',
     activeServers: 'Runnable servers',
     serverLoad: 'Server load',
+    viewTrace: 'View audit trace',
   },
   ja: {
     running: '実行中',
@@ -219,6 +223,7 @@ const copyByLanguage: Record<string, Copy> = {
     preview: '影響プレビュー',
     activeServers: '実行可能サーバー',
     serverLoad: 'サーバー負荷',
+    viewTrace: '監査 trace を表示',
   },
 };
 
@@ -280,7 +285,7 @@ const preflightCopyByLanguage: Record<string, {
   },
 };
 
-export function OperationsCenter({ events, servers, onTaskFinished }: OperationsCenterProps) {
+export function OperationsCenter({ events, servers, onTaskFinished, onAuditTraceOpen }: OperationsCenterProps) {
   const { language, t } = useI18n();
   const copy = copyByLanguage[language] ?? copyByLanguage.zh;
   const preflightCopy = preflightCopyByLanguage[language] ?? preflightCopyByLanguage.zh;
@@ -662,7 +667,7 @@ export function OperationsCenter({ events, servers, onTaskFinished }: Operations
                     <Icon size={17} />
                     <span>
                       <strong>{meta.label}</strong>
-                      <small>{formatTaskTime(task.startedAt, language)} / {targetSummary(task, copy)}</small>
+                      <small>{formatTaskTime(task.startedAt, language)} / {targetSummary(task, copy)} / {shortTraceId(task.correlationId)}</small>
                     </span>
                     <b>{statusText(task.status, copy)}</b>
                   </button>
@@ -698,7 +703,15 @@ export function OperationsCenter({ events, servers, onTaskFinished }: Operations
       <div className="ops-result-panel">
         <div className="ops-panel-title">
           <h3>{copy.result}</h3>
-          {activeTask && <span>{activeTask.summary.success} {copy.success} / {activeTask.summary.failed} {copy.failed} / {activeTask.summary.skipped} {copy.skipped}</span>}
+          {activeTask && (
+            <div className="ops-result-actions">
+              <span>{activeTask.summary.success} {copy.success} / {activeTask.summary.failed} {copy.failed} / {activeTask.summary.skipped} {copy.skipped}</span>
+              <button type="button" className="inline-trace-button" onClick={() => onAuditTraceOpen?.(activeTask.correlationId)}>
+                <ShieldCheck size={14} />
+                {copy.viewTrace}
+              </button>
+            </div>
+          )}
         </div>
         {!activeTask ? (
           <div className="quiet-state">{copy.noResult}</div>
@@ -839,6 +852,10 @@ function targetSummary(task: OperationTaskResponse, copy: Copy) {
 function formatTaskTime(value: string, language: string) {
   const locale = language === 'en' ? 'en-US' : language === 'ja' ? 'ja-JP' : 'zh-CN';
   return new Date(value).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+}
+
+function shortTraceId(value: string) {
+  return value.replace(/^(ops|srv)-trace-/, '').slice(0, 8);
 }
 
 function buildOperationConfirmMessage(type: OperationTaskType, count: number, name: string, copy: Copy) {

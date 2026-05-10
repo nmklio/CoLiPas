@@ -25,6 +25,7 @@ interface ServerInventoryProps {
   filters: ServerFilters;
   onFiltersChange: (filters: ServerFilters) => void;
   onServerConnected: () => Promise<void> | void;
+  onAuditTraceOpen?: (correlationId: string) => void;
 }
 
 const statuses: Array<Extract<ServerStatus, 'running' | 'stopped' | 'unconnected'> | 'all'> = ['all', 'running', 'stopped', 'unconnected'];
@@ -74,7 +75,7 @@ const initialForm: ConnectServerPayload = {
   },
 };
 
-export function ServerInventory({ allServers, servers, filters, onFiltersChange, onServerConnected }: ServerInventoryProps) {
+export function ServerInventory({ allServers, servers, filters, onFiltersChange, onServerConnected, onAuditTraceOpen }: ServerInventoryProps) {
   const { language, t } = useI18n();
   const regions = Array.from(new Set(allServers.map((server) => server.region))).sort();
   const scopedRegions = (filters.regionScope ?? []).filter(
@@ -84,6 +85,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const providerDisplayName = (provider: string) => formatProviderName(provider, t);
   const providerFilterName = (provider: string) => formatProviderFilterName(provider, t);
   const [actionMessage, setActionMessage] = useState('');
+  const [lastActionTraceId, setLastActionTraceId] = useState('');
   const [form, setForm] = useState<ConnectServerPayload>(initialForm);
   const [tagsText, setTagsText] = useState('');
   const [connecting, setConnecting] = useState(false);
@@ -178,9 +180,11 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     }
 
     setActionMessage('');
+    setLastActionTraceId('');
     try {
       const result = await executeServerAction(server.id, action, `operator requested ${action}`, true);
       setActionMessage(t('servers.actionDone', { name: result.serverName, action: actionLabel(action) }));
+      setLastActionTraceId(result.correlationId);
       if (sshConsoleOpen && activeSshServer?.id === server.id) {
         appendTerminalOutput(actionCommands[action], result.output || `${actionLabel(action)} executed`);
       }
@@ -537,7 +541,17 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       </form>
       )}
 
-      {actionMessage && <div className="validation-box">{actionMessage}</div>}
+      {actionMessage && (
+        <div className="validation-box action-trace-box">
+          <span>{actionMessage}</span>
+          {lastActionTraceId && (
+            <button type="button" className="inline-trace-button" onClick={() => onAuditTraceOpen?.(lastActionTraceId)}>
+              <Search size={14} />
+              {t('common.viewTrace')}
+            </button>
+          )}
+        </div>
+      )}
 
       {servers.length === 0 ? (
         <div className="empty-state">

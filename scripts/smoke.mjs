@@ -2952,6 +2952,8 @@ function assertServerStatusLifecycleGuards() {
   const inventorySource = fs.readFileSync(new URL('../src/modules/servers/ServerInventory.tsx', import.meta.url), 'utf8');
   const inventoryServiceSource = fs.readFileSync(new URL('../src/server/services/inventoryService.ts', import.meta.url), 'utf8');
   const serverActionsSource = fs.readFileSync(new URL('../src/server/services/serverActions.ts', import.meta.url), 'utf8');
+  const globalCss = fs.readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
+  const i18nSource = fs.readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
 
   if (inventorySource.includes("['all', 'running', 'warning', 'stopped', 'provisioning', 'unconnected']")) {
     throw new Error('Server status filters must not expose provisioning/creating status');
@@ -2981,6 +2983,31 @@ function assertServerStatusLifecycleGuards() {
   const missingAction = requiredActionFragments.filter((fragment) => !serverActionsSource.includes(fragment));
   if (missingAction.length) {
     throw new Error(`Server power action status update is incomplete: ${missingAction.join(', ')}`);
+  }
+
+  const requiredTraceFragments = [
+    'onAuditTraceOpen?: (correlationId: string) => void',
+    'const [lastActionTraceId, setLastActionTraceId] = useState(\'\')',
+    'setLastActionTraceId(result.correlationId)',
+    'onAuditTraceOpen?.(lastActionTraceId)',
+    "t('common.viewTrace')",
+    'action-trace-box',
+    'inline-trace-button',
+  ];
+  const missingTrace = requiredTraceFragments.filter((fragment) => !inventorySource.includes(fragment));
+  if (missingTrace.length) {
+    throw new Error(`Server action audit trace navigation is incomplete: ${missingTrace.join(', ')}`);
+  }
+
+  const traceCssFragments = ['.action-trace-box', '.inline-trace-button'];
+  const missingTraceCss = traceCssFragments.filter((fragment) => !globalCss.includes(fragment));
+  if (missingTraceCss.length) {
+    throw new Error(`Server action audit trace CSS is incomplete: ${missingTraceCss.join(', ')}`);
+  }
+
+  const viewTraceI18nCount = (i18nSource.match(/common\.viewTrace/g) ?? []).length;
+  if (viewTraceI18nCount < 3) {
+    throw new Error('Common audit trace navigation i18n key is missing languages');
   }
 
   console.log('ok server lifecycle status maps SSH access to running/unconnected and power actions to stopped/running');
@@ -3165,6 +3192,9 @@ function assertSecurityAuditRelationsAreSpecific() {
     'security-audit-insight',
     'selectedOperationTrace',
     'activeTraceId',
+    'focusTraceId',
+    'onTraceFocused',
+    'firstMatchedAudit || auditEntries.length > 0',
     'applyTraceFilter(selectedAudit.correlationId',
     'entry.correlationId === activeTraceId',
     'entry.correlationId]',
@@ -3256,6 +3286,7 @@ function assertSecurityAuditRelationsAreSpecific() {
   }
 
   const appSource = fs.readFileSync(new URL('../src/server/app.ts', import.meta.url), 'utf8');
+  const frontendAppSource = fs.readFileSync(new URL('../src/app/App.tsx', import.meta.url), 'utf8');
   const auditServiceSource = fs.readFileSync(new URL('../src/server/services/auditService.ts', import.meta.url), 'utf8');
   const diagnosticServiceSource = fs.readFileSync(new URL('../src/server/services/diagnosticService.ts', import.meta.url), 'utf8');
   const readinessServiceSource = fs.readFileSync(new URL('../src/server/services/releaseReadinessService.ts', import.meta.url), 'utf8');
@@ -3295,6 +3326,18 @@ function assertSecurityAuditRelationsAreSpecific() {
     throw new Error(`Security audit remediation API is incomplete: ${missingRemediation.join(', ')}`);
   }
 
+  const traceNavigationFragments = [
+    'const [securityTraceFocusId, setSecurityTraceFocusId] = useState(\'\')',
+    'function openSecurityTrace(correlationId: string)',
+    'onAuditTraceOpen={openSecurityTrace}',
+    'focusTraceId={securityTraceFocusId}',
+    'onTraceFocused={() => setSecurityTraceFocusId(\'\')}',
+  ];
+  const missingTraceNavigation = traceNavigationFragments.filter((fragment) => !frontendAppSource.includes(fragment));
+  if (missingTraceNavigation.length) {
+    throw new Error(`Cross-module audit trace navigation is incomplete: ${missingTraceNavigation.join(', ')}`);
+  }
+
   console.log('ok security audit relation filters, remediation actions, load errors, and insight cards are guarded');
 }
 
@@ -3325,6 +3368,10 @@ function assertOperationsTargetSelectionGuards() {
     'target.issues.length',
     'preflightStatusText',
     'preflightTone(preflight)',
+    'onAuditTraceOpen?: (correlationId: string) => void',
+    'onAuditTraceOpen?.(activeTask.correlationId)',
+    'shortTraceId(task.correlationId)',
+    'inline-trace-button',
   ];
   const missingFrontend = frontendRequired.filter((fragment) => !operationsSource.includes(fragment));
   if (missingFrontend.length) {
