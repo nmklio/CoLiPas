@@ -52,10 +52,6 @@ function Push-GitHub {
   if ($LASTEXITCODE -ne 0) {
     throw "Unable to read local HEAD."
   }
-  $parent = (git rev-parse "HEAD^").Trim()
-  if ($LASTEXITCODE -ne 0) {
-    throw "Unable to read local HEAD parent."
-  }
   $headTree = (git rev-parse "HEAD^{tree}").Trim()
   if ($LASTEXITCODE -ne 0) {
     throw "Unable to read local HEAD tree."
@@ -63,8 +59,17 @@ function Push-GitHub {
 
   $remoteRef = & $gh api "repos/$GitHubRepo/git/ref/heads/$Branch" | ConvertFrom-Json
   $remoteSha = $remoteRef.object.sha
-  if ($remoteSha -ne $parent) {
-    throw "Remote $Branch moved to $remoteSha; expected local parent $parent."
+  git cat-file -e "$remoteSha^{commit}" 2>$null
+  if ($LASTEXITCODE -ne 0) {
+    git fetch origin $Branch
+    if ($LASTEXITCODE -ne 0) {
+      throw "Unable to fetch remote $Branch commit $remoteSha."
+    }
+  }
+
+  git merge-base --is-ancestor $remoteSha $head
+  if ($LASTEXITCODE -ne 0) {
+    throw "Remote $Branch at $remoteSha is not an ancestor of local HEAD $head."
   }
 
   $remoteTree = (& $gh api "repos/$GitHubRepo/git/commits/$remoteSha" | ConvertFrom-Json).tree.sha
@@ -74,7 +79,7 @@ function Push-GitHub {
   }
 
   $treeEntries = @()
-  $files = git diff --name-only $parent $head
+  $files = git diff --name-only $remoteSha $head
   if ($LASTEXITCODE -ne 0) {
     throw "Unable to list changed files."
   }
@@ -142,10 +147,6 @@ function Push-GitHub {
     committer = $committer
   } | ConvertTo-Json -Depth 10 -Compress
   $newCommit = $newCommitBody | & $gh api "repos/$GitHubRepo/git/commits" -X POST --input - | ConvertFrom-Json
-  if ($newCommit.sha -ne $head) {
-    throw "GitHub API commit $($newCommit.sha) does not match local HEAD $head."
-  }
-
   $updateBody = @{
     sha = $newCommit.sha
     force = $false
@@ -153,6 +154,22 @@ function Push-GitHub {
   $updatedRef = $updateBody | & $gh api "repos/$GitHubRepo/git/refs/heads/$Branch" -X PATCH --input - | ConvertFrom-Json
   if ($updatedRef.object.sha -ne $newCommit.sha) {
     throw "GitHub API ref update did not return expected commit."
+  }
+
+  Write-Warning "GitHub API produced commit $($newCommit.sha) for local HEAD $head. The tree matches, so aligning the local branch to the published ref."
+  git fetch origin $Branch
+  if ($LASTEXITCODE -ne 0) {
+    throw "Unable to fetch published GitHub API commit."
+  }
+
+  $publishedTree = (git rev-parse "origin/$Branch^{tree}").Trim()
+  if ($LASTEXITCODE -ne 0 -or $publishedTree -ne $headTree) {
+    throw "Published GitHub tree $publishedTree does not match local HEAD tree $headTree."
+  }
+
+  git update-ref "refs/heads/$Branch" "origin/$Branch"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Unable to align local $Branch to origin/$Branch."
   }
 
   Write-Host "GitHub API pushed $($newCommit.sha)."
@@ -167,6 +184,10 @@ Run-Step "Git status guard" {
   if ($status) {
     throw "Working tree has uncommitted changes. Commit them before release deploy."
   }
+}
+
+Run-Step "Sensitive data guard" {
+  node scripts/secret-scan.mjs
 }
 
 Run-Step "Push GitHub" {
