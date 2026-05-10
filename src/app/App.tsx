@@ -19,8 +19,7 @@ import {
 } from 'lucide-react';
 import { getLocale, languageOptions, useI18n } from '../i18n';
 import { AIConsole } from '../modules/ai/AIConsole';
-import { DocsPage } from './DocsPage';
-import { MarketingPage } from './MarketingPage';
+import { LoginPage } from './LoginPage';
 import { CustomApiLab } from '../modules/custom-api/CustomApiLab';
 import { OperationsCenter } from '../modules/operations/OperationsCenter';
 import { MonitoringOverview } from '../modules/overview/MonitoringOverview';
@@ -104,7 +103,6 @@ export function App() {
   const appMountedRef = useRef(true);
   const sessionAuthenticatedRef = useRef(false);
   const overviewRefreshInFlightRef = useRef(false);
-  const onDocsPage = window.location.pathname === '/docs.html' || window.location.pathname === '/docs';
 
   async function refreshOverview() {
     if ((!session?.authenticated && !sessionAuthenticatedRef.current) || overviewRefreshInFlightRef.current) {
@@ -329,12 +327,8 @@ export function App() {
     );
   }
 
-  if (onDocsPage) {
-    return <DocsPage onLogin={() => window.location.assign(session?.authenticated ? '/' : '/#admin-login')} />;
-  }
-
   if (!session?.authenticated) {
-    return <MarketingPage loading={loginLoading} error={loginError} onLogin={handleLogin} />;
+    return <LoginPage loading={loginLoading} error={loginError} onLogin={handleLogin} />;
   }
 
   return (

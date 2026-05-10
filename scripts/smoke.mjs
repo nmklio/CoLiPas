@@ -1531,33 +1531,14 @@ if (!frontendResponse.ok || !html.includes('root') || !html.includes('CoLiPas'))
 }
 console.log('ok / frontend shell');
 
-const docsResponse = await fetch(`${baseUrl}/docs.html`);
-const docsHtml = await docsResponse.text();
-if (!docsResponse.ok || !docsHtml.includes('root') || !docsHtml.includes('CoLiPas')) {
-  throw new Error('/docs.html did not return the built frontend shell');
+const appSource = fs.readFileSync(new URL('../src/app/App.tsx', import.meta.url), 'utf8');
+if (!appSource.includes("import { LoginPage } from './LoginPage';")) {
+  throw new Error('Deployed app must render LoginPage for unauthenticated visitors');
 }
-
-const docsSource = fs.readFileSync(new URL('../src/app/DocsPage.tsx', import.meta.url), 'utf8');
-const marketingSource = fs.readFileSync(new URL('../src/app/MarketingPage.tsx', import.meta.url), 'utf8');
-const requiredDocsFragments = [
-  '使用文档',
-  '安装部署',
-  '接入服务器',
-  'AI 助手',
-  'SSH 与云维编排',
-  'POST /api/ai/stream',
-  'CUSTOM_API_ALLOWED_HOSTS',
-  'COLIPAS_DB_PATH',
-  'http://127.0.0.1:8080/',
-];
-const missingDocsFragments = requiredDocsFragments.filter((fragment) => !docsSource.includes(fragment));
-if (missingDocsFragments.length) {
-  throw new Error(`Docs page is missing deployment and usage guidance: ${missingDocsFragments.join(', ')}`);
+if (appSource.includes('MarketingPage') || appSource.includes('DocsPage') || appSource.includes('onDocsPage')) {
+  throw new Error('Deployed app must not expose marketing or docs pages at runtime');
 }
-if (!marketingSource.includes('href="/docs.html"')) {
-  throw new Error('Marketing page must expose a documentation navigation link');
-}
-console.log('ok /docs.html usage documentation shell');
+console.log('ok deployed frontend is limited to login and authenticated console');
 
 function assertAiProviderSecretNotPersisted() {
   const aiConsoleSource = fs.readFileSync(new URL('../src/modules/ai/AIConsole.tsx', import.meta.url), 'utf8');
