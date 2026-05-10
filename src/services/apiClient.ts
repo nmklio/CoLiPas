@@ -6,6 +6,7 @@ import {
   OperationEvent,
   OperationTaskRequest,
   OperationTaskResponse,
+  DiagnosticExportResponse,
   ReleaseReadinessReportResponse,
   ReleaseReadinessResponse,
   ReleaseReadinessSnapshotResponse,
@@ -535,6 +536,16 @@ export async function fetchReleaseReadinessReport(fetcher: typeof fetch = fetch)
   }
 
   return (await response.json()) as ReleaseReadinessReportResponse;
+}
+
+export async function fetchDiagnosticExport(fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/audit/diagnostics/export');
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as DiagnosticExportResponse;
 }
 
 export async function connectServer(payload: ConnectServerPayload, fetcher: typeof fetch = fetch) {

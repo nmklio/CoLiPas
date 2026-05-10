@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { getLocale, useI18n } from '../../i18n';
 import { OperationEvent } from '../../types';
-import { fetchReleaseReadiness, fetchReleaseReadinessReport, recordReleaseReadinessSnapshot, remediateSecurityRisk } from '../../services/apiClient';
+import { fetchDiagnosticExport, fetchReleaseReadiness, fetchReleaseReadinessReport, recordReleaseReadinessSnapshot, remediateSecurityRisk } from '../../services/apiClient';
 import type { SecurityRemediationResponse } from '../../services/apiClient';
 import type { ReleaseReadinessResponse } from '../../types';
 
@@ -96,6 +96,7 @@ interface SecurityRiskAction {
 export function SecurityPanel({ events, onNavigate, onRemediated }: SecurityPanelProps) {
   const { language, t } = useI18n();
   const copy = securityCopyByLanguage[language] ?? securityCopyByLanguage.zh;
+  const diagnosticCopy = diagnosticCopyByLanguage[language] ?? diagnosticCopyByLanguage.zh;
   const locale = getLocale(language);
   const openEvents = events.filter((event) => event.status === 'open');
   const [config, setConfig] = useState<ConfigSummary | null>(null);
@@ -113,6 +114,7 @@ export function SecurityPanel({ events, onNavigate, onRemediated }: SecurityPane
   const [readiness, setReadiness] = useState<ReleaseReadinessResponse | null>(null);
   const [recordingSnapshot, setRecordingSnapshot] = useState(false);
   const [exportingReadinessReport, setExportingReadinessReport] = useState(false);
+  const [exportingDiagnostic, setExportingDiagnostic] = useState(false);
 
   const filteredAudits = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -310,6 +312,28 @@ export function SecurityPanel({ events, onNavigate, onRemediated }: SecurityPane
     }
   }
 
+  async function exportDiagnosticBundle() {
+    setExportingDiagnostic(true);
+    setRemediationMessage('');
+    setRemediationError(false);
+    try {
+      const bundle = await fetchDiagnosticExport();
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: `${bundle.contentType};charset=utf-8` });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = bundle.filename;
+      link.click();
+      URL.revokeObjectURL(url);
+      setRemediationMessage(diagnosticCopy.exported);
+    } catch (error) {
+      setRemediationMessage(error instanceof Error ? error.message : diagnosticCopy.failed);
+      setRemediationError(true);
+    } finally {
+      setExportingDiagnostic(false);
+    }
+  }
+
   return (
     <section className="module-section security-workbench" aria-labelledby="security-title">
       <div className="section-header security-header">
@@ -383,6 +407,10 @@ export function SecurityPanel({ events, onNavigate, onRemediated }: SecurityPane
             <button type="button" className="tool-button" onClick={exportReadinessReport} disabled={exportingReadinessReport || !readiness}>
               <Download size={15} />
               {exportingReadinessReport ? copy.reportExporting : copy.reportExport}
+            </button>
+            <button type="button" className="tool-button" onClick={exportDiagnosticBundle} disabled={exportingDiagnostic}>
+              <Download size={15} />
+              {exportingDiagnostic ? diagnosticCopy.exporting : diagnosticCopy.export}
             </button>
           </div>
         </div>
@@ -1086,6 +1114,32 @@ interface SecurityCopy {
   timeoutMs: (ms: number) => string;
   auditStatus: (status: AuditStatusFilter) => string;
 }
+
+const diagnosticCopyByLanguage: Record<string, {
+  export: string;
+  exporting: string;
+  exported: string;
+  failed: string;
+}> = {
+  zh: {
+    export: '导出诊断包',
+    exporting: '导出中',
+    exported: '脱敏诊断包已生成',
+    failed: '诊断包导出失败',
+  },
+  en: {
+    export: 'Export diagnostics',
+    exporting: 'Exporting',
+    exported: 'Sanitized diagnostics generated',
+    failed: 'Diagnostics export failed',
+  },
+  ja: {
+    export: '診断パックを書き出す',
+    exporting: '書き出し中',
+    exported: '匿名化診断パックを生成しました',
+    failed: '診断パックの書き出しに失敗しました',
+  },
+};
 
 const securityCopyByLanguage: Record<string, SecurityCopy> = {
   zh: {

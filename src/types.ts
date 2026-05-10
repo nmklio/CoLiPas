@@ -194,3 +194,64 @@ export interface ReleaseReadinessReportResponse {
   contentType: 'text/markdown';
   markdown: string;
 }
+
+export interface DiagnosticExportResponse {
+  generatedAt: string;
+  filename: string;
+  contentType: 'application/json';
+  runtime: {
+    nodeEnv: string;
+    uptimeSeconds: number;
+    database: {
+      driver: 'sqlite';
+      name: string;
+    };
+  };
+  config: {
+    customApiAllowedHosts: number;
+    customApiTimeoutMs: number;
+    ai: {
+      baseUrlHost: string;
+      model: string;
+      configured: boolean;
+    };
+    security: {
+      adminPasswordDefault: boolean;
+      sessionSecretDefault: boolean;
+      credentialEncryptionKeyConfigured: boolean;
+      credentialEncryptionKeyDefault: boolean;
+    };
+  };
+  readiness: {
+    score: number;
+    status: ReleaseReadinessStatus;
+    summary: ReleaseReadinessResponse['summary'];
+    nextBestAction: string;
+    checks: Array<Pick<ReleaseReadinessCheck, 'id' | 'label' | 'severity' | 'passed' | 'value' | 'relatedModule'>>;
+  };
+  audit: {
+    total: number;
+    byStatus: Record<'success' | 'blocked' | 'failed', number>;
+    byAction: Record<string, number>;
+    last24h: number;
+  };
+  inventory: {
+    servers: {
+      total: number;
+      running: number;
+      stopped: number;
+      unconnected: number;
+      connectedSsh: number;
+    };
+    cloudAccounts: {
+      total: number;
+      connected: number;
+      warning: number;
+      disconnected: number;
+      providers: number;
+    };
+    regions: number;
+    customProviders: number;
+    openEvents: number;
+  };
+}

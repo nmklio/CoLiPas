@@ -291,6 +291,27 @@ const getChecks = [
       !body.markdown.includes('admin123456'),
   ],
   [
+    '/api/audit/diagnostics/export',
+    (body) =>
+      body.contentType === 'application/json' &&
+      body.filename?.startsWith('colipas-diagnostics-') &&
+      body.runtime?.database?.driver === 'sqlite' &&
+      body.runtime?.database?.name === 'colipas.sqlite' &&
+      !('path' in body.runtime.database) &&
+      Number.isInteger(body.config?.customApiAllowedHosts) &&
+      typeof body.config?.ai?.baseUrlHost === 'string' &&
+      body.config?.security?.adminPasswordDefault === true &&
+      Number.isInteger(body.readiness?.score) &&
+      body.readiness?.checks?.some((check) => check.id === 'runtime-secret-posture') &&
+      Number.isInteger(body.audit?.total) &&
+      Number.isInteger(body.inventory?.servers?.total) &&
+      !JSON.stringify(body).includes('admin123456') &&
+      !JSON.stringify(body).includes('verify-production-session-secret') &&
+      !JSON.stringify(body).includes('publicIp') &&
+      !JSON.stringify(body).includes('privateIp') &&
+      !JSON.stringify(body).includes('detail'),
+  ],
+  [
     '/api/overview',
     (body) =>
       Array.isArray(body.cloudAccounts) &&
@@ -1695,6 +1716,37 @@ if (
 }
 console.log('ok /api/audit/readiness/report exports sanitized Markdown evidence');
 
+const diagnosticExportResponse = await fetch(`${baseUrl}/api/audit/diagnostics/export`, { headers: authHeaders });
+if (!diagnosticExportResponse.ok) {
+  throw new Error(`/api/audit/diagnostics/export returned HTTP ${diagnosticExportResponse.status}`);
+}
+const diagnosticExportBody = await diagnosticExportResponse.json();
+const diagnosticPayload = JSON.stringify(diagnosticExportBody);
+if (
+  diagnosticExportBody.contentType !== 'application/json'
+  || !diagnosticExportBody.filename?.startsWith('colipas-diagnostics-')
+  || !diagnosticExportBody.readiness?.checks?.some((check) => check.id === 'runtime-secret-posture')
+  || typeof diagnosticExportBody.config?.ai?.baseUrlHost !== 'string'
+  || !Number.isInteger(diagnosticExportBody.inventory?.servers?.connectedSsh)
+) {
+  throw new Error('/api/audit/diagnostics/export returned incomplete diagnostic bundle');
+}
+if (
+  diagnosticPayload.includes(sensitiveAuditSecret)
+  || diagnosticPayload.includes(sensitiveSshSecret)
+  || diagnosticPayload.includes(smokePrivateKeyMarker)
+  || diagnosticPayload.includes(smokePrivateKeyPassphrase)
+  || diagnosticPayload.includes('admin123456')
+  || diagnosticPayload.includes('verify-production-session-secret')
+  || diagnosticPayload.includes('"publicIp"')
+  || diagnosticPayload.includes('"privateIp"')
+  || diagnosticPayload.includes('"detail"')
+  || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(diagnosticPayload)
+) {
+  throw new Error('/api/audit/diagnostics/export leaked sensitive or asset-identifying material');
+}
+console.log('ok /api/audit/diagnostics/export exports sanitized aggregate diagnostics');
+
 const remediationResponse = await fetch(`${baseUrl}/api/audit/remediate`, {
   method: 'POST',
   headers: { ...authHeaders, 'Content-Type': 'application/json' },
@@ -2923,6 +2975,9 @@ function assertSecurityAuditRelationsAreSpecific() {
     'copy.readinessTrend(readiness.history.trend.direction, readiness.history.trend.deltaScore)',
     'copy.snapshotRecorded(result.snapshot.score)',
     'copy.reportExported',
+    'fetchDiagnosticExport()',
+    'diagnosticCopy.exported',
+    'diagnosticCopy.failed',
   ];
   const missing = requiredFragments.filter((fragment) => !securitySource.includes(fragment));
   if (missing.length) {
@@ -2963,17 +3018,21 @@ function assertSecurityAuditRelationsAreSpecific() {
 
   const appSource = fs.readFileSync(new URL('../src/server/app.ts', import.meta.url), 'utf8');
   const auditServiceSource = fs.readFileSync(new URL('../src/server/services/auditService.ts', import.meta.url), 'utf8');
+  const diagnosticServiceSource = fs.readFileSync(new URL('../src/server/services/diagnosticService.ts', import.meta.url), 'utf8');
   const readinessServiceSource = fs.readFileSync(new URL('../src/server/services/releaseReadinessService.ts', import.meta.url), 'utf8');
   const apiClientSource = fs.readFileSync(new URL('../src/services/apiClient.ts', import.meta.url), 'utf8');
   const remediationFragments = [
     "app.get('/api/audit/readiness'",
     "app.post('/api/audit/readiness/snapshots'",
     "app.get('/api/audit/readiness/report'",
+    "app.get('/api/audit/diagnostics/export'",
     'buildReleaseReadiness(config)',
     'buildReleaseReadinessReport(config)',
+    'buildDiagnosticExport(config)',
     'recordReleaseReadinessSnapshot(config)',
     'export function buildReleaseReadiness(config',
     'export function buildReleaseReadinessReport(config',
+    'export function buildDiagnosticExport(config',
     'runtime-secret-posture',
     'config.security.adminPasswordDefault',
     'sanitizeReportText',
@@ -2983,6 +3042,7 @@ function assertSecurityAuditRelationsAreSpecific() {
     "fetcher('/api/audit/readiness'",
     "fetcher('/api/audit/readiness/snapshots'",
     "fetcher('/api/audit/readiness/report'",
+    "fetcher('/api/audit/diagnostics/export'",
     "app.post('/api/audit/remediate'",
     'remediateSecurityRisk(request.body, session.user.username)',
     "z.enum(['acknowledgeCheck', 'acknowledgeAuditFailures', 'closeOpenEvents', 'reviewRuntime'])",
@@ -2990,7 +3050,7 @@ function assertSecurityAuditRelationsAreSpecific() {
     "target: parsed.target",
     "fetcher('/api/audit/remediate'",
   ];
-  const remediationCombined = [appSource, auditServiceSource, readinessServiceSource, apiClientSource].join('\n');
+  const remediationCombined = [appSource, auditServiceSource, diagnosticServiceSource, readinessServiceSource, apiClientSource].join('\n');
   const missingRemediation = remediationFragments.filter((fragment) => !remediationCombined.includes(fragment));
   if (missingRemediation.length) {
     throw new Error(`Security audit remediation API is incomplete: ${missingRemediation.join(', ')}`);

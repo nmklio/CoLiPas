@@ -14,6 +14,7 @@ import { listAuditEntries, recordAudit, remediateSecurityRisk } from './services
 import { buildAccountPayload, changeAdminPassword, getCurrentSession, getLoginThrottleStatus, login, logout, requireSession, updateConsoleProfile } from './services/authService.js';
 import { executeCustomApiProxy } from './services/customApiProxy.js';
 import { getDatabasePath } from './services/database.js';
+import { buildDiagnosticExport } from './services/diagnosticService.js';
 import { createOperationTask } from './services/operationsService.js';
 import { buildReleaseReadiness, buildReleaseReadinessReport, recordReleaseReadinessSnapshot } from './services/releaseReadinessService.js';
 import {
@@ -551,6 +552,10 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
 
   app.get('/api/audit/readiness/report', (_request, response) => {
     response.json(buildReleaseReadinessReport(config));
+  });
+
+  app.get('/api/audit/diagnostics/export', (_request, response) => {
+    response.json(buildDiagnosticExport(config));
   });
 
   app.post('/api/audit/remediate', (request, response, next) => {
