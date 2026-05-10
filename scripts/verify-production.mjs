@@ -81,6 +81,13 @@ try {
       SMOKE_BASE_URL: baseUrl,
     },
   });
+  await run(process.execPath, ['scripts/browser-e2e.mjs'], {
+    env: {
+      ...process.env,
+      E2E_BASE_URL: baseUrl,
+      E2E_ADMIN_PASSWORD: 'NextPassword123',
+    },
+  });
   await run(process.execPath, ['scripts/concurrency-check.mjs'], {
     env: {
       ...process.env,
