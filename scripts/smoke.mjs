@@ -3365,6 +3365,23 @@ function assertSecurityAuditRelationsAreSpecific() {
     }
   }
 
+  const browserE2eSource = fs.readFileSync(new URL('../scripts/browser-e2e.mjs', import.meta.url), 'utf8');
+  const browserRequiredFragments = [
+    'assertAccountSettingsAndAiChat',
+    'save avatar and name',
+    'avatar and display name updated',
+    'open ai chat',
+    '.ai-message.assistant.done .ai-message-content',
+    '.ai-message.assistant.cached .ai-message-content',
+    'AI cached answer should match the first local rule answer',
+    'assertOperationsResultTraceRoundTrip',
+    'waitForAuditEvents(targetPage, traceIdFromUrl)',
+  ];
+  const missingBrowserFragments = browserRequiredFragments.filter((fragment) => !browserE2eSource.includes(fragment));
+  if (missingBrowserFragments.length) {
+    throw new Error(`Browser grey E2E coverage is incomplete: ${missingBrowserFragments.join(', ')}`);
+  }
+
   console.log('ok security audit relation filters, remediation actions, load errors, and insight cards are guarded');
 }
 

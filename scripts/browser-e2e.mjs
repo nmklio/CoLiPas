@@ -18,6 +18,8 @@ let temporaryServerId = '';
 
 await page.addInitScript(() => {
   window.localStorage.setItem('colipas.language', 'en');
+  window.localStorage.removeItem('colipas.aiConsoleState');
+  window.localStorage.removeItem('colipas.aiResponseCache');
 });
 
 page.on('console', (message) => {
@@ -34,6 +36,8 @@ try {
   await assertSyntheticTraceDeepLink(page, traceId);
 
   console.log('ok browser e2e preserves security trace deep link after login');
+
+  await assertAccountSettingsAndAiChat(page);
 
   const temporaryServer = await createTemporaryAssetServer(page);
   temporaryServerId = temporaryServer.id;
@@ -77,6 +81,42 @@ async function assertSyntheticTraceDeepLink(targetPage, expectedTraceId) {
   if (auditRows !== 0) {
     throw new Error(`Synthetic trace should filter to zero audit rows, got ${auditRows}`);
   }
+}
+
+async function assertAccountSettingsAndAiChat(targetPage) {
+  const profileName = `Ops E2E ${Date.now().toString().slice(-5)}`;
+  await targetPage.locator('.account-settings-trigger').click();
+  await targetPage.locator('.account-modal').waitFor({ timeout: 5000 });
+  await targetPage.getByLabel(/display name/i).fill(profileName);
+  await targetPage.getByLabel(/avatar text/i).fill('QE');
+  await targetPage.getByRole('button', { name: /save avatar and name/i }).click();
+  await targetPage.getByText(/avatar and display name updated/i).waitFor({ timeout: 10000 });
+  await targetPage.locator('.account-modal .icon-button').first().click();
+  await targetPage.locator('.account-modal').waitFor({ state: 'hidden', timeout: 5000 });
+  await targetPage.locator('.account-settings-trigger').filter({ hasText: profileName }).waitFor({ timeout: 5000 });
+
+  await targetPage.getByRole('button', { name: /^AI System$/i }).click();
+  await targetPage.waitForURL(/#ai$/, { timeout: 10000 });
+  await targetPage.getByRole('button', { name: /open ai chat/i }).click();
+  await targetPage.locator('.ai-dock').waitFor({ timeout: 10000 });
+  await targetPage.getByRole('textbox', { name: /question/i }).fill('List the current highest server risk in one sentence');
+  await targetPage.getByRole('button', { name: /^send$/i }).click();
+  await targetPage.locator('.ai-message.assistant.done .ai-message-content').first().waitFor({ timeout: 20000 });
+  const firstAnswer = (await targetPage.locator('.ai-message.assistant .ai-message-content').last().textContent())?.trim() ?? '';
+  if (firstAnswer.length < 20) {
+    throw new Error(`AI chat should return a substantive local answer, got ${firstAnswer.length} chars`);
+  }
+
+  await targetPage.getByRole('button', { name: /new ai chat/i }).click();
+  await targetPage.getByRole('textbox', { name: /question/i }).fill('List the current highest server risk in one sentence');
+  await targetPage.getByRole('button', { name: /^send$/i }).click();
+  await targetPage.locator('.ai-message.assistant.cached .ai-message-content').first().waitFor({ timeout: 10000 });
+  const cachedAnswer = (await targetPage.locator('.ai-message.assistant.cached .ai-message-content').last().textContent())?.trim() ?? '';
+  if (cachedAnswer !== firstAnswer) {
+    throw new Error('AI cached answer should match the first local rule answer for the same prompt');
+  }
+
+  console.log('ok browser e2e covers account profile save and AI cached chat');
 }
 
 async function createTemporaryAssetServer(targetPage) {
