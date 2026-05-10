@@ -95,6 +95,7 @@ export interface OperationTaskRequest {
   command?: string;
   reason?: string;
   confirmed?: boolean;
+  correlationId?: string;
 }
 
 export interface OperationTaskPreflightIssue {
@@ -127,6 +128,7 @@ export interface OperationTaskPreflightTarget {
 
 export interface OperationTaskPreflightResponse {
   ok: boolean;
+  correlationId: string;
   type: OperationTaskType;
   targetMode: OperationTaskTargetMode;
   requiresSsh: boolean;
@@ -163,6 +165,7 @@ export interface OperationTaskTargetResult {
 
 export interface OperationTaskResponse {
   id: string;
+  correlationId: string;
   type: OperationTaskType;
   targetMode: OperationTaskTargetMode;
   status: OperationTaskStatus;

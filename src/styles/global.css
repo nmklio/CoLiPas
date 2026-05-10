@@ -6346,6 +6346,7 @@ pre {
 .security-audit-trace > small {
   color: var(--muted);
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .security-audit-trace-steps strong,

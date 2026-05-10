@@ -1424,6 +1424,7 @@ const operationPreflightReadyBody = await operationPreflightReadyResponse.json()
 const operationPreflightReadyPayload = JSON.stringify(operationPreflightReadyBody);
 if (
   operationPreflightReadyBody.ok !== true
+  || !/^ops-trace-[a-f0-9-]{36}$/.test(operationPreflightReadyBody.correlationId)
   || operationPreflightReadyBody.summary?.totalTargets !== 1
   || operationPreflightReadyBody.summary?.runnableTargets !== 1
   || operationPreflightReadyBody.summary?.blocked !== 0
@@ -1555,6 +1556,7 @@ const operationHealthResponse = await fetch(`${baseUrl}/api/operations/tasks`, {
     type: 'healthCheck',
     targetMode: 'selected',
     serverIds: [connectedServer.id],
+    correlationId: operationPreflightReadyBody.correlationId,
   }),
 });
 if (operationHealthResponse.status !== 202) {
@@ -1563,6 +1565,7 @@ if (operationHealthResponse.status !== 202) {
 const operationHealthBody = await operationHealthResponse.json();
 if (
   operationHealthBody.status !== 'completed'
+  || operationHealthBody.correlationId !== operationPreflightReadyBody.correlationId
   || operationHealthBody.summary?.success !== 1
   || !operationHealthBody.outputs?.[0]?.output?.includes('host=')
 ) {
@@ -1745,6 +1748,12 @@ const operationPreflightAudit = auditBody.items.find((item) => item.action === '
 const operationTaskAudit = auditBody.items.find((item) => item.action === 'OPERATIONS_TASK' && item.status === 'success' && item.target === connectedServer.id && item.detail?.includes('healthCheck completed'));
 if (!operationPreflightAudit || !operationTaskAudit) {
   throw new Error('/api/audit/events did not include linkable operations preflight and execution evidence');
+}
+if (
+  operationPreflightAudit.correlationId !== operationPreflightReadyBody.correlationId
+  || operationTaskAudit.correlationId !== operationPreflightReadyBody.correlationId
+) {
+  throw new Error('/api/audit/events did not preserve operations preflight/execution correlation IDs');
 }
 if (new Date(operationTaskAudit.createdAt).getTime() < new Date(operationPreflightAudit.createdAt).getTime()) {
   throw new Error('/api/audit/events operation execution audit appeared before its preflight');
@@ -3132,6 +3141,10 @@ function assertSecurityAuditRelationsAreSpecific() {
     'buildOperationAuditTrace(selectedAudit, auditEntries, copy, locale)',
     'function buildOperationAuditTrace(',
     "action !== 'OPERATIONS_PREFLIGHT' && action !== 'OPERATIONS_TASK'",
+    'getRelatedOperationAuditEntries(selectedAudit, auditEntries, selectedTime, selectedSignature)',
+    'entry.correlationId === selectedAudit.correlationId',
+    'shortenOperationCorrelationId(selectedAudit.correlationId)',
+    'operationTraceCorrelation',
     'getOperationAuditSignature(selectedAudit)',
     '15 * 60 * 1000',
     'copy.operationTraceElapsed',
@@ -3286,6 +3299,10 @@ function assertOperationsTargetSelectionGuards() {
     'selected servers do not exist',
     'export function preflightOperationTask(input: unknown)',
     'requiresConfirmation',
+    'correlationId',
+    'buildOperationCorrelationId()',
+    'const correlationId = parsed.correlationId || buildOperationCorrelationId()',
+    "z.string().trim().regex(/^ops-trace-[a-f0-9-]{36}$/).optional()",
     'sshConnected: Boolean(server.ssh?.connected)',
     'runnable: parsed.type === \'assetSync\' || resolveServerLifecycleStatus(server) !== \'unconnected\'',
     'buildTargetPreflightIssues(parsed, server, requiresConfirmation)',
@@ -3293,6 +3310,7 @@ function assertOperationsTargetSelectionGuards() {
     'sanitizeCommandPreview(task.command)',
     'riskSummary',
     "action: 'OPERATIONS_PREFLIGHT'",
+    'correlationId,',
     'buildPreflightAuditDetail(response)',
     'status: \'missing\'',
     'runnable: false',
@@ -3304,6 +3322,9 @@ function assertOperationsTargetSelectionGuards() {
 
   if (!auditServiceSource.includes("| 'OPERATIONS_PREFLIGHT'")) {
     throw new Error('Operations preflight audit action is not registered');
+  }
+  if (!auditServiceSource.includes('correlationId?: string')) {
+    throw new Error('Audit entries must preserve optional operation correlation IDs');
   }
 
   const preflightRouteRequired = [

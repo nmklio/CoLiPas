@@ -363,7 +363,7 @@ export function OperationsCenter({ events, servers, onTaskFinished }: Operations
       return;
     }
 
-    const payload = buildTaskPayload(actionTaskIds.includes(taskType));
+    const payload = buildTaskPayload(actionTaskIds.includes(taskType), preflightResult.correlationId);
     setRunning(true);
     setMessage('');
     const pendingTask = createPendingTask(taskType, targetMode, previewCount, language);
@@ -386,7 +386,7 @@ export function OperationsCenter({ events, servers, onTaskFinished }: Operations
     }
   }
 
-  function buildTaskPayload(confirmed = actionTaskIds.includes(taskType)): OperationTaskRequest {
+  function buildTaskPayload(confirmed = actionTaskIds.includes(taskType), correlationId?: string): OperationTaskRequest {
     return {
       type: taskType,
       targetMode,
@@ -394,6 +394,7 @@ export function OperationsCenter({ events, servers, onTaskFinished }: Operations
       command: taskType === 'sshCommand' ? command.trim() : undefined,
       reason: reason.trim() || `operator requested ${taskType}`,
       confirmed,
+      correlationId,
     };
   }
 
@@ -779,6 +780,7 @@ function createPendingTask(
   const copy = copyByLanguage[language] ?? copyByLanguage.zh;
   return {
     id: `pending-${Date.now()}`,
+    correlationId: `pending-${Date.now()}`,
     type,
     targetMode,
     status: 'running',

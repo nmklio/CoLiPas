@@ -24,6 +24,7 @@ const operationTaskSchema = z
     command: z.string().trim().max(2000).optional().default(''),
     reason: z.string().trim().max(300).optional().default('operator requested operation task'),
     confirmed: z.boolean().optional().default(false),
+    correlationId: z.string().trim().regex(/^ops-trace-[a-f0-9-]{36}$/).optional(),
   })
   .superRefine((value, context) => {
     if (value.type === 'sshCommand' && !value.command) {
@@ -50,6 +51,7 @@ export async function createOperationTask(input: unknown): Promise<OperationTask
   const startedAt = new Date().toISOString();
   const targets = resolveTargets(parsed);
   const taskId = `ops-${crypto.randomUUID()}`;
+  const correlationId = parsed.correlationId || buildOperationCorrelationId();
 
   if (parsed.targetMode === 'selected') {
     const foundIds = new Set(targets.map((server) => server.id));
@@ -61,6 +63,7 @@ export async function createOperationTask(input: unknown): Promise<OperationTask
         target: missingIds.join(','),
         status: 'blocked',
         detail: `Blocked ${parsed.type}: selected servers do not exist`,
+        correlationId,
       });
       throw new HttpError(404, 'Selected servers do not exist', 'OPERATIONS_TARGETS_NOT_FOUND');
     }
@@ -73,6 +76,7 @@ export async function createOperationTask(input: unknown): Promise<OperationTask
       target: parsed.targetMode,
       status: 'blocked',
       detail: `Blocked ${parsed.type}: no eligible SSH-connected servers`,
+      correlationId,
     });
     throw new HttpError(409, 'No eligible SSH-connected servers for this operation', 'OPERATIONS_NO_TARGETS');
   }
@@ -86,6 +90,7 @@ export async function createOperationTask(input: unknown): Promise<OperationTask
         target: disconnectedTargets.map((server) => server.id).join(','),
         status: 'blocked',
         detail: `Blocked ${parsed.type}: allServers includes servers that are not SSH-connected`,
+        correlationId,
       });
       throw new HttpError(409, 'All server targets must be SSH-connected for this operation', 'OPERATIONS_TARGETS_UNCONNECTED');
     }
@@ -100,6 +105,7 @@ export async function createOperationTask(input: unknown): Promise<OperationTask
         target: disconnectedTargets.map((server) => server.id).join(','),
         status: 'blocked',
         detail: `Blocked ${parsed.type}: selected servers are not SSH-connected`,
+        correlationId,
       });
       throw new HttpError(409, 'Selected servers must be SSH-connected for this operation', 'OPERATIONS_TARGETS_UNCONNECTED');
     }
@@ -112,6 +118,7 @@ export async function createOperationTask(input: unknown): Promise<OperationTask
       target: parsed.targetMode === 'selected' ? parsed.serverIds.join(',') : parsed.targetMode,
       status: 'blocked',
       detail: `Blocked ${parsed.type}: missing operator confirmation`,
+      correlationId,
     });
     throw new HttpError(409, `Operator confirmation is required before ${parsed.type}`, 'OPERATIONS_CONFIRMATION_REQUIRED');
   }
@@ -137,10 +144,12 @@ export async function createOperationTask(input: unknown): Promise<OperationTask
     target: parsed.targetMode === 'selected' ? parsed.serverIds.join(',') : parsed.targetMode,
     status: status === 'failed' ? 'failed' : 'success',
     detail: `${parsed.type} ${status}: ${summary.success} success, ${summary.failed} failed, ${summary.skipped} skipped`,
+    correlationId,
   });
 
   return {
     id: taskId,
+    correlationId,
     type: parsed.type,
     targetMode: parsed.targetMode,
     status,
@@ -154,6 +163,7 @@ export async function createOperationTask(input: unknown): Promise<OperationTask
 
 export function preflightOperationTask(input: unknown): OperationTaskPreflightResponse {
   const parsed = operationTaskSchema.parse(input) satisfies OperationTaskRequest;
+  const correlationId = parsed.correlationId || buildOperationCorrelationId();
   const targets = resolveTargets(parsed);
   const selectedIds = new Set(parsed.serverIds);
   const targetById = new Map(targets.map((server) => [server.id, server]));
@@ -240,6 +250,7 @@ export function preflightOperationTask(input: unknown): OperationTaskPreflightRe
 
   const response: OperationTaskPreflightResponse = {
     ok: !issues.some((issue) => issue.severity === 'block'),
+    correlationId,
     type: parsed.type,
     targetMode: parsed.targetMode,
     requiresSsh: parsed.type !== 'assetSync',
@@ -270,9 +281,14 @@ export function preflightOperationTask(input: unknown): OperationTaskPreflightRe
     target: parsed.targetMode === 'selected' ? summarizeAuditTargets(parsed.serverIds) : parsed.targetMode,
     status: response.ok ? 'success' : 'blocked',
     detail: buildPreflightAuditDetail(response),
+    correlationId,
   });
 
   return response;
+}
+
+function buildOperationCorrelationId() {
+  return `ops-trace-${crypto.randomUUID()}`;
 }
 
 function buildPreflightAuditDetail(response: OperationTaskPreflightResponse) {

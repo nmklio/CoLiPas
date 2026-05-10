@@ -53,6 +53,7 @@ interface AuditEntry {
   status: 'success' | 'blocked' | 'failed';
   detail: string;
   createdAt: string;
+  correlationId?: string;
 }
 
 type AuditStatusFilter = 'all' | AuditEntry['status'];
@@ -88,6 +89,7 @@ interface OperationAuditTrace {
   execution: AuditEntry | null;
   elapsedLabel: string;
   evidence: string;
+  correlationLabel: string;
 }
 
 interface SecurityRiskAction {
@@ -627,6 +629,7 @@ export function SecurityPanel({ events, onNavigate, onRemediated }: SecurityPane
                   </div>
                   <p>{selectedOperationTrace.evidence}</p>
                   <small>{selectedOperationTrace.elapsedLabel}</small>
+                  <small>{selectedOperationTrace.correlationLabel}</small>
                   <button type="button" className="tool-button" onClick={() => onNavigate('operations')}>
                     {copy.goOperations}
                   </button>
@@ -1049,19 +1052,7 @@ function buildOperationAuditTrace(
   }
 
   const selectedSignature = getOperationAuditSignature(selectedAudit);
-  const relatedEntries = auditEntries
-    .filter((entry) => entry.action === 'OPERATIONS_PREFLIGHT' || entry.action === 'OPERATIONS_TASK')
-    .filter((entry) => {
-      const entryTime = new Date(entry.createdAt).getTime();
-      if (Number.isNaN(entryTime) || Math.abs(entryTime - selectedTime) > 15 * 60 * 1000) {
-        return false;
-      }
-
-      const entrySignature = getOperationAuditSignature(entry);
-      const sameType = selectedSignature.taskType === 'unknown' || entrySignature.taskType === 'unknown' || selectedSignature.taskType === entrySignature.taskType;
-      const sameTarget = selectedSignature.targetKey === entrySignature.targetKey;
-      return sameType && sameTarget;
-    })
+  const relatedEntries = getRelatedOperationAuditEntries(selectedAudit, auditEntries, selectedTime, selectedSignature)
     .sort((left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime());
 
   const preflight = action === 'OPERATIONS_PREFLIGHT'
@@ -1091,6 +1082,9 @@ function buildOperationAuditTrace(
     ? copy.operationTraceElapsed(formatAuditDuration(new Date(preflight.createdAt).getTime(), new Date(execution.createdAt).getTime(), locale))
     : copy.operationTraceWindow;
   const evidence = [preflight?.detail, execution?.detail].filter(Boolean).join(' -> ') || selectedAudit.detail;
+  const correlationLabel = selectedAudit.correlationId
+    ? copy.operationTraceCorrelation(shortenOperationCorrelationId(selectedAudit.correlationId))
+    : copy.operationTraceWindow;
 
   return {
     tone,
@@ -1099,7 +1093,36 @@ function buildOperationAuditTrace(
     execution,
     elapsedLabel,
     evidence,
+    correlationLabel,
   };
+}
+
+function getRelatedOperationAuditEntries(
+  selectedAudit: AuditEntry,
+  auditEntries: AuditEntry[],
+  selectedTime: number,
+  selectedSignature: ReturnType<typeof getOperationAuditSignature>,
+) {
+  if (selectedAudit.correlationId) {
+    return auditEntries.filter((entry) => (
+      (entry.action === 'OPERATIONS_PREFLIGHT' || entry.action === 'OPERATIONS_TASK')
+      && entry.correlationId === selectedAudit.correlationId
+    ));
+  }
+
+  return auditEntries
+    .filter((entry) => entry.action === 'OPERATIONS_PREFLIGHT' || entry.action === 'OPERATIONS_TASK')
+    .filter((entry) => {
+      const entryTime = new Date(entry.createdAt).getTime();
+      if (Number.isNaN(entryTime) || Math.abs(entryTime - selectedTime) > 15 * 60 * 1000) {
+        return false;
+      }
+
+      const entrySignature = getOperationAuditSignature(entry);
+      const sameType = selectedSignature.taskType === 'unknown' || entrySignature.taskType === 'unknown' || selectedSignature.taskType === entrySignature.taskType;
+      const sameTarget = selectedSignature.targetKey === entrySignature.targetKey;
+      return sameType && sameTarget;
+    });
 }
 
 function getLastOperationAuditBefore(entries: AuditEntry[], selectedTime: number, action: 'OPERATIONS_PREFLIGHT' | 'OPERATIONS_TASK') {
@@ -1139,6 +1162,10 @@ function formatAuditDuration(start: number, end: number, locale: string) {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
   return `${new Intl.NumberFormat(locale).format(minutes)}m ${new Intl.NumberFormat(locale).format(remainingSeconds)}s`;
+}
+
+function shortenOperationCorrelationId(value: string) {
+  return value.replace(/^ops-trace-/, '').slice(0, 8);
 }
 
 function formatAuditTime(value: string, locale: string) {
@@ -1229,6 +1256,7 @@ interface SecurityCopy {
   operationTraceNoPreflight: string;
   operationTraceNoExecution: string;
   operationTraceWindow: string;
+  operationTraceCorrelation: (id: string) => string;
   remediationTitle: string;
   remediationClear: string;
   noRemediation: string;
@@ -1383,6 +1411,7 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     operationTraceNoPreflight: '未找到匹配预检',
     operationTraceNoExecution: '未找到匹配执行',
     operationTraceWindow: '按 15 分钟窗口匹配同类型、同目标记录',
+    operationTraceCorrelation: (id) => `关联 ID ${id}`,
     remediationTitle: '风险处置',
     remediationClear: '暂无待处置',
     noRemediation: '当前没有需要处理的风险项。',
@@ -1523,6 +1552,7 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     operationTraceNoPreflight: 'No matching preflight',
     operationTraceNoExecution: 'No matching execution',
     operationTraceWindow: 'Matched by task type and target within a 15-minute window',
+    operationTraceCorrelation: (id) => `Correlation ID ${id}`,
     remediationTitle: 'Risk remediation',
     remediationClear: 'Nothing to handle',
     noRemediation: 'No risk item requires action right now.',
@@ -1663,6 +1693,7 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     operationTraceNoPreflight: '一致する事前確認なし',
     operationTraceNoExecution: '一致する実行なし',
     operationTraceWindow: '15分以内の同一タイプ、同一対象で照合',
+    operationTraceCorrelation: (id) => `関連 ID ${id}`,
     remediationTitle: 'リスク対応',
     remediationClear: '対応不要',
     noRemediation: '現在対応が必要なリスク項目はありません。',

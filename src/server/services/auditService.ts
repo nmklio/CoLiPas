@@ -34,6 +34,7 @@ export interface AuditEntry {
   status: 'success' | 'blocked' | 'failed';
   detail: string;
   createdAt: string;
+  correlationId?: string;
 }
 
 const dataDir = process.env.COLIPAS_DATA_DIR || '.data';
