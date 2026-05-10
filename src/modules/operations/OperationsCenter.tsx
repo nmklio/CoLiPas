@@ -230,6 +230,9 @@ const preflightCopyByLanguage: Record<string, {
   targets: string;
   issues: string;
   unavailable: string;
+  runnable: string;
+  blockedTarget: string;
+  detailTitle: string;
 }> = {
   zh: {
     title: '执行预检',
@@ -239,6 +242,9 @@ const preflightCopyByLanguage: Record<string, {
     targets: '目标 / 可执行',
     issues: '风险项',
     unavailable: '预检未完成',
+    runnable: '可执行',
+    blockedTarget: '阻断',
+    detailTitle: '目标明细',
   },
   en: {
     title: 'Preflight',
@@ -248,6 +254,9 @@ const preflightCopyByLanguage: Record<string, {
     targets: 'Targets / runnable',
     issues: 'Issues',
     unavailable: 'Preflight not run',
+    runnable: 'Runnable',
+    blockedTarget: 'Blocked',
+    detailTitle: 'Target details',
   },
   ja: {
     title: '実行前チェック',
@@ -257,6 +266,9 @@ const preflightCopyByLanguage: Record<string, {
     targets: '対象 / 実行可能',
     issues: 'リスク項目',
     unavailable: '未チェック',
+    runnable: '実行可能',
+    blockedTarget: 'ブロック',
+    detailTitle: '対象詳細',
   },
 };
 
@@ -540,6 +552,23 @@ export function OperationsCenter({ events, servers, onTaskFinished }: Operations
                       <li key={`${issue.code}-${issue.severity}`}>{issue.message}</li>
                     ))}
                   </ul>
+                )}
+                {preflight && preflight.targets.length > 0 && (
+                  <div className="ops-preflight-targets" aria-label={preflightCopy.detailTitle}>
+                    <span>{preflightCopy.detailTitle}</span>
+                    {preflight.targets.slice(0, 8).map((target) => (
+                      <div key={target.id} className={target.runnable ? 'ops-preflight-target runnable' : 'ops-preflight-target blocked'}>
+                        <div>
+                          <strong>{target.name}</strong>
+                          <small>{providerName(target.provider)} / {target.region} / {statusLabel(target.status, language)}</small>
+                        </div>
+                        <em>{target.runnable ? preflightCopy.runnable : preflightCopy.blockedTarget}</em>
+                        {target.issues.length > 0 && (
+                          <p>{target.issues.map((issue) => issue.message).join(' / ')}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>

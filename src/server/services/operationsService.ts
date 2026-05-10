@@ -156,7 +156,8 @@ export function preflightOperationTask(input: unknown): OperationTaskPreflightRe
   const parsed = operationTaskSchema.parse(input) satisfies OperationTaskRequest;
   const targets = resolveTargets(parsed);
   const selectedIds = new Set(parsed.serverIds);
-  const foundIds = new Set(targets.map((server) => server.id));
+  const targetById = new Map(targets.map((server) => [server.id, server]));
+  const foundIds = new Set(targetById.keys());
   const missingTargets = parsed.targetMode === 'selected'
     ? parsed.serverIds.filter((serverId) => !foundIds.has(serverId))
     : [];
@@ -207,6 +208,36 @@ export function preflightOperationTask(input: unknown): OperationTaskPreflightRe
     });
   }
 
+  const existingPreflightTargets: OperationTaskPreflightResponse['targets'] = targets.map((server) => ({
+    id: server.id,
+    name: server.name,
+    provider: server.provider,
+    region: server.region,
+    status: resolveServerLifecycleStatus(server),
+    sshConnected: Boolean(server.ssh?.connected),
+    runnable: parsed.type === 'assetSync' || resolveServerLifecycleStatus(server) !== 'unconnected',
+    issues: buildTargetPreflightIssues(parsed, server, requiresConfirmation),
+  }))
+    .filter((target) => parsed.targetMode !== 'selected' || selectedIds.has(target.id));
+  const missingPreflightTargets: OperationTaskPreflightResponse['targets'] = missingTargets.map((serverId) => ({
+    id: serverId,
+    name: serverId,
+    provider: 'Unknown',
+    region: 'Unknown',
+    status: 'missing',
+    sshConnected: false,
+    runnable: false,
+    issues: [{
+      code: 'OPERATIONS_TARGETS_NOT_FOUND',
+      severity: 'block',
+      message: 'Selected server does not exist',
+    }],
+  }));
+  const preflightTargets: OperationTaskPreflightResponse['targets'] = [
+    ...existingPreflightTargets,
+    ...missingPreflightTargets,
+  ];
+
   return {
     ok: !issues.some((issue) => issue.severity === 'block'),
     type: parsed.type,
@@ -214,23 +245,42 @@ export function preflightOperationTask(input: unknown): OperationTaskPreflightRe
     requiresSsh: parsed.type !== 'assetSync',
     requiresConfirmation,
     summary: {
-      totalTargets: targets.length,
+      totalTargets: targets.length + missingTargets.length,
       runnableTargets: runnableTargets.length,
       missingTargets: missingTargets.length,
       disconnectedTargets: disconnectedTargets.length,
       blocked: issues.filter((issue) => issue.severity === 'block').length,
     },
     issues,
-    targets: targets.map((server) => ({
-      id: server.id,
-      name: server.name,
-      provider: server.provider,
-      region: server.region,
-      status: resolveServerLifecycleStatus(server),
-      sshConnected: Boolean(server.ssh?.connected),
-    })).filter((target) => parsed.targetMode !== 'selected' || selectedIds.has(target.id)),
+    targets: preflightTargets,
     generatedAt: new Date().toISOString(),
   };
+}
+
+function buildTargetPreflightIssues(
+  task: ParsedOperationTask,
+  server: ServerNode,
+  requiresConfirmation: boolean,
+): OperationTaskPreflightResponse['targets'][number]['issues'] {
+  const targetIssues: OperationTaskPreflightResponse['targets'][number]['issues'] = [];
+
+  if (task.type !== 'assetSync' && resolveServerLifecycleStatus(server) === 'unconnected') {
+    targetIssues.push({
+      code: 'OPERATIONS_TARGETS_UNCONNECTED',
+      severity: 'block',
+      message: 'SSH access is not connected',
+    });
+  }
+
+  if (requiresConfirmation && !task.confirmed && targetIssues.every((issue) => issue.severity !== 'block')) {
+    targetIssues.push({
+      code: 'OPERATIONS_CONFIRMATION_REQUIRED',
+      severity: 'warn',
+      message: `Operator confirmation is required before ${task.type}`,
+    });
+  }
+
+  return targetIssues;
 }
 
 function resolveTargets(task: ParsedOperationTask) {

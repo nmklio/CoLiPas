@@ -1429,8 +1429,12 @@ if (
   || operationPreflightReadyBody.summary?.blocked !== 0
   || operationPreflightReadyBody.targets?.[0]?.id !== connectedServer.id
   || operationPreflightReadyBody.targets?.[0]?.sshConnected !== true
+  || operationPreflightReadyBody.targets?.[0]?.runnable !== true
+  || operationPreflightReadyBody.targets?.[0]?.issues?.length !== 0
   || operationPreflightReadyPayload.includes('"publicIp"')
   || operationPreflightReadyPayload.includes('"privateIp"')
+  || operationPreflightReadyPayload.includes(connectedServer.publicIp)
+  || operationPreflightReadyPayload.includes(connectedServer.privateIp)
   || operationPreflightReadyPayload.includes('smoke-password')
   || operationPreflightReadyPayload.includes('BEGIN RSA PRIVATE KEY')
 ) {
@@ -1454,6 +1458,9 @@ const operationPreflightUnconnectedBody = await operationPreflightUnconnectedRes
 if (
   operationPreflightUnconnectedBody.ok !== false
   || operationPreflightUnconnectedBody.summary?.disconnectedTargets !== 1
+  || operationPreflightUnconnectedBody.targets?.[0]?.id !== inventoryOnlyServer.id
+  || operationPreflightUnconnectedBody.targets?.[0]?.runnable !== false
+  || !operationPreflightUnconnectedBody.targets?.[0]?.issues?.some((issue) => issue.code === 'OPERATIONS_TARGETS_UNCONNECTED' && issue.severity === 'block')
   || !operationPreflightUnconnectedBody.issues?.some((issue) => issue.code === 'OPERATIONS_TARGETS_UNCONNECTED' && issue.severity === 'block')
 ) {
   throw new Error('/api/operations/tasks/preflight did not block selected unconnected targets');
@@ -1476,6 +1483,10 @@ const operationPreflightMissingBody = await operationPreflightMissingResponse.js
 if (
   operationPreflightMissingBody.ok !== false
   || operationPreflightMissingBody.summary?.missingTargets !== 1
+  || operationPreflightMissingBody.summary?.totalTargets !== 1
+  || operationPreflightMissingBody.targets?.[0]?.status !== 'missing'
+  || operationPreflightMissingBody.targets?.[0]?.runnable !== false
+  || !operationPreflightMissingBody.targets?.[0]?.issues?.some((issue) => issue.code === 'OPERATIONS_TARGETS_NOT_FOUND' && issue.severity === 'block')
   || !operationPreflightMissingBody.issues?.some((issue) => issue.code === 'OPERATIONS_TARGETS_NOT_FOUND' && issue.severity === 'block')
 ) {
   throw new Error('/api/operations/tasks/preflight did not report missing selected targets');
@@ -1499,6 +1510,8 @@ const operationPreflightRebootWarnBody = await operationPreflightRebootWarnRespo
 if (
   operationPreflightRebootWarnBody.ok !== true
   || operationPreflightRebootWarnBody.requiresConfirmation !== true
+  || operationPreflightRebootWarnBody.targets?.[0]?.runnable !== true
+  || !operationPreflightRebootWarnBody.targets?.[0]?.issues?.some((issue) => issue.code === 'OPERATIONS_CONFIRMATION_REQUIRED' && issue.severity === 'warn')
   || !operationPreflightRebootWarnBody.issues?.some((issue) => issue.code === 'OPERATIONS_CONFIRMATION_REQUIRED' && issue.severity === 'warn')
 ) {
   throw new Error('/api/operations/tasks/preflight did not warn for unconfirmed reboot');
@@ -3186,6 +3199,9 @@ function assertOperationsTargetSelectionGuards() {
     'preflightOperationTask(preflightPayload)',
     'buildTaskPayload(false)',
     'ops-preflight-card',
+    'ops-preflight-targets',
+    'target.runnable',
+    'target.issues.length',
     'preflightStatusText',
     'preflightTone(preflight)',
   ];
@@ -3205,6 +3221,10 @@ function assertOperationsTargetSelectionGuards() {
     'export function preflightOperationTask(input: unknown)',
     'requiresConfirmation',
     'sshConnected: Boolean(server.ssh?.connected)',
+    'runnable: parsed.type === \'assetSync\' || resolveServerLifecycleStatus(server) !== \'unconnected\'',
+    'buildTargetPreflightIssues(parsed, server, requiresConfirmation)',
+    'status: \'missing\'',
+    'runnable: false',
   ];
   const missingService = serviceRequired.filter((fragment) => !serviceSource.includes(fragment));
   if (missingService.length) {

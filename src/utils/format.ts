@@ -12,7 +12,7 @@ export function formatCurrency(value: number, language: Language = 'zh') {
   }).format(value);
 }
 
-export function statusLabel(status: CloudAccountStatus | ServerStatus | 'open' | 'closed', language: Language = 'zh') {
+export function statusLabel(status: CloudAccountStatus | ServerStatus | 'open' | 'closed' | 'missing', language: Language = 'zh') {
   const labels: Record<Language, Record<string, string>> = {
     zh: {
       connected: '已连接',
@@ -22,6 +22,7 @@ export function statusLabel(status: CloudAccountStatus | ServerStatus | 'open' |
       stopped: '已停止',
       provisioning: '创建中',
       unconnected: '未接入',
+      missing: '不存在',
       open: '待处理',
       closed: '已关闭',
     },
@@ -33,6 +34,7 @@ export function statusLabel(status: CloudAccountStatus | ServerStatus | 'open' |
       stopped: 'Stopped',
       provisioning: 'Provisioning',
       unconnected: 'Unconnected',
+      missing: 'Missing',
       open: 'Open',
       closed: 'Closed',
     },
@@ -44,6 +46,7 @@ export function statusLabel(status: CloudAccountStatus | ServerStatus | 'open' |
       stopped: '停止済み',
       provisioning: '作成中',
       unconnected: '未接続',
+      missing: '見つかりません',
       open: '対応待ち',
       closed: 'クローズ済み',
     },

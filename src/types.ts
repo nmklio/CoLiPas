@@ -108,13 +108,21 @@ export interface OperationTaskPreflightIssue {
   count: number;
 }
 
+export interface OperationTaskPreflightTargetIssue {
+  code: OperationTaskPreflightIssue['code'];
+  severity: OperationTaskPreflightIssue['severity'];
+  message: string;
+}
+
 export interface OperationTaskPreflightTarget {
   id: string;
   name: string;
   provider: CloudProvider;
   region: string;
-  status: ServerStatus;
+  status: ServerStatus | 'missing';
   sshConnected: boolean;
+  runnable: boolean;
+  issues: OperationTaskPreflightTargetIssue[];
 }
 
 export interface OperationTaskPreflightResponse {
