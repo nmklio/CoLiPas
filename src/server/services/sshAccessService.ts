@@ -2,12 +2,13 @@ import crypto from 'node:crypto';
 import ssh2, { Client, type ClientChannel } from 'ssh2';
 import { z } from 'zod';
 import type { SshAuthType, SshVerifyMode } from '../../types.js';
+import { defaultRuntimeSecrets } from '../config.js';
 import { HttpError } from '../httpErrors.js';
 import { redactSensitiveText } from './sensitiveRedaction.js';
 
 const credentialSecret = crypto
   .createHash('sha256')
-  .update(process.env.CREDENTIAL_ENCRYPTION_KEY || 'colipas-local-development-secret')
+  .update(process.env.CREDENTIAL_ENCRYPTION_KEY || defaultRuntimeSecrets.credentialEncryptionKey)
   .digest();
 const sshReadyTimeoutMs = 5000;
 const sshShellReadyTimeoutMs = 10000;

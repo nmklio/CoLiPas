@@ -37,6 +37,12 @@ interface ConfigSummary {
     model: string;
     configured: boolean;
   };
+  security: {
+    adminPasswordDefault: boolean;
+    sessionSecretDefault: boolean;
+    credentialEncryptionKeyConfigured: boolean;
+    credentialEncryptionKeyDefault: boolean;
+  };
 }
 
 interface AuditEntry {
@@ -50,7 +56,7 @@ interface AuditEntry {
 }
 
 type AuditStatusFilter = 'all' | AuditEntry['status'];
-type SecurityRelationKey = 'runtime' | 'ai' | 'api' | 'cors' | 'timeout' | 'ssh';
+type SecurityRelationKey = 'runtime' | 'ai' | 'api' | 'cors' | 'timeout' | 'ssh' | 'secrets';
 
 interface SecurityCheck {
   id: string;
@@ -131,7 +137,7 @@ export function SecurityPanel({ events, onNavigate, onRemediated }: SecurityPane
   const relationItems = useMemo(() => buildSecurityRelationItems(config, auditEntries, copy), [auditEntries, config, copy]);
   const selectedRelation = relationFilter ? relationItems.find((item) => item.key === relationFilter) ?? null : null;
   const runtimeItems = relationItems.filter((item) => item.key === 'runtime' || item.key === 'cors' || item.key === 'timeout');
-  const secretItems = relationItems.filter((item) => item.key === 'ai' || item.key === 'api' || item.key === 'ssh');
+  const secretItems = relationItems.filter((item) => item.key === 'ai' || item.key === 'api' || item.key === 'ssh' || item.key === 'secrets');
   const failedCount = activeAuditIssues.failed;
   const blockedCount = activeAuditIssues.blocked;
   const riskyCount = checks.filter((check) => check.state !== 'pass').length + activeAuditIssues.total + openEvents.length;
@@ -595,7 +601,14 @@ function buildSecurityChecks(
   copy: SecurityCopy,
 ): SecurityCheck[] {
   const auditIssues = getActiveAuditIssues(auditEntries);
+  const defaultSecretCount = getDefaultSecretCount(config);
   return [
+    {
+      id: 'runtime-secrets',
+      title: copy.runtimeSecrets,
+      detail: defaultSecretCount > 0 ? copy.defaultSecretsDetected(defaultSecretCount) : copy.runtimeSecretsManaged,
+      state: defaultSecretCount > 0 ? 'fail' : 'pass',
+    },
     {
       id: 'ai-key',
       title: copy.aiKey,
@@ -790,6 +803,7 @@ function buildSecurityRelationItems(
   const apiHostText = apiHosts.length ? apiHosts.join(', ') : copy.noAllowedHosts;
   const corsOriginText = corsOrigins.length ? corsOrigins.join(', ') : copy.notConfigured;
   const timeoutMs = config?.customApiTimeoutMs ?? 0;
+  const defaultSecretCount = getDefaultSecretCount(config);
 
   return [
     {
@@ -815,6 +829,14 @@ function buildSecurityRelationItems(
       detail: copy.linkedAudits(count('timeout')),
       state: timeoutMs > 0 && timeoutMs <= 15000 ? 'pass' : 'warn',
       count: count('timeout'),
+    },
+    {
+      key: 'secrets',
+      label: copy.runtimeSecrets,
+      value: defaultSecretCount > 0 ? copy.defaultSecretsDetected(defaultSecretCount) : copy.runtimeSecretsManaged,
+      detail: copy.secretPostureDetail(config?.security.credentialEncryptionKeyConfigured === true),
+      state: defaultSecretCount > 0 ? 'fail' : 'pass',
+      count: count('secrets'),
     },
     {
       key: 'ai',
@@ -868,6 +890,10 @@ function isAuditRelated(entry: AuditEntry, relation: SecurityRelationKey, config
     return haystack.includes('timeout') || haystack.includes('timed out');
   }
 
+  if (relation === 'secrets') {
+    return action.startsWith('AUTH_') || action === 'PROFILE_UPDATE' || haystack.includes('secret') || haystack.includes('password') || haystack.includes('credential');
+  }
+
   return (
     action === 'SERVER_SSH_VERIFY'
     || action === 'SERVER_SSH_DIAGNOSTIC'
@@ -875,6 +901,17 @@ function isAuditRelated(entry: AuditEntry, relation: SecurityRelationKey, config
     || action === 'SERVER_ACTION'
     || haystack.includes('ssh')
   );
+}
+
+function getDefaultSecretCount(config: ConfigSummary | null) {
+  if (!config) {
+    return 0;
+  }
+  return [
+    config.security.adminPasswordDefault,
+    config.security.sessionSecretDefault,
+    config.security.credentialEncryptionKeyDefault,
+  ].filter(Boolean).length;
 }
 
 function buildAuditInsight(entry: AuditEntry, copy: SecurityCopy): AuditInsight {
@@ -947,6 +984,8 @@ interface SecurityCopy {
   successRate: string;
   identityAccess: string;
   secretsProxy: string;
+  runtimeSecrets: string;
+  runtimeSecretsManaged: string;
   configured: string;
   simulated: string;
   localEncryptedCache: string;
@@ -1038,6 +1077,8 @@ interface SecurityCopy {
   openEventCount: (count: number) => string;
   linkedAudits: (count: number) => string;
   configRelationDetail: (value: string, count: number) => string;
+  defaultSecretsDetected: (count: number) => string;
+  secretPostureDetail: (credentialKeyConfigured: boolean) => string;
   blockedFailedCount: (blocked: number, failed: number) => string;
   relationApplied: (label: string, count: number) => string;
   apiHostCount: (count: number) => string;
@@ -1059,6 +1100,8 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     successRate: '成功率',
     identityAccess: '身份与访问',
     secretsProxy: '密钥与代理',
+    runtimeSecrets: '运行时密钥姿态',
+    runtimeSecretsManaged: '未使用内置默认值',
     configured: '已配置',
     simulated: '模拟模式',
     localEncryptedCache: '本地加密缓存',
@@ -1159,6 +1202,8 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     openEventCount: (count) => `${count} 个待处理事件`,
     linkedAudits: (count) => `${count} 条关联审计`,
     configRelationDetail: (value, count) => `${value} / ${count} 条关联审计`,
+    defaultSecretsDetected: (count) => `${count} 项默认密钥风险`,
+    secretPostureDetail: (credentialKeyConfigured) => credentialKeyConfigured ? '管理员密码、会话密钥和 SSH 凭据加密 Key 均由运行环境托管' : '管理员密码和会话密钥已检查，建议配置专用 SSH 凭据加密 Key',
     blockedFailedCount: (blocked, failed) => `${blocked} 个阻断 / ${failed} 个失败`,
     relationApplied: (label, count) => `正在查看「${label}」关联审计，共 ${count} 条`,
     apiHostCount: (count) => `${count} 个允许域名`,
@@ -1183,6 +1228,8 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     successRate: 'Success rate',
     identityAccess: 'Identity and access',
     secretsProxy: 'Secrets and proxy',
+    runtimeSecrets: 'Runtime secret posture',
+    runtimeSecretsManaged: 'No built-in defaults',
     configured: 'Configured',
     simulated: 'Simulated',
     localEncryptedCache: 'Local encrypted cache',
@@ -1283,6 +1330,8 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     openEventCount: (count) => `${count} open events`,
     linkedAudits: (count) => `${count} linked audits`,
     configRelationDetail: (value, count) => `${value} / ${count} linked audits`,
+    defaultSecretsDetected: (count) => `${count} default secret risks`,
+    secretPostureDetail: (credentialKeyConfigured) => credentialKeyConfigured ? 'Admin password, session secret, and SSH credential key are environment-managed' : 'Admin password and session secret are checked; configure a dedicated SSH credential key',
     blockedFailedCount: (blocked, failed) => `${blocked} blocked / ${failed} failed`,
     relationApplied: (label, count) => `Viewing ${label} linked audits, ${count} total`,
     apiHostCount: (count) => `${count} allowed hosts`,
@@ -1307,6 +1356,8 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     successRate: '成功率',
     identityAccess: 'ID とアクセス',
     secretsProxy: 'シークレットとプロキシ',
+    runtimeSecrets: 'ランタイムシークレット状態',
+    runtimeSecretsManaged: '組み込み既定値なし',
     configured: '設定済み',
     simulated: 'シミュレーション',
     localEncryptedCache: 'ローカル暗号化キャッシュ',
@@ -1407,6 +1458,8 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     openEventCount: (count) => `${count} 件の未対応イベント`,
     linkedAudits: (count) => `${count} 件の関連監査`,
     configRelationDetail: (value, count) => `${value} / ${count} 件の関連監査`,
+    defaultSecretsDetected: (count) => `${count} 件の既定シークレットリスク`,
+    secretPostureDetail: (credentialKeyConfigured) => credentialKeyConfigured ? '管理者パスワード、セッションシークレット、SSH 資格情報キーは環境で管理されています' : '管理者パスワードとセッションシークレットは確認済みです。専用の SSH 資格情報キーを設定してください',
     blockedFailedCount: (blocked, failed) => `${blocked} 件ブロック / ${failed} 件失敗`,
     relationApplied: (label, count) => `${label} の関連監査を表示中、計 ${count} 件`,
     apiHostCount: (count) => `${count} 件の許可ホスト`,

@@ -11,5 +11,6 @@ export function buildConfigSummary(config: RuntimeConfig) {
       model: config.ai.model,
       configured: Boolean(config.ai.apiKey),
     },
+    security: config.security,
   };
 }

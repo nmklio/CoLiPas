@@ -135,7 +135,7 @@ export interface ReleaseReadinessCheck {
   value: string;
   evidence: string;
   recommendedAction: string;
-  relatedModule: 'ai' | 'api' | 'audit' | 'database' | 'events' | 'runtime' | 'servers' | 'ssh';
+  relatedModule: 'ai' | 'api' | 'audit' | 'database' | 'events' | 'runtime' | 'security' | 'servers' | 'ssh';
 }
 
 export type ReleaseReadinessStatus = 'ready' | 'review' | 'blocked';

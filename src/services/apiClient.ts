@@ -66,6 +66,12 @@ export interface ConfigSummaryResponse {
     model: string;
     configured: boolean;
   };
+  security: {
+    adminPasswordDefault: boolean;
+    sessionSecretDefault: boolean;
+    credentialEncryptionKeyConfigured: boolean;
+    credentialEncryptionKeyDefault: boolean;
+  };
 }
 
 export interface SecurityRemediationResponse {

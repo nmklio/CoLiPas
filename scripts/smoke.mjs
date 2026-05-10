@@ -254,7 +254,18 @@ console.log('ok /api/account/password hashes password, rejects weak input, and r
 
 const getChecks = [
   ['/api/health', (body) => body.status === 'ok' && body.database?.driver === 'sqlite' && body.database?.name === 'colipas.sqlite' && !('path' in body.database)],
-  ['/api/config', (body) => Array.isArray(body.customApiAllowedHosts) && body.ai?.configured === false],
+  [
+    '/api/config',
+    (body) =>
+      Array.isArray(body.customApiAllowedHosts) &&
+      body.ai?.configured === false &&
+      body.security?.adminPasswordDefault === true &&
+      body.security?.sessionSecretDefault === false &&
+      body.security?.credentialEncryptionKeyConfigured === false &&
+      body.security?.credentialEncryptionKeyDefault === true &&
+      !JSON.stringify(body).includes(initialSmokePassword) &&
+      !JSON.stringify(body).includes('verify-production-session-secret'),
+  ],
   [
     '/api/audit/readiness',
     (body) =>
@@ -264,6 +275,7 @@ const getChecks = [
       ['ready', 'review', 'blocked'].includes(body.status) &&
       Array.isArray(body.checks) &&
       body.checks.some((check) => check.id === 'api-allowlist') &&
+      body.checks.some((check) => check.id === 'runtime-secret-posture' && check.severity === 'fail') &&
       body.summary?.totalChecks === body.checks.length &&
       body.history?.trend?.snapshotCount >= 0 &&
       !JSON.stringify(body).includes('admin123456'),
@@ -275,6 +287,7 @@ const getChecks = [
       body.filename?.startsWith('colipas-readiness-') &&
       body.markdown?.includes('# CoLiPas Release Readiness Report') &&
       body.markdown?.includes('## Checks') &&
+      body.markdown?.includes('Runtime secret posture') &&
       !body.markdown.includes('admin123456'),
   ],
   [
@@ -2899,6 +2912,7 @@ function assertSecurityAuditRelationsAreSpecific() {
     'copy.blockedFailedCount(blockedCount, failedCount)',
     'copy.blockedFailedCount(auditIssues.blocked, auditIssues.failed)',
     'copy.configRelationDetail(corsOriginText, count(\'cors\'))',
+    'copy.secretPostureDetail(config?.security.credentialEncryptionKeyConfigured === true)',
     'copy.configRelationDetail(config?.ai.baseUrl ?? copy.unavailable, count(\'ai\'))',
     'copy.configRelationDetail(apiHostText, count(\'api\'))',
     'fetchReleaseReadiness()',
@@ -2960,6 +2974,8 @@ function assertSecurityAuditRelationsAreSpecific() {
     'recordReleaseReadinessSnapshot(config)',
     'export function buildReleaseReadiness(config',
     'export function buildReleaseReadinessReport(config',
+    'runtime-secret-posture',
+    'config.security.adminPasswordDefault',
     'sanitizeReportText',
     'writeAppSetting(readinessHistorySettingId',
     'getLastRemediationTime(auditEntries, \'audit-errors\')',

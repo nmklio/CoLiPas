@@ -15,6 +15,12 @@ const envSchema = z.object({
   SESSION_TTL_HOURS: z.coerce.number().positive().max(168).default(12),
 });
 
+export const defaultRuntimeSecrets = {
+  adminPassword: 'admin123456',
+  sessionSecret: 'colipas-local-session-secret',
+  credentialEncryptionKey: 'colipas-local-development-secret',
+} as const;
+
 export type RuntimeConfig = ReturnType<typeof loadConfig>;
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
@@ -40,6 +46,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       adminPassword: parsed.ADMIN_PASSWORD,
       sessionSecret: parsed.SESSION_SECRET,
       sessionTtlMs: parsed.SESSION_TTL_HOURS * 60 * 60 * 1000,
+    },
+    security: {
+      adminPasswordDefault: parsed.ADMIN_PASSWORD === defaultRuntimeSecrets.adminPassword,
+      sessionSecretDefault: parsed.SESSION_SECRET === defaultRuntimeSecrets.sessionSecret,
+      credentialEncryptionKeyConfigured: Boolean(env.CREDENTIAL_ENCRYPTION_KEY),
+      credentialEncryptionKeyDefault: (env.CREDENTIAL_ENCRYPTION_KEY || defaultRuntimeSecrets.credentialEncryptionKey) === defaultRuntimeSecrets.credentialEncryptionKey,
     },
   };
 }

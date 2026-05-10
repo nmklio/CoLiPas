@@ -22,6 +22,11 @@ export function buildReleaseReadiness(config: RuntimeConfig): ReleaseReadinessRe
   const connectedServers = servers.filter((server) => resolveServerLifecycleStatus(server) !== 'unconnected');
   const openEvents = operationEvents.filter((event) => event.status === 'open');
   const databaseName = getDatabasePath().split(/[\\/]/).pop() ?? 'unknown';
+  const defaultSecretIssues = [
+    config.security.adminPasswordDefault ? 'admin password' : '',
+    config.security.sessionSecretDefault ? 'session secret' : '',
+    config.security.credentialEncryptionKeyDefault ? 'credential encryption key' : '',
+  ].filter(Boolean);
 
   const checks: ReleaseReadinessCheck[] = [
     {
@@ -43,6 +48,20 @@ export function buildReleaseReadiness(config: RuntimeConfig): ReleaseReadinessRe
       evidence: `SQLite store opened as ${databaseName}`,
       recommendedAction: 'Keep database backup and WAL checkpoint checks in the release runbook.',
       relatedModule: 'database',
+    },
+    {
+      id: 'runtime-secret-posture',
+      label: 'Runtime secret posture',
+      severity: defaultSecretIssues.length > 0 ? 'fail' : 'info',
+      passed: defaultSecretIssues.length === 0,
+      value: defaultSecretIssues.length > 0 ? `${defaultSecretIssues.length} default(s)` : 'hardened',
+      evidence: defaultSecretIssues.length > 0
+        ? `Default runtime secret(s) detected: ${defaultSecretIssues.join(', ')}`
+        : 'Admin password, session secret, and SSH credential encryption key are not using built-in defaults.',
+      recommendedAction: defaultSecretIssues.length > 0
+        ? 'Set ADMIN_PASSWORD, SESSION_SECRET, and CREDENTIAL_ENCRYPTION_KEY to unique production values before release.'
+        : 'Keep production secrets outside the repository and rotate them through the deployment environment.',
+      relatedModule: 'security',
     },
     {
       id: 'api-allowlist',
