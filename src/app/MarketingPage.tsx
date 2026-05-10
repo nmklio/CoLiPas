@@ -91,7 +91,7 @@ const securityItems = ['登录会话保护', 'SSH 命令边界', 'AI Base URL �
 
 export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
   const { language, setLanguage, t } = useI18n();
-  const [username, setUsername] = useState('admin');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
@@ -323,8 +323,8 @@ export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
           <p>使用本地管理员账号登录后，可以查看服务器总览、小地图、AI 助手、SSH、运维编排、自定义 API 和安全审计。</p>
           <div className="demo-account">
             <Server size={18} />
-            <span>默认演示账号</span>
-            <strong>admin / admin123456</strong>
+            <span>安全登录</span>
+            <strong>使用你部署时配置的管理员账号</strong>
           </div>
         </div>
 

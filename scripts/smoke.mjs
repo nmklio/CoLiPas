@@ -1814,6 +1814,7 @@ function assertAiProviderSecretNotPersisted() {
 
 function assertAccountUiGuards() {
   const loginSource = fs.readFileSync(new URL('../src/app/LoginPage.tsx', import.meta.url), 'utf8');
+  const marketingSource = fs.readFileSync(new URL('../src/app/MarketingPage.tsx', import.meta.url), 'utf8');
   const appSource = fs.readFileSync(new URL('../src/app/App.tsx', import.meta.url), 'utf8');
   const serverAppSource = fs.readFileSync(new URL('../src/server/app.ts', import.meta.url), 'utf8');
   const authSource = fs.readFileSync(new URL('../src/server/services/authService.ts', import.meta.url), 'utf8');
@@ -1823,6 +1824,13 @@ function assertAccountUiGuards() {
 
   if (loginSource.includes("useState('admin')") || loginSource.includes('value="admin"')) {
     throw new Error('Login page must not prefill the admin username');
+  }
+  if (
+    marketingSource.includes("useState('admin')")
+    || marketingSource.includes('admin / admin123456')
+    || marketingSource.includes('默认演示账号')
+  ) {
+    throw new Error('Marketing login must not prefill or publish default admin credentials');
   }
   if (appSource.includes("session.user?.username ?? 'admin'") || !appSource.includes('accountDisplayLabel')) {
     throw new Error('Authenticated account UI must not display admin as a fallback label');
