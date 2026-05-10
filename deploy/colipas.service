@@ -17,6 +17,7 @@ PrivateTmp=true
 ProtectSystem=full
 ProtectHome=true
 UMask=0077
+ExecStartPre=/usr/bin/install -d -o colipas -g colipas -m 0700 /opt/colipas/.data
 ReadWritePaths=/opt/colipas/.data /opt/colipas/prod.current.stdout.log /opt/colipas/prod.current.stderr.log
 
 [Install]
