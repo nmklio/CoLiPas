@@ -59,27 +59,55 @@ function Push-GitHub {
 
   $remoteRef = & $gh api "repos/$GitHubRepo/git/ref/heads/$Branch" | ConvertFrom-Json
   $remoteSha = $remoteRef.object.sha
-  git cat-file -e "$remoteSha^{commit}" 2>$null
-  if ($LASTEXITCODE -ne 0) {
-    git fetch origin $Branch
-    if ($LASTEXITCODE -ne 0) {
-      throw "Unable to fetch remote $Branch commit $remoteSha."
-    }
-  }
-
-  git merge-base --is-ancestor $remoteSha $head
-  if ($LASTEXITCODE -ne 0) {
-    throw "Remote $Branch at $remoteSha is not an ancestor of local HEAD $head."
-  }
-
-  $remoteTree = (& $gh api "repos/$GitHubRepo/git/commits/$remoteSha" | ConvertFrom-Json).tree.sha
+  $remoteCommit = & $gh api "repos/$GitHubRepo/git/commits/$remoteSha" | ConvertFrom-Json
+  $remoteTree = $remoteCommit.tree.sha
   if ($remoteTree -eq $headTree) {
     Write-Host "GitHub already has the current tree at $remoteSha."
+    $global:LASTEXITCODE = 0
     return
   }
 
+  $baseCommit = $null
+  $remoteCommitAvailable = $false
+  try {
+    $null = git cat-file -e "$remoteSha^{commit}" 2>$null
+    $remoteCommitAvailable = $LASTEXITCODE -eq 0
+  } catch {
+    $remoteCommitAvailable = $false
+    $global:LASTEXITCODE = 0
+  }
+
+  if ($remoteCommitAvailable) {
+    git merge-base --is-ancestor $remoteSha $head
+    if ($LASTEXITCODE -eq 0) {
+      $baseCommit = $remoteSha
+    } else {
+      $global:LASTEXITCODE = 0
+    }
+  }
+
+  if (-not $baseCommit) {
+    Write-Warning "Remote $Branch commit $remoteSha is not available locally or is not a direct ancestor; matching by tree."
+    $ancestors = git rev-list --first-parent $head
+    if ($LASTEXITCODE -ne 0) {
+      throw "Unable to inspect local HEAD history."
+    }
+
+    foreach ($candidate in $ancestors) {
+      $candidateTree = (git rev-parse "$candidate^{tree}").Trim()
+      if ($LASTEXITCODE -eq 0 -and $candidateTree -eq $remoteTree) {
+        $baseCommit = $candidate
+        break
+      }
+    }
+  }
+
+  if (-not $baseCommit) {
+    throw "Remote $Branch tree $remoteTree does not match local HEAD history; refusing API fallback."
+  }
+
   $treeEntries = @()
-  $files = git diff --name-only $remoteSha $head
+  $files = git diff --name-only $baseCommit $head
   if ($LASTEXITCODE -ne 0) {
     throw "Unable to list changed files."
   }
@@ -160,6 +188,7 @@ function Push-GitHub {
   git fetch origin $Branch
   if ($LASTEXITCODE -ne 0) {
     Write-Warning "Unable to fetch published GitHub API commit; continuing because GitHub ref already points to a matching tree."
+    $global:LASTEXITCODE = 0
     return
   }
 
