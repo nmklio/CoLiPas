@@ -134,7 +134,15 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now colipas
 ```
 
-Use `deploy/nginx.conf` as a reverse-proxy starting point. Keep `.env`, `.data`, and SSH private keys outside public web roots and outside Git.
+Use `deploy/nginx.conf` as a reverse-proxy starting point. It is tuned for long-running AI and SSH streams with buffering disabled.
+
+For repeat releases, install `deploy/server-update.sh` on the server as `/usr/local/sbin/colipas-update`, then run the local guarded release flow:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/release-deploy.ps1
+```
+
+The release script runs `npm test` first, requires a clean working tree, pushes GitHub, then triggers the server update command over SSH. Keep `.env`, `.data`, SSH private keys, and deployment credentials outside public web roots and outside Git.
 
 ## Server Onboarding
 

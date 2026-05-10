@@ -7,7 +7,7 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=/opt/colipas
 EnvironmentFile=/opt/colipas/.env
-ExecStart=/usr/bin/npm start
+ExecStart=/usr/bin/node build/server/index.js
 Restart=on-failure
 RestartSec=5
 User=colipas
@@ -16,6 +16,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
 ProtectHome=true
+UMask=0077
 ReadWritePaths=/opt/colipas/.data /opt/colipas/prod.current.stdout.log /opt/colipas/prod.current.stderr.log
 
 [Install]
