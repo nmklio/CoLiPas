@@ -5518,6 +5518,143 @@ pre {
   line-height: 1;
 }
 
+.security-readiness-card {
+  min-width: 0;
+  border: 1px solid #d7e6e8;
+  border-radius: 8px;
+  padding: 14px;
+  background: #ffffff;
+  box-shadow: var(--shadow);
+  display: grid;
+  grid-template-columns: minmax(160px, 0.28fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.security-readiness-card.ready {
+  border-color: #b8dfcb;
+}
+
+.security-readiness-card.blocked {
+  border-color: #efc0bd;
+}
+
+.security-readiness-score {
+  border-radius: 8px;
+  padding: 12px;
+  background: #f4fbfa;
+  display: grid;
+  align-content: center;
+  gap: 6px;
+}
+
+.security-readiness-card.blocked .security-readiness-score {
+  background: #fff5f4;
+}
+
+.security-readiness-score span,
+.security-readiness-score small,
+.security-readiness-meta,
+.security-readiness-body p,
+.security-readiness-blocker small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.security-readiness-score span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 850;
+}
+
+.security-readiness-score strong {
+  font-size: 38px;
+  line-height: 1;
+  color: var(--text);
+}
+
+.security-readiness-body {
+  min-width: 0;
+  display: grid;
+  gap: 9px;
+}
+
+.security-readiness-meter {
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #e8f0f2;
+}
+
+.security-readiness-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--brand), var(--green));
+  transition: width 0.2s ease;
+}
+
+.security-readiness-card.blocked .security-readiness-meter span {
+  background: linear-gradient(90deg, var(--red), var(--orange));
+}
+
+.security-readiness-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+  font-weight: 850;
+}
+
+.security-readiness-body p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.security-readiness-blockers {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.security-readiness-blocker {
+  min-width: 0;
+  border: 1px solid #dce8eb;
+  border-left: 4px solid var(--orange);
+  border-radius: 8px;
+  padding: 9px;
+  background: #fffdf9;
+  text-align: left;
+  cursor: pointer;
+}
+
+.security-readiness-blocker.fail {
+  border-left-color: var(--red);
+  background: #fff7f7;
+}
+
+.security-readiness-blocker span,
+.security-readiness-blocker strong,
+.security-readiness-blocker small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.security-readiness-blocker span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.security-readiness-blocker strong {
+  margin: 4px 0;
+  color: var(--text);
+}
+
 .security-control-grid {
   display: grid;
   grid-template-columns: minmax(280px, 0.95fr) minmax(300px, 1.1fr) minmax(240px, 0.75fr);
@@ -6252,6 +6389,7 @@ pre {
   .ops-output-grid,
   .api-status-strip,
   .api-template-grid,
+  .security-readiness-card,
   .security-kpi-grid,
   .security-control-grid,
   .security-audit-workspace {
@@ -6696,6 +6834,8 @@ pre {
   .api-status-strip,
   .api-template-grid,
   .api-config-panel,
+  .security-readiness-card,
+  .security-readiness-blockers,
   .security-kpi-grid,
   .security-control-grid,
   .security-remediation-item,

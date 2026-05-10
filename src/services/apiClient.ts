@@ -6,6 +6,7 @@ import {
   OperationEvent,
   OperationTaskRequest,
   OperationTaskResponse,
+  ReleaseReadinessResponse,
   ServerNode,
   SshAuthType,
   SshVerifyMode,
@@ -494,6 +495,16 @@ export async function remediateSecurityRisk(
   }
 
   return (await response.json()) as SecurityRemediationResponse;
+}
+
+export async function fetchReleaseReadiness(fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/audit/readiness');
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as ReleaseReadinessResponse;
 }
 
 export async function connectServer(payload: ConnectServerPayload, fetcher: typeof fetch = fetch) {

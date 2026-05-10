@@ -256,6 +256,18 @@ const getChecks = [
   ['/api/health', (body) => body.status === 'ok' && body.database?.driver === 'sqlite' && body.database?.name === 'colipas.sqlite' && !('path' in body.database)],
   ['/api/config', (body) => Array.isArray(body.customApiAllowedHosts) && body.ai?.configured === false],
   [
+    '/api/audit/readiness',
+    (body) =>
+      Number.isInteger(body.score) &&
+      body.score >= 0 &&
+      body.score <= 100 &&
+      ['ready', 'review', 'blocked'].includes(body.status) &&
+      Array.isArray(body.checks) &&
+      body.checks.some((check) => check.id === 'api-allowlist') &&
+      body.summary?.totalChecks === body.checks.length &&
+      !JSON.stringify(body).includes('admin123456'),
+  ],
+  [
     '/api/overview',
     (body) =>
       Array.isArray(body.cloudAccounts) &&
@@ -1578,6 +1590,31 @@ if (!auditBody.items.some((item) => item.action === 'AUTH_PASSWORD_CHANGE' && it
 }
 console.log('ok /api/audit/events');
 
+const readinessResponse = await fetch(`${baseUrl}/api/audit/readiness`, { headers: authHeaders });
+if (!readinessResponse.ok) {
+  throw new Error(`/api/audit/readiness returned HTTP ${readinessResponse.status}`);
+}
+const readinessBody = await readinessResponse.json();
+if (
+  !Number.isInteger(readinessBody.score)
+  || readinessBody.summary?.totalChecks !== readinessBody.checks?.length
+  || !readinessBody.checks?.some((check) => check.id === 'audit-failures' && check.severity !== 'info')
+  || !readinessBody.blockers?.some((check) => check.id === 'audit-failures')
+  || typeof readinessBody.nextBestAction !== 'string'
+) {
+  throw new Error('/api/audit/readiness did not reflect active audit risk evidence');
+}
+const readinessPayload = JSON.stringify(readinessBody);
+if (
+  readinessPayload.includes(sensitiveAuditSecret)
+  || readinessPayload.includes(sensitiveSshSecret)
+  || readinessPayload.includes(smokePrivateKeyMarker)
+  || readinessPayload.includes(smokePrivateKeyPassphrase)
+) {
+  throw new Error('/api/audit/readiness leaked sensitive audit or SSH material');
+}
+console.log('ok /api/audit/readiness aggregates release evidence without secrets');
+
 const remediationResponse = await fetch(`${baseUrl}/api/audit/remediate`, {
   method: 'POST',
   headers: { ...authHeaders, 'Content-Type': 'application/json' },
@@ -2779,6 +2816,9 @@ function assertSecurityAuditRelationsAreSpecific() {
     'copy.configRelationDetail(corsOriginText, count(\'cors\'))',
     'copy.configRelationDetail(config?.ai.baseUrl ?? copy.unavailable, count(\'ai\'))',
     'copy.configRelationDetail(apiHostText, count(\'api\'))',
+    'fetchReleaseReadiness()',
+    'security-readiness-card',
+    'applyReadinessFilter(check)',
   ];
   const missing = requiredFragments.filter((fragment) => !securitySource.includes(fragment));
   if (missing.length) {
@@ -2805,6 +2845,9 @@ function assertSecurityAuditRelationsAreSpecific() {
     '.security-remediation-card',
     '.security-remediation-list',
     '.security-remediation-item',
+    '.security-readiness-card',
+    '.security-readiness-meter',
+    '.security-readiness-blocker',
     '.config-state.action',
   ];
   const missingCss = cssFragments.filter((fragment) => !globalCss.includes(fragment));
@@ -2814,8 +2857,14 @@ function assertSecurityAuditRelationsAreSpecific() {
 
   const appSource = fs.readFileSync(new URL('../src/server/app.ts', import.meta.url), 'utf8');
   const auditServiceSource = fs.readFileSync(new URL('../src/server/services/auditService.ts', import.meta.url), 'utf8');
+  const readinessServiceSource = fs.readFileSync(new URL('../src/server/services/releaseReadinessService.ts', import.meta.url), 'utf8');
   const apiClientSource = fs.readFileSync(new URL('../src/services/apiClient.ts', import.meta.url), 'utf8');
   const remediationFragments = [
+    "app.get('/api/audit/readiness'",
+    'buildReleaseReadiness(config)',
+    'export function buildReleaseReadiness(config',
+    'nextBestAction',
+    "fetcher('/api/audit/readiness'",
     "app.post('/api/audit/remediate'",
     'remediateSecurityRisk(request.body, session.user.username)',
     "z.enum(['acknowledgeCheck', 'acknowledgeAuditFailures', 'closeOpenEvents', 'reviewRuntime'])",
@@ -2823,7 +2872,7 @@ function assertSecurityAuditRelationsAreSpecific() {
     "target: parsed.target",
     "fetcher('/api/audit/remediate'",
   ];
-  const remediationCombined = [appSource, auditServiceSource, apiClientSource].join('\n');
+  const remediationCombined = [appSource, auditServiceSource, readinessServiceSource, apiClientSource].join('\n');
   const missingRemediation = remediationFragments.filter((fragment) => !remediationCombined.includes(fragment));
   if (missingRemediation.length) {
     throw new Error(`Security audit remediation API is incomplete: ${missingRemediation.join(', ')}`);

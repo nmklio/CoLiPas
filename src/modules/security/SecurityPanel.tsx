@@ -7,6 +7,7 @@ import {
   Fingerprint,
   LockKeyhole,
   RefreshCw,
+  Rocket,
   Search,
   ShieldAlert,
   ShieldCheck,
@@ -16,8 +17,9 @@ import {
 } from 'lucide-react';
 import { getLocale, useI18n } from '../../i18n';
 import { OperationEvent } from '../../types';
-import { remediateSecurityRisk } from '../../services/apiClient';
+import { fetchReleaseReadiness, remediateSecurityRisk } from '../../services/apiClient';
 import type { SecurityRemediationResponse } from '../../services/apiClient';
+import type { ReleaseReadinessResponse } from '../../types';
 
 interface SecurityPanelProps {
   events: OperationEvent[];
@@ -102,6 +104,7 @@ export function SecurityPanel({ events, onNavigate, onRemediated }: SecurityPane
   const [remediationMessage, setRemediationMessage] = useState('');
   const [remediationError, setRemediationError] = useState(false);
   const [remediatingId, setRemediatingId] = useState('');
+  const [readiness, setReadiness] = useState<ReleaseReadinessResponse | null>(null);
 
   const filteredAudits = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -146,23 +149,27 @@ export function SecurityPanel({ events, onNavigate, onRemediated }: SecurityPane
         fetch('/api/config'),
         fetch('/api/audit/events'),
       ]);
+      const readinessPromise = fetchReleaseReadiness();
       if (!configResponse.ok || !auditResponse.ok) {
         throw new Error(copy.loadFailed);
       }
-      const [configBody, auditBody] = await Promise.all([
+      const [configBody, auditBody, readinessBody] = await Promise.all([
         configResponse.json(),
         auditResponse.json(),
+        readinessPromise,
       ]);
       if (!Array.isArray(auditBody.items)) {
         throw new Error(copy.loadFailed);
       }
       setConfig(configBody as ConfigSummary);
       setAuditEntries((auditBody.items ?? []) as AuditEntry[]);
+      setReadiness(readinessBody);
       setLastRefreshedAt(new Date());
     } catch {
       setLoadError(copy.loadFailed);
       setConfig(null);
       setAuditEntries([]);
+      setReadiness(null);
     } finally {
       setLoading(false);
     }
@@ -189,6 +196,41 @@ export function SecurityPanel({ events, onNavigate, onRemediated }: SecurityPane
 
   function clearRelationFilter() {
     setRelationFilter(null);
+  }
+
+  function applyReadinessFilter(check: ReleaseReadinessResponse['checks'][number]) {
+    if (check.relatedModule === 'ai') {
+      onNavigate('ai');
+      return;
+    }
+
+    if (check.relatedModule === 'api') {
+      onNavigate('api');
+      return;
+    }
+
+    if (check.relatedModule === 'servers' || check.relatedModule === 'ssh') {
+      onNavigate('servers');
+      return;
+    }
+
+    if (check.relatedModule === 'events') {
+      onNavigate('operations');
+      return;
+    }
+
+    if (check.relatedModule === 'audit') {
+      setRelationFilter(null);
+      setStatusFilter('all');
+      setQuery('');
+      setSelectedAuditId(getActiveAuditEntries(auditEntries)[0]?.id ?? '');
+      focusRemediation();
+      return;
+    }
+
+    if (check.relatedModule === 'runtime') {
+      applyRelationFilter('runtime');
+    }
   }
 
   function focusRemediation() {
@@ -246,6 +288,40 @@ export function SecurityPanel({ events, onNavigate, onRemediated }: SecurityPane
 
       {loadError && <div className="error-box">{loadError}</div>}
       {remediationMessage && <div className={remediationError ? 'error-box' : 'validation-box'}>{remediationMessage}</div>}
+
+      <article className={`security-readiness-card ${readiness?.status ?? 'review'}`}>
+        <div className="security-readiness-score">
+          <span><Rocket size={17} /> {copy.readinessTitle}</span>
+          <strong>{readiness ? readiness.score : '--'}</strong>
+          <small>{readiness ? copy.readinessStatus(readiness.status) : copy.waitingRefresh}</small>
+        </div>
+        <div className="security-readiness-body">
+          <div className="security-readiness-meter" aria-hidden="true">
+            <span style={{ width: `${readiness?.score ?? 0}%` }} />
+          </div>
+          <div className="security-readiness-meta">
+            <span>{readiness ? copy.readinessChecks(readiness.summary.passed, readiness.summary.totalChecks) : copy.waitingRefresh}</span>
+            <span>{readiness ? copy.readinessIssues(readiness.summary.failures, readiness.summary.warnings) : copy.readinessCalculating}</span>
+          </div>
+          <p>{readiness?.nextBestAction ?? copy.readinessCalculating}</p>
+          {readiness && readiness.blockers.length > 0 && (
+            <div className="security-readiness-blockers">
+              {readiness.blockers.slice(0, 3).map((check) => (
+                <button
+                  key={check.id}
+                  type="button"
+                  className={`security-readiness-blocker ${check.severity}`}
+                  onClick={() => applyReadinessFilter(check)}
+                >
+                  <span>{check.label}</span>
+                  <strong>{check.value}</strong>
+                  <small>{check.evidence}</small>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </article>
 
       <div className="security-kpi-grid">
         <article className={riskyCount > 0 ? 'warn' : 'ok'}>
@@ -879,7 +955,12 @@ interface SecurityCopy {
   markReviewed: string;
   reviewAndClose: string;
   closeEvents: string;
+  readinessTitle: string;
+  readinessCalculating: string;
   riskItems: (count: number) => string;
+  readinessChecks: (passed: number, total: number) => string;
+  readinessIssues: (failures: number, warnings: number) => string;
+  readinessStatus: (status: ReleaseReadinessResponse['status']) => string;
   remediationCount: (count: number) => string;
   remediationDone: (title: string) => string;
   updated: (time: string) => string;
@@ -975,7 +1056,16 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     markReviewed: '标记已复核',
     reviewAndClose: '复核并闭环',
     closeEvents: '关闭事件',
+    readinessTitle: '上线就绪评分',
+    readinessCalculating: '正在汇总运行时、审计、SSH、AI 和 API 证据',
     riskItems: (count) => `${count} 风险项`,
+    readinessChecks: (passed, total) => `${passed}/${total} 项通过`,
+    readinessIssues: (failures, warnings) => `${failures} 阻断 / ${warnings} 预警`,
+    readinessStatus: (status) => ({
+      ready: '可发布',
+      review: '需复核',
+      blocked: '阻断发布',
+    })[status],
     remediationCount: (count) => `${count} 项可处理`,
     remediationDone: (title) => `已处理：${title}`,
     updated: (time) => `更新 ${time}`,
@@ -1074,7 +1164,16 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     markReviewed: 'Mark reviewed',
     reviewAndClose: 'Review and close',
     closeEvents: 'Close events',
+    readinessTitle: 'Release readiness',
+    readinessCalculating: 'Aggregating runtime, audit, SSH, AI, and API evidence',
     riskItems: (count) => `${count} risk items`,
+    readinessChecks: (passed, total) => `${passed}/${total} checks passed`,
+    readinessIssues: (failures, warnings) => `${failures} blockers / ${warnings} warnings`,
+    readinessStatus: (status) => ({
+      ready: 'Ready',
+      review: 'Needs review',
+      blocked: 'Blocked',
+    })[status],
     remediationCount: (count) => `${count} actionable`,
     remediationDone: (title) => `Handled: ${title}`,
     updated: (time) => `Updated ${time}`,
@@ -1173,7 +1272,16 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     markReviewed: '確認済みにする',
     reviewAndClose: '確認して閉じる',
     closeEvents: 'イベントを閉じる',
+    readinessTitle: 'リリース準備スコア',
+    readinessCalculating: '実行環境、監査、SSH、AI、API の証拠を集計中',
     riskItems: (count) => `${count} 件のリスク`,
+    readinessChecks: (passed, total) => `${passed}/${total} 件合格`,
+    readinessIssues: (failures, warnings) => `${failures} 件ブロック / ${warnings} 件警告`,
+    readinessStatus: (status) => ({
+      ready: 'リリース可能',
+      review: '確認が必要',
+      blocked: 'ブロック中',
+    })[status],
     remediationCount: (count) => `${count} 件対応可能`,
     remediationDone: (title) => `対応済み: ${title}`,
     updated: (time) => `更新 ${time}`,

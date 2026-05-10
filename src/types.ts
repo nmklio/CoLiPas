@@ -124,3 +124,31 @@ export interface OperationTaskResponse {
   outputs: OperationTaskTargetResult[];
   message: string;
 }
+
+export type ReleaseReadinessSeverity = 'info' | 'warn' | 'fail';
+
+export interface ReleaseReadinessCheck {
+  id: string;
+  label: string;
+  severity: ReleaseReadinessSeverity;
+  passed: boolean;
+  value: string;
+  evidence: string;
+  recommendedAction: string;
+  relatedModule: 'ai' | 'api' | 'audit' | 'database' | 'events' | 'runtime' | 'servers' | 'ssh';
+}
+
+export interface ReleaseReadinessResponse {
+  score: number;
+  status: 'ready' | 'review' | 'blocked';
+  generatedAt: string;
+  summary: {
+    totalChecks: number;
+    passed: number;
+    warnings: number;
+    failures: number;
+  };
+  checks: ReleaseReadinessCheck[];
+  blockers: ReleaseReadinessCheck[];
+  nextBestAction: string;
+}
