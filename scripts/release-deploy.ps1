@@ -1,9 +1,9 @@
 param(
   [string]$RemoteHost = "colipas-prod",
   [string]$RemoteUser = "colipas-deploy",
-  [string]$RemoteCommand = "/usr/local/sbin/colipas-update",
+  [string]$RemoteCommand = "sudo /usr/local/sbin/colipas-update",
   [string]$Branch = "master",
-  [string]$SshKey = "$env:USERPROFILE\.ssh\colipas_deploy_ed25519"
+  [string]$SshKey = "$env:USERPROFILE\.ssh\colipas_deploy_rsa"
 )
 
 $ErrorActionPreference = "Stop"
