@@ -16,6 +16,9 @@ function Run-Step {
 
   Write-Host "==> $Title"
   & $Command
+  if ($LASTEXITCODE -ne 0) {
+    throw "$Title failed with exit code $LASTEXITCODE"
+  }
 }
 
 Run-Step "Local grey test" {

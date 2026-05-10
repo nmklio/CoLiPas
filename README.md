@@ -144,6 +144,14 @@ powershell -ExecutionPolicy Bypass -File scripts/release-deploy.ps1
 
 The release script runs `npm test` first, requires a clean working tree, pushes GitHub, then triggers the server update command over SSH. Configure the SSH target as a private local host alias such as `colipas-prod`; keep `.env`, `.data`, SSH private keys, server IPs, and deployment credentials outside public web roots and outside Git.
 
+To make local commits publish automatically after the same guarded checks, install the optional local hook:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/install-release-hook.ps1
+```
+
+The hook is stored only under your local `.git/hooks/post-commit`. It is not committed to the repository and it still blocks deployment when tests fail, the tree is dirty, GitHub push fails, or the server update command fails.
+
 ## Server Onboarding
 
 Add servers from the Servers page with provider, region, public/private IP, OS, tags, and optional custom cloud provider names.
