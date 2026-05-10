@@ -6055,7 +6055,8 @@ pre {
   line-height: 1.35;
 }
 
-.security-relation-banner {
+.security-relation-banner,
+.security-trace-filter-banner {
   border: 1px solid #c9e3e0;
   border-radius: 8px;
   padding: 9px 10px;
@@ -6069,7 +6070,14 @@ pre {
   font-weight: 800;
 }
 
-.security-relation-banner button {
+.security-trace-filter-banner {
+  border-color: #d7ddea;
+  background: #f4f7fb;
+  color: #2d4a64;
+}
+
+.security-relation-banner button,
+.security-trace-filter-banner button {
   border: 0;
   border-radius: 7px;
   padding: 6px 9px;
@@ -6077,6 +6085,11 @@ pre {
   color: #19534d;
   font-weight: 850;
   cursor: pointer;
+}
+
+.security-trace-filter-banner button {
+  background: #e3eaf5;
+  color: #263e56;
 }
 
 .security-audit-workspace {
@@ -6362,6 +6375,17 @@ pre {
   font-size: 12px;
   line-height: 1.45;
   overflow-wrap: anywhere;
+}
+
+.security-audit-trace-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.security-audit-trace-actions .tool-button {
+  min-width: 0;
+  flex: 1 1 150px;
 }
 
 .security-audit-detail dl {

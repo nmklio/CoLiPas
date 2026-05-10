@@ -115,6 +115,7 @@ export function SecurityPanel({ events, onNavigate, onRemediated }: SecurityPane
   const [loading, setLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<AuditStatusFilter>('all');
   const [relationFilter, setRelationFilter] = useState<SecurityRelationKey | null>(null);
+  const [activeTraceId, setActiveTraceId] = useState('');
   const [query, setQuery] = useState('');
   const [selectedAuditId, setSelectedAuditId] = useState('');
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
@@ -132,13 +133,14 @@ export function SecurityPanel({ events, onNavigate, onRemediated }: SecurityPane
     return auditEntries.filter((entry) => {
       const statusMatched = statusFilter === 'all' || entry.status === statusFilter;
       const relationMatched = !relationFilter || isAuditRelated(entry, relationFilter, config);
-      const queryMatched = !normalizedQuery || [entry.action, entry.actor, entry.target, entry.detail]
+      const traceMatched = !activeTraceId || entry.correlationId === activeTraceId;
+      const queryMatched = !normalizedQuery || [entry.action, entry.actor, entry.target, entry.detail, entry.correlationId]
         .join(' ')
         .toLowerCase()
         .includes(normalizedQuery);
-      return statusMatched && relationMatched && queryMatched;
+      return statusMatched && relationMatched && traceMatched && queryMatched;
     });
-  }, [auditEntries, config, query, relationFilter, statusFilter]);
+  }, [activeTraceId, auditEntries, config, query, relationFilter, statusFilter]);
 
   const selectedAudit = filteredAudits.find((entry) => entry.id === selectedAuditId)
     ?? filteredAudits[0]
@@ -213,6 +215,7 @@ export function SecurityPanel({ events, onNavigate, onRemediated }: SecurityPane
 
   function applyRelationFilter(relation: SecurityRelationKey) {
     setRelationFilter(relation);
+    setActiveTraceId('');
     setQuery('');
     setStatusFilter('all');
     const firstMatchedAudit = auditEntries.find((entry) => isAuditRelated(entry, relation, config));
@@ -221,6 +224,19 @@ export function SecurityPanel({ events, onNavigate, onRemediated }: SecurityPane
 
   function clearRelationFilter() {
     setRelationFilter(null);
+  }
+
+  function applyTraceFilter(correlationId: string) {
+    setActiveTraceId(correlationId);
+    setRelationFilter(null);
+    setQuery('');
+    setStatusFilter('all');
+    const firstMatchedAudit = auditEntries.find((entry) => entry.correlationId === correlationId);
+    setSelectedAuditId(firstMatchedAudit?.id ?? '');
+  }
+
+  function clearTraceFilter() {
+    setActiveTraceId('');
   }
 
   function applyReadinessFilter(check: ReleaseReadinessResponse['checks'][number]) {
@@ -246,6 +262,7 @@ export function SecurityPanel({ events, onNavigate, onRemediated }: SecurityPane
 
     if (check.relatedModule === 'audit') {
       setRelationFilter(null);
+      setActiveTraceId('');
       setStatusFilter('all');
       setQuery('');
       setSelectedAuditId(getActiveAuditEntries(auditEntries)[0]?.id ?? '');
@@ -559,6 +576,12 @@ export function SecurityPanel({ events, onNavigate, onRemediated }: SecurityPane
               <button type="button" onClick={clearRelationFilter}>{copy.clearRelation}</button>
             </div>
           )}
+          {activeTraceId && (
+            <div className="security-trace-filter-banner">
+              <span>{copy.traceApplied(shortenOperationCorrelationId(activeTraceId), filteredAudits.length)}</span>
+              <button type="button" onClick={clearTraceFilter}>{copy.clearTrace}</button>
+            </div>
+          )}
           <label className="security-search">
             <Search size={15} />
             <input
@@ -566,6 +589,7 @@ export function SecurityPanel({ events, onNavigate, onRemediated }: SecurityPane
               onChange={(event) => {
                 setQuery(event.target.value);
                 setRelationFilter(null);
+                setActiveTraceId('');
               }}
               placeholder={copy.searchPlaceholder}
             />
@@ -630,9 +654,17 @@ export function SecurityPanel({ events, onNavigate, onRemediated }: SecurityPane
                   <p>{selectedOperationTrace.evidence}</p>
                   <small>{selectedOperationTrace.elapsedLabel}</small>
                   <small>{selectedOperationTrace.correlationLabel}</small>
-                  <button type="button" className="tool-button" onClick={() => onNavigate('operations')}>
-                    {copy.goOperations}
-                  </button>
+                  <div className="security-audit-trace-actions">
+                    {selectedAudit.correlationId && (
+                      <button type="button" className="tool-button" onClick={() => applyTraceFilter(selectedAudit.correlationId ?? '')}>
+                        <Search size={15} />
+                        {copy.viewTrace}
+                      </button>
+                    )}
+                    <button type="button" className="tool-button" onClick={() => onNavigate(getAuditNavigationTarget(selectedAudit))}>
+                      {getAuditNavigationLabel(selectedAudit, copy)}
+                    </button>
+                  </div>
                 </div>
               )}
               <dl>
@@ -827,7 +859,7 @@ function getLastRemediationTime(auditEntries: AuditEntry[], target: string) {
   return remediation ? new Date(remediation.createdAt).getTime() : 0;
 }
 
-function getAuditNavigationTarget(entry: AuditEntry): SecurityRiskAction['navigateTo'] {
+function getAuditNavigationTarget(entry: AuditEntry): NonNullable<SecurityRiskAction['navigateTo']> {
   const action = entry.action.toUpperCase();
   if (action.startsWith('AI_')) {
     return 'ai';
@@ -1054,11 +1086,12 @@ function buildOperationAuditTrace(
   const selectedSignature = getOperationAuditSignature(selectedAudit);
   const relatedEntries = getRelatedOperationAuditEntries(selectedAudit, auditEntries, selectedTime, selectedSignature)
     .sort((left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime());
+  const directServerTrace = action === 'SERVER_ACTION' || action === 'SERVER_SSH_COMMAND';
 
   const preflight = action === 'OPERATIONS_PREFLIGHT'
     ? selectedAudit
     : getLastOperationAuditBefore(relatedEntries, selectedTime, 'OPERATIONS_PREFLIGHT');
-  const execution = action === 'OPERATIONS_TASK'
+  const execution = action === 'OPERATIONS_TASK' || directServerTrace
     ? selectedAudit
     : relatedEntries.find((entry) => entry.action === 'OPERATIONS_TASK' && new Date(entry.createdAt).getTime() >= selectedTime) ?? null;
 
@@ -1266,6 +1299,9 @@ interface SecurityCopy {
   operationTraceNoExecution: string;
   operationTraceWindow: string;
   operationTraceCorrelation: (id: string) => string;
+  viewTrace: string;
+  clearTrace: string;
+  traceApplied: (id: string, count: number) => string;
   remediationTitle: string;
   remediationClear: string;
   noRemediation: string;
@@ -1421,6 +1457,8 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     operationTraceNoExecution: '未找到匹配执行',
     operationTraceWindow: '按 15 分钟窗口匹配同类型、同目标记录',
     operationTraceCorrelation: (id) => `关联 ID ${id}`,
+    viewTrace: '只看这条链',
+    clearTrace: '清除链路筛选',
     remediationTitle: '风险处置',
     remediationClear: '暂无待处置',
     noRemediation: '当前没有需要处理的风险项。',
@@ -1470,6 +1508,7 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     secretPostureDetail: (credentialKeyConfigured) => credentialKeyConfigured ? '管理员密码、会话密钥和 SSH 凭据加密 Key 均由运行环境托管' : '管理员密码和会话密钥已检查，建议配置专用 SSH 凭据加密 Key',
     blockedFailedCount: (blocked, failed) => `${blocked} 个阻断 / ${failed} 个失败`,
     relationApplied: (label, count) => `正在查看「${label}」关联审计，共 ${count} 条`,
+    traceApplied: (id, count) => `正在查看 trace ${id}，共 ${count} 条`,
     apiHostCount: (count) => `${count} 个允许域名`,
     corsOriginCount: (count) => `${count} 个来源`,
     timeoutMs: (ms) => `${ms} ms`,
@@ -1562,6 +1601,8 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     operationTraceNoExecution: 'No matching execution',
     operationTraceWindow: 'Matched by task type and target within a 15-minute window',
     operationTraceCorrelation: (id) => `Correlation ID ${id}`,
+    viewTrace: 'View this trace',
+    clearTrace: 'Clear trace',
     remediationTitle: 'Risk remediation',
     remediationClear: 'Nothing to handle',
     noRemediation: 'No risk item requires action right now.',
@@ -1611,6 +1652,7 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     secretPostureDetail: (credentialKeyConfigured) => credentialKeyConfigured ? 'Admin password, session secret, and SSH credential key are environment-managed' : 'Admin password and session secret are checked; configure a dedicated SSH credential key',
     blockedFailedCount: (blocked, failed) => `${blocked} blocked / ${failed} failed`,
     relationApplied: (label, count) => `Viewing ${label} linked audits, ${count} total`,
+    traceApplied: (id, count) => `Viewing trace ${id}, ${count} total`,
     apiHostCount: (count) => `${count} allowed hosts`,
     corsOriginCount: (count) => `${count} origins`,
     timeoutMs: (ms) => `${ms} ms`,
@@ -1703,6 +1745,8 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     operationTraceNoExecution: '一致する実行なし',
     operationTraceWindow: '15分以内の同一タイプ、同一対象で照合',
     operationTraceCorrelation: (id) => `関連 ID ${id}`,
+    viewTrace: 'この trace を表示',
+    clearTrace: 'trace を解除',
     remediationTitle: 'リスク対応',
     remediationClear: '対応不要',
     noRemediation: '現在対応が必要なリスク項目はありません。',
@@ -1752,6 +1796,7 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     secretPostureDetail: (credentialKeyConfigured) => credentialKeyConfigured ? '管理者パスワード、セッションシークレット、SSH 資格情報キーは環境で管理されています' : '管理者パスワードとセッションシークレットは確認済みです。専用の SSH 資格情報キーを設定してください',
     blockedFailedCount: (blocked, failed) => `${blocked} 件ブロック / ${failed} 件失敗`,
     relationApplied: (label, count) => `${label} の関連監査を表示中、計 ${count} 件`,
+    traceApplied: (id, count) => `trace ${id} を表示中、計 ${count} 件`,
     apiHostCount: (count) => `${count} 件の許可ホスト`,
     corsOriginCount: (count) => `${count} 件のオリジン`,
     timeoutMs: (ms) => `${ms} ms`,
