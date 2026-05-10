@@ -12,24 +12,9 @@ if (!executablePath) {
 }
 
 const browser = await chromium.launch({ executablePath, headless: true });
-const page = await browser.newPage({ viewport: { width: 1440, height: 980 } });
 const consoleProblems = [];
+const page = await createE2ePage({ viewport: { width: 1440, height: 980 } });
 let temporaryServerId = '';
-
-await page.addInitScript(() => {
-  window.localStorage.setItem('colipas.language', 'en');
-  window.localStorage.removeItem('colipas.aiConsoleState');
-  window.localStorage.removeItem('colipas.aiResponseCache');
-});
-
-page.on('console', (message) => {
-  if (message.type() === 'error' || message.type() === 'warning') {
-    consoleProblems.push(`${message.type()}: ${message.text()}`);
-  }
-});
-page.on('pageerror', (error) => {
-  consoleProblems.push(`pageerror: ${error.message}`);
-});
 
 try {
   await openAndLogin(page, `${baseUrl}/admin/#security?trace=${encodeURIComponent(traceId)}`);
@@ -45,6 +30,8 @@ try {
   await deleteTemporaryAssetServer(page, temporaryServer.id);
   temporaryServerId = '';
 
+  await assertMobileConsoleAndMap();
+
   if (consoleProblems.length > 0) {
     throw new Error(`Browser console had problems:\n${consoleProblems.join('\n')}`);
   }
@@ -53,6 +40,24 @@ try {
     await deleteTemporaryAssetServer(page, temporaryServerId).catch(() => undefined);
   }
   await browser.close();
+}
+
+async function createE2ePage(options) {
+  const targetPage = await browser.newPage(options);
+  await targetPage.addInitScript(() => {
+    window.localStorage.setItem('colipas.language', 'en');
+    window.localStorage.removeItem('colipas.aiConsoleState');
+    window.localStorage.removeItem('colipas.aiResponseCache');
+  });
+  targetPage.on('console', (message) => {
+    if (message.type() === 'error' || message.type() === 'warning') {
+      consoleProblems.push(`${message.type()}: ${message.text()}`);
+    }
+  });
+  targetPage.on('pageerror', (error) => {
+    consoleProblems.push(`pageerror: ${error.message}`);
+  });
+  return targetPage;
 }
 
 async function openAndLogin(targetPage, url) {
@@ -64,6 +69,7 @@ async function openAndLogin(targetPage, url) {
   await targetPage.locator('input[autocomplete="username"]').fill(username);
   await targetPage.locator('input[autocomplete="current-password"]').fill(password);
   await targetPage.getByRole('button', { name: /sign in/i }).click();
+  await targetPage.locator('.topbar').waitFor({ timeout: 15000 });
 }
 
 async function assertSyntheticTraceDeepLink(targetPage, expectedTraceId) {
@@ -119,10 +125,10 @@ async function assertAccountSettingsAndAiChat(targetPage) {
   console.log('ok browser e2e covers account profile save and AI cached chat');
 }
 
-async function createTemporaryAssetServer(targetPage) {
+async function createTemporaryAssetServer(targetPage, namePrefix = 'browser-e2e-asset') {
   const response = await targetPage.request.post(`${baseUrl}/api/servers`, {
     data: {
-      name: `browser-e2e-asset-${Date.now()}`,
+      name: `${namePrefix}-${Date.now()}`,
       provider: 'OpenStack Lab',
       region: 'US - Los Angeles',
       publicIp: `198.51.100.${Math.floor(Math.random() * 100) + 10}`,
@@ -214,6 +220,68 @@ async function assertOperationsResultTraceRoundTrip(targetPage) {
   console.log('ok browser e2e links operations result to security trace and preserves reload state');
 }
 
+async function assertMobileConsoleAndMap() {
+  const mobilePage = await createE2ePage({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+  });
+  let mobileServerId = '';
+
+  try {
+    await openAndLogin(mobilePage, `${baseUrl}/admin/#overview`);
+    await mobilePage.getByRole('button', { name: /open navigation/i }).waitFor({ timeout: 5000 });
+    await assertNoHorizontalOverflow(mobilePage, 'mobile console after login');
+
+    await mobilePage.locator('.account-settings-trigger').click();
+    await mobilePage.locator('.account-modal').waitFor({ timeout: 5000 });
+    await assertElementWithinViewport(mobilePage, '.account-modal', 'mobile account settings modal');
+    await mobilePage.getByRole('button', { name: /close settings/i }).click();
+    await mobilePage.locator('.account-modal').waitFor({ state: 'hidden', timeout: 5000 });
+
+    await mobilePage.getByRole('button', { name: /open navigation/i }).click();
+    await mobilePage.getByRole('button', { name: /^AI System$/i }).click();
+    await mobilePage.waitForURL(/#ai$/, { timeout: 10000 });
+    await mobilePage.getByRole('button', { name: /open ai chat/i }).click();
+    await mobilePage.locator('.ai-dock').waitFor({ timeout: 10000 });
+    await assertElementWithinViewport(mobilePage, '.ai-dock', 'mobile AI dock');
+    await mobilePage.getByRole('button', { name: /hide ai assistant/i }).click();
+    await mobilePage.locator('.ai-dock').waitFor({ state: 'hidden', timeout: 5000 });
+
+    mobileServerId = (await createTemporaryAssetServer(mobilePage, 'browser-e2e-mobile-map')).id;
+    await mobilePage.goto(`${baseUrl}/admin/#overview`, {
+      waitUntil: 'networkidle',
+      timeout: 30000,
+    });
+    await mobilePage.reload({ waitUntil: 'networkidle' });
+    await mobilePage.locator('.cloud-map').scrollIntoViewIfNeeded();
+    await mobilePage.locator('.cloud-map').waitFor({ timeout: 10000 });
+    await mobilePage.locator('.world-map-svg').waitFor({ timeout: 10000 });
+    await mobilePage.waitForFunction(() => document.querySelectorAll('.map-country.active').length > 0, undefined, { timeout: 10000 });
+    await assertElementWithinViewport(mobilePage, '.cloud-map', 'mobile overview map');
+
+    await mobilePage.getByRole('button', { name: /zoom in/i }).click();
+    await mobilePage.waitForFunction(() => document.querySelector('.cloud-map')?.classList.contains('is-zoomed'), undefined, { timeout: 5000 });
+    await mobilePage.locator('.map-country.active').first().click({ force: true });
+    await mobilePage.locator('.map-tooltip.pinned').waitFor({ timeout: 5000 });
+    await assertElementWithinViewport(mobilePage, '.map-tooltip.pinned', 'mobile map pinned tooltip');
+    await mobilePage.waitForTimeout(1100);
+    if (!(await mobilePage.locator('.map-tooltip.pinned').isVisible())) {
+      throw new Error('Mobile map pinned tooltip disappeared before users could interact with it');
+    }
+
+    await mobilePage.getByRole('button', { name: /view region servers/i }).click();
+    await mobilePage.waitForURL(/#servers$/, { timeout: 10000 });
+    await assertNoHorizontalOverflow(mobilePage, 'mobile map to servers linkage');
+
+    console.log('ok browser e2e covers mobile account, AI dock, map tooltip, zoom, and region linkage');
+  } finally {
+    if (mobileServerId) {
+      await deleteTemporaryAssetServer(mobilePage, mobileServerId).catch(() => undefined);
+    }
+    await mobilePage.close();
+  }
+}
+
 async function waitForAuditEvents(targetPage, expectedTraceId) {
   const startedAt = Date.now();
   let lastCount = 0;
@@ -234,6 +302,34 @@ async function waitForAuditEvents(targetPage, expectedTraceId) {
   }
 
   throw new Error(`Timed out waiting for audit records with ${expectedTraceId}, last count ${lastCount}`);
+}
+
+async function assertElementWithinViewport(targetPage, selector, label) {
+  const viewport = targetPage.viewportSize();
+  const box = await targetPage.locator(selector).first().boundingBox();
+  if (!viewport || !box) {
+    throw new Error(`${label} was not rendered with a measurable viewport box`);
+  }
+
+  const tolerance = 1;
+  if (
+    box.x < -tolerance
+    || box.y < -tolerance
+    || box.x + box.width > viewport.width + tolerance
+    || box.y + box.height > viewport.height + tolerance
+  ) {
+    throw new Error(`${label} overflows viewport ${viewport.width}x${viewport.height}: ${JSON.stringify(box)}`);
+  }
+}
+
+async function assertNoHorizontalOverflow(targetPage, label) {
+  const metrics = await targetPage.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    viewportWidth: window.innerWidth,
+  }));
+  if (metrics.scrollWidth > metrics.viewportWidth + 1) {
+    throw new Error(`${label} has horizontal document overflow: ${metrics.scrollWidth}px > ${metrics.viewportWidth}px`);
+  }
 }
 
 function findSystemBrowser() {

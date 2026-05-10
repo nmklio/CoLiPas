@@ -3376,6 +3376,18 @@ function assertSecurityAuditRelationsAreSpecific() {
     'AI cached answer should match the first local rule answer',
     'assertOperationsResultTraceRoundTrip',
     'waitForAuditEvents(targetPage, traceIdFromUrl)',
+    'assertMobileConsoleAndMap',
+    '{ width: 390, height: 844 }',
+    'assertElementWithinViewport',
+    'assertNoHorizontalOverflow',
+    '.account-modal',
+    '.ai-dock',
+    '.cloud-map',
+    '.world-map-svg',
+    '.map-country.active',
+    '.map-tooltip.pinned',
+    'Mobile map pinned tooltip disappeared before users could interact with it',
+    'mobile map to servers linkage',
   ];
   const missingBrowserFragments = browserRequiredFragments.filter((fragment) => !browserE2eSource.includes(fragment));
   if (missingBrowserFragments.length) {
