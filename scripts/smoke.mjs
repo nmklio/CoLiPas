@@ -2784,7 +2784,7 @@ function assertOverviewServerFilterLinkage() {
   const requiredAppFragments = [
     'function openServersForRegion(region: string | string[])',
     'const regionScope = (Array.isArray(region) ? region : [region])',
-    "setActiveSection('servers')",
+    "navigateToSection('servers')",
     "region: regionScope.length === 1 ? regionScope[0] : 'all'",
     'regionScope,',
     'onRegionServersOpen={openServersForRegion}',
@@ -3203,6 +3203,11 @@ function assertSecurityAuditRelationsAreSpecific() {
     'copy.traceApplied(shortenOperationCorrelationId(activeTraceId), filteredAudits.length)',
     'copy.viewTrace',
     'copy.clearTrace',
+    'copy.copyTraceLink',
+    'copy.traceLinkCopied',
+    'function copyTraceLink()',
+    'navigator.clipboard.writeText(url)',
+    'security-trace-filter-actions',
     'buildOperationAuditTrace(selectedAudit, auditEntries, copy, locale)',
     'function buildOperationAuditTrace(',
     'if (!isCorrelatableAuditAction(action))',
@@ -3268,6 +3273,7 @@ function assertSecurityAuditRelationsAreSpecific() {
     '.security-audit-trace-steps',
     '.security-audit-trace-actions',
     '.security-trace-filter-banner',
+    '.security-trace-filter-actions',
     '.security-audit-trace.blocked',
     '.security-audit-trace.failed',
     '.security-remediation-card',
@@ -3327,8 +3333,19 @@ function assertSecurityAuditRelationsAreSpecific() {
   }
 
   const traceNavigationFragments = [
-    'const [securityTraceFocusId, setSecurityTraceFocusId] = useState(\'\')',
+    'interface HashRoute',
+    'function readHashRoute(): HashRoute',
+    'function writeHashRoute(section: SectionId, traceId = \'\')',
+    'function normalizeTraceRouteId(value: string | null | undefined)',
+    '/^(ops|srv)-trace-[a-f0-9-]{36}$/',
+    'const initialHashRouteRef = useRef<HashRoute | null>(null)',
+    'const [securityTraceFocusId, setSecurityTraceFocusId] = useState(initialHashRouteRef.current.traceId)',
+    'window.addEventListener(\'hashchange\', syncRouteFromHash)',
+    'function navigateToSection(section: SectionId)',
     'function openSecurityTrace(correlationId: string)',
+    'writeHashRoute(\'security\', traceId)',
+    'function handleSecurityTraceFilterChange(correlationId: string)',
+    'onTraceFilterChange={handleSecurityTraceFilterChange}',
     'onAuditTraceOpen={openSecurityTrace}',
     'focusTraceId={securityTraceFocusId}',
     'onTraceFocused={() => setSecurityTraceFocusId(\'\')}',
@@ -3336,6 +3353,13 @@ function assertSecurityAuditRelationsAreSpecific() {
   const missingTraceNavigation = traceNavigationFragments.filter((fragment) => !frontendAppSource.includes(fragment));
   if (missingTraceNavigation.length) {
     throw new Error(`Cross-module audit trace navigation is incomplete: ${missingTraceNavigation.join(', ')}`);
+  }
+
+  for (const fragment of ['copyTraceLink', 'traceLinkCopied']) {
+    const count = (securitySource.match(new RegExp(fragment, 'g')) ?? []).length;
+    if (count < 4) {
+      throw new Error(`Security trace-link copy text is missing languages: ${fragment}`);
+    }
   }
 
   console.log('ok security audit relation filters, remediation actions, load errors, and insight cards are guarded');

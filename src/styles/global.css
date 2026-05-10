@@ -6111,6 +6111,14 @@ pre {
   color: #2d4a64;
 }
 
+.security-trace-filter-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
 .security-relation-banner button,
 .security-trace-filter-banner button {
   border: 0;

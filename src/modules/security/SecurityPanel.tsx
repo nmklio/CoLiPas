@@ -27,6 +27,7 @@ interface SecurityPanelProps {
   onRemediated: () => void | Promise<void>;
   focusTraceId?: string;
   onTraceFocused?: () => void;
+  onTraceFilterChange?: (correlationId: string) => void;
 }
 
 interface ConfigSummary {
@@ -106,7 +107,7 @@ interface SecurityRiskAction {
   note?: string;
 }
 
-export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, onTraceFocused }: SecurityPanelProps) {
+export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, onTraceFocused, onTraceFilterChange }: SecurityPanelProps) {
   const { language, t } = useI18n();
   const copy = securityCopyByLanguage[language] ?? securityCopyByLanguage.zh;
   const diagnosticCopy = diagnosticCopyByLanguage[language] ?? diagnosticCopyByLanguage.zh;
@@ -181,10 +182,11 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
     setStatusFilter('all');
     const firstMatchedAudit = auditEntries.find((entry) => entry.correlationId === focusTraceId);
     setSelectedAuditId(firstMatchedAudit?.id ?? '');
+    onTraceFilterChange?.(focusTraceId);
     if (firstMatchedAudit || auditEntries.length > 0) {
       onTraceFocused?.();
     }
-  }, [auditEntries, focusTraceId, onTraceFocused]);
+  }, [auditEntries, focusTraceId, onTraceFilterChange, onTraceFocused]);
 
   async function refreshSecurityData() {
     setLoading(true);
@@ -234,6 +236,7 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
   function applyRelationFilter(relation: SecurityRelationKey) {
     setRelationFilter(relation);
     setActiveTraceId('');
+    onTraceFilterChange?.('');
     setQuery('');
     setStatusFilter('all');
     const firstMatchedAudit = auditEntries.find((entry) => isAuditRelated(entry, relation, config));
@@ -251,10 +254,28 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
     setStatusFilter('all');
     const firstMatchedAudit = auditEntries.find((entry) => entry.correlationId === correlationId);
     setSelectedAuditId(firstMatchedAudit?.id ?? '');
+    onTraceFilterChange?.(correlationId);
   }
 
   function clearTraceFilter() {
     setActiveTraceId('');
+    onTraceFilterChange?.('');
+  }
+
+  async function copyTraceLink() {
+    if (!activeTraceId || typeof window === 'undefined') {
+      return;
+    }
+
+    const url = `${window.location.origin}${window.location.pathname}${window.location.search}#security?trace=${encodeURIComponent(activeTraceId)}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setRemediationMessage(copy.traceLinkCopied);
+      setRemediationError(false);
+    } catch {
+      setRemediationMessage(url);
+      setRemediationError(false);
+    }
   }
 
   function applyReadinessFilter(check: ReleaseReadinessResponse['checks'][number]) {
@@ -281,6 +302,7 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
     if (check.relatedModule === 'audit') {
       setRelationFilter(null);
       setActiveTraceId('');
+      onTraceFilterChange?.('');
       setStatusFilter('all');
       setQuery('');
       setSelectedAuditId(getActiveAuditEntries(auditEntries)[0]?.id ?? '');
@@ -597,7 +619,10 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
           {activeTraceId && (
             <div className="security-trace-filter-banner">
               <span>{copy.traceApplied(shortenOperationCorrelationId(activeTraceId), filteredAudits.length)}</span>
-              <button type="button" onClick={clearTraceFilter}>{copy.clearTrace}</button>
+              <div className="security-trace-filter-actions">
+                <button type="button" onClick={copyTraceLink}>{copy.copyTraceLink}</button>
+                <button type="button" onClick={clearTraceFilter}>{copy.clearTrace}</button>
+              </div>
             </div>
           )}
           <label className="security-search">
@@ -608,6 +633,7 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
                 setQuery(event.target.value);
                 setRelationFilter(null);
                 setActiveTraceId('');
+                onTraceFilterChange?.('');
               }}
               placeholder={copy.searchPlaceholder}
             />
@@ -1319,6 +1345,8 @@ interface SecurityCopy {
   operationTraceCorrelation: (id: string) => string;
   viewTrace: string;
   clearTrace: string;
+  copyTraceLink: string;
+  traceLinkCopied: string;
   traceApplied: (id: string, count: number) => string;
   remediationTitle: string;
   remediationClear: string;
@@ -1477,6 +1505,8 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     operationTraceCorrelation: (id) => `关联 ID ${id}`,
     viewTrace: '只看这条链',
     clearTrace: '清除链路筛选',
+    copyTraceLink: '复制链路链接',
+    traceLinkCopied: '审计链链接已复制',
     remediationTitle: '风险处置',
     remediationClear: '暂无待处置',
     noRemediation: '当前没有需要处理的风险项。',
@@ -1621,6 +1651,8 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     operationTraceCorrelation: (id) => `Correlation ID ${id}`,
     viewTrace: 'View this trace',
     clearTrace: 'Clear trace',
+    copyTraceLink: 'Copy trace link',
+    traceLinkCopied: 'Audit trace link copied',
     remediationTitle: 'Risk remediation',
     remediationClear: 'Nothing to handle',
     noRemediation: 'No risk item requires action right now.',
@@ -1765,6 +1797,8 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     operationTraceCorrelation: (id) => `関連 ID ${id}`,
     viewTrace: 'この trace を表示',
     clearTrace: 'trace を解除',
+    copyTraceLink: 'trace リンクをコピー',
+    traceLinkCopied: '監査 trace リンクをコピーしました',
     remediationTitle: 'リスク対応',
     remediationClear: '対応不要',
     noRemediation: '現在対応が必要なリスク項目はありません。',

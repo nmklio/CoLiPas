@@ -56,6 +56,12 @@ const sections: Array<{ id: SectionId; labelKey: string; icon: typeof LayoutDash
   { id: 'security', labelKey: 'nav.security', icon: ShieldCheck },
 ];
 
+interface HashRoute {
+  section: SectionId;
+  traceId: string;
+  matched: boolean;
+}
+
 const defaultFilters: ServerFilters = {
   query: '',
   provider: 'all',
@@ -64,6 +70,48 @@ const defaultFilters: ServerFilters = {
 };
 const avatarMaxBytes = 2 * 1024 * 1024;
 const settingsMessageTtlMs = 2800;
+
+function isSectionId(value: string): value is SectionId {
+  return sections.some((section) => section.id === value);
+}
+
+function normalizeTraceRouteId(value: string | null | undefined) {
+  const traceId = (value ?? '').trim().toLowerCase();
+  return /^(ops|srv)-trace-[a-f0-9-]{36}$/.test(traceId) ? traceId : '';
+}
+
+function readHashRoute(): HashRoute {
+  if (typeof window === 'undefined') {
+    return { section: 'overview', traceId: '', matched: false };
+  }
+
+  const rawHash = window.location.hash.replace(/^#/, '').trim();
+  if (!rawHash) {
+    return { section: 'overview', traceId: '', matched: false };
+  }
+
+  const queryStart = rawHash.indexOf('?');
+  const sectionPart = queryStart >= 0 ? rawHash.slice(0, queryStart) : rawHash;
+  const queryPart = queryStart >= 0 ? rawHash.slice(queryStart + 1) : '';
+  const matched = isSectionId(sectionPart);
+  const section = matched ? sectionPart : 'overview';
+  const traceId = section === 'security' ? normalizeTraceRouteId(new URLSearchParams(queryPart).get('trace')) : '';
+  return { section, traceId, matched };
+}
+
+function writeHashRoute(section: SectionId, traceId = '') {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const normalizedTraceId = section === 'security' ? normalizeTraceRouteId(traceId) : '';
+  const nextHash = normalizedTraceId ? `#${section}?trace=${encodeURIComponent(normalizedTraceId)}` : `#${section}`;
+  if (window.location.hash === nextHash) {
+    return;
+  }
+
+  window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${nextHash}`);
+}
 
 const fallbackOverview: OverviewResponse = {
   cloudAccounts: fallbackCloudAccounts,
@@ -84,6 +132,10 @@ const fallbackProfile: AccountProfile = {
 
 export function App() {
   const { language, setLanguage, t } = useI18n();
+  const initialHashRouteRef = useRef<HashRoute | null>(null);
+  if (!initialHashRouteRef.current) {
+    initialHashRouteRef.current = readHashRoute();
+  }
   const [session, setSession] = useState<AuthSession | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [loginLoading, setLoginLoading] = useState(false);
@@ -96,8 +148,8 @@ export function App() {
   const [profileDraft, setProfileDraft] = useState<AccountProfile>(fallbackProfile);
   const [passwordDraft, setPasswordDraft] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const avatarUploadRef = useRef<HTMLInputElement | null>(null);
-  const [activeSection, setActiveSection] = useState<SectionId>('overview');
-  const [securityTraceFocusId, setSecurityTraceFocusId] = useState('');
+  const [activeSection, setActiveSection] = useState<SectionId>(initialHashRouteRef.current.section);
+  const [securityTraceFocusId, setSecurityTraceFocusId] = useState(initialHashRouteRef.current.traceId);
   const [filters, setFilters] = useState<ServerFilters>(defaultFilters);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [aiCollapsed, setAiCollapsed] = useState(true);
@@ -175,6 +227,18 @@ export function App() {
   useEffect(() => {
     sessionAuthenticatedRef.current = Boolean(session?.authenticated);
   }, [session?.authenticated]);
+
+  useEffect(() => {
+    function syncRouteFromHash() {
+      const route = readHashRoute();
+      setActiveSection(route.section);
+      setSecurityTraceFocusId(route.traceId);
+      setSidebarOpen(false);
+    }
+
+    window.addEventListener('hashchange', syncRouteFromHash);
+    return () => window.removeEventListener('hashchange', syncRouteFromHash);
+  }, []);
 
   useEffect(() => {
     if (!session?.authenticated) {
@@ -272,7 +336,9 @@ export function App() {
       if (nextSession.profile) {
         setProfile(nextSession.profile);
       }
-      setActiveSection('overview');
+      const route = readHashRoute();
+      setActiveSection(route.matched ? route.section : 'overview');
+      setSecurityTraceFocusId(route.traceId);
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : t('login.failed'));
     } finally {
@@ -290,6 +356,15 @@ export function App() {
     setAiCollapsed(true);
   }
 
+  function navigateToSection(section: SectionId) {
+    setActiveSection(section);
+    if (section !== 'security') {
+      setSecurityTraceFocusId('');
+    }
+    writeHashRoute(section);
+    setSidebarOpen(false);
+  }
+
   function openServersForRegion(region: string | string[]) {
     const regionScope = (Array.isArray(region) ? region : [region])
       .map((item) => item.trim())
@@ -305,8 +380,7 @@ export function App() {
       region: regionScope.length === 1 ? regionScope[0] : 'all',
       regionScope,
     }));
-    setActiveSection('servers');
-    setSidebarOpen(false);
+    navigateToSection('servers');
   }
 
   function openAiWithQuestion(question: string) {
@@ -315,9 +389,19 @@ export function App() {
   }
 
   function openSecurityTrace(correlationId: string) {
-    setSecurityTraceFocusId(correlationId);
+    const traceId = normalizeTraceRouteId(correlationId);
+    if (!traceId) {
+      return;
+    }
+    setSecurityTraceFocusId(traceId);
     setActiveSection('security');
+    writeHashRoute('security', traceId);
     setSidebarOpen(false);
+  }
+
+  function handleSecurityTraceFilterChange(correlationId: string) {
+    const traceId = normalizeTraceRouteId(correlationId);
+    writeHashRoute('security', traceId);
   }
 
   function openSettings() {
@@ -431,10 +515,7 @@ export function App() {
                 key={section.id}
                 type="button"
                 className={activeSection === section.id ? 'nav-item active' : 'nav-item'}
-                onClick={() => {
-                  setActiveSection(section.id);
-                  setSidebarOpen(false);
-                }}
+                onClick={() => navigateToSection(section.id)}
               >
                 <Icon size={18} aria-hidden="true" />
                 <span>{t(section.labelKey)}</span>
@@ -637,12 +718,12 @@ export function App() {
             <SecurityPanel
               events={overview.operationEvents}
               onNavigate={(section) => {
-                setActiveSection(section);
-                setSidebarOpen(false);
+                navigateToSection(section);
               }}
               onRemediated={refreshOverview}
               focusTraceId={securityTraceFocusId}
               onTraceFocused={() => setSecurityTraceFocusId('')}
+              onTraceFilterChange={handleSecurityTraceFilterChange}
             />
           )}
         </main>
