@@ -7,6 +7,7 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=/opt/colipas
 EnvironmentFile=/opt/colipas/.env
+Environment=NODE_ENV=production
 ExecStart=/usr/bin/node build/server/index.js
 Restart=on-failure
 RestartSec=5
@@ -17,8 +18,8 @@ PrivateTmp=true
 ProtectSystem=full
 ProtectHome=true
 UMask=0077
-ExecStartPre=/usr/bin/install -d -o colipas -g colipas -m 0700 /opt/colipas/.data
-ReadWritePaths=/opt/colipas/.data /opt/colipas/prod.current.stdout.log /opt/colipas/prod.current.stderr.log
+ExecStartPre=+/usr/bin/install -d -o colipas -g colipas -m 0700 /opt/colipas/.data
+ReadWritePaths=/opt/colipas/.data
 
 [Install]
 WantedBy=multi-user.target
