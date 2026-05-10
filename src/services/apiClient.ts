@@ -1,0 +1,771 @@
+import { cloudAccounts, operationEvents, servers } from '../data/mockData';
+import {
+  AIProviderConfig,
+  CloudProvider,
+  CustomApiConfig,
+  OperationEvent,
+  OperationTaskRequest,
+  OperationTaskResponse,
+  ServerNode,
+  SshAuthType,
+  SshVerifyMode,
+} from '../types';
+
+export interface OverviewResponse {
+  cloudAccounts: typeof cloudAccounts;
+  servers: ServerNode[];
+  operationEvents: OperationEvent[];
+  summary: {
+    totalServers: number;
+    onlineServers: number;
+    openEvents: number;
+  };
+}
+
+export interface AiAnalysisResponse {
+  provider: string;
+  model: string;
+  prompt: string;
+  answer: string;
+  simulated: boolean;
+  cached?: boolean;
+  generatedAt?: string;
+}
+
+export interface AiChatRequestMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface AiConnectionTestResponse {
+  ok: boolean;
+  provider: string;
+  model: string;
+  latencyMs: number;
+  checkedAt: string;
+  message: string;
+}
+
+export interface AiModelsResponse {
+  models: string[];
+  provider: string;
+  source: 'upstream' | 'fallback';
+  message: string;
+}
+
+export interface ConfigSummaryResponse {
+  nodeEnv: string;
+  corsOrigins: string[];
+  customApiAllowedHosts: string[];
+  customApiTimeoutMs: number;
+  ai: {
+    baseUrl: string;
+    model: string;
+    configured: boolean;
+  };
+}
+
+export interface SecurityRemediationResponse {
+  ok: boolean;
+  type: 'acknowledgeCheck' | 'acknowledgeAuditFailures' | 'closeOpenEvents' | 'reviewRuntime';
+  target: string;
+  affected: number;
+  audit: {
+    id: string;
+    action: string;
+    actor: string;
+    target: string;
+    status: 'success' | 'blocked' | 'failed';
+    detail: string;
+    createdAt: string;
+  };
+}
+
+export interface CustomApiTestResponse {
+  ok: boolean;
+  status: number;
+  durationMs: number;
+  headers: Record<string, string>;
+  bodyText: string;
+}
+
+export interface ServerDiagnosticResponse {
+  serverId: string;
+  serverName: string;
+  mode: SshVerifyMode;
+  command: string;
+  output: string;
+  checkedAt: string;
+}
+
+export interface ServerCommandResponse {
+  serverId: string;
+  serverName: string;
+  command: string;
+  output: string;
+  executedAt: string;
+}
+
+export interface ServerCommandStreamEvent {
+  type: 'start' | 'stdout' | 'stderr' | 'done' | 'timeout' | 'error';
+  content?: string;
+  message?: string;
+  code?: number | null;
+  signal?: string | null;
+  output?: string;
+  result?: ServerCommandResponse;
+}
+
+export interface ServerShellResponse {
+  serverId: string;
+  serverName: string;
+  sessionId: string;
+  mode: SshVerifyMode;
+  connectedAt: string;
+}
+
+export interface ServerShellStreamEvent {
+  type: 'start' | 'stdout' | 'stderr' | 'close' | 'error';
+  content?: string;
+  message?: string;
+  code?: number | null;
+  signal?: string | null;
+  connectedAt?: string;
+}
+
+export interface ServerActionResponse extends ServerCommandResponse {
+  id: string;
+  action: 'powerOn' | 'shutdown' | 'reboot';
+  status: 'dry-run' | 'executed';
+  reason: string;
+}
+
+export interface ServerIdentityResponse {
+  region: string;
+  os: string;
+  sources: {
+    region: 'input' | 'ip' | 'ssh' | 'simulate' | 'fallback';
+    os: 'input' | 'ip' | 'ssh' | 'simulate' | 'fallback';
+  };
+  detectedAt: string;
+}
+
+export interface ConnectServerPayload {
+  name: string;
+  provider: CloudProvider;
+  region: string;
+  publicIp: string;
+  privateIp: string;
+  os: string;
+  tags: string[];
+  ssh: {
+    host?: string;
+    port: number;
+    username: string;
+    authType: SshAuthType;
+    password?: string;
+    privateKey?: string;
+    passphrase?: string;
+    verifyMode: SshVerifyMode;
+  };
+}
+
+export interface AuthSession {
+  authenticated: boolean;
+  user?: {
+    username: string;
+    role: string;
+  };
+  profile?: AccountProfile;
+  expiresAt?: string;
+  ttlSeconds?: number;
+}
+
+export interface AccountProfile {
+  displayName: string;
+  avatarText: string;
+}
+
+export interface AccountPayload {
+  session: AuthSession;
+  profile: AccountProfile;
+}
+
+export class AuthRequiredError extends Error {
+  constructor(message = 'AUTH_REQUIRED') {
+    super(message);
+    this.name = 'AuthRequiredError';
+  }
+}
+
+const fallbackOverview: OverviewResponse = {
+  cloudAccounts,
+  servers,
+  operationEvents,
+  summary: {
+    totalServers: servers.length,
+    onlineServers: servers.filter((server) => server.status === 'running').length,
+    openEvents: operationEvents.filter((event) => event.status === 'open').length,
+  },
+};
+
+export async function fetchOverview(fetcher: typeof fetch = fetch): Promise<{ data: OverviewResponse; source: 'api' | 'fallback' }> {
+  try {
+    const response = await fetcher('/api/overview');
+    if (response.status === 401) {
+      throw new AuthRequiredError();
+    }
+    if (!response.ok) {
+      throw new Error(`Overview API returned ${response.status}`);
+    }
+    return { data: (await response.json()) as OverviewResponse, source: 'api' };
+  } catch (error) {
+    if (error instanceof AuthRequiredError) {
+      throw error;
+    }
+    return { data: fallbackOverview, source: 'fallback' };
+  }
+}
+
+export async function fetchAuthSession(fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/auth/session', {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as AuthSession;
+}
+
+export async function login(username: string, password: string, fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ username, password }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as AuthSession;
+}
+
+export async function logout(fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/auth/logout', {
+    method: 'POST',
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as AuthSession;
+}
+
+export async function fetchAccount(fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/account', {
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as AccountPayload;
+}
+
+export async function updateAccountProfile(profile: AccountProfile, fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/account/profile', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(profile),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as { profile: AccountProfile };
+}
+
+export async function changeAccountPassword(
+  currentPassword: string,
+  newPassword: string,
+  fetcher: typeof fetch = fetch,
+) {
+  const response = await fetcher('/api/account/password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as { ok: true; changedAt: string };
+}
+
+export async function fetchConfigSummary(fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/config');
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as ConfigSummaryResponse;
+}
+
+export async function requestAiAnalysis(
+  question: string,
+  provider?: AIProviderConfig,
+  serverId?: string,
+  fetcher: typeof fetch = fetch,
+) {
+  const response = await fetcher('/api/ai/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question, provider, serverId }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as AiAnalysisResponse;
+}
+
+export async function streamAiAnalysis(
+  question: string,
+  provider: AIProviderConfig,
+  serverId: string,
+  onChunk: (chunk: string) => void,
+  options: { forceRefresh?: boolean; messages?: AiChatRequestMessage[]; signal?: AbortSignal } = {},
+  fetcher: typeof fetch = fetch,
+): Promise<AiAnalysisResponse> {
+  const response = await fetcher('/api/ai/stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      question,
+      provider,
+      serverId,
+      forceRefresh: options.forceRefresh === true,
+      messages: options.messages ?? [],
+    }),
+    signal: options.signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  if (!response.body) {
+    throw new Error('AI stream did not return a readable body');
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  const streamState: { result?: AiAnalysisResponse; error?: string } = {};
+
+  const consumeEvent = (eventText: string) => {
+    const dataText = eventText
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith('data:'))
+      .map((line) => line.slice(5).trim())
+      .join('\n');
+
+    if (!dataText) {
+      return;
+    }
+
+    const payload = JSON.parse(dataText) as {
+      type?: 'chunk' | 'done' | 'error';
+      content?: string;
+      result?: AiAnalysisResponse;
+      message?: string;
+    };
+
+    if (payload.type === 'chunk' && payload.content) {
+      onChunk(payload.content);
+    }
+
+    if (payload.type === 'done' && payload.result) {
+      streamState.result = payload.result;
+    }
+
+    if (payload.type === 'error') {
+      streamState.error = payload.message || 'AI stream failed';
+    }
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+    const events = buffer.split('\n\n');
+    buffer = events.pop() ?? '';
+    for (const eventText of events) {
+      consumeEvent(eventText);
+    }
+  }
+
+  buffer += decoder.decode();
+  if (buffer.trim()) {
+    consumeEvent(buffer);
+  }
+
+  if (streamState.error) {
+    throw new Error(streamState.error);
+  }
+
+  if (!streamState.result) {
+    throw new Error('AI stream ended without a final result');
+  }
+
+  return streamState.result;
+}
+
+export async function testAiConnection(provider: AIProviderConfig, fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/ai/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as AiConnectionTestResponse;
+}
+
+export async function fetchAiModels(provider: AIProviderConfig, fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/ai/models', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as AiModelsResponse;
+}
+
+export async function testCustomApi(config: CustomApiConfig, fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/custom-apis/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as CustomApiTestResponse;
+}
+
+export async function remediateSecurityRisk(
+  payload: { type: SecurityRemediationResponse['type']; target: string; note?: string },
+  fetcher: typeof fetch = fetch,
+) {
+  const response = await fetcher('/api/audit/remediate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as SecurityRemediationResponse;
+}
+
+export async function connectServer(payload: ConnectServerPayload, fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/servers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as ServerNode;
+}
+
+export async function inspectServerIdentity(payload: Pick<ConnectServerPayload, 'publicIp' | 'region' | 'os' | 'ssh'>, fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/servers/inspect', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as ServerIdentityResponse;
+}
+
+export async function updateServer(serverId: string, payload: ConnectServerPayload, fetcher: typeof fetch = fetch) {
+  const response = await fetcher(`/api/servers/${encodeURIComponent(serverId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as ServerNode;
+}
+
+export async function deleteServer(serverId: string, fetcher: typeof fetch = fetch) {
+  const response = await fetcher(`/api/servers/${encodeURIComponent(serverId)}`, {
+    method: 'DELETE',
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as { id: string; deleted: boolean };
+}
+
+export async function runServerDiagnostic(serverId: string, fetcher: typeof fetch = fetch) {
+  const response = await fetcher(`/api/servers/${encodeURIComponent(serverId)}/diagnostics`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as ServerDiagnosticResponse;
+}
+
+export async function executeServerAction(
+  serverId: string,
+  action: ServerActionResponse['action'],
+  reason: string,
+  confirmed = false,
+  fetcher: typeof fetch = fetch,
+) {
+  const response = await fetcher('/api/servers/actions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ serverId, action, reason, confirmed }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as ServerActionResponse;
+}
+
+export async function runServerCommand(serverId: string, command: string, fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/servers/commands', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ serverId, command }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as ServerCommandResponse;
+}
+
+export async function streamServerCommand(
+  serverId: string,
+  command: string,
+  onEvent: (event: ServerCommandStreamEvent) => void,
+  options: { signal?: AbortSignal; fetcher?: typeof fetch } = {},
+): Promise<ServerCommandResponse | null> {
+  const fetcher = options.fetcher ?? fetch;
+  const response = await fetcher('/api/servers/commands/stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ serverId, command }),
+    signal: options.signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  if (!response.body) {
+    throw new Error('SSH stream did not return a readable body');
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let result: ServerCommandResponse | null = null;
+  let streamError = '';
+
+  const consumeEvent = (eventText: string) => {
+    const dataText = eventText
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith('data:'))
+      .map((line) => line.slice(5).trim())
+      .join('\n');
+
+    if (!dataText) {
+      return;
+    }
+
+    const payload = JSON.parse(dataText) as ServerCommandStreamEvent;
+    onEvent(payload);
+    if (payload.type === 'done' && payload.result) {
+      result = payload.result;
+    }
+    if (payload.type === 'error') {
+      streamError = payload.message || 'SSH stream command failed';
+    }
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+    const events = buffer.split('\n\n');
+    buffer = events.pop() ?? '';
+    for (const eventText of events) {
+      consumeEvent(eventText);
+    }
+  }
+
+  buffer += decoder.decode();
+  if (buffer.trim()) {
+    consumeEvent(buffer);
+  }
+
+  if (streamError) {
+    throw new Error(streamError);
+  }
+
+  return result;
+}
+
+export async function openServerShell(
+  serverId: string,
+  dimensions: { cols?: number; rows?: number } = {},
+  fetcher: typeof fetch = fetch,
+) {
+  const response = await fetcher('/api/servers/shells', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ serverId, ...dimensions }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as ServerShellResponse;
+}
+
+export async function writeServerShell(sessionId: string, input: string, fetcher: typeof fetch = fetch) {
+  const response = await fetcher(`/api/servers/shells/${encodeURIComponent(sessionId)}/input`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ input }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+}
+
+export async function resizeServerShell(
+  sessionId: string,
+  dimensions: { cols: number; rows: number },
+  fetcher: typeof fetch = fetch,
+) {
+  const response = await fetcher(`/api/servers/shells/${encodeURIComponent(sessionId)}/resize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dimensions),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+}
+
+export async function closeServerShell(sessionId: string, fetcher: typeof fetch = fetch) {
+  const response = await fetcher(`/api/servers/shells/${encodeURIComponent(sessionId)}`, {
+    method: 'DELETE',
+  });
+
+  if (!response.ok && response.status !== 404) {
+    throw new Error(await readApiError(response));
+  }
+}
+
+export function streamServerShell(
+  sessionId: string,
+  onEvent: (event: ServerShellStreamEvent) => void,
+  onError: (error: Error) => void,
+) {
+  const source = new EventSource(`/api/servers/shells/${encodeURIComponent(sessionId)}/stream`);
+  source.onmessage = (event) => {
+    try {
+      onEvent(JSON.parse(event.data) as ServerShellStreamEvent);
+    } catch (error) {
+      onError(error instanceof Error ? error : new Error('Invalid SSH shell stream event'));
+    }
+  };
+  source.onerror = () => {
+    onError(new Error('SSH shell stream disconnected'));
+  };
+  return source;
+}
+
+export async function createOperationTask(payload: OperationTaskRequest, fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/operations/tasks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as OperationTaskResponse;
+}
+
+async function readApiError(response: Response) {
+  try {
+    const body = (await response.json()) as { error?: { message?: string } };
+    return body.error?.message ?? `API returned ${response.status}`;
+  } catch {
+    return `API returned ${response.status}`;
+  }
+}

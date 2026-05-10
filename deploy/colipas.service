@@ -1,0 +1,22 @@
+[Unit]
+Description=CoLiPas multi-cloud server management panel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/colipas
+EnvironmentFile=/opt/colipas/.env
+ExecStart=/usr/bin/npm start
+Restart=on-failure
+RestartSec=5
+User=colipas
+Group=colipas
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/colipas/.data /opt/colipas/prod.current.stdout.log /opt/colipas/prod.current.stderr.log
+
+[Install]
+WantedBy=multi-user.target

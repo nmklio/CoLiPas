@@ -1,0 +1,8 @@
+node_modules/
+dist/
+build/
+.data/
+.playwright-cli/
+output/
+*.log
+*.tsbuildinfo
