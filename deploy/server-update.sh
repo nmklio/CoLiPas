@@ -62,14 +62,11 @@ function replaceAll(pattern, replacement) {
 }
 
 replaceAll(/\/\* colipas landing balanced ui(?: v2)? \*\/[\s\S]*?(?=<\/style>)/g, '');
+replaceAll(/<a class="button github-button" href="https:\/\/github\.com\/nmklio\/CoLiPas"[^>]*>GitHub<\/a>/g, '');
 
 if (!html.includes('https://github.com/nmklio/CoLiPas')) {
   replaceOnce(/<a class="nav-action" href="\/admin\/">([\s\S]*?)<\/a>/, (_match, label) => (
     `<div class="nav-actions"><a class="nav-github" href="https://github.com/nmklio/CoLiPas" target="_blank" rel="noreferrer">GitHub</a><a class="nav-action" href="/admin/">${label}</a></div>`
-  ));
-
-  replaceOnce(/<a class="button" href="#deploy">([\s\S]*?)<\/a>/, (_match, label) => (
-    `<a class="button" href="#deploy">${label}</a><a class="button github-button" href="https://github.com/nmklio/CoLiPas" target="_blank" rel="noreferrer">GitHub</a>`
   ));
 }
 
@@ -228,6 +225,18 @@ replaceOnce('</style>', `/* colipas landing balanced ui v2 */
     min-height: 116px;
     padding: 20px;
   }
+  #features .feature-head {
+    display: block;
+    max-width: 920px;
+    margin-bottom: 30px;
+  }
+  #features .feature-head h2 {
+    max-width: 900px;
+  }
+  #features .feature-head .section-copy {
+    max-width: 760px;
+    margin-top: 14px;
+  }
 }
 @media (min-width: 1280px) {
   .hero { transform: none; }
@@ -255,7 +264,6 @@ replaceOnce('</style>', `/* colipas landing balanced ui v2 */
     font-size: clamp(38px, 11vw, 46px);
     line-height: 1.08;
   }
-  .hero-buttons .github-button { width: 100%; }
   .product-preview {
     border-radius: 14px;
     transform: none;
