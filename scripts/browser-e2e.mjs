@@ -343,13 +343,14 @@ async function assertSshTerminalPanel(targetPage) {
       const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
       return terminalText.includes('hanging until interrupt');
     }, undefined, { timeout: 10000 });
+    const interruptMessage = targetPage.locator('.action-message').filter({ hasText: /sent ctrl\+c/i }).waitFor({ timeout: 7000 });
     await targetPage.getByRole('button', { name: /send ctrl\+c/i }).click();
     await targetPage.getByText(/sending interrupt/i).waitFor({ timeout: 5000 }).catch(() => undefined);
+    await interruptMessage;
     await targetPage.waitForFunction(() => {
       const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
       return terminalText.includes('^C') && terminalText.includes('simulated$');
     }, undefined, { timeout: 5000 });
-    await targetPage.locator('.action-message').filter({ hasText: /sent ctrl\+c/i }).waitFor({ timeout: 5000 });
     await targetPage.keyboard.type('id', { delay: 10 });
     await targetPage.keyboard.press('Enter');
     await targetPage.waitForFunction(() => {
@@ -474,6 +475,12 @@ async function assertMobileConsoleAndMap() {
     await mobilePage.getByRole('button', { name: /open ai chat/i }).click();
     await mobilePage.locator('.ai-dock').waitFor({ timeout: 10000 });
     await assertElementWithinViewport(mobilePage, '.ai-dock', 'mobile AI dock');
+    await mobilePage.getByRole('textbox', { name: /question/i }).fill('Check server memory usage');
+    await mobilePage.getByRole('button', { name: /^send$/i }).click();
+    await mobilePage.locator('.ai-message.user').first().waitFor({ timeout: 10000 });
+    await mobilePage.locator('.ai-message.assistant.done .ai-message-content').first().waitFor({ timeout: 20000 });
+    await assertMobileAiChatLayout(mobilePage);
+    await captureVisualEvidence(mobilePage, 'mobile-ai-dock-chat', ['.ai-dock', '.ai-chat-thread', '.ai-composer']);
     await mobilePage.getByRole('button', { name: /hide ai assistant/i }).click();
     await mobilePage.locator('.ai-dock').waitFor({ state: 'hidden', timeout: 5000 });
 
@@ -655,6 +662,122 @@ async function assertElementWithinViewport(targetPage, selector, label) {
     || box.y + box.height > viewport.height + tolerance
   ) {
     throw new Error(`${label} overflows viewport ${viewport.width}x${viewport.height}: ${JSON.stringify(box)}`);
+  }
+}
+
+async function assertMobileAiChatLayout(targetPage) {
+  const metrics = await targetPage.evaluate(() => {
+    const readBox = (selector) => {
+      const element = document.querySelector(selector);
+      if (!element) {
+        return null;
+      }
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return {
+        selector,
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+        bottom: rect.bottom,
+        right: rect.right,
+        overflow: style.overflow,
+        scrollHeight: element.scrollHeight,
+        clientHeight: element.clientHeight,
+      };
+    };
+
+    const thread = document.querySelector('.ai-chat-thread')?.getBoundingClientRect();
+    const messageIntersections = Array.from(document.querySelectorAll('.ai-chat-thread .ai-message')).map((element) => {
+      const rect = element.getBoundingClientRect();
+      if (!thread) {
+        return null;
+      }
+      const top = Math.max(rect.top, thread.top);
+      const bottom = Math.min(rect.bottom, thread.bottom);
+      const left = Math.max(rect.left, thread.left);
+      const right = Math.min(rect.right, thread.right);
+      return {
+        selector: element.className,
+        x: left,
+        y: top,
+        width: Math.max(0, right - left),
+        height: Math.max(0, bottom - top),
+        bottom,
+        right,
+      };
+    }).filter(Boolean);
+
+    const selectors = [
+      '.ai-dock',
+      '.ai-dock-body',
+      '.ai-live-strip',
+      '.ai-chat-thread',
+      '.ai-composer',
+      '.ai-status-stack',
+    ];
+    return {
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      scrollWidth: document.documentElement.scrollWidth,
+      scrollHeight: document.documentElement.scrollHeight,
+      messageIntersections,
+      boxes: Object.fromEntries(selectors.map((selector) => [selector, readBox(selector)])),
+    };
+  });
+
+  const tolerance = 3;
+  const requireBox = (selector) => {
+    const box = metrics.boxes[selector];
+    if (!box) {
+      throw new Error(`Mobile AI chat layout missing ${selector}`);
+    }
+    return box;
+  };
+  const dock = requireBox('.ai-dock');
+  const body = requireBox('.ai-dock-body');
+  const liveStrip = requireBox('.ai-live-strip');
+  const thread = requireBox('.ai-chat-thread');
+  const composer = requireBox('.ai-composer');
+  const statusStack = metrics.boxes['.ai-status-stack'];
+
+  if (metrics.scrollWidth > metrics.viewport.width + 1) {
+    throw new Error(`Mobile AI chat introduced horizontal overflow: ${metrics.scrollWidth}px > ${metrics.viewport.width}px`);
+  }
+  if (body.overflow !== 'hidden') {
+    throw new Error(`Mobile AI chat body should keep outer overflow hidden, got ${body.overflow}`);
+  }
+  if (thread.overflow !== 'auto') {
+    throw new Error(`Mobile AI chat thread should own message scrolling, got ${thread.overflow}`);
+  }
+  if (dock.y < -tolerance || dock.bottom > metrics.viewport.height + tolerance) {
+    throw new Error(`Mobile AI dock should fit viewport, got ${JSON.stringify(dock)}`);
+  }
+  if (liveStrip.bottom > thread.y + tolerance) {
+    throw new Error(`Mobile AI live strip overlaps chat thread: ${JSON.stringify({ liveStrip, thread })}`);
+  }
+  if (thread.bottom > composer.y + tolerance) {
+    throw new Error(`Mobile AI chat thread overlaps composer: ${JSON.stringify({ thread, composer })}`);
+  }
+  if (statusStack && composer.bottom > statusStack.y + tolerance) {
+    throw new Error(`Mobile AI composer overlaps status stack: ${JSON.stringify({ composer, statusStack })}`);
+  }
+  if ((statusStack?.bottom ?? composer.bottom) > body.bottom + tolerance) {
+    throw new Error(`Mobile AI chat content exceeds dock body: ${JSON.stringify({ body, composer, statusStack })}`);
+  }
+  const visibleMessages = metrics.messageIntersections.filter((box) => box.height > 8 && box.width > 8);
+  if (visibleMessages.length === 0) {
+    throw new Error('Mobile AI chat thread should show at least one clipped message inside its own scroll area');
+  }
+  for (const messageBox of visibleMessages) {
+    if (
+      messageBox.y < thread.y - tolerance
+      || messageBox.bottom > thread.bottom + tolerance
+      || messageBox.x < thread.x - tolerance
+      || messageBox.right > thread.right + tolerance
+    ) {
+      throw new Error(`Mobile AI visible message escapes chat thread: ${JSON.stringify({ messageBox, thread })}`);
+    }
   }
 }
 

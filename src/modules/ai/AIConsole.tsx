@@ -102,6 +102,7 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [newChatReady, setNewChatReady] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const chatThreadRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const newChatTimerRef = useRef<number | null>(null);
   const modelRequestSeqRef = useRef(0);
@@ -192,7 +193,10 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
   }, [activeSessionId, connectionTest, sessions]);
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ block: 'end' });
+    const chatThread = chatThreadRef.current;
+    if (chatThread) {
+      chatThread.scrollTop = chatThread.scrollHeight;
+    }
   }, [activeSession.messages, runningSessionId]);
 
   useEffect(() => {
@@ -468,7 +472,7 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
         </div>
       </div>
 
-      <div className="ai-dock-body">
+      <div className={settingsOpen ? 'ai-dock-body settings-mode' : 'ai-dock-body chat-mode'}>
         {settingsOpen ? (
           <form className="config-panel ai-dock-settings" onSubmit={(event) => event.preventDefault()}>
             <h3><Settings2 size={18} /> {t('ai.llmSettings')}</h3>
@@ -590,7 +594,7 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
               </div>
             )}
 
-            <div className="ai-chat-thread" aria-live="polite">
+            <div className="ai-chat-thread" aria-live="polite" ref={chatThreadRef}>
               {activeSession.messages.length === 0 ? (
                 <div className="ai-empty-panel">
                   <Sparkles size={17} />
@@ -666,19 +670,23 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
                 </div>
               </div>
             </div>
-            {connectionTest && (
-              <div className={connectionTest.ok ? 'ai-connection-chip ok' : 'ai-connection-chip'}>
-                <PlugZap size={14} />
-                <span>{connectionTest.latencyMs} ms / {connectionTest.model}</span>
+            {(connectionTest || modelMessage || error) && (
+              <div className="ai-status-stack">
+                {connectionTest && (
+                  <div className={connectionTest.ok ? 'ai-connection-chip ok' : 'ai-connection-chip'}>
+                    <PlugZap size={14} />
+                    <span>{connectionTest.latencyMs} ms / {connectionTest.model}</span>
+                  </div>
+                )}
+                {modelMessage && (
+                  <div className={modelSource === 'upstream' ? 'ai-connection-chip ok' : 'ai-connection-chip'}>
+                    <RefreshCw size={14} />
+                    <span>{modelMessage}</span>
+                  </div>
+                )}
+                {error && <div className="error-box">{error}</div>}
               </div>
             )}
-            {modelMessage && (
-              <div className={modelSource === 'upstream' ? 'ai-connection-chip ok' : 'ai-connection-chip'}>
-                <RefreshCw size={14} />
-                <span>{modelMessage}</span>
-              </div>
-            )}
-            {error && <div className="error-box">{error}</div>}
           </>
         )}
       </div>
