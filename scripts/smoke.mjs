@@ -3343,10 +3343,14 @@ function assertSshTerminalRealtimeGuards() {
   const appSource = fs.readFileSync(new URL('../src/server/app.ts', import.meta.url), 'utf8');
   const sshServiceSource = fs.readFileSync(new URL('../src/server/services/sshAccessService.ts', import.meta.url), 'utf8');
   const apiClientSource = fs.readFileSync(new URL('../src/services/apiClient.ts', import.meta.url), 'utf8');
+  const viteSource = fs.readFileSync(new URL('../vite.config.ts', import.meta.url), 'utf8');
 
   const requiredFrontendFragments = [
-    "import { Terminal as XTerm",
-    "import { FitAddon } from '@xterm/addon-fit'",
+    "import type { Terminal as XTerm",
+    "import type { FitAddon } from '@xterm/addon-fit'",
+    "import('@xterm/xterm')",
+    "import('@xterm/addon-fit')",
+    "import('@xterm/xterm/css/xterm.css?inline')",
     'openServerShell(server.id, getTerminalDimensions())',
     'streamServerShell(',
     'terminal.write(event.content)',
@@ -3354,6 +3358,10 @@ function assertSshTerminalRealtimeGuards() {
     'writeServerShell(sessionId, data)',
     'resizeServerShell(terminalShellIdRef.current, getTerminalDimensions())',
     "writeServerShell(terminalShellIdRef.current, '\\u0003')",
+    'function closeSshConsole()',
+    'setSshConsoleOpen(false)',
+    'terminalShellServerIdRef.current',
+    'attachExistingTerminal(server)',
     'terminalDataSubscriptionRef.current?.dispose()',
     'terminalResizeObserverRef.current',
     'terminalShellStreamRef.current?.close()',
@@ -3369,6 +3377,16 @@ function assertSshTerminalRealtimeGuards() {
   }
   if (inventorySource.includes('ssh-terminal-input-line') || inventorySource.includes('normalizeInteractiveCommand')) {
     throw new Error('SSH terminal must not use a command-submit input or rewrite interactive command text');
+  }
+  const closeSshConsoleMatch = inventorySource.match(/function closeSshConsole\(\)\s*\{(?<body>[^}]+)\}/);
+  if (!closeSshConsoleMatch?.groups?.body?.includes('setSshConsoleOpen(false)')) {
+    throw new Error('SSH terminal close handler must hide the modal');
+  }
+  if (closeSshConsoleMatch.groups.body.includes('closeActiveShellSession(')) {
+    throw new Error('Closing the SSH panel must hide the modal without disconnecting the active shell');
+  }
+  if (!viteSource.includes("return 'vendor-terminal'")) {
+    throw new Error('xterm runtime must stay in a separate terminal chunk');
   }
 
   const requiredBackendFragments = [

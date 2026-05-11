@@ -1,7 +1,6 @@
 import { FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { Terminal as XTerm, type IDisposable } from '@xterm/xterm';
-import { FitAddon } from '@xterm/addon-fit';
-import '@xterm/xterm/css/xterm.css';
+import type { Terminal as XTerm, IDisposable } from '@xterm/xterm';
+import type { FitAddon } from '@xterm/addon-fit';
 import { ChevronUp, Cpu, Database, Edit3, FileKey2, Globe2, KeyRound, Plus, Power, PowerOff, RotateCcw, Search, Server, ShieldCheck, Terminal, Trash2, X } from 'lucide-react';
 import { Language, useI18n } from '../../i18n';
 import {
@@ -102,11 +101,18 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const terminalRuntimeRef = useRef<Promise<{
+    TerminalCtor: typeof import('@xterm/xterm').Terminal;
+    FitAddonCtor: typeof import('@xterm/addon-fit').FitAddon;
+  }> | null>(null);
   const terminalDataSubscriptionRef = useRef<IDisposable | null>(null);
   const terminalResizeObserverRef = useRef<ResizeObserver | null>(null);
   const terminalResizeTimerRef = useRef<number | null>(null);
   const terminalShellIdRef = useRef<string | null>(null);
+  const terminalShellServerIdRef = useRef<string | null>(null);
   const terminalShellStreamRef = useRef<EventSource | null>(null);
+  const sshConsoleOpenRef = useRef(false);
+  const sshPanelServerIdRef = useRef('');
   const formRef = useRef(form);
   const privateKeyFileRef = useRef<HTMLInputElement | null>(null);
   const identityRequestSeqRef = useRef(0);
@@ -143,20 +149,20 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   }, [form]);
 
   useEffect(() => {
+    sshConsoleOpenRef.current = sshConsoleOpen;
+  }, [sshConsoleOpen]);
+
+  useEffect(() => {
+    sshPanelServerIdRef.current = sshPanelServerId;
+  }, [sshPanelServerId]);
+
+  useEffect(() => {
     if (!sshConsoleOpen || !activeSshServer?.ssh?.connected) {
       return;
     }
 
-    ensureXterm();
     startTerminalLogin(activeSshServer).catch(() => undefined);
   }, [sshConsoleOpen, activeSshServer?.id]);
-
-  useEffect(() => {
-    if (!sshConsoleOpen) {
-      closeActiveShellSession();
-      disposeXterm();
-    }
-  }, [sshConsoleOpen]);
 
   async function runAction(server: ServerNode, action: 'powerOn' | 'shutdown' | 'reboot') {
     const confirmed = confirmServerAction(server, action, language);
@@ -188,6 +194,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     try {
       await deleteServer(server.id);
       if (sshPanelServerId === server.id) {
+        closeActiveShellSession();
+        disposeXterm();
         setSshPanelServerId('');
         setSshConsoleOpen(false);
         setLoginProbe(null);
@@ -913,21 +921,29 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       return;
     }
 
+    if (terminalShellServerIdRef.current && terminalShellServerIdRef.current !== server.id) {
+      closeActiveShellSession();
+      disposeXterm();
+    }
     setSshPanelServerId(server.id);
     setLoginProbe(null);
     setSshConsoleOpen(true);
   }
 
   function closeSshConsole() {
-    closeActiveShellSession();
     setSshConsoleOpen(false);
-    disposeXterm();
   }
 
   async function startTerminalLogin(server: ServerNode) {
-    const terminal = ensureXterm();
+    if (terminalShellIdRef.current && terminalShellServerIdRef.current === server.id) {
+      await attachExistingTerminal(server);
+      return;
+    }
+
+    const terminal = await ensureXterm();
     setSshRunning(true);
     closeActiveShellSession();
+    terminalShellServerIdRef.current = server.id;
     terminal.reset();
     terminal.writeln(`Connecting to ${server.ssh?.username}@${server.ssh?.host}:${server.ssh?.port}...`);
 
@@ -938,6 +954,9 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       const stream = streamServerShell(
         shell.sessionId,
         (event) => {
+          if (sshPanelServerIdRef.current !== server.id) {
+            return;
+          }
           if (event.type === 'stdout' && event.content) {
             terminal.write(event.content);
             return;
@@ -949,17 +968,20 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
           if (event.type === 'close') {
             terminal.writeln('\r\nConnection closed.');
             terminalShellIdRef.current = null;
+            terminalShellServerIdRef.current = null;
             terminalDataSubscriptionRef.current?.dispose();
             terminalDataSubscriptionRef.current = null;
             terminalShellStreamRef.current?.close();
             terminalShellStreamRef.current = null;
           }
           if (event.type === 'error') {
-            terminal.writeln(`\r\n${event.message ?? 'SSH shell stream failed'}`);
+            if (sshConsoleOpenRef.current) {
+              terminal.writeln(`\r\n${event.message ?? 'SSH shell stream failed'}`);
+            }
           }
         },
         (error) => {
-          if (terminalShellIdRef.current) {
+          if (terminalShellIdRef.current && sshConsoleOpenRef.current) {
             terminal.writeln(`\r\n${error.message}`);
           }
         },
@@ -993,12 +1015,68 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     }
   }
 
-  function ensureXterm() {
+  async function attachExistingTerminal(server: ServerNode) {
+    const terminal = await ensureXterm();
+    const sessionId = terminalShellIdRef.current;
+    if (!sessionId) {
+      return;
+    }
+
+    if (!terminalShellStreamRef.current) {
+      const stream = streamServerShell(
+        sessionId,
+        (event) => {
+          if (sshPanelServerIdRef.current !== server.id) {
+            return;
+          }
+          if ((event.type === 'stdout' || event.type === 'stderr') && event.content) {
+            terminal.write(event.content);
+            return;
+          }
+          if (event.type === 'close') {
+            terminal.writeln('\r\nConnection closed.');
+            terminalShellIdRef.current = null;
+            terminalShellServerIdRef.current = null;
+            terminalDataSubscriptionRef.current?.dispose();
+            terminalDataSubscriptionRef.current = null;
+            terminalShellStreamRef.current?.close();
+            terminalShellStreamRef.current = null;
+          }
+          if (event.type === 'error') {
+            if (sshConsoleOpenRef.current) {
+              terminal.writeln(`\r\n${event.message ?? 'SSH shell stream failed'}`);
+            }
+          }
+        },
+        (error) => {
+          if (terminalShellIdRef.current && sshConsoleOpenRef.current) {
+            terminal.writeln(`\r\n${error.message}`);
+          }
+        },
+      );
+      terminalShellStreamRef.current = stream;
+    }
+
+    attachTerminalInput(sessionId);
+    setLoginProbe({
+      host: server.ssh?.host || server.publicIp,
+      user: server.ssh?.username || 'root',
+      pwd: '~',
+      date: new Date().toString(),
+      uname: `${server.os} ${server.publicIp}`,
+    });
+    scheduleTerminalFit(true);
+    window.setTimeout(() => terminal.focus(), 30);
+  }
+
+  async function ensureXterm() {
     if (xtermRef.current) {
+      mountXterm(xtermRef.current);
       return xtermRef.current;
     }
 
-    const terminal = new XTerm({
+    const { TerminalCtor, FitAddonCtor } = await loadTerminalRuntime();
+    const terminal = new TerminalCtor({
       cursorBlink: true,
       convertEol: false,
       fontFamily: '"Cascadia Code", Consolas, "SFMono-Regular", monospace',
@@ -1030,21 +1108,49 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
         brightWhite: '#ffffff',
       },
     });
-    const fitAddon = new FitAddon();
+    const fitAddon = new FitAddonCtor();
     terminal.loadAddon(fitAddon);
     xtermRef.current = terminal;
     fitAddonRef.current = fitAddon;
 
     if (terminalContainerRef.current) {
-      terminal.open(terminalContainerRef.current);
-      scheduleTerminalFit(false);
-      terminal.focus();
-      const resizeObserver = new ResizeObserver(() => scheduleTerminalFit(true));
-      resizeObserver.observe(terminalContainerRef.current);
-      terminalResizeObserverRef.current = resizeObserver;
+      mountXterm(terminal);
     }
 
     return terminal;
+  }
+
+  function mountXterm(terminal: XTerm) {
+    if (!terminalContainerRef.current) {
+      return;
+    }
+
+    if (terminal.element && terminal.element.parentElement !== terminalContainerRef.current) {
+      terminalContainerRef.current.appendChild(terminal.element);
+    } else if (!terminal.element) {
+      terminal.open(terminalContainerRef.current);
+    }
+
+    terminalResizeObserverRef.current?.disconnect();
+    const resizeObserver = new ResizeObserver(() => scheduleTerminalFit(true));
+    resizeObserver.observe(terminalContainerRef.current);
+    terminalResizeObserverRef.current = resizeObserver;
+    scheduleTerminalFit(false);
+    terminal.focus();
+  }
+
+  function loadTerminalRuntime() {
+    if (!terminalRuntimeRef.current) {
+      terminalRuntimeRef.current = Promise.all([
+        import('@xterm/xterm'),
+        import('@xterm/addon-fit'),
+        import('@xterm/xterm/css/xterm.css?inline'),
+      ]).then(([terminalModule, fitModule]) => ({
+        TerminalCtor: terminalModule.Terminal,
+        FitAddonCtor: fitModule.FitAddon,
+      }));
+    }
+    return terminalRuntimeRef.current;
   }
 
   function attachTerminalInput(sessionId: string) {
@@ -1062,6 +1168,9 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     }
     terminalResizeTimerRef.current = window.setTimeout(() => {
       terminalResizeTimerRef.current = null;
+      if (!sshConsoleOpenRef.current) {
+        return;
+      }
       fitTerminal(pushResize);
     }, 20);
   }
@@ -1069,7 +1178,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   function fitTerminal(pushResize: boolean) {
     const terminal = xtermRef.current;
     const fitAddon = fitAddonRef.current;
-    if (!terminal || !fitAddon || !terminalContainerRef.current) {
+    if (!terminal || !fitAddon || !terminalContainerRef.current || !sshConsoleOpenRef.current) {
       return;
     }
 
@@ -1099,6 +1208,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   function closeActiveShellSession() {
     const sessionId = terminalShellIdRef.current;
     terminalShellIdRef.current = null;
+    terminalShellServerIdRef.current = null;
     terminalDataSubscriptionRef.current?.dispose();
     terminalDataSubscriptionRef.current = null;
     terminalShellStreamRef.current?.close();

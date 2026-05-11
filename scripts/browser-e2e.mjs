@@ -285,7 +285,19 @@ async function assertSshTerminalPanel(targetPage) {
     await assertElementWithinViewport(targetPage, '.ssh-console', 'desktop SSH console');
     await targetPage.locator('.ssh-console-header .icon-button').click();
     await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });
-    console.log('ok browser e2e covers interactive xterm SSH terminal');
+    await targetPage.locator('.server-workspace-row').filter({ hasText: sshServer.name }).getByRole('button', { name: /^SSH$/i }).click();
+    await targetPage.locator('.ssh-console').waitFor({ timeout: 10000 });
+    await targetPage.waitForFunction(() => {
+      const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
+      return terminalText.includes('simulated$ whoami') && terminalText.includes('command simulated.');
+    }, undefined, { timeout: 10000 });
+    const reopenedText = await targetPage.locator('.ssh-terminal-screen .xterm-rows').textContent();
+    if (!reopenedText?.includes('simulated$ whoami')) {
+      throw new Error('SSH terminal did not preserve the live shell buffer after closing the panel');
+    }
+    await targetPage.locator('.ssh-console-header .icon-button').click();
+    await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });
+    console.log('ok browser e2e covers interactive xterm SSH terminal and panel reopen persistence');
   } finally {
     await deleteTemporaryAssetServer(targetPage, sshServer.id).catch(() => undefined);
   }
