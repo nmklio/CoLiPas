@@ -53,6 +53,16 @@ function replaceOnce(pattern, replacement) {
   }
 }
 
+function replaceAll(pattern, replacement) {
+  const next = html.replace(pattern, replacement);
+  if (next !== html) {
+    html = next;
+    changed = true;
+  }
+}
+
+replaceAll(/\/\* colipas landing balanced ui(?: v2)? \*\/[\s\S]*?(?=<\/style>)/g, '');
+
 if (!html.includes('https://github.com/nmklio/CoLiPas')) {
   replaceOnce(/<a class="nav-action" href="\/admin\/">([\s\S]*?)<\/a>/, (_match, label) => (
     `<div class="nav-actions"><a class="nav-github" href="https://github.com/nmklio/CoLiPas" target="_blank" rel="noreferrer">GitHub</a><a class="nav-action" href="/admin/">${label}</a></div>`
@@ -62,6 +72,10 @@ if (!html.includes('https://github.com/nmklio/CoLiPas')) {
     `<a class="button" href="#deploy">${label}</a><a class="button github-button" href="https://github.com/nmklio/CoLiPas" target="_blank" rel="noreferrer">GitHub</a>`
   ));
 }
+
+replaceOnce(/(<section class="hero wrap">[\s\S]*?)<h1>[\s\S]*?<\/h1>/, (_match, prefix) => (
+  `${prefix}<h1><span class="hero-title-main">多云服务器管理面板</span><span class="hero-title-accent">接入、监控、修复一体化</span></h1>`
+));
 
 if (!html.includes('.nav-actions {')) {
   replaceOnce('.nav-action {', `.nav-actions {
@@ -102,49 +116,160 @@ if (!html.includes('@media (max-width: 640px) {\n  .nav-actions')) {
   }`);
 }
 
-if (!html.includes('/* colipas landing balanced ui */')) {
-  replaceOnce('</style>', `/* colipas landing balanced ui */
+replaceOnce('</style>', `/* colipas landing balanced ui v2 */
 @media (min-width: 981px) {
-  .wrap { width: min(1060px, calc(100% - 56px)); }
-  .nav { height: 74px; }
-  .hero {
-    min-height: calc(100vh - 74px);
-    padding: clamp(54px, 7vh, 78px) 0 56px;
-    grid-template-columns: minmax(0, .96fr) minmax(380px, .86fr);
-    gap: clamp(44px, 6vw, 74px);
+  .nav { height: 72px; }
+  .nav-inner,
+  .wrap {
+    width: min(1200px, calc(100% - 64px));
   }
+  .nav-inner {
+    grid-template-columns: minmax(180px, 1fr) auto minmax(220px, 1fr);
+    gap: 30px;
+  }
+  .nav-actions {
+    justify-self: end;
+    gap: 10px;
+  }
+  .nav-github,
+  .nav-action {
+    min-height: 42px;
+    padding: 0 18px;
+    border-radius: 10px;
+  }
+  .hero {
+    min-height: clamp(590px, calc(100vh - 210px), 680px);
+    padding: clamp(36px, 5.2vh, 60px) 0 34px;
+    grid-template-columns: minmax(0, 1fr) minmax(420px, 488px);
+    gap: clamp(40px, 5vw, 58px);
+    align-items: center;
+    transform: none;
+  }
+  .hero > div:first-child { min-width: 0; }
   h1 {
-    max-width: 580px;
-    font-size: clamp(48px, 4.45vw, 64px);
-    line-height: 1.02;
+    max-width: 680px;
+    margin: 24px 0 18px;
+    font-size: clamp(48px, 4.2vw, 62px);
+    line-height: 1.04;
+    text-wrap: balance;
+  }
+  h1 .hero-title-main,
+  h1 .hero-title-accent {
+    display: block;
+  }
+  h1 .hero-title-main {
+    color: var(--ink);
+  }
+  h1 .hero-title-accent {
+    color: var(--blue);
   }
   .lead {
-    max-width: 560px;
+    max-width: 620px;
     font-size: 16px;
-    line-height: 1.72;
+    line-height: 1.75;
+  }
+  .hero-buttons {
+    margin-top: 30px;
   }
   .product-preview {
-    max-width: 520px;
+    width: min(100%, 488px);
+    max-width: 488px;
     justify-self: end;
+    transform: translateY(2px);
+  }
+  .preview-top {
+    height: 46px;
   }
   .mini-console {
-    min-height: 284px;
-    grid-template-columns: .94fr 1.06fr;
+    min-height: 286px;
+    grid-template-columns: .92fr 1.08fr;
+  }
+  .mini-sidebar,
+  .mini-panel {
+    padding: 24px;
   }
   .stats {
-    max-width: 520px;
-    margin-top: 32px;
+    max-width: 620px;
+    margin-top: 28px;
+    padding-top: 22px;
+  }
+  .section {
+    padding: 74px 0;
+  }
+  #product.section {
+    padding-top: 44px;
+  }
+  #product .split {
+    grid-template-columns: minmax(0, .9fr) minmax(360px, .74fr);
+    gap: 36px;
+    align-items: center;
+    padding-top: 8px;
+  }
+  #product h2 {
+    max-width: 680px;
+    font-size: clamp(32px, 2.85vw, 40px);
+    line-height: 1.14;
+    word-break: keep-all;
+    overflow-wrap: normal;
+  }
+  #product .section-copy {
+    max-width: 480px;
+    justify-self: end;
+    padding: 0 0 0 22px;
+    border-left: 4px solid var(--blue);
+    background: transparent;
+    box-shadow: none;
+  }
+  .position-grid {
+    margin-top: 24px;
+    gap: 16px;
+  }
+  .position-card {
+    min-height: 116px;
+    padding: 20px;
   }
 }
 @media (min-width: 1280px) {
-  .hero { transform: translateY(-10px); }
+  .hero { transform: none; }
+}
+@media (max-width: 1100px) and (min-width: 981px) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr) minmax(380px, 440px);
+    gap: 38px;
+  }
+}
+@media (max-width: 980px) {
+  .hero {
+    padding: 46px 0 48px;
+  }
+  h1 {
+    text-wrap: balance;
+  }
 }
 @media (max-width: 640px) {
+  .nav-github,
+  .nav-action {
+    width: 100%;
+  }
+  h1 {
+    font-size: clamp(38px, 11vw, 46px);
+    line-height: 1.08;
+  }
   .hero-buttons .github-button { width: 100%; }
-  .product-preview { border-radius: 14px; }
+  .product-preview {
+    border-radius: 14px;
+    transform: none;
+  }
+  #product .section-copy {
+    max-width: none;
+    padding: 0;
+    border-left: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
 }
 </style>`);
-}
 
 if (!html.includes('https://github.com/nmklio/CoLiPas')) {
   throw new Error(`Unable to add GitHub link to ${file}`);
