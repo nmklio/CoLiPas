@@ -10,6 +10,17 @@ LANDING_ROOT="${COLIPAS_LANDING_ROOT:-/var/www/colipas-landing}"
 SSL_CERTIFICATE="${COLIPAS_SSL_CERTIFICATE:-/etc/letsencrypt/live/$SERVER_NAME/fullchain.pem}"
 SSL_CERTIFICATE_KEY="${COLIPAS_SSL_CERTIFICATE_KEY:-/etc/letsencrypt/live/$SERVER_NAME/privkey.pem}"
 RELEASE_VERIFY_TOKEN_VALUE=""
+PUBLIC_URL="${RELEASE_PUBLIC_URL:-https://$SERVER_NAME}"
+
+if [ -z "${COLIPAS_SERVER_NAME:-}" ] && [ -n "${RELEASE_PUBLIC_URL:-}" ]; then
+  derived_server_name="$(printf '%s' "$RELEASE_PUBLIC_URL" | sed -E 's#^[a-zA-Z][a-zA-Z0-9+.-]*://##; s#/.*$##; s#:[0-9]+$##')"
+  if [ -n "$derived_server_name" ]; then
+    SERVER_NAME="$derived_server_name"
+    SSL_CERTIFICATE="${COLIPAS_SSL_CERTIFICATE:-/etc/letsencrypt/live/$SERVER_NAME/fullchain.pem}"
+    SSL_CERTIFICATE_KEY="${COLIPAS_SSL_CERTIFICATE_KEY:-/etc/letsencrypt/live/$SERVER_NAME/privkey.pem}"
+  fi
+fi
+PUBLIC_URL="${RELEASE_PUBLIC_URL:-https://$SERVER_NAME}"
 
 run_as_app() {
   if [ "$(id -u)" -eq 0 ]; then
@@ -1137,7 +1148,7 @@ write_release_evidence_env() {
       printf 'RELEASE_TARGET_NAME=%s\n' "$SERVER_NAME"
       printf 'RELEASE_CHANNEL=%s\n' "production"
       printf 'RELEASE_DEPLOYMENT_MODE=%s\n' "systemd"
-      printf 'RELEASE_PUBLIC_URL=%s\n' "https://$SERVER_NAME"
+      printf 'RELEASE_PUBLIC_URL=%s\n' "$PUBLIC_URL"
       printf 'RELEASE_GIT_COMMIT=%s\n' "$commit_sha"
       printf 'RELEASE_ARTIFACT_ID=%s\n' "systemd-$BRANCH"
       printf 'RELEASE_DEPLOYED_AT=%s\n' "$deployed_at"
