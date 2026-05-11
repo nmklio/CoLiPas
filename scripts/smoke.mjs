@@ -3390,7 +3390,8 @@ function assertServerStatusLifecycleGuards() {
   const requiredTraceFragments = [
     'onAuditTraceOpen?: (correlationId: string) => void',
     'const [lastActionTraceId, setLastActionTraceId] = useState(\'\')',
-    'setLastActionTraceId(result.correlationId)',
+    '{ traceId: result.correlationId }',
+    'setLastActionTraceId(options.traceId ?? \'\')',
     'onAuditTraceOpen?.(lastActionTraceId)',
     "t('common.viewTrace')",
     'action-trace-box',
@@ -3452,7 +3453,7 @@ function assertSshTerminalRealtimeGuards() {
     'setLoginProbe(null)',
     'setSshRunning(false)',
     'setSshInterrupting(false)',
-    "setActionMessage(t('servers.sshDisconnectedMessage'",
+    "showActionMessage(t('servers.sshDisconnectedMessage'",
     'terminalShellServerIdRef.current',
     'terminalDataSubscriptionRef.current?.dispose()',
     'terminalResizeObserverRef.current',

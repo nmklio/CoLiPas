@@ -359,7 +359,9 @@ async function assertSshTerminalPanel(targetPage) {
     await assertElementWithinViewport(targetPage, '.ssh-console', 'desktop SSH console');
     await targetPage.getByRole('button', { name: /disconnect/i }).click();
     await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });
-    await targetPage.locator('.action-message').filter({ hasText: /disconnected/i }).waitFor({ timeout: 5000 });
+    const disconnectMessage = targetPage.locator('.action-message').filter({ hasText: /disconnected/i });
+    await disconnectMessage.waitFor({ timeout: 5000 });
+    await disconnectMessage.waitFor({ state: 'hidden', timeout: 7000 });
     await targetPage.waitForFunction(async () => {
       const response = await fetch('/api/servers/shells/status');
       const status = await response.json();
@@ -377,7 +379,9 @@ async function assertSshTerminalPanel(targetPage) {
     }
     await targetPage.locator('.ssh-console-header .icon-button').click();
     await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });
-    await targetPage.locator('.action-message').filter({ hasText: /disconnected/i }).waitFor({ timeout: 5000 });
+    const closeMessage = targetPage.locator('.action-message').filter({ hasText: /disconnected/i });
+    await closeMessage.waitFor({ timeout: 5000 });
+    await closeMessage.waitFor({ state: 'hidden', timeout: 7000 });
     await targetPage.waitForFunction(async () => {
       const response = await fetch('/api/servers/shells/status');
       const status = await response.json();

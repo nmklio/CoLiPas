@@ -36,6 +36,8 @@ const statuses: Array<Extract<ServerStatus, 'running' | 'stopped' | 'unconnected
 const baseProviders = [...baseCloudProviders];
 const customProvider = customProviderFilterValue;
 const customProviderOption = '__custom__';
+const actionMessageAutoDismissMs = 4500;
+const actionTraceMessageAutoDismissMs = 10000;
 
 const actionCommands: Record<'powerOn' | 'shutdown' | 'reboot', string> = {
   powerOn: 'printf "server reachable via SSH\\n"; uptime',
@@ -117,6 +119,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const terminalShellServerIdRef = useRef<string | null>(null);
   const terminalShellStreamRef = useRef<EventSource | null>(null);
   const terminalCssInjectedRef = useRef(false);
+  const actionMessageTimerRef = useRef<number | null>(null);
   const sshConsoleOpenRef = useRef(false);
   const sshPanelServerIdRef = useRef('');
   const terminalLifecycleSeqRef = useRef(0);
@@ -203,23 +206,23 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     return () => window.clearInterval(timer);
   }, [sshConsoleOpen, terminalShellId]);
 
+  useEffect(() => () => clearActionMessageTimer(), []);
+
   async function runAction(server: ServerNode, action: 'powerOn' | 'shutdown' | 'reboot') {
     const confirmed = confirmServerAction(server, action, language);
     if (!confirmed) {
       return;
     }
 
-    setActionMessage('');
-    setLastActionTraceId('');
+    clearActionMessage();
     try {
       const result = await executeServerAction(server.id, action, `operator requested ${action}`, true);
-      setActionMessage(t('servers.actionDone', { name: result.serverName, action: actionLabel(action) }));
-      setLastActionTraceId(result.correlationId);
+      showActionMessage(t('servers.actionDone', { name: result.serverName, action: actionLabel(action) }), { traceId: result.correlationId });
       if (sshConsoleOpen && activeSshServer?.id === server.id) {
         appendTerminalOutput(actionCommands[action], result.output || `${actionLabel(action)} executed`);
       }
     } catch (error) {
-      setActionMessage(error instanceof Error ? error.message : 'action failed');
+      showActionMessage(error instanceof Error ? error.message : 'action failed');
     }
   }
 
@@ -229,7 +232,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       return;
     }
 
-    setActionMessage('');
+    clearActionMessage();
     try {
       await deleteServer(server.id);
       if (sshPanelServerId === server.id) {
@@ -239,17 +242,17 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
         setSshConsoleOpen(false);
         setLoginProbe(null);
       }
-      setActionMessage(t('servers.deleted', { name: server.name }));
+      showActionMessage(t('servers.deleted', { name: server.name }));
       await onServerConnected();
     } catch (error) {
-      setActionMessage(error instanceof Error ? error.message : 'delete failed');
+      showActionMessage(error instanceof Error ? error.message : 'delete failed');
     }
   }
 
   async function handleConnect(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setConnecting(true);
-    setActionMessage('');
+    clearActionMessage();
     try {
       const basePayload = {
         ...form,
@@ -278,10 +281,10 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
           ? t('servers.registered')
           : t('servers.connected');
       resetForm();
-      setActionMessage(successMessage);
+      showActionMessage(successMessage);
       await onServerConnected();
     } catch (error) {
-      setActionMessage(error instanceof Error ? error.message : 'connect failed');
+      showActionMessage(error instanceof Error ? error.message : 'connect failed');
     } finally {
       setConnecting(false);
     }
@@ -795,7 +798,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     }
 
     if (file.size > 64 * 1024) {
-      setActionMessage(t('servers.privateKeyFileTooLarge'));
+      showActionMessage(t('servers.privateKeyFileTooLarge'));
       if (privateKeyFileRef.current) {
         privateKeyFileRef.current.value = '';
       }
@@ -805,9 +808,9 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     try {
       const text = await file.text();
       setSshField('privateKey', text.trim());
-      setActionMessage(t('servers.privateKeyImported', { name: file.name }));
+      showActionMessage(t('servers.privateKeyImported', { name: file.name }));
     } catch {
-      setActionMessage(t('servers.privateKeyImportFailed'));
+      showActionMessage(t('servers.privateKeyImportFailed'));
     } finally {
       if (privateKeyFileRef.current) {
         privateKeyFileRef.current.value = '';
@@ -949,7 +952,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     setProviderMode(isBaseProvider ? server.provider : customProviderOption);
     setCustomProviderName(isBaseProvider ? customProvider : server.provider);
     setTagsText(server.tags.join(', '));
-    setActionMessage('');
+    clearActionMessage();
     setFormDismissed(false);
     setFormOpen(true);
     setForm({
@@ -976,7 +979,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
 
   function openSshConsole(server: ServerNode) {
     if (!server.ssh?.connected) {
-      setActionMessage(t('servers.selectVerifiedFirst'));
+      showActionMessage(t('servers.selectVerifiedFirst'));
       return;
     }
 
@@ -1007,7 +1010,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     setSshRunning(false);
     setSshInterrupting(false);
     if (serverName) {
-      setActionMessage(t('servers.sshDisconnectedMessage', { name: serverName }));
+      showActionMessage(t('servers.sshDisconnectedMessage', { name: serverName }));
     }
     window.setTimeout(refreshShellStatus, 200);
   }
@@ -1094,7 +1097,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       };
 
       setLoginProbe(mergedProbe);
-      setActionMessage(t('servers.sshConnectedMessage', { name: server.name }));
+      showActionMessage(t('servers.sshConnectedMessage', { name: server.name }));
       scheduleTerminalFit(true);
       terminal.scrollToBottom();
       window.setTimeout(() => terminal.focus(), 30);
@@ -1108,7 +1111,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       });
       terminal.reset();
       terminal.writeln(error instanceof Error ? error.message : 'SSH login failed');
-      setActionMessage(error instanceof Error ? error.message : 'SSH login failed');
+      showActionMessage(error instanceof Error ? error.message : 'SSH login failed');
     } finally {
       setSshRunning(false);
     }
@@ -1330,16 +1333,16 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     const selectedText = terminal.getSelection();
     const text = selectedText.trim() ? selectedText : getVisibleTerminalText(terminal);
     if (!text.trim()) {
-      setActionMessage(t('servers.terminalCopyEmpty'));
+      showActionMessage(t('servers.terminalCopyEmpty'));
       terminal.focus();
       return;
     }
 
     try {
       await writeClipboardText(text);
-      setActionMessage(t('servers.terminalCopied'));
+      showActionMessage(t('servers.terminalCopied'));
     } catch {
-      setActionMessage(t('servers.terminalCopyFailed'));
+      showActionMessage(t('servers.terminalCopyFailed'));
     } finally {
       terminal.focus();
     }
@@ -1352,26 +1355,26 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     }
 
     terminal.clear();
-    setActionMessage(t('servers.terminalCleared'));
+    showActionMessage(t('servers.terminalCleared'));
     terminal.focus();
   }
 
   function interruptTerminalCommand() {
     const sessionId = terminalShellId;
     if (!sessionId) {
-      setActionMessage(t('servers.sshInterruptUnavailable'));
+      showActionMessage(t('servers.sshInterruptUnavailable'));
       return;
     }
 
     setSshInterrupting(true);
     writeServerShell(sessionId, '\u0003')
       .then(() => {
-        setActionMessage(t('servers.sshInterruptSent'));
+        showActionMessage(t('servers.sshInterruptSent'));
         refreshShellStatus();
         xtermRef.current?.focus();
       })
       .catch((error) => {
-        setActionMessage(error instanceof Error ? error.message : 'SSH interrupt failed');
+        showActionMessage(error instanceof Error ? error.message : 'SSH interrupt failed');
       })
       .finally(() => {
         setSshInterrupting(false);
@@ -1425,6 +1428,34 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       closeServerShell(sessionId)
         .catch(() => undefined)
         .finally(() => refreshShellStatus());
+    }
+  }
+
+  function showActionMessage(message: string, options: { traceId?: string; autoDismissMs?: number | null } = {}) {
+    clearActionMessageTimer();
+    setActionMessage(message);
+    setLastActionTraceId(options.traceId ?? '');
+
+    const autoDismissMs = options.autoDismissMs ?? (options.traceId ? actionTraceMessageAutoDismissMs : actionMessageAutoDismissMs);
+    if (message && autoDismissMs !== null && autoDismissMs > 0) {
+      actionMessageTimerRef.current = window.setTimeout(() => {
+        setActionMessage('');
+        setLastActionTraceId('');
+        actionMessageTimerRef.current = null;
+      }, autoDismissMs);
+    }
+  }
+
+  function clearActionMessage() {
+    clearActionMessageTimer();
+    setActionMessage('');
+    setLastActionTraceId('');
+  }
+
+  function clearActionMessageTimer() {
+    if (actionMessageTimerRef.current !== null) {
+      window.clearTimeout(actionMessageTimerRef.current);
+      actionMessageTimerRef.current = null;
     }
   }
 
