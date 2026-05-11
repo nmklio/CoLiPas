@@ -44,6 +44,7 @@ import {
   logout,
   updateAccountProfile,
 } from '../services/apiClient';
+import type { ServerNode } from '../types';
 
 type SectionId = 'overview' | 'servers' | 'operations' | 'ai' | 'api' | 'security';
 
@@ -310,14 +311,38 @@ export function App() {
   }, [filters.region, filters.regionScope, overview.servers]);
 
   const filteredServers = useMemo(() => filterServers(overview.servers, filters), [filters, overview.servers]);
-  const onlineCount = overview.servers.filter((server) => resolveServerLifecycleStatus(server) === 'running').length;
-  const avgCpu = overview.servers.length > 0
-    ? Math.round(overview.servers.reduce((total, item) => total + item.cpu, 0) / overview.servers.length)
-    : 0;
-  const connectedCount = overview.servers.filter((server) => server.ssh?.connected).length;
-  const openEventCount = overview.operationEvents.filter((event) => event.status === 'open').length;
-  const busiestServer = [...overview.servers]
-    .sort((left, right) => Math.max(right.cpu, right.memory, right.disk) - Math.max(left.cpu, left.memory, left.disk))[0];
+  const overviewStats = useMemo(() => {
+    let online = 0;
+    let connected = 0;
+    let cpuTotal = 0;
+    let busiest: ServerNode | undefined;
+    let busiestLoad = -1;
+
+    for (const server of overview.servers) {
+      if (resolveServerLifecycleStatus(server) === 'running') {
+        online += 1;
+      }
+      if (server.ssh?.connected) {
+        connected += 1;
+      }
+      cpuTotal += server.cpu;
+
+      const load = Math.max(server.cpu, server.memory, server.disk);
+      if (load > busiestLoad) {
+        busiest = server;
+        busiestLoad = load;
+      }
+    }
+
+    return {
+      onlineCount: online,
+      avgCpu: overview.servers.length > 0 ? Math.round(cpuTotal / overview.servers.length) : 0,
+      connectedCount: connected,
+      openEventCount: overview.operationEvents.reduce((count, event) => count + (event.status === 'open' ? 1 : 0), 0),
+      busiestServer: busiest,
+    };
+  }, [overview.operationEvents, overview.servers]);
+  const { onlineCount, avgCpu, connectedCount, openEventCount, busiestServer } = overviewStats;
   const timeLocale = getLocale(language);
   const sessionIdentity = session?.user?.username?.trim() ?? '';
   const accountDisplayLabel = profile.displayName || sessionIdentity || 'CoLiPas';

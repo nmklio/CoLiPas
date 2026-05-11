@@ -104,6 +104,13 @@ try {
       PUBLIC_PAGES_MODE: 'admin',
     },
   });
+  await run(process.execPath, ['scripts/performance-check.mjs'], {
+    env: {
+      ...process.env,
+      PERF_BASE_URL: baseUrl,
+      PERF_ADMIN_PASSWORD: 'NextPassword123',
+    },
+  });
   await run(process.execPath, ['scripts/concurrency-check.mjs'], {
     env: {
       ...process.env,

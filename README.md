@@ -94,6 +94,7 @@ npm run dev          # Vite frontend dev server
 npm run dev:server   # Express API watcher
 npm run build        # client + server build
 npm run smoke        # smoke checks against an existing server
+npm run perf         # browser timing check against an existing server
 npm test             # production build + temporary smoke environment
 npm start            # production server
 ```
@@ -124,6 +125,26 @@ Create `.env` from `.env.example` and replace every default before exposing the 
 ## Production Deploy
 
 CoLiPas can be deployed either as a Docker service or as a native Linux systemd service. Both modes expose one production HTTP service on `8080`; put Nginx, Caddy, or your cloud load balancer in front for HTTPS.
+
+### One-click Linux
+
+Use the one-click script on a fresh Linux host when you want a guarded default install without copying commands by hand. The default mode is Docker Compose; it writes secrets only to the server-side `.env`, keeps runtime data in the Docker volume, and never commits those values back to Git.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo bash
+```
+
+Common options:
+
+```bash
+sudo env \
+  COLIPAS_PUBLIC_URL='https://colipas.example.com' \
+  COLIPAS_ADMIN_PASSWORD='ChangeThisStrongPassword123' \
+  COLIPAS_DEPLOY_MODE=docker \
+  bash scripts/one-click-deploy.sh
+```
+
+For native systemd instead of Docker, set `COLIPAS_DEPLOY_MODE=native`. If `COLIPAS_APP_DIR` already exists and is not a CoLiPas git checkout, the script stops before replacing it; set `COLIPAS_ASSUME_YES=1` only when that directory is safe to overwrite.
 
 ### Docker Compose
 
@@ -353,6 +374,14 @@ npm test
 ```
 
 The smoke suite covers authentication, profile/password changes, protected APIs, SQLite persistence, AI streaming and cache behavior, model loading, custom API SSRF guards, SSH terminal contracts, server lifecycle logic, operations target validation, security remediation, dashboard map interaction guards, and production build output.
+
+For UI smoothness checks against a running production server, use:
+
+```bash
+PERF_BASE_URL=http://127.0.0.1:18080 PERF_ADMIN_PASSWORD=admin123456 npm run perf
+```
+
+The performance check measures login, section switching, map interaction, browser console errors, and Chromium long-task duration. It is a measurement guard, not a replacement for `npm test`.
 
 ## Notes
 

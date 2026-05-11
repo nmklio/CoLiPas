@@ -74,11 +74,11 @@ const initialForm: ConnectServerPayload = {
 
 export function ServerInventory({ allServers, servers, filters, onFiltersChange, onServerConnected, onAuditTraceOpen }: ServerInventoryProps) {
   const { language, t } = useI18n();
-  const regions = Array.from(new Set(allServers.map((server) => server.region))).sort();
+  const regions = useMemo(() => Array.from(new Set(allServers.map((server) => server.region))).sort(), [allServers]);
   const scopedRegions = (filters.regionScope ?? []).filter(
     (region, index, items) => region.trim() && items.findIndex((item) => item.trim().toLowerCase() === region.trim().toLowerCase()) === index,
   );
-  const providerFilters = buildProviderOptions(allServers.map((server) => server.provider));
+  const providerFilters = useMemo(() => buildProviderOptions(allServers.map((server) => server.provider)), [allServers]);
   const providerDisplayName = (provider: string) => formatProviderName(provider, t);
   const providerFilterName = (provider: string) => formatProviderFilterName(provider, t);
   const [actionMessage, setActionMessage] = useState('');
@@ -122,16 +122,37 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const visibleConnectedServers = useMemo(() => servers.filter((server) => server.ssh?.connected), [servers]);
   const visibleServerRows = useMemo(() => servers.slice(0, visibleServerLimit), [servers, visibleServerLimit]);
   const hiddenServerCount = Math.max(servers.length - visibleServerRows.length, 0);
-  const activeSshServer = allServers.find((server) => server.id === sshPanelServerId) ?? null;
-  const visibleMaxLoadServer = useMemo(
-    () => [...servers].sort((left, right) => maxServerLoad(right) - maxServerLoad(left))[0],
-    [servers],
-  );
-  const visibleProviderCount = new Set(servers.map((server) => server.provider)).size;
-  const visibleRegionCount = new Set(servers.map((server) => server.region)).size;
-  const visibleAvgLoad = servers.length > 0
-    ? Math.round(servers.reduce((total, server) => total + Math.max(server.cpu, server.memory, server.disk), 0) / servers.length)
-    : 0;
+  const activeSshServer = useMemo(() => allServers.find((server) => server.id === sshPanelServerId) ?? null, [allServers, sshPanelServerId]);
+  const visibleSummary = useMemo(() => {
+    let maxLoadServer: ServerNode | undefined;
+    let maxLoad = -1;
+    let loadTotal = 0;
+    const providers = new Set<string>();
+    const serverRegions = new Set<string>();
+
+    for (const server of servers) {
+      providers.add(server.provider);
+      serverRegions.add(server.region);
+
+      const load = maxServerLoad(server);
+      loadTotal += load;
+      if (load > maxLoad) {
+        maxLoad = load;
+        maxLoadServer = server;
+      }
+    }
+
+    return {
+      maxLoadServer,
+      providerCount: providers.size,
+      regionCount: serverRegions.size,
+      avgLoad: servers.length > 0 ? Math.round(loadTotal / servers.length) : 0,
+    };
+  }, [servers]);
+  const visibleMaxLoadServer = visibleSummary.maxLoadServer;
+  const visibleProviderCount = visibleSummary.providerCount;
+  const visibleRegionCount = visibleSummary.regionCount;
+  const visibleAvgLoad = visibleSummary.avgLoad;
   const regionScopeKey = scopedRegions.join('|');
 
   useEffect(() => () => {

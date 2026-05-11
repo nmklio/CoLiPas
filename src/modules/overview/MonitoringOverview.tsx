@@ -148,6 +148,10 @@ const regionLocations: Array<{ aliases: string[]; location: RegionLocation }> = 
   { aliases: ['cape town', 'south africa', 'af-south-1', '开普敦', '南非'], location: { lat: -33.9249, lng: 18.4241, countryId: '710' } },
   { aliases: ['us', 'usa', 'u-s', 'u-s-a', 'united states', 'united states of america', 'america', '美国', '美國', '米国', 'アメリカ'], location: { lat: 39.8283, lng: -98.5795, countryId: '840' } },
 ];
+const normalizedRegionLocations = regionLocations.map(({ aliases, location }) => ({
+  location,
+  aliases: aliases.map((alias) => normalizeRegion(alias)),
+}));
 
 const fallbackLocation: RegionLocation = { lat: 18, lng: 0, countryId: '', matched: false };
 
@@ -161,22 +165,20 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, onReg
   const [selectedRegionName, setSelectedRegionName] = useState('');
   const [hoveredCountry, setHoveredCountry] = useState<CountryHover | null>(null);
   const [pinnedCountry, setPinnedCountry] = useState<CountryHover | null>(null);
-  const openEvents = events.filter((event) => event.status === 'open');
-  const criticalEvents = openEvents.filter((event) => event.severity === 'critical').length;
-  const warningServers = servers.filter((server) => server.status === 'warning').length;
-  const connectedServers = servers.filter((server) => server.ssh?.connected).length;
+  const overviewStats = useMemo(() => buildOverviewStats(servers, events), [events, servers]);
   const regions = useMemo(() => buildRegionNodes(servers), [servers]);
-  const visibleRegions = regions.length ? regions : [buildEmptyRegionNode(t('overview.pendingRegion'), t('overview.noAssetProvider'))];
-  const mapRegions = regions.length ? regions : [];
-  const activeCountryIds = new Set(mapRegions.flatMap((region) => region.countryIds));
-  const regionsByCountryId = buildCountryRegionMap(mapRegions);
+  const visibleRegions = useMemo(
+    () => (regions.length ? regions : [buildEmptyRegionNode(t('overview.pendingRegion'), t('overview.noAssetProvider'))]),
+    [regions, t],
+  );
+  const mapRegions = useMemo(() => (regions.length ? regions : []), [regions]);
+  const activeCountryIds = useMemo(() => new Set(mapRegions.flatMap((region) => region.countryIds)), [mapRegions]);
+  const regionsByCountryId = useMemo(() => buildCountryRegionMap(mapRegions), [mapRegions]);
   const selectedRegion = visibleRegions.find((region) => region.region === selectedRegionName) ?? visibleRegions[0];
   const visibleCountryPopup = hoveredCountry ?? pinnedCountry;
   const visibleTooltipAnchor = visibleCountryPopup ? getTooltipViewportAnchor(visibleCountryPopup) : null;
   const tooltipIsPinned = Boolean(pinnedCountry && visibleCountryPopup && pinnedCountry.title === visibleCountryPopup.title);
-  const busiestServers = [...servers]
-    .sort((left, right) => Math.max(right.cpu, right.memory, right.disk) - Math.max(left.cpu, left.memory, left.disk))
-    .slice(0, 5);
+  const { openEvents, criticalEvents, warningServers, connectedServers, busiestServers } = overviewStats;
 
   useEffect(() => {
     const mapElement = mapRef.current;
@@ -707,6 +709,52 @@ function buildCountryRegionMap(regions: RegionNode[]) {
   return map;
 }
 
+function buildOverviewStats(servers: ServerNode[], events: OperationEvent[]) {
+  const openEvents = [];
+  let criticalEvents = 0;
+  let warningServers = 0;
+  let connectedServers = 0;
+  const busiestServers: Array<{ server: ServerNode; load: number }> = [];
+
+  for (const event of events) {
+    if (event.status !== 'open') {
+      continue;
+    }
+    openEvents.push(event);
+    if (event.severity === 'critical') {
+      criticalEvents += 1;
+    }
+  }
+
+  for (const server of servers) {
+    if (server.status === 'warning') {
+      warningServers += 1;
+    }
+    if (server.ssh?.connected) {
+      connectedServers += 1;
+    }
+
+    const load = Math.max(server.cpu, server.memory, server.disk);
+    const insertAt = busiestServers.findIndex((item) => load > item.load);
+    if (insertAt >= 0) {
+      busiestServers.splice(insertAt, 0, { server, load });
+    } else if (busiestServers.length < 5) {
+      busiestServers.push({ server, load });
+    }
+    if (busiestServers.length > 5) {
+      busiestServers.length = 5;
+    }
+  }
+
+  return {
+    openEvents,
+    criticalEvents,
+    warningServers,
+    connectedServers,
+    busiestServers: busiestServers.map((item) => item.server),
+  };
+}
+
 function buildCountryHover(country: Feature<Geometry, { name?: string }>, regions: RegionNode[], countryId: string): CountryHover {
   const total = regions.reduce((sum, region) => sum + region.total, 0);
   const running = regions.reduce((sum, region) => sum + region.running, 0);
@@ -777,8 +825,8 @@ function formatProviderName(provider: string, t: (key: string, vars?: Record<str
 
 function resolveRegionLocation(region: string, _index: number): RegionLocation {
   const normalizedRegions = buildRegionSearchVariants(region);
-  const exactMatch = regionLocations.find(({ aliases }) => aliases.some((alias) => normalizedRegions.includes(normalizeRegion(alias))));
-  const partialMatch = regionLocations.find(({ aliases }) => aliases.some((alias) => normalizedRegions.some((normalizedRegion) => regionHasAlias(normalizedRegion, normalizeRegion(alias)))));
+  const exactMatch = normalizedRegionLocations.find(({ aliases }) => aliases.some((alias) => normalizedRegions.includes(alias)));
+  const partialMatch = normalizedRegionLocations.find(({ aliases }) => aliases.some((alias) => normalizedRegions.some((normalizedRegion) => regionHasAlias(normalizedRegion, alias))));
   const countryCodeLocation = normalizedRegions.map(resolveCountryCodeLocation).find(Boolean);
 
   return exactMatch?.location ?? partialMatch?.location ?? countryCodeLocation ?? fallbackLocation;

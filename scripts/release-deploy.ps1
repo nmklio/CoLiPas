@@ -7,7 +7,7 @@ param(
   [string]$GitHubRepo = "nmklio/CoLiPas",
   [string]$TargetsFile = "release-targets.local.json",
   [string]$TargetsJson = "",
-  [string]$ProductionBaseUrl = "https://c.miao7777.com",
+  [string]$ProductionBaseUrl = "https://colipas.example.com",
   [switch]$PlanOnly
 )
 
