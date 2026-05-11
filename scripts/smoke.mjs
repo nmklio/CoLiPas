@@ -2250,6 +2250,7 @@ function assertAccountUiGuards() {
   const composeSource = fs.readFileSync(new URL('../docker-compose.yml', import.meta.url), 'utf8');
   const systemdSource = fs.readFileSync(new URL('../deploy/colipas.service', import.meta.url), 'utf8');
   const dockerUpdateSource = fs.readFileSync(new URL('../deploy/docker-update.sh', import.meta.url), 'utf8');
+  const evidenceCheckSource = fs.readFileSync(new URL('../deploy/release-evidence-check.mjs', import.meta.url), 'utf8');
 
   if (loginSource.includes("useState('admin')") || loginSource.includes('value="admin"')) {
     throw new Error('Login page must not prefill the admin username');
@@ -2320,11 +2321,15 @@ function assertAccountUiGuards() {
     'RELEASE_ARTIFACT_ID=$safeArtifact',
     'docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" up -d --build --remove-orphans',
     "grep -Ev '^(RELEASE_TARGET_NAME|RELEASE_CHANNEL|RELEASE_DEPLOYMENT_MODE|RELEASE_PUBLIC_URL|RELEASE_GIT_COMMIT|RELEASE_ARTIFACT_ID|RELEASE_DEPLOYED_AT)=' .env",
+    'deploy/release-evidence-check.mjs',
+    'verify_release_evidence',
+    'security evidence UI marker is missing',
+    'docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" exec -T colipas node deploy/release-evidence-check.mjs',
     'ARG RELEASE_GIT_COMMIT',
     'RELEASE_ARTIFACT_ID',
     'Environment=RELEASE_DEPLOYMENT_MODE=systemd',
   ];
-  const deploymentEvidenceGuardSource = `${verifyProductionSource}\n${releaseDeploySource}\n${dockerfileSource}\n${composeSource}\n${systemdSource}\n${dockerUpdateSource}`;
+  const deploymentEvidenceGuardSource = `${verifyProductionSource}\n${releaseDeploySource}\n${dockerfileSource}\n${composeSource}\n${systemdSource}\n${serverUpdateSource}\n${dockerUpdateSource}\n${evidenceCheckSource}`;
   const missingDeploymentEvidenceGuard = deploymentEvidenceGuardFragments.filter((fragment) => !deploymentEvidenceGuardSource.includes(fragment));
   if (missingDeploymentEvidenceGuard.length) {
     throw new Error(`Deployment evidence environment propagation is incomplete: ${missingDeploymentEvidenceGuard.join(', ')}`);

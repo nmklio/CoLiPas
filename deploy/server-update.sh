@@ -1091,6 +1091,18 @@ install_runtime_update_script() {
   fi
 }
 
+verify_release_evidence() {
+  if [ ! -f "$APP_DIR/.env" ] || [ ! -f "$APP_DIR/deploy/release-evidence-check.mjs" ]; then
+    echo "WARN: release evidence check is unavailable; skipped" >&2
+    return 0
+  fi
+
+  env \
+    $(grep -E '^(RELEASE_VERIFY_TOKEN|RELEASE_TARGET_NAME|RELEASE_DEPLOYMENT_MODE|RELEASE_GIT_COMMIT)=' "$APP_DIR/.env" | xargs) \
+    RELEASE_VERIFY_BASE_URL="http://127.0.0.1:8080" \
+    node "$APP_DIR/deploy/release-evidence-check.mjs"
+}
+
 install_nginx_config() {
   if [ -f "$LANDING_ROOT/index.html" ] && [ -f "$SSL_CERTIFICATE" ] && [ -f "$SSL_CERTIFICATE_KEY" ]; then
     cat >/etc/nginx/sites-available/colipas.conf <<NGINX
@@ -1249,4 +1261,5 @@ if [ "$(id -u)" -eq 0 ]; then
 fi
 systemctl restart "$SERVICE_NAME"
 systemctl is-active --quiet "$SERVICE_NAME"
+verify_release_evidence
 echo "CoLiPas updated to $REMOTE_HEAD"

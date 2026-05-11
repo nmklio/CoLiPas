@@ -21,5 +21,6 @@ COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/build ./build
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/deploy/release-evidence-check.mjs ./deploy/release-evidence-check.mjs
 EXPOSE 8080
 CMD ["npm", "start"]
