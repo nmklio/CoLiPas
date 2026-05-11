@@ -631,7 +631,7 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
                 onKeyDown={handleComposerKeyDown}
               />
               <div className="ai-composer-toolbar">
-                <div className="ai-composer-tools">
+                <div className="ai-composer-toolbar-main">
                   <label className="ai-model-select">
                     <select value={provider.model} onChange={(event) => setProvider({ ...provider, model: event.target.value })} aria-label={t('ai.model')}>
                       {availableModelOptions.map((model) => (
@@ -642,18 +642,20 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
                     </select>
                     <ChevronDown size={13} aria-hidden="true" />
                   </label>
-                  <button type="button" className="ai-composer-icon" aria-label={t('ai.refreshModels')} title={t('ai.refreshModels')} onClick={() => refreshModels()} disabled={modelsLoading || !validation.valid}>
-                    <RefreshCw size={15} className={modelsLoading ? 'spin-icon' : ''} />
-                  </button>
-                  <button type="button" className="ai-composer-icon" aria-label={t('ai.testStreaming')} title={t('ai.testStreaming')} onClick={handleTestConnection} disabled={testing || !validation.valid}>
-                    <PlugZap size={15} />
-                  </button>
-                  <button type="button" className="ai-composer-icon" aria-label={t('ai.forceRegenerate')} title={t('ai.forceRegenerate')} onClick={() => handleAnalyze(true)} disabled={Boolean(runningSessionId) || !activeSession.question.trim()}>
-                    <RefreshCw size={15} />
-                  </button>
-                  <button type="button" className="ai-composer-icon" aria-label={t('ai.regenerateLast')} title={t('ai.regenerateLast')} onClick={handleRegenerateLast} disabled={Boolean(runningSessionId) || !lastUserQuestion}>
-                    <RotateCcw size={15} />
-                  </button>
+                  <div className="ai-composer-tools">
+                    <button type="button" className="ai-composer-icon" aria-label={t('ai.refreshModels')} title={t('ai.refreshModels')} onClick={() => refreshModels()} disabled={modelsLoading || !validation.valid}>
+                      <RefreshCw size={15} className={modelsLoading ? 'spin-icon' : ''} />
+                    </button>
+                    <button type="button" className="ai-composer-icon" aria-label={t('ai.testStreaming')} title={t('ai.testStreaming')} onClick={handleTestConnection} disabled={testing || !validation.valid}>
+                      <PlugZap size={15} />
+                    </button>
+                    <button type="button" className="ai-composer-icon" aria-label={t('ai.forceRegenerate')} title={t('ai.forceRegenerate')} onClick={() => handleAnalyze(true)} disabled={Boolean(runningSessionId) || !activeSession.question.trim()}>
+                      <RefreshCw size={15} />
+                    </button>
+                    <button type="button" className="ai-composer-icon" aria-label={t('ai.regenerateLast')} title={t('ai.regenerateLast')} onClick={handleRegenerateLast} disabled={Boolean(runningSessionId) || !lastUserQuestion}>
+                      <RotateCcw size={15} />
+                    </button>
+                  </div>
                 </div>
                 <div className="ai-composer-actions">
                   {running ? (

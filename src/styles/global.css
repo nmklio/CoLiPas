@@ -5519,6 +5519,13 @@ pre {
   border-top: 1px solid #d9e7ea;
   padding: 7px;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 7px;
+}
+
+.ai-composer-toolbar-main {
+  min-width: 0;
+  display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 7px;
@@ -5534,6 +5541,7 @@ pre {
 
 .ai-composer-tools {
   flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .ai-composer-actions {
@@ -5580,8 +5588,8 @@ pre {
 }
 
 .ai-model-select {
-  flex: 1 1 160px;
-  min-width: 150px;
+  flex: 1 1 180px;
+  min-width: 160px;
   max-width: none;
   height: 31px;
   border-radius: 8px;
@@ -5623,7 +5631,7 @@ pre {
 }
 
 .ai-send-orb {
-  min-width: 84px;
+  min-width: 96px;
   height: 32px;
   border-radius: 8px;
   padding: 0 11px;

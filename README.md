@@ -53,7 +53,7 @@ CoLiPas is designed for teams that manage a mix of public cloud, private cloud, 
 | Workflow automation | Targeted operation tasks for asset sync, health checks, patching, backup verification, and SSH-connected server workflows. |
 | Custom API lab | Allowlisted backend proxy for testing provider APIs without exposing browser-side secrets or private network targets. |
 | Security audit | Auth events, blocked API calls, SSH actions, remediation flows, risk relation cards, and audit trail persistence. |
-| Operator experience | Login page, editable profile/avatar, password change, Chinese/English/Japanese language switch, and responsive authenticated dashboard. |
+| Operator experience | Login page, editable profile/avatar, password change, and responsive authenticated dashboard with Chinese / English / Japanese UI language switching. |
 
 ## Highlights
 
@@ -62,6 +62,7 @@ CoLiPas is designed for teams that manage a mix of public cloud, private cloud, 
 - SSH secrets are encrypted at rest with `CREDENTIAL_ENCRYPTION_KEY`.
 - AI keys stay server-side or in one-time request payloads; they are not committed and are guarded by smoke checks.
 - The custom API proxy blocks private IP ranges, unsafe headers, redirects to sensitive networks, and secret leakage in audit targets.
+- The operator UI supports Chinese, English, and Japanese. Switch the interface language from the account/settings area; this changes the console labels and navigation text only.
 - `npm test` builds the app, starts a temporary production server, runs API and source-level smoke checks, then cleans up test data.
 
 ## Quick Start
