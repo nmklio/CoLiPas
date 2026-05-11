@@ -123,6 +123,15 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const visibleServerRows = useMemo(() => servers.slice(0, visibleServerLimit), [servers, visibleServerLimit]);
   const hiddenServerCount = Math.max(servers.length - visibleServerRows.length, 0);
   const activeSshServer = allServers.find((server) => server.id === sshPanelServerId) ?? null;
+  const visibleTerminalLines = useMemo(
+    () => terminalLines.filter((line, index, lines) => !isTrailingRemotePromptLine(
+      line,
+      index,
+      lines,
+      loginProbe?.user || activeSshServer?.ssh?.username,
+    )),
+    [activeSshServer?.ssh?.username, loginProbe?.user, terminalLines],
+  );
   const visibleMaxLoadServer = useMemo(
     () => [...servers].sort((left, right) => maxServerLoad(right) - maxServerLoad(left))[0],
     [servers],
@@ -586,7 +595,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
             {visibleServerRows.map((server) => {
               const sshAccess = server.ssh;
               const connected = Boolean(sshAccess?.connected);
-              const canOpenTerminal = connected && sshAccess?.verifyMode !== 'simulate';
+              const canOpenTerminal = connected;
               const lifecycleStatus = resolveServerLifecycleStatus(server);
               return (
               <article key={server.id} className={`server-workspace-row ${lifecycleStatus}`}>
@@ -726,7 +735,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                   </div>
                 </div>
                 <div ref={terminalBodyRef} className="ssh-terminal-screen">
-                  {terminalLines.map((line) => (
+                  {visibleTerminalLines.map((line) => (
                     <div key={line.id} className={`ssh-terminal-line ${line.kind}`}>{line.text}</div>
                   ))}
                   <div className="ssh-terminal-input-line">
@@ -956,6 +965,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
 
     setSshPanelServerId(server.id);
     clearTerminalInput();
+    terminalCommandBufferRef.current = '';
     setTerminalLines([]);
     setLoginProbe(null);
     setHistoryIndex(null);
@@ -967,12 +977,14 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     terminalAbortRef.current = null;
     closeActiveShellSession();
     setSshConsoleOpen(false);
+    terminalCommandBufferRef.current = '';
     clearTerminalInput();
   }
 
   async function startTerminalLogin(server: ServerNode) {
     setSshRunning(true);
     closeActiveShellSession();
+    terminalCommandBufferRef.current = '';
     setTerminalLines([
       createTerminalLine('system', `Connecting to ${server.ssh?.username}@${server.ssh?.host}:${server.ssh?.port}...`),
     ]);
@@ -1044,6 +1056,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
 
     if (trimmedCommand === 'clear') {
       setTerminalLines([]);
+      terminalCommandBufferRef.current = '';
       clearTerminalInput();
       setHistoryIndex(null);
       return;
@@ -1142,16 +1155,25 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       .replace(/\x1b\[H/g, '')
       .replace(/\r\n/g, '\n')
       .replace(/\r/g, '\n');
-    const currentCommand = terminalCommandBufferRef.current;
+    const previousPartialLine = kind === 'output' ? terminalCommandBufferRef.current : '';
+    const parts = normalized.split('\n');
+    const nextPartialLine = kind === 'output'
+      ? normalized.endsWith('\n')
+        ? ''
+        : normalized.includes('\n')
+          ? parts[parts.length - 1] ?? ''
+          : `${previousPartialLine}${normalized}`
+      : '';
     setTerminalLines((current) => {
       const next = [...current];
-      const parts = normalized.split('\n');
       parts.forEach((part, index) => {
         const isLast = index === parts.length - 1;
-        if (kind === 'output') {
-          terminalCommandBufferRef.current = isLast ? part : '';
+        const isFinalEmptySegment = isLast && normalized.endsWith('\n');
+        if (isFinalEmptySegment) {
+          return;
         }
-        if (index === 0 && next.length > 0 && next[next.length - 1].kind === kind) {
+
+        if (index === 0 && previousPartialLine && next.length > 0 && next[next.length - 1].kind === kind) {
           next[next.length - 1] = {
             ...next[next.length - 1],
             text: `${next[next.length - 1].text}${part}`,
@@ -1159,13 +1181,11 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
         } else if (part || !isLast) {
           next.push(createTerminalLine(kind, part));
         }
-        if (!isLast) {
-          next.push(createTerminalLine(kind, ''));
-        }
       });
       return limitTerminalLines(next);
     });
-    updateShellPromptState(normalized, currentCommand);
+    terminalCommandBufferRef.current = nextPartialLine;
+    updateShellPromptState(normalized, previousPartialLine);
   }
 
   function stopTerminalCommand() {
@@ -1440,7 +1460,7 @@ function stripAnsiControl(output: string) {
 
 function parseShellPrompt(line: string, expectedUser?: string) {
   const escapedUser = expectedUser ? escapeRegExp(expectedUser) : '[\\w.-]+';
-  const match = line.match(new RegExp(`(?:^|\\s)(${escapedUser})@([\\w.-]+):(.+?)[#$]\\s*$`));
+  const match = line.match(new RegExp(`^(${escapedUser})@([\\w.-]+):(.+?)[#$]\\s*$`));
   if (!match) {
     return null;
   }
@@ -1449,6 +1469,20 @@ function parseShellPrompt(line: string, expectedUser?: string) {
     host: match[2],
     pwd: match[3],
   };
+}
+
+function isTrailingRemotePromptLine(
+  line: TerminalLine,
+  index: number,
+  lines: TerminalLine[],
+  expectedUser?: string,
+) {
+  if (line.kind !== 'output' || index !== lines.length - 1) {
+    return false;
+  }
+
+  const text = line.text.trim();
+  return Boolean(parseShellPrompt(text, expectedUser)) || /^simulated[$#]\s*$/.test(text);
 }
 
 function escapeRegExp(value: string) {

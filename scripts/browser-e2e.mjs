@@ -27,6 +27,7 @@ try {
 
   const temporaryServer = await createTemporaryAssetServer(page);
   temporaryServerId = temporaryServer.id;
+  await assertSshTerminalPanel(page);
   await assertOperationsResultTraceRoundTrip(page);
   await deleteTemporaryAssetServer(page, temporaryServer.id);
   temporaryServerId = '';
@@ -196,10 +197,92 @@ async function createTemporaryAssetServer(targetPage, namePrefix = 'browser-e2e-
   return server;
 }
 
+async function createTemporarySimulatedSshServer(targetPage, namePrefix = 'browser-e2e-ssh') {
+  const response = await targetPage.request.post(`${baseUrl}/api/servers`, {
+    data: {
+      name: `${namePrefix}-${Date.now()}`,
+      provider: 'OpenStack Lab',
+      region: 'US - Los Angeles',
+      publicIp: `203.0.113.${Math.floor(Math.random() * 100) + 10}`,
+      privateIp: '10.77.0.10',
+      os: 'Debian 12',
+      tags: ['browser-e2e', 'ssh-panel'],
+      ssh: {
+        host: 'simulated-ssh.local',
+        port: 22,
+        username: 'root',
+        authType: 'password',
+        password: 'test-browser-e2e-value',
+        verifyMode: 'simulate',
+      },
+    },
+  });
+
+  if (response.status() !== 201) {
+    throw new Error(`/api/servers simulated SSH setup returned HTTP ${response.status()}: ${await response.text()}`);
+  }
+
+  const server = await response.json();
+  if (!server.id || server.ssh?.connected !== true || server.status !== 'running') {
+    throw new Error('/api/servers simulated SSH setup returned unexpected connected server payload');
+  }
+
+  return server;
+}
+
 async function deleteTemporaryAssetServer(targetPage, serverId) {
   const response = await targetPage.request.delete(`${baseUrl}/api/servers/${encodeURIComponent(serverId)}`);
   if (!response.ok()) {
     throw new Error(`/api/servers/${serverId} browser e2e cleanup returned HTTP ${response.status()}`);
+  }
+}
+
+async function assertSshTerminalPanel(targetPage) {
+  const sshServer = await createTemporarySimulatedSshServer(targetPage);
+  try {
+    await targetPage.goto(`${baseUrl}/admin/#servers`, {
+      waitUntil: 'networkidle',
+      timeout: 30000,
+    });
+    await targetPage.reload({ waitUntil: 'networkidle' });
+    await targetPage.locator('.server-workspace-row').filter({ hasText: sshServer.name }).waitFor({ timeout: 10000 });
+    await targetPage.locator('.server-workspace-row').filter({ hasText: sshServer.name }).getByRole('button', { name: /^SSH$/i }).click();
+    await targetPage.locator('.ssh-console').waitFor({ timeout: 10000 });
+    await targetPage.locator('.ssh-terminal-input-line input').fill('whoami');
+    await targetPage.keyboard.press('Enter');
+    await targetPage.waitForFunction(() => document.querySelector('.ssh-terminal-screen')?.textContent?.includes('simulated$ whoami'), undefined, { timeout: 10000 });
+    await targetPage.waitForFunction(() => document.querySelectorAll('.ssh-terminal-input-line').length === 1, undefined, { timeout: 5000 });
+
+    const terminalState = await targetPage.evaluate(() => {
+      const lineTexts = Array.from(document.querySelectorAll('.ssh-terminal-line')).map((element) => element.textContent ?? '');
+      const inputPrompt = document.querySelector('.ssh-terminal-input-line span')?.textContent ?? '';
+      const blankLineCount = lineTexts.filter((text) => text === '').length;
+      const trailingPromptCount = lineTexts.filter((text) => /^root@[\w.-]+:.+[#$]\s*$/.test(text.trim())).length;
+      return {
+        lineTexts,
+        inputPrompt,
+        blankLineCount,
+        trailingPromptCount,
+      };
+    });
+
+    if (!terminalState.inputPrompt.includes('root@') || !/[#$]\s$/.test(terminalState.inputPrompt)) {
+      throw new Error(`SSH terminal input prompt did not reflect simulated shell state: ${terminalState.inputPrompt}`);
+    }
+    if (terminalState.blankLineCount > 1) {
+      throw new Error(`SSH terminal rendered excessive blank history rows: ${terminalState.blankLineCount}`);
+    }
+    if (terminalState.trailingPromptCount > 0) {
+      throw new Error(`SSH terminal rendered duplicate remote prompt history rows: ${terminalState.lineTexts.join(' | ')}`);
+    }
+
+    await targetPage.getByRole('button', { name: /interrupt/i }).waitFor({ timeout: 5000 });
+    await assertElementWithinViewport(targetPage, '.ssh-console', 'desktop SSH console');
+    await targetPage.locator('.ssh-console-header .icon-button').click();
+    await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });
+    console.log('ok browser e2e covers SSH terminal panel prompt rendering');
+  } finally {
+    await deleteTemporaryAssetServer(targetPage, sshServer.id).catch(() => undefined);
   }
 }
 

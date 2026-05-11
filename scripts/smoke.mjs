@@ -3342,6 +3342,12 @@ function assertSshTerminalRealtimeGuards() {
     'terminalShellStreamRef.current?.close()',
     'const terminalLineLimit = 500',
     'limitTerminalLines(',
+    'visibleTerminalLines.map',
+    'isTrailingRemotePromptLine(',
+    'terminalCommandBufferRef.current = nextPartialLine',
+    'const canOpenTerminal = connected',
+    "|| /^simulated[$#]\\s*$/.test(text)",
+    "const match = line.match(new RegExp(`^(${escapedUser})@",
     "t('servers.commandSent'",
   ];
   const missingFrontend = requiredFrontendFragments.filter((fragment) => !inventorySource.includes(fragment));
