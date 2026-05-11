@@ -10,6 +10,7 @@ const root = process.cwd();
 const serverCount = clampNumber(process.env.LARGE_SIM_SERVER_COUNT, 100, 3000, 1000);
 const userCount = clampNumber(process.env.LARGE_SIM_USERS, 4, 80, 24);
 const createConcurrency = clampNumber(process.env.LARGE_SIM_CREATE_CONCURRENCY, 2, 64, 16);
+const expectedServerRenderBatch = 120;
 const dataDir = path.resolve(root, '.tmp-large-simulation-data');
 const evidenceDir = path.resolve(root, 'output', 'large-user-simulation');
 const adminUsername = 'admin';
@@ -261,7 +262,21 @@ async function runBrowserSimulation(targetBaseUrl) {
     await page.getByRole('button', { name: /^Servers$/i }).click();
     await page.locator('.server-workspace-row').first().waitFor({ timeout: 20000 });
     const visibleRows = await page.locator('.server-workspace-row').count();
-    assert(visibleRows >= Math.min(serverCount, 50), 'desktop server inventory rendered the large list');
+    assert(visibleRows >= Math.min(serverCount, expectedServerRenderBatch), 'desktop server inventory rendered the first batch');
+    assert(visibleRows <= expectedServerRenderBatch, 'desktop server inventory limited the initial DOM rows');
+    if (serverCount > expectedServerRenderBatch) {
+      await page.locator('.server-render-window').waitFor({ timeout: 5000 });
+      await page.getByRole('button', { name: /load \d+ more/i }).click();
+      await page.waitForFunction(
+        ({ minRows, maxRows }) => {
+          const rows = document.querySelectorAll('.server-workspace-row').length;
+          return rows > minRows && rows <= maxRows;
+        },
+        { minRows: visibleRows, maxRows: expectedServerRenderBatch * 2 },
+        { timeout: 5000 },
+      );
+      assertions.push(`desktop server inventory rendered ${visibleRows} initial rows before loading more`);
+    }
     await assertNoHorizontalOverflow(page, 'desktop server inventory');
     await page.screenshot({ path: path.join(evidenceDir, 'desktop-servers-large.png'), fullPage: false });
   });
@@ -281,6 +296,22 @@ async function runBrowserSimulation(targetBaseUrl) {
     await page.getByRole('button', { name: /open navigation/i }).click();
     await page.getByRole('button', { name: /^Servers$/i }).click();
     await page.locator('.server-workspace-row').first().waitFor({ timeout: 20000 });
+    const mobileVisibleRows = await page.locator('.server-workspace-row').count();
+    assert(mobileVisibleRows >= Math.min(serverCount, expectedServerRenderBatch), 'mobile server inventory rendered the first batch');
+    assert(mobileVisibleRows <= expectedServerRenderBatch, 'mobile server inventory limited the initial DOM rows');
+    if (serverCount > expectedServerRenderBatch) {
+      await page.locator('.server-render-window').waitFor({ timeout: 5000 });
+      await page.getByRole('button', { name: /load \d+ more/i }).click();
+      await page.waitForFunction(
+        ({ minRows, maxRows }) => {
+          const rows = document.querySelectorAll('.server-workspace-row').length;
+          return rows > minRows && rows <= maxRows;
+        },
+        { minRows: mobileVisibleRows, maxRows: expectedServerRenderBatch * 2 },
+        { timeout: 5000 },
+      );
+      assertions.push(`mobile server inventory rendered ${mobileVisibleRows} initial rows before loading more`);
+    }
     await assertNoHorizontalOverflow(page, 'mobile server inventory');
     await page.screenshot({ path: path.join(evidenceDir, 'mobile-servers-large.png'), fullPage: false });
   });

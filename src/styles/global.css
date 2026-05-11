@@ -3203,6 +3203,26 @@ main {
   overflow: visible;
 }
 
+.server-render-window {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px dashed #bfd2d6;
+  border-radius: 8px;
+  padding: 12px 14px;
+  background:
+    linear-gradient(180deg, #f8fbfb, #eef6f6);
+  color: #526a70;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.server-render-window .tool-button {
+  min-height: 34px;
+  padding: 8px 12px;
+}
+
 .server-card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -7469,6 +7489,16 @@ pre {
 
   .server-workspace-head {
     display: none;
+  }
+
+  .server-render-window {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .server-render-window .tool-button {
+    justify-content: center;
+    width: 100%;
   }
 
   .server-row-actions {

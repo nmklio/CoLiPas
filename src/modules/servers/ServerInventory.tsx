@@ -39,6 +39,8 @@ const actionCommands: Record<'powerOn' | 'shutdown' | 'reboot', string> = {
   reboot: 'nohup sh -c "reboot" >/dev/null 2>&1 & echo "reboot scheduled"',
 };
 const terminalLineLimit = 500;
+const serverRenderBatchSize = 120;
+const serverRenderBatchStep = 120;
 
 type TerminalLineKind = 'banner' | 'command' | 'output' | 'error' | 'system';
 
@@ -104,6 +106,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [formDismissed, setFormDismissed] = useState(false);
+  const [visibleServerLimit, setVisibleServerLimit] = useState(serverRenderBatchSize);
   const terminalInputRef = useRef<HTMLInputElement | null>(null);
   const terminalBodyRef = useRef<HTMLDivElement | null>(null);
   const terminalAbortRef = useRef<AbortController | null>(null);
@@ -117,6 +120,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const identityCacheRef = useRef<Map<string, ServerIdentityResponse>>(new Map());
   const lastAppliedIdentityRef = useRef<{ region: string; os: string } | null>(null);
   const visibleConnectedServers = useMemo(() => servers.filter((server) => server.ssh?.connected), [servers]);
+  const visibleServerRows = useMemo(() => servers.slice(0, visibleServerLimit), [servers, visibleServerLimit]);
+  const hiddenServerCount = Math.max(servers.length - visibleServerRows.length, 0);
   const activeSshServer = allServers.find((server) => server.id === sshPanelServerId) ?? null;
   const visibleMaxLoadServer = useMemo(
     () => [...servers].sort((left, right) => maxServerLoad(right) - maxServerLoad(left))[0],
@@ -127,12 +132,17 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const visibleAvgLoad = servers.length > 0
     ? Math.round(servers.reduce((total, server) => total + Math.max(server.cpu, server.memory, server.disk), 0) / servers.length)
     : 0;
+  const regionScopeKey = scopedRegions.join('|');
 
   useEffect(() => () => {
     terminalAbortRef.current?.abort();
     closeActiveShellSession();
   }, []);
   const formVisible = formOpen || Boolean(editingServerId) || (allServers.length === 0 && !formDismissed);
+
+  useEffect(() => {
+    setVisibleServerLimit(serverRenderBatchSize);
+  }, [filters.provider, filters.query, filters.region, filters.status, regionScopeKey, servers.length]);
 
   useEffect(() => {
     formRef.current = form;
@@ -573,7 +583,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
               <div>{t('servers.tableSsh')}</div>
               <div>{t('servers.tableActions')}</div>
             </div>
-            {servers.map((server) => {
+            {visibleServerRows.map((server) => {
               const sshAccess = server.ssh;
               const connected = Boolean(sshAccess?.connected);
               const canOpenTerminal = connected && sshAccess?.verifyMode !== 'simulate';
@@ -637,6 +647,24 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
               </article>
               );
             })}
+            {hiddenServerCount > 0 && (
+              <div className="server-render-window" aria-live="polite">
+                <span>
+                  {t('servers.renderWindow', {
+                    shown: visibleServerRows.length,
+                    total: servers.length,
+                  })}
+                </span>
+                <button
+                  type="button"
+                  className="tool-button"
+                  onClick={() => setVisibleServerLimit((current) => Math.min(servers.length, current + serverRenderBatchStep))}
+                >
+                  <Plus size={16} />
+                  {t('servers.loadMore', { count: Math.min(serverRenderBatchStep, hiddenServerCount) })}
+                </button>
+              </div>
+            )}
           </div>
         </>
       )}

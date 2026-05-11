@@ -1104,6 +1104,8 @@ const cleanTranslations: Record<Language, Record<string, string>> = {
     'ai.send': '发送',
     'ai.sending': '流式分析中',
     'ai.regenerate': '重新生成',
+    'servers.renderWindow': '已渲染 {shown} / {total} 台，继续加载以查看其余服务器',
+    'servers.loadMore': '再加载 {count} 台',
   },
   en: {
     'ai.apiKeyEphemeral': 'The key stays in page memory only and is not written to localStorage or the repo.',
@@ -1125,6 +1127,8 @@ const cleanTranslations: Record<Language, Record<string, string>> = {
     'ai.send': 'Send',
     'ai.sending': 'Streaming',
     'ai.regenerate': 'Regenerate',
+    'servers.renderWindow': 'Rendered {shown} / {total} servers. Load more to inspect the rest.',
+    'servers.loadMore': 'Load {count} more',
   },
   ja: {
     'ai.apiKeyEphemeral': 'キーはページのメモリ内だけに保持され、localStorage やリポジトリには保存されません。',
@@ -1146,6 +1150,8 @@ const cleanTranslations: Record<Language, Record<string, string>> = {
     'ai.send': '送信',
     'ai.sending': 'ストリーミング中',
     'ai.regenerate': '再生成',
+    'servers.renderWindow': '{shown} / {total} 台を描画しました。残りを確認するにはさらに読み込みます。',
+    'servers.loadMore': 'さらに {count} 台',
   },
 };
 
