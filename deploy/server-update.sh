@@ -443,6 +443,643 @@ NODE
   fi
 }
 
+write_docs_page() {
+  if [ ! -d "$LANDING_ROOT" ]; then
+    return 0
+  fi
+
+  cat >"$LANDING_ROOT/docs.html" <<'HTML'
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CoLiPas 使用文档</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #0f172a;
+      --muted: #52627a;
+      --line: #dce7f4;
+      --soft: #f4f8fc;
+      --panel: #ffffff;
+      --blue: #2563eb;
+      --green: #0f766e;
+      --shadow: 0 18px 46px rgba(31, 56, 88, .08);
+      font-family: Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      background:
+        linear-gradient(90deg, rgba(37, 99, 235, .045) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(37, 99, 235, .04) 1px, transparent 1px),
+        linear-gradient(180deg, #fff 0, #f7faff 520px, #f4f7fb 100%);
+      background-size: 44px 44px, 44px 44px, auto;
+      color: var(--ink);
+    }
+    a { color: inherit; }
+    .nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      min-height: 72px;
+      border-bottom: 1px solid rgba(210, 220, 235, .86);
+      background: rgba(255, 255, 255, .9);
+      backdrop-filter: blur(16px);
+    }
+    .nav-inner,
+    .wrap {
+      width: min(1180px, calc(100% - 44px));
+      margin: 0 auto;
+    }
+    .nav-inner {
+      min-height: 72px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 26px;
+    }
+    .brand,
+    .nav-links,
+    .nav-actions,
+    .button,
+    .quick-card a,
+    .doc-card h3,
+    .check-line {
+      display: flex;
+      align-items: center;
+    }
+    .brand {
+      gap: 9px;
+      text-decoration: none;
+      font-weight: 950;
+    }
+    .brand span {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: linear-gradient(135deg, var(--green), var(--blue));
+    }
+    .nav-links {
+      justify-content: center;
+      gap: 28px;
+    }
+    .nav-links a,
+    .nav-actions a {
+      color: #243449;
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 850;
+    }
+    .nav-links a:hover,
+    .nav-actions a:hover {
+      color: var(--blue);
+    }
+    .nav-actions { gap: 10px; }
+    .nav-action {
+      min-height: 42px;
+      border-radius: 10px;
+      padding: 0 18px;
+      border: 1px solid transparent;
+      background: var(--blue);
+      color: #fff !important;
+      box-shadow: 0 16px 34px rgba(37, 99, 235, .2);
+    }
+    .nav-github {
+      min-height: 42px;
+      border-radius: 10px;
+      padding: 0 16px;
+      border: 1px solid var(--line);
+      background: #fff;
+      display: inline-flex;
+      align-items: center;
+    }
+    .hero {
+      padding: 72px 0 58px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+      gap: 48px;
+      align-items: end;
+    }
+    .kicker {
+      margin: 0 0 18px;
+      color: var(--blue);
+      font-size: 13px;
+      font-weight: 950;
+    }
+    .kicker::before {
+      content: "";
+      width: 22px;
+      height: 2px;
+      margin-right: 10px;
+      display: inline-block;
+      vertical-align: middle;
+      background: var(--blue);
+    }
+    h1 {
+      margin: 0;
+      max-width: 900px;
+      font-size: clamp(44px, 6vw, 76px);
+      line-height: 1;
+      letter-spacing: 0;
+    }
+    .lead {
+      max-width: 820px;
+      margin: 24px 0 0;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.75;
+    }
+    .hero-actions {
+      margin-top: 30px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .button {
+      min-height: 48px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0 18px;
+      background: #fff;
+      color: #122033;
+      text-decoration: none;
+      font-weight: 900;
+    }
+    .button.primary {
+      border-color: var(--blue);
+      background: var(--blue);
+      color: #fff;
+    }
+    .quick-card,
+    .section,
+    .doc-card,
+    .terminal-card {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, .92);
+      box-shadow: var(--shadow);
+    }
+    .quick-card {
+      padding: 18px;
+      display: grid;
+      gap: 10px;
+    }
+    .quick-card strong {
+      font-size: 18px;
+    }
+    .quick-card a {
+      min-height: 42px;
+      justify-content: space-between;
+      border: 1px solid #e3edf8;
+      border-radius: 8px;
+      padding: 0 12px;
+      background: #fbfdff;
+      text-decoration: none;
+      font-weight: 850;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 230px minmax(0, 1fr);
+      gap: 34px;
+      padding-bottom: 88px;
+      align-items: start;
+    }
+    .sidebar {
+      position: sticky;
+      top: 96px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+      background: rgba(255, 255, 255, .9);
+      box-shadow: var(--shadow);
+      display: grid;
+      gap: 5px;
+    }
+    .sidebar a {
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: #405572;
+      text-decoration: none;
+      font-weight: 850;
+    }
+    .sidebar a:hover {
+      background: #eaf2ff;
+      color: var(--blue);
+    }
+    .content {
+      display: grid;
+      gap: 18px;
+    }
+    .section {
+      scroll-margin-top: 96px;
+      padding: clamp(22px, 4vw, 34px);
+    }
+    .section h2 {
+      margin: 0;
+      font-size: clamp(28px, 3.8vw, 42px);
+      line-height: 1.1;
+    }
+    .section p {
+      color: var(--muted);
+      line-height: 1.72;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .doc-card {
+      padding: 20px;
+      box-shadow: none;
+      display: grid;
+      gap: 10px;
+    }
+    .doc-card h3 {
+      gap: 10px;
+      margin: 0;
+      font-size: 19px;
+    }
+    .badge {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: #142037;
+      font-weight: 950;
+    }
+    code,
+    pre {
+      border: 1px solid #dce8f5;
+      border-radius: 8px;
+      background: #0f172a;
+      color: #dceafe;
+      overflow-x: auto;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+    }
+    code { padding: 10px 12px; }
+    pre {
+      margin: 0;
+      padding: 14px;
+      line-height: 1.55;
+    }
+    .table {
+      display: grid;
+      gap: 10px;
+    }
+    .table div {
+      border: 1px solid #e1ebf7;
+      border-radius: 8px;
+      padding: 14px;
+      background: #fbfdff;
+      display: grid;
+      grid-template-columns: minmax(210px, .35fr) minmax(0, 1fr);
+      gap: 16px;
+      align-items: center;
+    }
+    .table code {
+      background: transparent;
+      border: 0;
+      padding: 0;
+      color: #1e3a8a;
+      font-weight: 900;
+    }
+    .check-list {
+      display: grid;
+      gap: 10px;
+    }
+    .check-line {
+      gap: 9px;
+      margin: 0;
+      color: #30445e;
+      line-height: 1.6;
+    }
+    .check-line span {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #e8f5ee;
+      color: var(--green);
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      font-size: 12px;
+      font-weight: 950;
+    }
+    .split {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(280px, 390px);
+      gap: 20px;
+      align-items: start;
+    }
+    .terminal-card {
+      padding: 18px;
+      display: grid;
+      gap: 12px;
+      box-shadow: none;
+    }
+    details {
+      border: 1px solid #e1ebf7;
+      border-radius: 8px;
+      padding: 14px;
+      background: #fbfdff;
+    }
+    summary {
+      cursor: pointer;
+      font-weight: 900;
+    }
+    footer {
+      border-top: 1px solid rgba(150, 165, 190, .16);
+      padding: 28px 0 42px;
+      color: #7b8aa2;
+      text-align: center;
+      font-weight: 800;
+    }
+    @media (max-width: 960px) {
+      .nav-inner,
+      .hero,
+      .layout,
+      .split {
+        grid-template-columns: 1fr;
+      }
+      .nav-inner {
+        padding: 14px 0;
+        align-items: start;
+      }
+      .nav-links,
+      .nav-actions {
+        justify-content: flex-start;
+        flex-wrap: wrap;
+      }
+      .sidebar {
+        position: static;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+    @media (max-width: 640px) {
+      .nav { position: static; }
+      .nav-inner,
+      .wrap {
+        width: calc(100% - 32px);
+      }
+      .nav-links {
+        gap: 14px;
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        padding-bottom: 4px;
+      }
+      .nav-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+      }
+      .nav-action,
+      .nav-github,
+      .button {
+        width: 100%;
+        justify-content: center;
+      }
+      .hero {
+        padding: 48px 0 34px;
+      }
+      h1 {
+        font-size: 42px;
+      }
+      .lead {
+        font-size: 16px;
+      }
+      .grid,
+      .table div,
+      .sidebar {
+        grid-template-columns: 1fr;
+      }
+      .section {
+        padding: 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="/" aria-label="CoLiPas"><span>CP</span><strong>CoLiPas</strong></a>
+      <nav class="nav-links" aria-label="文档导航">
+        <a href="/">产品</a>
+        <a href="/#features">功能</a>
+        <a href="/#security">安全</a>
+        <a href="/#deploy">部署</a>
+        <a href="/docs.html">文档</a>
+      </nav>
+      <div class="nav-actions">
+        <a class="nav-github" href="https://github.com/nmklio/CoLiPas" target="_blank" rel="noreferrer">GitHub</a>
+        <a class="nav-action" href="/admin/">进入后台</a>
+      </div>
+    </div>
+  </header>
+
+  <section class="hero wrap">
+    <div>
+      <p class="kicker">使用文档</p>
+      <h1>下载、配置、运行，完整落地 CoLiPas</h1>
+      <p class="lead">这份文档按上线顺序组织：先部署生产服务，再接入服务器，随后验证 SSH、AI、自定义 API、运维编排、数据库持久化和安全审计。所有公开内容只使用示例配置，不包含真实服务器、密码、API Key 或用户数据。</p>
+      <div class="hero-actions">
+        <a class="button primary" href="#install">开始部署</a>
+        <a class="button" href="https://github.com/nmklio/CoLiPas" target="_blank" rel="noreferrer">打开 GitHub</a>
+      </div>
+    </div>
+    <aside class="quick-card" aria-label="快速导航">
+      <strong>快速导航</strong>
+      <a href="#install">安装部署 <span>→</span></a>
+      <a href="#config">环境变量 <span>→</span></a>
+      <a href="#server-access">服务器接入 <span>→</span></a>
+      <a href="#ai">AI 设置 <span>→</span></a>
+      <a href="#security">安全上线 <span>→</span></a>
+    </aside>
+  </section>
+
+  <div class="layout wrap">
+    <aside class="sidebar" aria-label="页面目录">
+      <a href="#install">安装部署</a>
+      <a href="#config">环境变量</a>
+      <a href="#server-access">服务器接入</a>
+      <a href="#ai">AI 助手</a>
+      <a href="#ssh">SSH 与编排</a>
+      <a href="#api">API 与代理</a>
+      <a href="#security">安全上线</a>
+      <a href="#faq">常见问题</a>
+    </aside>
+
+    <main class="content">
+      <section id="install" class="section">
+        <p class="kicker">安装部署</p>
+        <h2>一套源码，支持 Docker 和 Linux systemd</h2>
+        <p>生产服务统一监听 8080，构建后的前端资源和后端 API 由同一个 Node 服务提供；公网 HTTPS 建议放在 Nginx、Caddy 或云负载均衡之后。</p>
+        <div class="grid">
+          <article class="doc-card">
+            <h3><span class="badge">1</span> 获取项目</h3>
+            <p>从公开仓库获取源码，安装依赖前先确认 Node.js 版本。</p>
+            <code>git clone https://github.com/nmklio/CoLiPas.git && cd CoLiPas</code>
+          </article>
+          <article class="doc-card">
+            <h3><span class="badge">2</span> 配置环境</h3>
+            <p>复制示例环境变量，替换所有默认密码、密钥和域名配置。</p>
+            <code>cp .env.example .env</code>
+          </article>
+          <article class="doc-card">
+            <h3><span class="badge">3</span> 灰度测试</h3>
+            <p>上线前先构建、启动临时生产服务并跑 API、浏览器、并发和安全烟测。</p>
+            <code>npm test</code>
+          </article>
+          <article class="doc-card">
+            <h3><span class="badge">4</span> 启动服务</h3>
+            <p>本机或服务器上只需要一个生产入口，不要把 5173 当作正式服务。</p>
+            <code>PORT=8080 npm start</code>
+          </article>
+        </div>
+      </section>
+
+      <section id="config" class="section">
+        <p class="kicker">环境变量</p>
+        <h2>上线前必须替换默认值</h2>
+        <div class="table">
+          <div><code>ADMIN_USERNAME / ADMIN_PASSWORD</code><p>管理员账号和初始密码，部署后应立即在后台修改密码。</p></div>
+          <div><code>SESSION_SECRET</code><p>会话签名密钥，必须使用长随机字符串。</p></div>
+          <div><code>CREDENTIAL_ENCRYPTION_KEY</code><p>SSH 密码和私钥的加密密钥，不能提交到 Git。</p></div>
+          <div><code>COLIPAS_DATA_DIR / COLIPAS_DB_PATH</code><p>SQLite 数据库和运行数据目录，默认位于 .data。</p></div>
+          <div><code>AI_BASE_URL / AI_API_KEY / AI_MODEL</code><p>OpenAI 兼容 API 配置；不配置密钥时只使用本地模拟分析。</p></div>
+          <div><code>CUSTOM_API_ALLOWED_HOSTS</code><p>自定义 API 代理允许访问的域名白名单。</p></div>
+        </div>
+      </section>
+
+      <section id="server-access" class="section">
+        <p class="kicker">服务器接入</p>
+        <h2>资产登记、真实 SSH 验证和地图联动</h2>
+        <div class="grid">
+          <article class="doc-card">
+            <h3>资产模式</h3>
+            <p>只登记服务器名称、IP、地区、系统和标签，不会显示为已接入，也不会允许执行 SSH 命令。</p>
+          </article>
+          <article class="doc-card">
+            <h3>SSH 模式</h3>
+            <p>支持密码和私钥认证。真实验证成功后，服务器状态才会进入可执行运维动作的链路。</p>
+          </article>
+          <article class="doc-card">
+            <h3>小地图</h3>
+            <p>总览会按地域聚合服务器，支持悬停详情、点击筛选、缩放、移动端 pinned tooltip 和跳转服务器列表。</p>
+          </article>
+          <article class="doc-card">
+            <h3>生命周期</h3>
+            <p>未接入、运行中、已停止分别代表不同能力边界；关机后显示已停止，未验证不会伪装成运行中。</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="ai" class="section split">
+        <div>
+          <p class="kicker">AI 助手</p>
+          <h2>真实流式对话、模型读取和本地缓存</h2>
+          <p>AI 面板支持 OpenAI 兼容接口，后端使用 stream:true，并把多轮上下文传给上游。相同问题会在本地缓存窗口内复用结果，也可以强制刷新重新生成。</p>
+          <div class="check-list">
+            <p class="check-line"><span>✓</span> 模型列表从上游 /v1/models 获取。</p>
+            <p class="check-line"><span>✓</span> API Key 不写入 Git，也不会进入浏览器持久化配置。</p>
+            <p class="check-line"><span>✓</span> 上游错误会脱敏后再展示。</p>
+          </div>
+        </div>
+        <aside class="terminal-card">
+          <strong>AI request contract</strong>
+          <pre>POST /api/ai/stream
+{
+  "provider": {
+    "baseUrl": "https://.../v1",
+    "model": "model-name",
+    "apiKey": "sk-***"
+  },
+  "messages": [...],
+  "forceRefresh": false
+}</pre>
+        </aside>
+      </section>
+
+      <section id="ssh" class="section split">
+        <div>
+          <p class="kicker">SSH 与运维编排</p>
+          <h2>先验证目标，再执行命令</h2>
+          <p>实时终端使用 PTY 流式输出，命令执行期间输入框保持可响应；运维编排会拒绝未接入或不存在的服务器，重启、关机等动作需要二次确认。</p>
+          <div class="check-list">
+            <p class="check-line"><span>✓</span> 支持 Ctrl+C 中断长命令。</p>
+            <p class="check-line"><span>✓</span> 支持终端 resize 和实时输出。</p>
+            <p class="check-line"><span>✓</span> 任务结果会关联审计 trace。</p>
+          </div>
+        </div>
+        <aside class="terminal-card">
+          <strong>常用诊断命令</strong>
+          <pre>uptime
+whoami
+df -h
+free -m
+systemctl status ssh --no-pager</pre>
+        </aside>
+      </section>
+
+      <section id="api" class="section">
+        <p class="kicker">API 与自定义代理</p>
+        <h2>业务 API 需要登录，自定义代理需要白名单</h2>
+        <div class="table">
+          <div><code>GET /api/health</code><p>公开健康检查，只返回运行状态和 SQLite 驱动名称，不暴露路径。</p></div>
+          <div><code>POST /api/auth/login</code><p>管理员登录，失败次数会限速并返回 Retry-After。</p></div>
+          <div><code>GET /api/overview</code><p>登录后读取账号、服务器、事件和总览指标。</p></div>
+          <div><code>POST /api/custom-apis/test</code><p>通过后端代理测试外部接口，阻止内网地址、敏感 Header 和重定向 SSRF。</p></div>
+          <div><code>POST /api/audit/remediate</code><p>执行安全风险确认或修复动作，并写入审计记录。</p></div>
+        </div>
+      </section>
+
+      <section id="security" class="section split">
+        <div>
+          <p class="kicker">安全上线清单</p>
+          <h2>公网部署前逐项确认</h2>
+          <div class="check-list">
+            <p class="check-line"><span>✓</span> 修改管理员密码，不使用默认演示密码。</p>
+            <p class="check-line"><span>✓</span> 使用强随机 SESSION_SECRET 和 CREDENTIAL_ENCRYPTION_KEY。</p>
+            <p class="check-line"><span>✓</span> 限制 CUSTOM_API_ALLOWED_HOSTS，避免代理被滥用。</p>
+            <p class="check-line"><span>✓</span> 备份 .data/colipas.sqlite，不提交 .env、.data、私钥或截图里的真实资产。</p>
+          </div>
+        </div>
+        <aside class="terminal-card">
+          <strong>灰度测试命令</strong>
+          <pre>npm test
+node scripts/secret-scan.mjs
+npm audit --omit=dev --audit-level=high
+curl -fsS http://127.0.0.1:8080/api/health</pre>
+        </aside>
+      </section>
+
+      <section id="faq" class="section">
+        <p class="kicker">常见问题</p>
+        <h2>排障时先看这里</h2>
+        <div class="check-list">
+          <details open><summary>后台地址在哪里？</summary><p>生产入口是你的域名或 http://127.0.0.1:8080/，后台登录入口是 /admin/。5173 只用于 Vite 开发服务。</p></details>
+          <details><summary>为什么乱填服务器不能显示已接入？</summary><p>真实接入必须通过 SSH 握手。资产模式只登记信息，不会显示已接入，也不会允许执行远程命令。</p></details>
+          <details><summary>AI 回答是不是固定的？</summary><p>未配置有效 API Key 时会返回本地模拟分析；配置 OpenAI 兼容 API 并测试成功后，会使用真实流式模型。</p></details>
+          <details><summary>数据存在哪里？</summary><p>默认保存在 .data/colipas.sqlite。SSH 凭据会加密后存储，请保护 .env 和 .data。</p></details>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <footer class="wrap">CoLiPas docs · public-safe deployment guide · no runtime secrets embedded</footer>
+</body>
+</html>
+HTML
+  echo "CoLiPas docs page ready: $LANDING_ROOT/docs.html"
+}
+
 install_runtime_update_script() {
   if [ -f "$APP_DIR/deploy/server-update.sh" ]; then
     install -m 0755 "$APP_DIR/deploy/server-update.sh" /usr/local/sbin/colipas-update
@@ -490,7 +1127,11 @@ server {
   }
 
   location = /docs.html {
-    try_files /index.html =404;
+    try_files /docs.html =404;
+  }
+
+  location = /docs {
+    return 302 /docs.html;
   }
 
   location = /admin {
@@ -558,8 +1199,9 @@ REMOTE_HEAD="$(run_as_app git rev-parse "origin/$BRANCH")"
 if [ "$LOCAL_HEAD" = "$REMOTE_HEAD" ]; then
   if [ "$(id -u)" -eq 0 ]; then
     install_runtime_update_script
-    install_nginx_config
     patch_landing_page_ui
+    write_docs_page
+    install_nginx_config
     nginx -t
     systemctl reload nginx
   fi
@@ -573,8 +1215,9 @@ run_as_app npm run build
 if [ "$(id -u)" -eq 0 ]; then
   install_runtime_update_script
   install -m 0644 "$APP_DIR/deploy/colipas.service" /etc/systemd/system/colipas.service
-  install_nginx_config
   patch_landing_page_ui
+  write_docs_page
+  install_nginx_config
   systemctl daemon-reload
   nginx -t
   systemctl reload nginx

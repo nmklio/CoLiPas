@@ -2164,10 +2164,13 @@ function assertAccountUiGuards() {
     || !loginSource.includes('login-panel-header')
     || !marketingSource.includes('deploy-inline-link')
     || !serverUpdateSource.includes('patch_landing_page_ui')
+    || !serverUpdateSource.includes('write_docs_page')
     || !serverUpdateSource.includes('https://github.com/nmklio/CoLiPas')
     || !serverUpdateSource.includes('colipas landing balanced ui')
+    || !serverUpdateSource.includes('try_files /docs.html =404')
+    || !serverUpdateSource.includes('CoLiPas docs page ready')
   ) {
-    throw new Error('Deployment and login pages must expose a GitHub repository jump button');
+    throw new Error('Deployment, docs, and login pages must expose public navigation without fake docs links');
   }
 
   const avatarFragments = [
