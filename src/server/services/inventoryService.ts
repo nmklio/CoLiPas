@@ -23,6 +23,7 @@ import {
   StoredSshCredential,
   buildStoredSshCredential,
   closeSshShellSession,
+  getRecentSshShellEvidence,
   collectSshMetrics,
   getSshShellSessionStats,
   openStoredSshShell,
@@ -429,7 +430,7 @@ export async function openServerShell(input: unknown) {
   }).parse(input);
   const correlationId = parsed.correlationId || buildServerAuditCorrelationId();
   const { server, credential } = getConnectedServerCredential(parsed.serverId, 'SERVER_SSH_COMMAND');
-  const result = await openStoredSshShell(credential, server.ssh.verifyMode, {
+  const result = await openStoredSshShell(credential, { id: server.id, name: server.name }, server.ssh.verifyMode, {
     cols: parsed.cols,
     rows: parsed.rows,
   });
@@ -492,6 +493,10 @@ export function closeServerShell(input: unknown) {
 
 export function getServerShellStatus() {
   return getSshShellSessionStats();
+}
+
+export function getServerShellEvidence(serverIds?: string[]) {
+  return getRecentSshShellEvidence(serverIds);
 }
 
 export function setServerRuntimeStatus(serverId: string, status: Extract<ServerStatus, 'running' | 'stopped' | 'warning'>) {

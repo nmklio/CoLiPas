@@ -14,6 +14,9 @@ const sshReadyTimeoutMs = 5000;
 const sshShellReadyTimeoutMs = 10000;
 const sshShellIdleTimeoutMs = 20 * 60 * 1000;
 const sshShellHistoryLimit = 120;
+const sshShellEvidenceLimit = 80;
+const sshShellEvidenceRetentionMs = 30 * 60 * 1000;
+const sshShellEvidenceMaxChars = 6000;
 const simulatedShellPrompt = 'simulated$ ';
 const privateKeyBlockPattern = /^-----BEGIN (?:OPENSSH PRIVATE KEY|RSA PRIVATE KEY|EC PRIVATE KEY|DSA PRIVATE KEY|PRIVATE KEY)-----[\s\S]+-----END (?:OPENSSH PRIVATE KEY|RSA PRIVATE KEY|EC PRIVATE KEY|DSA PRIVATE KEY|PRIVATE KEY)-----$/;
 const puttyPrivateKeyPattern = /^PuTTY-User-Key-File-2: ssh-(?:rsa|dss)\r?\nEncryption: (?:aes256-cbc|none)\r?\nComment: [^\r\n]*\r?\nPublic-Lines: \d+\r?\n[\s\S]+?\r?\nPrivate-Lines: \d+\r?\n[\s\S]+?\r?\nPrivate-MAC: [^\r\n]+/;
@@ -114,6 +117,15 @@ export interface SshShellSessionResult {
   connectedAt: string;
 }
 
+export interface SshShellEvidenceSummary {
+  serverId: string;
+  serverName: string;
+  mode: SshVerifyMode;
+  active: boolean;
+  updatedAt: string;
+  transcript: string;
+}
+
 export interface SshShellSessionStats {
   activeCount: number;
   byMode: Record<SshVerifyMode, number>;
@@ -134,6 +146,8 @@ type SshShellListener = (event: SshShellStreamEvent) => void;
 
 interface ActiveSshShellSession {
   id: string;
+  serverId: string;
+  serverName: string;
   mode: SshVerifyMode;
   connectedAt: string;
   history: SshShellStreamEvent[];
@@ -147,6 +161,21 @@ interface ActiveSshShellSession {
 }
 
 const activeSshShellSessions = new Map<string, ActiveSshShellSession>();
+
+interface SshShellEvidenceRecord {
+  serverId: string;
+  serverName: string;
+  mode: SshVerifyMode;
+  updatedAt: string;
+  events: Array<{
+    type: SshShellStreamEvent['type'];
+    content?: string;
+    message?: string;
+    at: string;
+  }>;
+}
+
+const recentSshShellEvidenceByServer = new Map<string, SshShellEvidenceRecord>();
 
 export interface SshVerificationResult {
   connected: boolean;
@@ -281,12 +310,13 @@ export async function streamStoredSshCommand(
 
 export async function openStoredSshShell(
   credential: StoredSshCredential,
+  server: { id: string; name: string },
   mode: SshVerifyMode,
   options: { cols?: number; rows?: number } = {},
 ): Promise<SshShellSessionResult> {
   return mode === 'simulate'
-    ? openSimulatedSshShell(mode)
-    : openRealSshShell(credential, mode, options);
+    ? openSimulatedSshShell(server, mode)
+    : openRealSshShell(credential, server, mode, options);
 }
 
 export function subscribeSshShellSession(
@@ -360,6 +390,26 @@ export function getSshShellSessionStats(): SshShellSessionStats {
   }
 
   return stats;
+}
+
+export function getRecentSshShellEvidence(serverIds?: string[]): SshShellEvidenceSummary[] {
+  pruneRecentSshShellEvidence();
+  const allowedServerIds = serverIds?.length ? new Set(serverIds) : null;
+  const activeServerIds = new Set(Array.from(activeSshShellSessions.values()).filter((session) => !session.closed).map((session) => session.serverId));
+
+  return Array.from(recentSshShellEvidenceByServer.values())
+    .filter((record) => !allowedServerIds || allowedServerIds.has(record.serverId))
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .slice(0, 8)
+    .map((record) => ({
+      serverId: record.serverId,
+      serverName: record.serverName,
+      mode: record.mode,
+      active: activeServerIds.has(record.serverId),
+      updatedAt: record.updatedAt,
+      transcript: summarizeShellEvidence(record),
+    }))
+    .filter((summary) => summary.transcript.trim());
 }
 
 export async function collectSshMetrics(credential: StoredSshCredential, mode: SshVerifyMode) {
@@ -593,7 +643,7 @@ function execSshCommandStream(
   });
 }
 
-function openSimulatedSshShell(mode: SshVerifyMode): SshShellSessionResult {
+function openSimulatedSshShell(server: { id: string; name: string }, mode: SshVerifyMode): SshShellSessionResult {
   const connectedAt = new Date().toISOString();
   const sessionId = crypto.randomUUID();
   let pendingTimer: ReturnType<typeof setTimeout> | null = null;
@@ -601,6 +651,8 @@ function openSimulatedSshShell(mode: SshVerifyMode): SshShellSessionResult {
   let inputBuffer = '';
   const shell = registerSshShellSession({
     id: sessionId,
+    serverId: server.id,
+    serverName: server.name,
     mode,
     connectedAt,
     write: (input) => {
@@ -709,6 +761,7 @@ function runSimulatedShellCommand(
 
 function openRealSshShell(
   credential: StoredSshCredential,
+  server: { id: string; name: string },
   mode: SshVerifyMode,
   options: { cols?: number; rows?: number } = {},
 ) {
@@ -748,7 +801,7 @@ function openRealSshShell(
           }
 
           clearTimeout(timer);
-          registeredSession = registerRealShellSession(sessionId, mode, connectedAt, client, stream);
+          registeredSession = registerRealShellSession(sessionId, server, mode, connectedAt, client, stream);
           settled = true;
           emitSshShellEvent(registeredSession, { type: 'start', connectedAt });
           resolve({ sessionId, mode, connectedAt });
@@ -780,6 +833,7 @@ function openRealSshShell(
 
 function registerRealShellSession(
   sessionId: string,
+  server: { id: string; name: string },
   mode: SshVerifyMode,
   connectedAt: string,
   client: Client,
@@ -788,6 +842,8 @@ function registerRealShellSession(
   let session: ActiveSshShellSession;
   session = registerSshShellSession({
     id: sessionId,
+    serverId: server.id,
+    serverName: server.name,
     mode,
     connectedAt,
     write: (input) => {
@@ -829,6 +885,8 @@ function registerRealShellSession(
 
 function registerSshShellSession(input: {
   id: string;
+  serverId: string;
+  serverName: string;
   mode: SshVerifyMode;
   connectedAt: string;
   write: (input: string) => void;
@@ -845,6 +903,8 @@ function registerSshShellSession(input: {
 
   session = {
     id: input.id,
+    serverId: input.serverId,
+    serverName: input.serverName,
     mode: input.mode,
     connectedAt: input.connectedAt,
     history: [],
@@ -875,7 +935,61 @@ function emitSshShellEvent(session: ActiveSshShellSession, event: SshShellStream
     : event;
   session.history.push(safeEvent);
   session.history.splice(0, Math.max(0, session.history.length - sshShellHistoryLimit));
+  recordSshShellEvidence(session, safeEvent);
   session.listeners.forEach((listener) => listener(safeEvent));
+}
+
+function recordSshShellEvidence(session: ActiveSshShellSession, event: SshShellStreamEvent) {
+  const text = event.content ?? event.message ?? '';
+  if (!text.trim() && event.type !== 'close') {
+    return;
+  }
+
+  pruneRecentSshShellEvidence();
+  const existing = recentSshShellEvidenceByServer.get(session.serverId);
+  const record: SshShellEvidenceRecord = existing ?? {
+    serverId: session.serverId,
+    serverName: session.serverName,
+    mode: session.mode,
+    updatedAt: session.connectedAt,
+    events: [],
+  };
+
+  record.serverName = session.serverName;
+  record.mode = session.mode;
+  record.updatedAt = new Date().toISOString();
+  record.events.push({
+    type: event.type,
+    content: event.content ? redactSensitiveText(event.content) : undefined,
+    message: event.message ? redactSensitiveText(event.message) : undefined,
+    at: record.updatedAt,
+  });
+  record.events.splice(0, Math.max(0, record.events.length - sshShellEvidenceLimit));
+  recentSshShellEvidenceByServer.set(session.serverId, record);
+}
+
+function pruneRecentSshShellEvidence() {
+  const cutoff = Date.now() - sshShellEvidenceRetentionMs;
+  for (const [serverId, record] of recentSshShellEvidenceByServer) {
+    if (new Date(record.updatedAt).getTime() < cutoff) {
+      recentSshShellEvidenceByServer.delete(serverId);
+    }
+  }
+}
+
+function summarizeShellEvidence(record: SshShellEvidenceRecord) {
+  const lines = record.events
+    .map((event) => {
+      const text = (event.content ?? event.message ?? '').replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '').replace(/\r/g, '\n');
+      return text
+        .split('\n')
+        .map((line) => line.trimEnd())
+        .filter((line) => line.trim())
+        .map((line) => `${event.type}: ${line}`)
+        .join('\n');
+    })
+    .filter(Boolean);
+  return lines.join('\n').slice(-sshShellEvidenceMaxChars);
 }
 
 function finalizeSshShellSession(session: ActiveSshShellSession) {

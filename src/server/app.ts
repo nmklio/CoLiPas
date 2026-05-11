@@ -22,6 +22,7 @@ import {
   closeServerShell,
   connectServer,
   deleteServer,
+  getServerShellEvidence,
   getServerShellStatus,
   inspectServerIdentity,
   listCloudAccounts,
@@ -294,7 +295,11 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
 
   app.post('/api/ai/analyze', async (request, response, next) => {
     try {
-      const result = await analyzeOperations(request.body, { servers, events: operationEvents }, config);
+      const result = await analyzeOperations(request.body, {
+        servers,
+        events: operationEvents,
+        shellEvidence: getServerShellEvidence(resolveAiShellEvidenceServerIds(request.body?.serverId)),
+      }, config);
       recordAudit({
         action: 'AI_ANALYZE',
         actor: 'operator',
@@ -355,7 +360,11 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
       response.flushHeaders();
       streamStarted = true;
 
-      const result = await streamAiAnalysis(request.body, { servers, events: operationEvents }, config, (chunk) => {
+      const result = await streamAiAnalysis(request.body, {
+        servers,
+        events: operationEvents,
+        shellEvidence: getServerShellEvidence(resolveAiShellEvidenceServerIds(request.body?.serverId)),
+      }, config, (chunk) => {
         writeEvent({ type: 'chunk', content: chunk });
       });
 
@@ -675,6 +684,14 @@ function getAttemptedUsername(input: unknown) {
 
 function flushSse(response: express.Response) {
   (response as express.Response & { flush?: () => void }).flush?.();
+}
+
+function resolveAiShellEvidenceServerIds(serverId: unknown) {
+  if (typeof serverId === 'string' && serverId.trim() && serverId !== 'all') {
+    return [serverId.trim()];
+  }
+
+  return undefined;
 }
 
 function getBearerToken(value: unknown) {

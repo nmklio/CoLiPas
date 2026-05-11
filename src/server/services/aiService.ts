@@ -3,6 +3,7 @@ import { buildOpsPrompt } from '../../shared/aiPrompt.js';
 import { AIProviderConfig, OperationEvent, ServerNode } from '../../types.js';
 import { RuntimeConfig } from '../config.js';
 import { HttpError } from '../httpErrors.js';
+import type { SshShellEvidenceSummary } from './sshAccessService.js';
 
 export interface AiAnalysisRequest {
   question: string;
@@ -71,7 +72,7 @@ const aiResponseCache = new Map<string, AiAnalysisResponse & { cachedAt: number 
 
 export async function streamAiAnalysis(
   input: AiAnalysisRequest,
-  context: { servers: ServerNode[]; events: OperationEvent[] },
+  context: { servers: ServerNode[]; events: OperationEvent[]; shellEvidence?: SshShellEvidenceSummary[] },
   config: RuntimeConfig,
   send: (chunk: string) => void,
 ): Promise<AiAnalysisResponse> {
@@ -93,7 +94,7 @@ export async function streamAiAnalysis(
   const aiProvider = resolveAiProvider(input, config);
   const chatHistory = normalizeChatHistory(input.messages);
   const includeOperationsContext = shouldUseOperationsContext(question, selectedServer);
-  const prompt = buildAnalysisPrompt(selectedServers, context.events, question, selectedServer, chatHistory, includeOperationsContext);
+  const prompt = buildAnalysisPrompt(selectedServers, context.events, question, selectedServer, chatHistory, includeOperationsContext, context.shellEvidence ?? []);
   const cacheKey = buildAiCacheKey(aiProvider, input.serverId ?? 'all', question, prompt, chatHistory);
   const cached = input.forceRefresh ? undefined : getCachedAiResponse(cacheKey);
   if (cached) {
@@ -102,7 +103,7 @@ export async function streamAiAnalysis(
   }
 
   if (!aiProvider.apiKey) {
-    const localResult = buildSimulatedAnswer(selectedServers, context.events, question, selectedServer, includeOperationsContext);
+    const localResult = buildSimulatedAnswer(selectedServers, context.events, question, selectedServer, includeOperationsContext, chatHistory, context.shellEvidence ?? []);
     const { answer, executionPlan } = localResult;
     await sendAnswerInChunks(answer, send, 18);
     const result = withGeneratedAt({
@@ -228,7 +229,7 @@ export async function listAiModels(input: { provider?: Partial<AIProviderConfig>
 
 export async function analyzeOperations(
   input: AiAnalysisRequest,
-  context: { servers: ServerNode[]; events: OperationEvent[] },
+  context: { servers: ServerNode[]; events: OperationEvent[]; shellEvidence?: SshShellEvidenceSummary[] },
   config: RuntimeConfig,
 ): Promise<AiAnalysisResponse> {
   return streamAiAnalysis(input, context, config, () => undefined);
@@ -519,18 +520,22 @@ function buildAnalysisPrompt(
   selectedServer?: ServerNode,
   chatHistory: AiChatMessage[] = [],
   includeOperationsContext = true,
+  shellEvidence: SshShellEvidenceSummary[] = [],
 ) {
   if (!includeOperationsContext) {
     return question;
   }
 
+  const shellEvidenceText = formatShellEvidenceForPrompt(shellEvidence);
   return [
     buildOpsPrompt(servers, events),
     '',
     `Analysis scope: ${selectedServer ? `${selectedServer.name} (${selectedServer.publicIp || 'no public IP'})` : 'all servers'}`,
     chatHistory.length ? `Prior conversation turns available: ${chatHistory.length}` : 'Prior conversation turns available: 0',
+    chatHistory.length ? 'Use prior assistant messages that begin with "Execution evidence:" as factual SSH/operations output evidence.' : '',
+    shellEvidenceText ? `Recent sanitized SSH terminal evidence:\n${shellEvidenceText}` : 'Recent sanitized SSH terminal evidence: none',
     `User question: ${question}`,
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 }
 
 function buildSimulatedAnswer(
@@ -539,7 +544,31 @@ function buildSimulatedAnswer(
   question: string,
   selectedServer?: ServerNode,
   includeOperationsContext = true,
+  chatHistory: AiChatMessage[] = [],
+  shellEvidence: SshShellEvidenceSummary[] = [],
 ) {
+  const priorEvidence = extractPriorExecutionEvidence(chatHistory);
+  const latestShellEvidence = shellEvidence.filter((item) => item.transcript.trim()).slice(0, 3);
+  if (includeOperationsContext && (priorEvidence.length > 0 || latestShellEvidence.length > 0)) {
+    const evidenceLines = [
+      ...priorEvidence.slice(-3).map((content, index) => `${index + 1}. Prior AI-run operation:\n${content}`),
+      ...latestShellEvidence.map((item, index) => `${priorEvidence.slice(-3).length + index + 1}. Recent SSH terminal on ${item.serverName} (${item.active ? 'active' : 'closed'}, ${item.mode}, ${item.updatedAt}):\n${item.transcript}`),
+    ];
+    return {
+      answer: [
+        'Local evidence analysis. CoLiPas found recent SSH/operations output in this conversation or active terminal context.',
+        `Question: ${question}`,
+        '',
+        'Available execution evidence:',
+        ...evidenceLines,
+        '',
+        'Conclusion:',
+        '- The answer above is based on the captured, sanitized execution output. If you need deeper diagnosis, run the next guarded SSH check and ask again.',
+      ].join('\n'),
+      executionPlan: buildExecutionPlan(servers, selectedServer, question, includeOperationsContext),
+    };
+  }
+
   if (!includeOperationsContext) {
     return {
       answer: [
@@ -655,6 +684,26 @@ function riskReasons(server: ServerNode, events: OperationEvent[]) {
     reasons.push('critical open event exists');
   }
   return reasons;
+}
+
+function extractPriorExecutionEvidence(chatHistory: AiChatMessage[]) {
+  return chatHistory
+    .filter((message) => message.role === 'assistant' && message.content.includes('Execution evidence:'))
+    .map((message) => message.content.trim().slice(0, 3000));
+}
+
+function formatShellEvidenceForPrompt(shellEvidence: SshShellEvidenceSummary[]) {
+  return shellEvidence
+    .filter((item) => item.transcript.trim())
+    .slice(0, 3)
+    .map((item, index) => [
+      `${index + 1}. server=${item.serverName}`,
+      `mode=${item.mode}`,
+      `active=${item.active}`,
+      `updatedAt=${item.updatedAt}`,
+      `transcript:\n${item.transcript.slice(-3000)}`,
+    ].join('\n'))
+    .join('\n\n');
 }
 
 function buildExecutionPlan(

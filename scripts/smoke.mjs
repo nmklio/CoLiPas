@@ -656,6 +656,44 @@ try {
   if (aiPlanTask.status !== 'completed' || aiPlanTask.summary.success !== 1 || !JSON.stringify(aiPlanTask.outputs).includes('simulated')) {
     throw new Error('/api/operations/tasks did not execute the guarded AI plan on simulated SSH');
   }
+  const aiEvidenceFollowupResponse = await fetch(`${baseUrl}/api/ai/stream`, {
+    method: 'POST',
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      question: '刚才执行结果是什么',
+      provider: {
+        name: 'Smoke AI',
+        baseUrl: 'https://api.example.com/v1',
+        model: 'smoke-model',
+        apiKey: '',
+        temperature: 0.2,
+      },
+      serverId: aiExecutableServer.id,
+      forceRefresh: true,
+      messages: [
+        { role: 'user', content: 'Run a safe SSH uptime check' },
+        {
+          role: 'assistant',
+          content: [
+            'Execution evidence:',
+            `task=${aiPlanTask.id}`,
+            `trace=${aiPlanTask.correlationId}`,
+            `type=${aiPlanTask.type}`,
+            `status=${aiPlanTask.status}`,
+            `summary=${aiPlanTask.summary.success}/${aiPlanTask.summary.total} succeeded`,
+            `output:\n${aiPlanTask.outputs[0]?.output ?? ''}`,
+          ].join('\n'),
+        },
+      ],
+    }),
+  });
+  if (!aiEvidenceFollowupResponse.ok) {
+    throw new Error(`/api/ai/stream execution evidence follow-up returned HTTP ${aiEvidenceFollowupResponse.status}`);
+  }
+  const aiEvidenceFollowupText = await aiEvidenceFollowupResponse.text();
+  if (!aiEvidenceFollowupText.includes('Available execution evidence') || !aiEvidenceFollowupText.includes('simulated')) {
+    throw new Error('/api/ai/stream did not use prior execution evidence in follow-up answer');
+  }
   console.log('ok AI execution plan preflights and runs through operations service');
 } finally {
   const deleteAiExecutableServerResponse = await fetch(`${baseUrl}/api/servers/${aiExecutableServer.id}`, {
@@ -1555,6 +1593,29 @@ if (!shellStreamResponse.ok) {
 const shellStreamText = await readSseUntil(shellStreamResponse, (text) => text.includes('"type":"stdout"') && text.includes('simulated$ whoami'));
 if (!shellStreamText.includes('"type":"start"') || !shellStreamText.includes('"type":"stdout"')) {
   throw new Error('/api/servers/shells/:sessionId/stream returned unexpected SSE payload');
+}
+const shellAiEvidenceResponse = await fetch(`${baseUrl}/api/ai/stream`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    question: '读取刚才服务器终端执行结果',
+    provider: {
+      name: 'Smoke AI',
+      baseUrl: 'https://api.example.com/v1',
+      model: 'smoke-model',
+      apiKey: '',
+      temperature: 0.2,
+    },
+    serverId: connectedServer.id,
+    forceRefresh: true,
+  }),
+});
+if (!shellAiEvidenceResponse.ok) {
+  throw new Error(`/api/ai/stream shell evidence returned HTTP ${shellAiEvidenceResponse.status}`);
+}
+const shellAiEvidenceText = await shellAiEvidenceResponse.text();
+if (!shellAiEvidenceText.includes('Recent SSH terminal') || !shellAiEvidenceText.includes('simulated$ whoami')) {
+  throw new Error('/api/ai/stream did not include recent SSH terminal evidence');
 }
 const shellCloseResponse = await fetch(`${baseUrl}/api/servers/shells/${shellBody.sessionId}`, {
   method: 'DELETE',
@@ -2701,6 +2762,11 @@ function assertAiResponseCachingGuards() {
     'executionPlan',
     'function buildExecutionPlan(',
     'safetyNote',
+    'shellEvidence',
+    'extractPriorExecutionEvidence(chatHistory)',
+    'formatShellEvidenceForPrompt(shellEvidence)',
+    'Recent sanitized SSH terminal evidence',
+    'Execution evidence:',
   ];
   const missingBackend = backendFragments.filter((fragment) => !aiServiceSource.includes(fragment));
   if (missingBackend.length) {
@@ -2737,6 +2803,9 @@ function assertAiResponseCachingGuards() {
     'ai-execution-choice-group',
     'preflightOperationTask(payload)',
     'createOperationTask({',
+    'appendExecutionEvidenceMessage(sessionId, result',
+    'buildExecutionEvidenceMessage(result',
+    'Execution evidence:',
     'ai-execution-card',
     'message.status === \'cached\'',
     'cachedResult.answer',

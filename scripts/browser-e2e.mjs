@@ -188,6 +188,10 @@ async function assertAccountSettingsAndAiChat(targetPage) {
     if (!executionText.includes(aiSshServer.name) || !executionText.includes('simulated')) {
       throw new Error(`AI execution card did not run through simulated SSH: ${executionText}`);
     }
+    await targetPage.locator('.ai-message.assistant .ai-message-content').filter({ hasText: 'Execution evidence:' }).waitFor({ timeout: 10000 });
+    await targetPage.getByRole('textbox', { name: /question/i }).fill('What did the last SSH execution return?');
+    await targetPage.getByRole('button', { name: /^send$/i }).click();
+    await targetPage.locator('.ai-message.assistant.done .ai-message-content').filter({ hasText: /Available execution evidence|simulated/i }).last().waitFor({ timeout: 20000 });
 
     await assertDesktopAiDockLayout(targetPage);
 

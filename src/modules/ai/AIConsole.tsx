@@ -565,6 +565,7 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
 
   async function handleExecuteAiPlan() {
     const plan = executionPlan;
+    const sessionId = activeSession.id;
     if (!plan || aiTaskRunning) {
       return;
     }
@@ -599,6 +600,7 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
       });
       setAiTaskResult(result);
       setAiTaskMessage(result.message);
+      appendExecutionEvidenceMessage(sessionId, result, executionCopy.noOutput);
       await onTaskFinished?.();
     } catch (requestError) {
       setAiTaskMessage(requestError instanceof Error ? requestError.message : executionCopy.failed);
@@ -992,6 +994,34 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
       };
     }));
   }
+
+  function appendExecutionEvidenceMessage(sessionId: string, result: OperationTaskResponse, noOutputLabel: string) {
+    const evidenceMessage = createAssistantMessage(
+      buildExecutionEvidenceMessage(result, noOutputLabel),
+      {
+        provider: 'CoLiPas operations',
+        model: 'execution-evidence',
+        prompt: 'Guarded AI operation execution result',
+        answer: '',
+        simulated: true,
+        cached: false,
+        generatedAt: result.finishedAt,
+      },
+      'done',
+    );
+
+    setSessions((current) => current.map((session) => {
+      if (session.id !== sessionId) {
+        return session;
+      }
+
+      return {
+        ...session,
+        messages: [...session.messages, evidenceMessage],
+        updatedAt: new Date().toISOString(),
+      };
+    }));
+  }
 }
 
 function createSession(title: string): AiChatSession {
@@ -1089,6 +1119,32 @@ function formatExecutionCommand(plan: NonNullable<AiAnalysisResponse['executionP
   }
 
   return plan.summary;
+}
+
+function buildExecutionEvidenceMessage(result: OperationTaskResponse, noOutputLabel: string) {
+  const outputLines = result.outputs.slice(0, 5).map((output, index) => {
+    const status = output.error ? `${output.status}: ${output.error}` : output.status;
+    const command = output.command?.trim() ? `command=${output.command.trim()}\n` : '';
+    const outputText = (output.output || output.error || noOutputLabel).trim().slice(0, 2200);
+    return [
+      `${index + 1}. ${output.serverName} (${output.serverId})`,
+      `status=${status}`,
+      command ? command.trimEnd() : '',
+      `output:\n${outputText}`,
+    ].filter(Boolean).join('\n');
+  });
+
+  return [
+    'Execution evidence:',
+    `task=${result.id}`,
+    `trace=${result.correlationId}`,
+    `type=${result.type}`,
+    `status=${result.status}`,
+    `summary=${result.summary.success}/${result.summary.total} succeeded, ${result.summary.failed} failed, ${result.summary.skipped} skipped`,
+    `finishedAt=${result.finishedAt}`,
+    '',
+    ...outputLines,
+  ].join('\n');
 }
 
 function loadStoredProvider(): AIProviderConfig {
@@ -1396,6 +1452,9 @@ function formatMessageMeta(
 
   const model = message.meta?.model ?? fallbackModel;
   if (message.meta?.simulated) {
+    if (message.meta.model === 'execution-evidence') {
+      return 'CoLiPas operations';
+    }
     return `${model} / ${t('ai.localRuleResult')}`;
   }
   if (message.meta?.generatedAt) {
