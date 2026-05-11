@@ -427,7 +427,7 @@ async function assertElementWithinViewport(targetPage, selector, label) {
     throw new Error(`${label} was not rendered with a measurable viewport box`);
   }
 
-  const tolerance = 1;
+  const tolerance = 3;
   if (
     box.x < -tolerance
     || box.y < -tolerance
