@@ -61,7 +61,7 @@ function replaceAll(pattern, replacement) {
   }
 }
 
-replaceAll(/\/\* colipas landing balanced ui(?: v2)? \*\/[\s\S]*?(?=<\/style>)/g, '');
+replaceAll(/\/\* colipas landing balanced ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\/style>)/g, '');
 replaceAll(/<a class="button github-button" href="https:\/\/github\.com\/nmklio\/CoLiPas"[^>]*>GitHub<\/a>/g, '');
 
 if (!html.includes('https://github.com/nmklio/CoLiPas')) {
@@ -72,6 +72,24 @@ if (!html.includes('https://github.com/nmklio/CoLiPas')) {
 
 replaceOnce(/(<section class="hero wrap">[\s\S]*?)<h1>[\s\S]*?<\/h1>/, (_match, prefix) => (
   `${prefix}<h1><span class="hero-title-main">多云服务器管理面板</span><span class="hero-title-accent">接入、监控、修复一体化</span></h1>`
+));
+
+replaceOnce(/(<section id="product" class="section wrap">[\s\S]*?<h2>)[\s\S]*?(<\/h2>)/, (_match, prefix, suffix) => (
+  `${prefix}先接入，再验证，再修复，最后审计${suffix}`
+));
+
+replaceOnce(/(<section id="product" class="section wrap">[\s\S]*?<p class="section-copy">)[\s\S]*?(<\/p>\s*<\/div>\s*<div class="position-grid">)/, (_match, prefix, suffix) => (
+  `${prefix}
+        从资产登记、地域识别、SSH 验证到 AI 分析和编排执行，关键动作都会留下审计记录，方便上线前巡检和问题复盘。
+      ${suffix}`
+));
+
+replaceOnce(/(<section id="features" class="section wrap">[\s\S]*?<h2>)[\s\S]*?(<\/h2>)/, (_match, prefix, suffix) => (
+  `${prefix}围绕服务器接入、诊断、修复构建完整后台${suffix}`
+));
+
+replaceOnce(/(<section id="features" class="section wrap">[\s\S]*?<p class="section-copy">)[\s\S]*?(<\/p>\s*<\/div>\s*<div class="feature-grid">)/, (_match, prefix, suffix) => (
+  `${prefix}保留资产、终端、AI、编排和审计入口，介绍页只展示能力边界，真实操作统一进入受保护后台。${suffix}`
 ));
 
 if (!html.includes('.nav-actions {')) {
@@ -113,7 +131,7 @@ if (!html.includes('@media (max-width: 640px) {\n  .nav-actions')) {
   }`);
 }
 
-replaceOnce('</style>', `/* colipas landing balanced ui v2 */
+replaceOnce('</style>', `/* colipas landing balanced ui v3 */
 @media (min-width: 981px) {
   .nav { height: 72px; }
   .nav-inner,
@@ -135,8 +153,8 @@ replaceOnce('</style>', `/* colipas landing balanced ui v2 */
     border-radius: 10px;
   }
   .hero {
-    min-height: clamp(590px, calc(100vh - 210px), 680px);
-    padding: clamp(36px, 5.2vh, 60px) 0 34px;
+    min-height: clamp(560px, calc(100vh - 250px), 640px);
+    padding: clamp(34px, 5vh, 56px) 0 32px;
     grid-template-columns: minmax(0, 1fr) minmax(420px, 488px);
     gap: clamp(40px, 5vw, 58px);
     align-items: center;
@@ -187,14 +205,15 @@ replaceOnce('</style>', `/* colipas landing balanced ui v2 */
   }
   .stats {
     max-width: 620px;
-    margin-top: 28px;
-    padding-top: 22px;
+    margin-top: 24px;
+    padding-top: 20px;
   }
   .section {
-    padding: 74px 0;
+    padding: 66px 0;
   }
   #product.section {
-    padding-top: 44px;
+    padding-top: 38px;
+    padding-bottom: 58px;
   }
   #product .split {
     grid-template-columns: minmax(0, .9fr) minmax(360px, .74fr);
@@ -203,8 +222,8 @@ replaceOnce('</style>', `/* colipas landing balanced ui v2 */
     padding-top: 8px;
   }
   #product h2 {
-    max-width: 680px;
-    font-size: clamp(32px, 2.85vw, 40px);
+    max-width: 620px;
+    font-size: clamp(32px, 2.65vw, 38px);
     line-height: 1.14;
     word-break: keep-all;
     overflow-wrap: normal;
@@ -222,8 +241,11 @@ replaceOnce('</style>', `/* colipas landing balanced ui v2 */
     gap: 16px;
   }
   .position-card {
-    min-height: 116px;
+    min-height: 104px;
     padding: 20px;
+  }
+  #features.section {
+    padding-top: 58px;
   }
   #features .feature-head {
     display: block;
@@ -237,6 +259,29 @@ replaceOnce('</style>', `/* colipas landing balanced ui v2 */
     max-width: 760px;
     margin-top: 14px;
   }
+  #features .feature-card {
+    min-height: 198px;
+    padding: 20px;
+  }
+  .band {
+    padding: 72px 0;
+  }
+  .security-layout {
+    gap: 52px;
+  }
+  #deploy.section {
+    padding-top: 68px;
+  }
+  .deploy-flow {
+    margin-top: 24px;
+    gap: 18px;
+  }
+  .deploy-grid {
+    margin-top: 24px;
+  }
+  .closing {
+    padding: 76px 0 84px;
+  }
 }
 @media (min-width: 1280px) {
   .hero { transform: none; }
@@ -249,7 +294,7 @@ replaceOnce('</style>', `/* colipas landing balanced ui v2 */
 }
 @media (max-width: 980px) {
   .hero {
-    padding: 46px 0 48px;
+    padding: 42px 0 44px;
   }
   h1 {
     text-wrap: balance;
@@ -261,12 +306,80 @@ replaceOnce('</style>', `/* colipas landing balanced ui v2 */
     width: 100%;
   }
   h1 {
-    font-size: clamp(38px, 11vw, 46px);
+    font-size: clamp(36px, 10.7vw, 42px);
     line-height: 1.08;
+  }
+  .lead {
+    font-size: 15px;
+    line-height: 1.68;
+  }
+  .hero-buttons {
+    margin-top: 22px;
+    gap: 10px;
+  }
+  .stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    padding-top: 16px;
+  }
+  .stats div {
+    min-height: 58px;
+    padding: 0 8px 0 0;
+    border-right: 1px solid #dfe8f3;
+    border-bottom: 0;
+  }
+  .stats div:last-child {
+    border-right: 0;
+  }
+  .stats strong {
+    font-size: 20px;
+  }
+  .stats span {
+    font-size: 10px;
+    line-height: 1.35;
   }
   .product-preview {
     border-radius: 14px;
     transform: none;
+  }
+  .mini-console {
+    grid-template-columns: .95fr 1.05fr;
+    min-height: 260px;
+  }
+  .mini-sidebar,
+  .mini-panel {
+    padding: 16px;
+  }
+  .mini-sidebar {
+    border-right: 1px solid #e6edf6;
+    border-bottom: 0;
+  }
+  .mini-row {
+    gap: 8px;
+    padding: 10px 0;
+    font-size: 12px;
+  }
+  .mini-panel h3 {
+    font-size: 15px;
+  }
+  .mini-card {
+    padding: 12px;
+  }
+  .section,
+  .band,
+  .closing {
+    padding: 48px 0;
+  }
+  #product.section {
+    padding-top: 42px;
+  }
+  #product h2,
+  #features h2,
+  #security h2,
+  #deploy h2,
+  .closing h2 {
+    font-size: clamp(30px, 8.4vw, 36px);
+    line-height: 1.12;
   }
   #product .section-copy {
     max-width: none;
@@ -275,6 +388,40 @@ replaceOnce('</style>', `/* colipas landing balanced ui v2 */
     border-radius: 0;
     background: transparent;
     box-shadow: none;
+  }
+  .position-card,
+  .feature-card,
+  .deploy-card {
+    min-height: 0;
+    padding: 18px;
+  }
+  .position-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .position-card {
+    padding: 16px;
+  }
+  .position-card strong {
+    margin-top: 10px;
+  }
+  .position-card span {
+    font-size: 11px;
+    line-height: 1.45;
+  }
+  .feature-grid,
+  .deploy-grid {
+    gap: 12px;
+  }
+  .feature-card h3,
+  .deploy-card h3 {
+    margin-top: 16px;
+  }
+  .deploy-flow {
+    gap: 12px;
+  }
+  .deploy-step {
+    min-height: 74px;
   }
 }
 </style>`);
