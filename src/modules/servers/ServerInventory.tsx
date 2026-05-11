@@ -1,7 +1,7 @@
 import { FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import type { Terminal as XTerm, IDisposable } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
-import { ChevronUp, Cpu, Database, Edit3, FileKey2, Globe2, KeyRound, Plus, Power, PowerOff, RotateCcw, Search, Server, ShieldCheck, Terminal, Trash2, X } from 'lucide-react';
+import { ChevronUp, Copy, Cpu, Database, Edit3, Eraser, FileKey2, Globe2, KeyRound, Plus, Power, PowerOff, RotateCcw, Search, Server, ShieldCheck, Terminal, Trash2, X } from 'lucide-react';
 import { Language, useI18n } from '../../i18n';
 import {
   closeServerShell,
@@ -723,14 +723,24 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     <span>{activeSshServer.ssh.username}@{loginProbe?.host ?? activeSshServer.ssh.host}</span>
                     <small>{activeSshServer.os}</small>
                   </div>
-                  <div className="ssh-terminal-state">
-                    <span className={terminalShellIdRef.current ? 'live' : sshRunning ? 'pending' : ''} aria-hidden="true" />
-                    <small>{terminalShellIdRef.current ? t('servers.sshConnected') : sshRunning ? t('servers.runningSsh') : t('servers.sshConnect')}</small>
-                    {(sshRunning || terminalShellIdRef.current) && (
-                      <button type="button" onClick={stopTerminalCommand}>
-                        {terminalShellIdRef.current ? t('servers.interruptSsh') : t('common.cancel')}
+                  <div className="ssh-terminal-controls">
+                    <div className="ssh-terminal-tools" aria-label={t('servers.terminalTools')}>
+                      <button type="button" aria-label={t('servers.copyTerminalOutput')} title={t('servers.copyTerminalOutput')} onClick={copyTerminalOutput}>
+                        <Copy size={14} />
                       </button>
-                    )}
+                      <button type="button" aria-label={t('servers.clearTerminalOutput')} title={t('servers.clearTerminalOutput')} onClick={clearTerminalOutput}>
+                        <Eraser size={14} />
+                      </button>
+                    </div>
+                    <div className="ssh-terminal-state">
+                      <span className={terminalShellIdRef.current ? 'live' : sshRunning ? 'pending' : ''} aria-hidden="true" />
+                      <small>{terminalShellIdRef.current ? t('servers.sshConnected') : sshRunning ? t('servers.runningSsh') : t('servers.sshConnect')}</small>
+                      {(sshRunning || terminalShellIdRef.current) && (
+                        <button type="button" onClick={stopTerminalCommand}>
+                          {terminalShellIdRef.current ? t('servers.interruptSsh') : t('common.cancel')}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div ref={terminalContainerRef} className="ssh-terminal-screen" aria-label="Interactive SSH terminal" />
@@ -1254,6 +1264,73 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     const terminal = xtermRef.current;
     terminal?.writeln(`\r\n${command}\r\n${output}`);
     terminal?.scrollToBottom();
+  }
+
+  async function copyTerminalOutput() {
+    const terminal = xtermRef.current;
+    if (!terminal) {
+      return;
+    }
+
+    const selectedText = terminal.getSelection();
+    const text = selectedText.trim() ? selectedText : getVisibleTerminalText(terminal);
+    if (!text.trim()) {
+      setActionMessage(t('servers.terminalCopyEmpty'));
+      terminal.focus();
+      return;
+    }
+
+    try {
+      await writeClipboardText(text);
+      setActionMessage(t('servers.terminalCopied'));
+    } catch {
+      setActionMessage(t('servers.terminalCopyFailed'));
+    } finally {
+      terminal.focus();
+    }
+  }
+
+  function clearTerminalOutput() {
+    const terminal = xtermRef.current;
+    if (!terminal) {
+      return;
+    }
+
+    terminal.clear();
+    setActionMessage(t('servers.terminalCleared'));
+    terminal.focus();
+  }
+
+  function getVisibleTerminalText(terminal: XTerm) {
+    const buffer = terminal.buffer.active;
+    const start = Math.max(0, buffer.viewportY);
+    const end = Math.min(buffer.length, start + terminal.rows);
+    const lines: string[] = [];
+    for (let index = start; index < end; index += 1) {
+      lines.push(buffer.getLine(index)?.translateToString(true) ?? '');
+    }
+    return lines.join('\n').replace(/\s+$/u, '');
+  }
+
+  async function writeClipboardText(text: string) {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', 'true');
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-10000px';
+    textarea.style.top = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    const copied = document.execCommand('copy');
+    document.body.removeChild(textarea);
+    if (!copied) {
+      throw new Error('clipboard copy failed');
+    }
   }
 
   function stopTerminalCommand() {

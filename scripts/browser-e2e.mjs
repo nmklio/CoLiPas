@@ -298,6 +298,34 @@ async function assertSshTerminalPanel(targetPage) {
     }
 
     await targetPage.getByRole('button', { name: /interrupt/i }).waitFor({ timeout: 5000 });
+    await targetPage.evaluate(() => {
+      window.__colipasCopiedTerminalText = '';
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: async (text) => {
+            window.__colipasCopiedTerminalText = text;
+          },
+        },
+      });
+    });
+    await targetPage.getByRole('button', { name: /copy terminal output/i }).click();
+    const copiedTerminalText = await targetPage.evaluate(() => window.__colipasCopiedTerminalText ?? '');
+    if (!copiedTerminalText.includes('simulated$ whoami') || !copiedTerminalText.includes('command simulated.')) {
+      throw new Error(`SSH terminal copy tool did not copy visible output: ${copiedTerminalText}`);
+    }
+    await targetPage.getByRole('button', { name: /clear terminal output/i }).click();
+    await targetPage.waitForFunction(() => {
+      const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
+      return !terminalText.includes('simulated$ whoami') && !terminalText.includes('command simulated.');
+    }, undefined, { timeout: 5000 });
+    await targetPage.locator('.ssh-terminal-screen').click();
+    await targetPage.keyboard.type('pwd', { delay: 10 });
+    await targetPage.keyboard.press('Enter');
+    await targetPage.waitForFunction(() => {
+      const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
+      return terminalText.includes('simulated$ pwd') && terminalText.includes('command simulated.');
+    }, undefined, { timeout: 10000 });
     await assertElementWithinViewport(targetPage, '.ssh-console', 'desktop SSH console');
     await targetPage.locator('.ssh-console-header .icon-button').click();
     await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });
@@ -305,15 +333,15 @@ async function assertSshTerminalPanel(targetPage) {
     await targetPage.locator('.ssh-console').waitFor({ timeout: 10000 });
     await targetPage.waitForFunction(() => {
       const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
-      return terminalText.includes('simulated$ whoami') && terminalText.includes('command simulated.');
+      return terminalText.includes('simulated$ pwd') && terminalText.includes('command simulated.');
     }, undefined, { timeout: 10000 });
     const reopenedText = await targetPage.locator('.ssh-terminal-screen .xterm-rows').textContent();
-    if (!reopenedText?.includes('simulated$ whoami')) {
+    if (!reopenedText?.includes('simulated$ pwd')) {
       throw new Error('SSH terminal did not preserve the live shell buffer after closing the panel');
     }
     await targetPage.locator('.ssh-console-header .icon-button').click();
     await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });
-    console.log('ok browser e2e covers interactive xterm SSH terminal and panel reopen persistence');
+    console.log('ok browser e2e covers interactive xterm SSH terminal, copy/clear tools, and panel reopen persistence');
   } finally {
     await deleteTemporaryAssetServer(targetPage, sshServer.id).catch(() => undefined);
   }

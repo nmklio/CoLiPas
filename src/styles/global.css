@@ -3553,6 +3553,13 @@ td span,
   gap: 12px;
 }
 
+.ssh-terminal-controls {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .ssh-terminal-target {
   min-width: 0;
   display: grid;
@@ -3581,6 +3588,30 @@ td span,
   color: #9cb0b5;
   font-size: 12px;
   font-weight: 760;
+}
+
+.ssh-terminal-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ssh-terminal-tools button {
+  width: 28px;
+  min-height: 28px;
+  border: 1px solid rgba(151, 193, 196, 0.24);
+  border-radius: 7px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.06);
+  color: #bfe7dc;
+  display: inline-grid;
+  place-items: center;
+}
+
+.ssh-terminal-tools button:hover {
+  border-color: rgba(151, 193, 196, 0.46);
+  background: rgba(255, 255, 255, 0.12);
+  color: #f3fffb;
 }
 
 .ssh-terminal-state {
@@ -7567,5 +7598,27 @@ pre {
 
   .ssh-terminal-shell {
     min-height: 420px;
+  }
+
+  .ssh-terminal-titlebar {
+    min-height: 62px;
+    padding: 9px 12px;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .ssh-terminal-controls {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .ssh-terminal-state {
+    min-width: 0;
+  }
+
+  .ssh-terminal-state small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }

@@ -3371,6 +3371,11 @@ function assertSshTerminalRealtimeGuards() {
     'terminalResizeObserverRef.current',
     'terminalShellStreamRef.current?.close()',
     'const canOpenTerminal = connected',
+    'function copyTerminalOutput()',
+    'terminal.getSelection()',
+    'getVisibleTerminalText(terminal)',
+    'function clearTerminalOutput()',
+    'terminal.clear()',
   ];
   const missingFrontend = requiredFrontendFragments.filter((fragment) => !inventorySource.includes(fragment));
   if (missingFrontend.length) {
@@ -3382,6 +3387,17 @@ function assertSshTerminalRealtimeGuards() {
   }
   if (inventorySource.includes('ssh-terminal-input-line') || inventorySource.includes('normalizeInteractiveCommand')) {
     throw new Error('SSH terminal must not use a command-submit input or rewrite interactive command text');
+  }
+  const requiredToolLabels = [
+    'servers.terminalTools',
+    'servers.copyTerminalOutput',
+    'servers.clearTerminalOutput',
+    'servers.terminalCopied',
+    'servers.terminalCleared',
+  ];
+  const missingToolLabels = requiredToolLabels.filter((key) => !inventorySource.includes(key) || !fs.readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8').includes(key));
+  if (missingToolLabels.length) {
+    throw new Error(`SSH terminal tool i18n or UI wiring is incomplete: ${missingToolLabels.join(', ')}`);
   }
   const closeSshConsoleMatch = inventorySource.match(/function closeSshConsole\(\)\s*\{(?<body>[^}]+)\}/);
   if (!closeSshConsoleMatch?.groups?.body?.includes('setSshConsoleOpen(false)')) {
