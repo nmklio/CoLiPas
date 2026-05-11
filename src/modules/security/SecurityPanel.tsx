@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
+  ClipboardCheck,
   Clock3,
   Download,
   Fingerprint,
@@ -107,6 +108,21 @@ interface SecurityRiskAction {
   note?: string;
 }
 
+interface ReleaseEvidenceMetric {
+  label: string;
+  value: string;
+  detail: string;
+  tone: 'ok' | 'warn' | 'fail';
+}
+
+interface ReleaseEvidenceBrief {
+  generatedLabel: string;
+  metrics: ReleaseEvidenceMetric[];
+  blockers: string[];
+  nextAction: string;
+  text: string;
+}
+
 export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, onTraceFocused, onTraceFilterChange }: SecurityPanelProps) {
   const { language, t } = useI18n();
   const copy = securityCopyByLanguage[language] ?? securityCopyByLanguage.zh;
@@ -166,6 +182,19 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
   const successRate = auditEntries.length > 0
     ? Math.round((auditEntries.filter((entry) => entry.status === 'success').length / auditEntries.length) * 100)
     : 100;
+  const evidenceBrief = useMemo(
+    () => buildReleaseEvidenceBrief({
+      readiness,
+      auditTotal: auditEntries.length,
+      activeAuditIssues,
+      successRate,
+      openEventCount: openEvents.length,
+      lastRefreshedAt,
+      copy,
+      locale,
+    }),
+    [activeAuditIssues.blocked, activeAuditIssues.failed, activeAuditIssues.total, auditEntries.length, copy, lastRefreshedAt, locale, openEvents.length, readiness, successRate],
+  );
 
   useEffect(() => {
     refreshSecurityData().catch(() => undefined);
@@ -301,6 +330,23 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
       setRemediationError(false);
     } catch {
       setRemediationMessage(url);
+      setRemediationError(false);
+    }
+  }
+
+  async function copyEvidenceBrief() {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) {
+      setRemediationMessage(evidenceBrief.text);
+      setRemediationError(false);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(evidenceBrief.text);
+      setRemediationMessage(copy.evidenceBriefCopied);
+      setRemediationError(false);
+    } catch {
+      setRemediationMessage(evidenceBrief.text);
       setRemediationError(false);
     }
   }
@@ -513,6 +559,39 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
             </button>
           </div>
         </div>
+      </article>
+
+      <article className={`security-evidence-brief ${readiness?.status ?? 'review'}`} aria-labelledby="security-evidence-brief-title">
+        <div className="security-evidence-heading">
+          <div>
+            <h3 id="security-evidence-brief-title"><ClipboardCheck size={18} /> {copy.evidenceBriefTitle}</h3>
+            <p>{copy.evidenceBriefDescription}</p>
+          </div>
+          <button type="button" className="tool-button" onClick={copyEvidenceBrief} disabled={!evidenceBrief.text}>
+            <ClipboardCheck size={15} />
+            {copy.evidenceBriefCopy}
+          </button>
+        </div>
+        <div className="security-evidence-metrics">
+          {evidenceBrief.metrics.map((metric) => (
+            <div key={metric.label} className={`security-evidence-metric ${metric.tone}`}>
+              <span>{metric.label}</span>
+              <strong>{metric.value}</strong>
+              <small>{metric.detail}</small>
+            </div>
+          ))}
+        </div>
+        <div className="security-evidence-footer">
+          <div>
+            <span>{copy.evidenceBriefNextAction}</span>
+            <p>{evidenceBrief.nextAction}</p>
+          </div>
+          <div>
+            <span>{copy.evidenceBriefBlockersTitle}</span>
+            <p>{evidenceBrief.blockers.length > 0 ? evidenceBrief.blockers.join(' / ') : copy.evidenceBriefNoBlockers}</p>
+          </div>
+        </div>
+        <small className="security-evidence-generated">{copy.evidenceBriefGenerated(evidenceBrief.generatedLabel)}</small>
       </article>
 
       <div className="security-kpi-grid">
@@ -1289,6 +1368,78 @@ function formatAuditTime(value: string, locale: string) {
   return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 }
 
+function buildReleaseEvidenceBrief(input: {
+  readiness: ReleaseReadinessResponse | null;
+  auditTotal: number;
+  activeAuditIssues: ReturnType<typeof getActiveAuditIssues>;
+  successRate: number;
+  openEventCount: number;
+  lastRefreshedAt: Date | null;
+  copy: SecurityCopy;
+  locale: string;
+}): ReleaseEvidenceBrief {
+  const { readiness, auditTotal, activeAuditIssues, successRate, openEventCount, lastRefreshedAt, copy, locale } = input;
+  const generatedLabel = lastRefreshedAt
+    ? lastRefreshedAt.toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' })
+    : copy.waitingRefresh;
+  const readinessStatus = readiness ? copy.readinessStatus(readiness.status) : copy.waitingRefresh;
+  const checksDetail = readiness ? copy.readinessIssues(readiness.summary.failures, readiness.summary.warnings) : copy.readinessCalculating;
+  const blockers = readiness?.blockers.slice(0, 3).map((check) => sanitizeEvidenceBriefText(`${check.label}: ${check.value}`)) ?? [];
+  const nextAction = sanitizeEvidenceBriefText(readiness?.nextBestAction ?? copy.readinessCalculating);
+  const metrics: ReleaseEvidenceMetric[] = [
+    {
+      label: copy.evidenceMetricReadiness,
+      value: readiness ? String(readiness.score) : '--',
+      detail: readinessStatus,
+      tone: readiness?.status === 'ready' ? 'ok' : readiness?.status === 'blocked' ? 'fail' : 'warn',
+    },
+    {
+      label: copy.evidenceMetricChecks,
+      value: readiness ? `${readiness.summary.passed}/${readiness.summary.totalChecks}` : '--',
+      detail: checksDetail,
+      tone: !readiness || readiness.summary.failures > 0 ? 'fail' : readiness.summary.warnings > 0 ? 'warn' : 'ok',
+    },
+    {
+      label: copy.evidenceMetricAudit,
+      value: String(activeAuditIssues.total),
+      detail: copy.evidenceAuditDetail(activeAuditIssues.blocked, activeAuditIssues.failed, successRate, auditTotal),
+      tone: activeAuditIssues.failed > 0 ? 'fail' : activeAuditIssues.blocked > 0 ? 'warn' : 'ok',
+    },
+    {
+      label: copy.evidenceMetricQueue,
+      value: String(openEventCount),
+      detail: copy.evidenceQueueDetail(openEventCount),
+      tone: openEventCount > 0 ? 'warn' : 'ok',
+    },
+  ];
+  const textLines = [
+    `# ${copy.evidenceBriefTitle}`,
+    copy.evidenceBriefGenerated(generatedLabel),
+    `${copy.evidenceMetricReadiness}: ${metrics[0].value} (${metrics[0].detail})`,
+    `${copy.evidenceMetricChecks}: ${metrics[1].value} (${metrics[1].detail})`,
+    `${copy.evidenceMetricAudit}: ${metrics[2].value} (${metrics[2].detail})`,
+    `${copy.evidenceMetricQueue}: ${metrics[3].value} (${metrics[3].detail})`,
+    `${copy.evidenceBriefBlockersTitle}: ${blockers.length > 0 ? blockers.join('; ') : copy.evidenceBriefNoBlockers}`,
+    `${copy.evidenceBriefNextAction}: ${nextAction}`,
+  ];
+
+  return {
+    generatedLabel,
+    metrics,
+    blockers,
+    nextAction,
+    text: textLines.join('\n'),
+  };
+}
+
+function sanitizeEvidenceBriefText(value: string) {
+  return value
+    .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, '[redacted-private-key]')
+    .replace(/\bsk-[A-Za-z0-9_-]{12,}\b/g, '[redacted-api-key]')
+    .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, '[redacted-ip]')
+    .replace(/\b(password|passwd|pwd|token|secret|api[_-]?key)\s*[:=]\s*[^,\s;]+/gi, '$1=[redacted]');
+}
+
 interface SecurityCopy {
   refresh: string;
   exportAudit: string;
@@ -1374,6 +1525,17 @@ interface SecurityCopy {
   clearTrace: string;
   copyTraceLink: string;
   traceLinkCopied: string;
+  evidenceBriefTitle: string;
+  evidenceBriefDescription: string;
+  evidenceBriefCopy: string;
+  evidenceBriefCopied: string;
+  evidenceBriefNextAction: string;
+  evidenceBriefBlockersTitle: string;
+  evidenceBriefNoBlockers: string;
+  evidenceMetricReadiness: string;
+  evidenceMetricChecks: string;
+  evidenceMetricAudit: string;
+  evidenceMetricQueue: string;
   traceApplied: (id: string, count: number) => string;
   remediationTitle: string;
   remediationClear: string;
@@ -1419,6 +1581,9 @@ interface SecurityCopy {
   corsOriginCount: (count: number) => string;
   timeoutMs: (ms: number) => string;
   operationTraceElapsed: (duration: string) => string;
+  evidenceBriefGenerated: (time: string) => string;
+  evidenceAuditDetail: (blocked: number, failed: number, successRate: number, total: number) => string;
+  evidenceQueueDetail: (count: number) => string;
   auditStatus: (status: AuditStatusFilter) => string;
 }
 
@@ -1534,6 +1699,17 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     clearTrace: '清除链路筛选',
     copyTraceLink: '复制链路链接',
     traceLinkCopied: '审计链链接已复制',
+    evidenceBriefTitle: '上线证据摘要',
+    evidenceBriefDescription: '汇总当前评分、审计、事件队列和下一步动作，复制时自动脱敏。',
+    evidenceBriefCopy: '复制证据摘要',
+    evidenceBriefCopied: '上线证据摘要已复制',
+    evidenceBriefNextAction: '下一步动作',
+    evidenceBriefBlockersTitle: '主要阻断',
+    evidenceBriefNoBlockers: '暂无阻断项',
+    evidenceMetricReadiness: '就绪评分',
+    evidenceMetricChecks: '检查覆盖',
+    evidenceMetricAudit: '活跃审计问题',
+    evidenceMetricQueue: '事件队列',
     remediationTitle: '风险处置',
     remediationClear: '暂无待处置',
     noRemediation: '当前没有需要处理的风险项。',
@@ -1588,6 +1764,9 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     corsOriginCount: (count) => `${count} 个来源`,
     timeoutMs: (ms) => `${ms} ms`,
     operationTraceElapsed: (duration) => `预检到执行间隔 ${duration}`,
+    evidenceBriefGenerated: (time) => `证据生成：${time}`,
+    evidenceAuditDetail: (blocked, failed, successRate, total) => `${blocked} 个阻断 / ${failed} 个失败，成功率 ${successRate}%（${total} 条）`,
+    evidenceQueueDetail: (count) => count > 0 ? `${count} 个待处理事件需闭环` : '无待处理事件',
     auditStatus: (status) => ({
       all: '全部',
       success: '成功',
@@ -1680,6 +1859,17 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     clearTrace: 'Clear trace',
     copyTraceLink: 'Copy trace link',
     traceLinkCopied: 'Audit trace link copied',
+    evidenceBriefTitle: 'Release evidence brief',
+    evidenceBriefDescription: 'Aggregates score, audits, event queue, and next action with secret-safe copy output.',
+    evidenceBriefCopy: 'Copy evidence brief',
+    evidenceBriefCopied: 'Release evidence brief copied',
+    evidenceBriefNextAction: 'Next action',
+    evidenceBriefBlockersTitle: 'Top blockers',
+    evidenceBriefNoBlockers: 'No blockers',
+    evidenceMetricReadiness: 'Readiness score',
+    evidenceMetricChecks: 'Check coverage',
+    evidenceMetricAudit: 'Active audit issues',
+    evidenceMetricQueue: 'Event queue',
     remediationTitle: 'Risk remediation',
     remediationClear: 'Nothing to handle',
     noRemediation: 'No risk item requires action right now.',
@@ -1734,6 +1924,9 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     corsOriginCount: (count) => `${count} origins`,
     timeoutMs: (ms) => `${ms} ms`,
     operationTraceElapsed: (duration) => `Preflight-to-execution gap ${duration}`,
+    evidenceBriefGenerated: (time) => `Evidence generated: ${time}`,
+    evidenceAuditDetail: (blocked, failed, successRate, total) => `${blocked} blocked / ${failed} failed, ${successRate}% success across ${total} audits`,
+    evidenceQueueDetail: (count) => count > 0 ? `${count} open events need closure` : 'No open events',
     auditStatus: (status) => ({
       all: 'All',
       success: 'Success',
@@ -1826,6 +2019,17 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     clearTrace: 'trace を解除',
     copyTraceLink: 'trace リンクをコピー',
     traceLinkCopied: '監査 trace リンクをコピーしました',
+    evidenceBriefTitle: 'リリース証跡サマリー',
+    evidenceBriefDescription: 'スコア、監査、イベントキュー、次の対応を集約し、コピー時に機密情報を伏せます。',
+    evidenceBriefCopy: '証跡サマリーをコピー',
+    evidenceBriefCopied: 'リリース証跡サマリーをコピーしました',
+    evidenceBriefNextAction: '次の対応',
+    evidenceBriefBlockersTitle: '主なブロッカー',
+    evidenceBriefNoBlockers: 'ブロッカーなし',
+    evidenceMetricReadiness: '準備スコア',
+    evidenceMetricChecks: 'チェック範囲',
+    evidenceMetricAudit: '有効な監査課題',
+    evidenceMetricQueue: 'イベントキュー',
     remediationTitle: 'リスク対応',
     remediationClear: '対応不要',
     noRemediation: '現在対応が必要なリスク項目はありません。',
@@ -1880,6 +2084,9 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     corsOriginCount: (count) => `${count} 件のオリジン`,
     timeoutMs: (ms) => `${ms} ms`,
     operationTraceElapsed: (duration) => `事前確認から実行まで ${duration}`,
+    evidenceBriefGenerated: (time) => `証跡生成: ${time}`,
+    evidenceAuditDetail: (blocked, failed, successRate, total) => `${blocked} 件ブロック / ${failed} 件失敗、${total} 件中成功率 ${successRate}%`,
+    evidenceQueueDetail: (count) => count > 0 ? `${count} 件の未対応イベントを閉じる必要があります` : '未対応イベントなし',
     auditStatus: (status) => ({
       all: 'すべて',
       success: '成功',

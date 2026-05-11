@@ -31,7 +31,8 @@ try {
   await deleteTemporaryAssetServer(page, temporaryServer.id);
   temporaryServerId = '';
 
-  await captureVisualEvidence(page, 'desktop-security-trace', ['.security-workbench', '.security-readiness-card']);
+  await assertReleaseEvidenceBrief(page);
+  await captureVisualEvidence(page, 'desktop-security-trace', ['.security-workbench', '.security-readiness-card', '.security-evidence-brief']);
   await assertMobileConsoleAndMap();
   await assertMobileModuleLayoutSweep();
 
@@ -112,6 +113,20 @@ async function assertSyntheticTraceDeepLink(targetPage, expectedTraceId) {
   if (auditRows !== 0) {
     throw new Error(`Synthetic trace should filter to zero audit rows, got ${auditRows}`);
   }
+}
+
+async function assertReleaseEvidenceBrief(targetPage) {
+  await targetPage.locator('.security-evidence-brief').waitFor({ timeout: 10000 });
+  await targetPage.getByRole('button', { name: /copy evidence brief/i }).waitFor({ timeout: 5000 });
+  const metricCount = await targetPage.locator('.security-evidence-metric').count();
+  if (metricCount !== 4) {
+    throw new Error(`Release evidence brief should expose four aggregate metrics, got ${metricCount}`);
+  }
+  const text = await targetPage.locator('.security-evidence-brief').innerText();
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(text) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(text)) {
+    throw new Error('Release evidence brief rendered a raw IP address or API key');
+  }
+  await assertElementHorizontallyWithinViewport(targetPage, '.security-evidence-brief', 'desktop release evidence brief');
 }
 
 async function assertAccountSettingsAndAiChat(targetPage) {
@@ -356,12 +371,15 @@ async function assertMobileModuleLayoutSweep() {
 
     await assertMobileSection(mobilePage, /^Security$/i, /#security$/, [
       '.security-readiness-card',
+      '.security-evidence-brief',
       '.security-kpi-grid',
       '.security-control-grid',
       '.security-remediation-card',
       '.security-audit-workspace',
     ]);
     await assertSingleColumnStack(mobilePage, '.security-readiness-card', 'mobile security readiness card');
+    await assertSingleColumnStack(mobilePage, '.security-evidence-metrics', 'mobile release evidence metrics');
+    await assertElementHorizontallyWithinViewport(mobilePage, '.security-evidence-brief', 'mobile release evidence brief');
     await assertSingleColumnStack(mobilePage, '.security-control-grid', 'mobile security control grid');
     await mobilePage.locator('.security-audit-row').first().click();
     await mobilePage.locator('.security-audit-detail-card').waitFor({ timeout: 5000 });
