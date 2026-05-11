@@ -38,6 +38,7 @@ const actionCommands: Record<'powerOn' | 'shutdown' | 'reboot', string> = {
   shutdown: 'nohup sh -c "shutdown -h now" >/dev/null 2>&1 & echo "shutdown scheduled"',
   reboot: 'nohup sh -c "reboot" >/dev/null 2>&1 & echo "reboot scheduled"',
 };
+const terminalLineLimit = 500;
 
 type TerminalLineKind = 'banner' | 'command' | 'output' | 'error' | 'system';
 
@@ -1104,7 +1105,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   }
 
   function appendTerminalRaw(output: string, kind: TerminalLineKind = 'output') {
-    setTerminalLines((current) => [...current, ...splitTerminalLines(output, kind)]);
+    setTerminalLines((current) => limitTerminalLines([...current, ...splitTerminalLines(output, kind)]));
   }
 
   function appendTerminalStreamChunk(chunk: string, kind: TerminalLineKind = 'output') {
@@ -1134,7 +1135,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
           next.push(createTerminalLine(kind, ''));
         }
       });
-      return next.slice(-500);
+      return limitTerminalLines(next);
     });
     updateShellPromptState(normalized, currentCommand);
   }
@@ -1397,6 +1398,10 @@ function splitTerminalLines(output: string, kind: TerminalLineKind): TerminalLin
     .split('\n')
     .map((line) => line.replace(/\r$/, ''))
     .map((line) => createTerminalLine(kind, line));
+}
+
+function limitTerminalLines(lines: TerminalLine[]) {
+  return lines.length > terminalLineLimit ? lines.slice(-terminalLineLimit) : lines;
 }
 
 function stripAnsiControl(output: string) {

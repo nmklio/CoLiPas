@@ -14,6 +14,7 @@ const sshReadyTimeoutMs = 5000;
 const sshShellReadyTimeoutMs = 10000;
 const sshShellIdleTimeoutMs = 20 * 60 * 1000;
 const sshShellHistoryLimit = 120;
+const simulatedShellPrompt = 'simulated$ ';
 const privateKeyBlockPattern = /^-----BEGIN (?:OPENSSH PRIVATE KEY|RSA PRIVATE KEY|EC PRIVATE KEY|DSA PRIVATE KEY|PRIVATE KEY)-----[\s\S]+-----END (?:OPENSSH PRIVATE KEY|RSA PRIVATE KEY|EC PRIVATE KEY|DSA PRIVATE KEY|PRIVATE KEY)-----$/;
 const puttyPrivateKeyPattern = /^PuTTY-User-Key-File-2: ssh-(?:rsa|dss)\r?\nEncryption: (?:aes256-cbc|none)\r?\nComment: [^\r\n]*\r?\nPublic-Lines: \d+\r?\n[\s\S]+?\r?\nPrivate-Lines: \d+\r?\n[\s\S]+?\r?\nPrivate-MAC: [^\r\n]+/;
 
@@ -550,32 +551,70 @@ function execSshCommandStream(
 function openSimulatedSshShell(mode: SshVerifyMode): SshShellSessionResult {
   const connectedAt = new Date().toISOString();
   const sessionId = crypto.randomUUID();
+  let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+  let interrupted = false;
   const shell = registerSshShellSession({
     id: sessionId,
     mode,
     connectedAt,
     write: (input) => {
+      if (input.includes('\u0003')) {
+        interrupted = true;
+        if (pendingTimer) {
+          clearTimeout(pendingTimer);
+          pendingTimer = null;
+        }
+        emitSshShellEvent(shell, { type: 'stdout', content: `^C\r\n${simulatedShellPrompt}` });
+        emitSshShellEvent(shell, { type: 'close', signal: 'SIGINT' });
+        finalizeSshShellSession(shell);
+        return;
+      }
+
       const command = input.replace(/\r?\n$/, '').trim();
       if (!command) {
-        emitSshShellEvent(shell, { type: 'stdout', content: 'simulated$ ' });
+        emitSshShellEvent(shell, { type: 'stdout', content: simulatedShellPrompt });
         return;
       }
       if (command === 'clear') {
-        emitSshShellEvent(shell, { type: 'stdout', content: '\x1b[2J\x1b[Hsimulated$ ' });
+        emitSshShellEvent(shell, { type: 'stdout', content: `\x1b[2J\x1b[H${simulatedShellPrompt}` });
+        return;
+      }
+      if (command === 'colipas-long-output') {
+        emitSshShellEvent(shell, { type: 'stdout', content: `\r\n${simulatedShellPrompt}${command}\r\n` });
+        for (let index = 1; index <= 80; index += 1) {
+          emitSshShellEvent(shell, { type: 'stdout', content: `long-output-${String(index).padStart(2, '0')}\r\n` });
+        }
+        emitSshShellEvent(shell, { type: 'stdout', content: simulatedShellPrompt });
+        return;
+      }
+      if (command === 'colipas-hang') {
+        interrupted = false;
+        emitSshShellEvent(shell, { type: 'stdout', content: `\r\n${simulatedShellPrompt}${command}\r\nhanging until interrupt\r\n` });
+        pendingTimer = setTimeout(() => {
+          pendingTimer = null;
+          if (!interrupted && !shell.closed) {
+            emitSshShellEvent(shell, { type: 'stdout', content: `still-running\r\n${simulatedShellPrompt}` });
+          }
+        }, 5000);
         return;
       }
       emitSshShellEvent(shell, {
         type: 'stdout',
-        content: redactSensitiveText(`\r\nsimulated$ ${command}\r\n命令已模拟执行。\r\nsimulated$ `),
+        content: redactSensitiveText(`\r\n${simulatedShellPrompt}${command}\r\n命令已模拟执行。\r\n${simulatedShellPrompt}`),
       });
     },
     resize: () => undefined,
-    close: () => undefined,
+    close: () => {
+      if (pendingTimer) {
+        clearTimeout(pendingTimer);
+        pendingTimer = null;
+      }
+    },
   });
 
   queueMicrotask(() => {
     emitSshShellEvent(shell, { type: 'start', connectedAt });
-    emitSshShellEvent(shell, { type: 'stdout', content: 'CoLiPas simulated SSH shell\r\nsimulated$ ' });
+    emitSshShellEvent(shell, { type: 'stdout', content: `CoLiPas simulated SSH shell\r\n${simulatedShellPrompt}` });
   });
 
   return {

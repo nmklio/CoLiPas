@@ -1410,6 +1410,96 @@ if (!shellCloseResponse.ok) {
 }
 console.log('ok /api/servers/shells realtime stream');
 
+const shellLongResponse = await fetch(`${baseUrl}/api/servers/shells`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    serverId: connectedServer.id,
+    cols: 120,
+    rows: 32,
+  }),
+});
+if (shellLongResponse.status !== 201) {
+  throw new Error(`/api/servers/shells long-output setup returned HTTP ${shellLongResponse.status}`);
+}
+const shellLongBody = await shellLongResponse.json();
+const shellLongWriteResponse = await fetch(`${baseUrl}/api/servers/shells/${shellLongBody.sessionId}/input`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ input: 'colipas-long-output\n' }),
+});
+if (!shellLongWriteResponse.ok) {
+  throw new Error(`/api/servers/shells/:sessionId/input long output returned HTTP ${shellLongWriteResponse.status}`);
+}
+const shellLongReplayResponse = await fetch(`${baseUrl}/api/servers/shells/${shellLongBody.sessionId}/stream`, {
+  headers: authHeaders,
+});
+if (!shellLongReplayResponse.ok) {
+  throw new Error(`/api/servers/shells/:sessionId/stream long-output replay returned HTTP ${shellLongReplayResponse.status}`);
+}
+const shellLongOutputText = await readSseUntil(
+  shellLongReplayResponse,
+  (text) => text.includes('long-output-01') && text.includes('long-output-80'),
+  5000,
+);
+if ((shellLongOutputText.match(/long-output-/g) ?? []).length < 80) {
+  throw new Error('/api/servers/shells long-output command did not stream all expected chunks');
+}
+const shellLongCloseResponse = await fetch(`${baseUrl}/api/servers/shells/${shellLongBody.sessionId}`, {
+  method: 'DELETE',
+  headers: authHeaders,
+});
+if (!shellLongCloseResponse.ok) {
+  throw new Error(`/api/servers/shells/:sessionId DELETE long-output returned HTTP ${shellLongCloseResponse.status}`);
+}
+console.log('ok /api/servers/shells streams long output without stalling');
+
+const shellInterruptResponse = await fetch(`${baseUrl}/api/servers/shells`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    serverId: connectedServer.id,
+    cols: 100,
+    rows: 28,
+  }),
+});
+if (shellInterruptResponse.status !== 201) {
+  throw new Error(`/api/servers/shells interrupt setup returned HTTP ${shellInterruptResponse.status}`);
+}
+const shellInterruptBody = await shellInterruptResponse.json();
+const shellInterruptStreamResponse = await fetch(`${baseUrl}/api/servers/shells/${shellInterruptBody.sessionId}/stream`, {
+  headers: authHeaders,
+});
+if (!shellInterruptStreamResponse.ok) {
+  throw new Error(`/api/servers/shells/:sessionId/stream interrupt returned HTTP ${shellInterruptStreamResponse.status}`);
+}
+const shellHangWriteResponse = await fetch(`${baseUrl}/api/servers/shells/${shellInterruptBody.sessionId}/input`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ input: 'colipas-hang\n' }),
+});
+if (!shellHangWriteResponse.ok) {
+  throw new Error(`/api/servers/shells/:sessionId/input hang command returned HTTP ${shellHangWriteResponse.status}`);
+}
+await new Promise((resolve) => setTimeout(resolve, 100));
+const shellInterruptWriteResponse = await fetch(`${baseUrl}/api/servers/shells/${shellInterruptBody.sessionId}/input`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ input: '\u0003' }),
+});
+if (!shellInterruptWriteResponse.ok) {
+  throw new Error(`/api/servers/shells/:sessionId/input interrupt returned HTTP ${shellInterruptWriteResponse.status}`);
+}
+const shellInterruptedText = await readSseUntil(
+  shellInterruptStreamResponse,
+  (text) => text.includes('"type":"close"') && text.includes('SIGINT') && text.includes('^C'),
+  5000,
+);
+if (!shellInterruptedText.includes('hanging until interrupt')) {
+  throw new Error('/api/servers/shells interrupt test missed the running command evidence');
+}
+console.log('ok /api/servers/shells interrupts a running terminal command');
+
 const actionResponse = await fetch(`${baseUrl}/api/servers/actions`, {
   method: 'POST',
   headers: { ...authHeaders, 'Content-Type': 'application/json' },
@@ -1851,9 +1941,15 @@ const commandAuditEntry = auditBody.items.find((item) => (
 if (!commandAuditEntry || commandAuditEntry.correlationId !== commandBody.correlationId) {
   throw new Error('/api/audit/events did not preserve server SSH command correlation ID');
 }
-const shellAuditEntry = auditBody.items.find((item) => item.action === 'SERVER_SSH_COMMAND' && item.detail?.includes('SSH shell opened') && item.target === connectedServer.id);
-if (!shellAuditEntry || shellAuditEntry.correlationId !== shellBody.correlationId) {
-  throw new Error('/api/audit/events did not preserve SSH shell correlation ID');
+const shellAuditCorrelationIds = new Set(
+  auditBody.items
+    .filter((item) => item.action === 'SERVER_SSH_COMMAND' && item.detail?.includes('SSH shell opened') && item.target === connectedServer.id)
+    .map((item) => item.correlationId),
+);
+const expectedShellCorrelationIds = [shellBody.correlationId, shellLongBody.correlationId, shellInterruptBody.correlationId];
+const missingShellCorrelationIds = expectedShellCorrelationIds.filter((correlationId) => !shellAuditCorrelationIds.has(correlationId));
+if (missingShellCorrelationIds.length > 0) {
+  throw new Error(`/api/audit/events did not preserve SSH shell correlation IDs: ${missingShellCorrelationIds.join(', ')}`);
 }
 const actionAuditEntry = auditBody.items.find((item) => item.action === 'SERVER_ACTION' && item.correlationId === actionBody.correlationId);
 if (!actionAuditEntry || actionAuditEntry.correlationId !== actionBody.correlationId) {
@@ -3123,6 +3219,8 @@ function assertSshTerminalRealtimeGuards() {
     'writeServerShell(sessionId, `${normalizeInteractiveCommand(trimmedCommand)}\\n`)',
     "writeServerShell(terminalShellIdRef.current, '\\u0003')",
     'terminalShellStreamRef.current?.close()',
+    'const terminalLineLimit = 500',
+    'limitTerminalLines(',
     "t('servers.commandSent'",
   ];
   const missingFrontend = requiredFrontendFragments.filter((fragment) => !inventorySource.includes(fragment));
@@ -3139,6 +3237,10 @@ function assertSshTerminalRealtimeGuards() {
     "term: 'xterm-256color'",
     'activeSshShellSessions',
     'emitSshShellEvent(session, { type: \'stdout\'',
+    "command === 'colipas-long-output'",
+    "command === 'colipas-hang'",
+    "input.includes('\\u0003')",
+    "signal: 'SIGINT'",
     'stream.setWindow(rows, cols',
     'sshShellIdleTimeoutMs',
   ];
