@@ -364,10 +364,10 @@ export function getSshShellSessionStats(): SshShellSessionStats {
 
 export async function collectSshMetrics(credential: StoredSshCredential, mode: SshVerifyMode) {
   const command = [
-    'cpu1=$(awk \'/^cpu / {print $2+$3+$4+$5+$6+$7+$8+$9 ":" $5+$6}\' /proc/stat)',
-    'sleep 0.2',
-    'cpu2=$(awk \'/^cpu / {print $2+$3+$4+$5+$6+$7+$8+$9 ":" $5+$6}\' /proc/stat)',
-    'cpu=$(awk -F: -v a="$cpu1" -v b="$cpu2" \'BEGIN {split(a,x,":"); split(b,y,":"); dt=y[1]-x[1]; di=y[2]-x[2]; if (dt>0) printf "%.0f", 100-(di*100/dt); else print 0}\')',
+    'cpu1=$(awk \'/^cpu / {total=0; for (i=2; i<=NF; i++) total+=$i; idle=$5+$6; print total ":" idle}\' /proc/stat)',
+    'sleep 0.5',
+    'cpu2=$(awk \'/^cpu / {total=0; for (i=2; i<=NF; i++) total+=$i; idle=$5+$6; print total ":" idle}\' /proc/stat)',
+    'cpu=$(awk -F: -v a="$cpu1" -v b="$cpu2" \'BEGIN {split(a,x,":"); split(b,y,":"); dt=y[1]-x[1]; di=y[2]-x[2]; if (dt>0) { usage=100-(di*100/dt); if (usage<0) usage=0; if (usage>100) usage=100; printf "%.1f", usage } else print 0}\')',
     'mem=$(free | awk \'/Mem:/ {printf "%.0f", $3*100/$2}\')',
     'disk=$(df -P / | awk \'NR==2 {gsub("%","",$5); print $5}\')',
     'printf "cpu=%s\\nmem=%s\\ndisk=%s\\n" "$cpu" "$mem" "$disk"',
@@ -933,11 +933,22 @@ function parseMetricsOutput(output: string) {
       .map(([key, value]) => [key, Number(value)]),
   );
 
+  const hasCpuSample = typeof values.cpu === 'number' && Number.isFinite(values.cpu);
+
   return {
-    cpu: clampMetric(values.cpu),
+    cpu: normalizeLiveCpuMetric(values.cpu, hasCpuSample),
     memory: clampMetric(values.mem),
     disk: clampMetric(values.disk),
   };
+}
+
+function normalizeLiveCpuMetric(value: unknown, hasCpuSample: boolean) {
+  const number = typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  const clamped = Math.max(0, Math.min(100, number));
+  if (hasCpuSample && clamped < 1) {
+    return 1;
+  }
+  return Math.round(clamped);
 }
 
 function clampMetric(value: unknown) {

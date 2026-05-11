@@ -163,7 +163,9 @@ async function assertAccountSettingsAndAiChat(targetPage) {
     throw new Error('AI cached answer should match the first local rule answer for the same prompt');
   }
 
-  console.log('ok browser e2e covers account profile save and AI cached chat');
+  await assertDesktopAiDockLayout(targetPage);
+
+  console.log('ok browser e2e covers account profile save, AI cached chat, and AI dock layout');
 }
 
 async function createTemporaryAssetServer(targetPage, namePrefix = 'browser-e2e-asset') {
@@ -663,6 +665,81 @@ async function assertElementWithinViewport(targetPage, selector, label) {
   ) {
     throw new Error(`${label} overflows viewport ${viewport.width}x${viewport.height}: ${JSON.stringify(box)}`);
   }
+}
+
+async function assertDesktopAiDockLayout(targetPage) {
+  await assertElementWithinViewport(targetPage, '.ai-dock', 'desktop AI dock');
+  await assertNoHorizontalOverflow(targetPage, 'desktop AI chat dock');
+
+  let metrics = await readAiDockMetrics(targetPage);
+  if (metrics.body.overflow !== 'hidden') {
+    throw new Error(`Desktop AI chat body should hide outer overflow, got ${metrics.body.overflow}`);
+  }
+  if (metrics.thread.overflow !== 'auto') {
+    throw new Error(`Desktop AI chat thread should own message scrolling, got ${metrics.thread.overflow}`);
+  }
+  if (metrics.thread.bottom > metrics.composer.y + 3) {
+    throw new Error(`Desktop AI chat thread overlaps composer: ${JSON.stringify(metrics)}`);
+  }
+  if (metrics.composer.right > metrics.dock.right + 3 || metrics.toolbar.right > metrics.dock.right + 3) {
+    throw new Error(`Desktop AI composer escapes dock width: ${JSON.stringify(metrics)}`);
+  }
+
+  await captureVisualEvidence(targetPage, 'desktop-ai-dock-chat', ['.ai-dock', '.ai-chat-thread', '.ai-composer']);
+  await targetPage.getByRole('button', { name: /ai settings/i }).click();
+  await targetPage.locator('.ai-dock-settings').waitFor({ timeout: 5000 });
+  await assertElementWithinViewport(targetPage, '.ai-dock', 'desktop AI settings dock');
+  metrics = await readAiDockMetrics(targetPage);
+  if (metrics.body.overflow !== 'hidden') {
+    throw new Error(`Desktop AI settings body should hide outer overflow, got ${metrics.body.overflow}`);
+  }
+  if (metrics.settings.overflow !== 'auto') {
+    throw new Error(`Desktop AI settings form should own scrolling, got ${metrics.settings.overflow}`);
+  }
+  if (metrics.settings.right > metrics.dock.right + 3 || metrics.range.right > metrics.settings.right + 3 || metrics.button.right > metrics.settings.right + 3) {
+    throw new Error(`Desktop AI settings controls escape the dock: ${JSON.stringify(metrics)}`);
+  }
+  if (metrics.range.width < 120) {
+    throw new Error(`Desktop AI temperature slider is too cramped: ${JSON.stringify(metrics.range)}`);
+  }
+  await captureVisualEvidence(targetPage, 'desktop-ai-dock-settings', ['.ai-dock', '.ai-dock-settings', '.ai-dock-settings input[type="range"]']);
+  await targetPage.getByRole('button', { name: /ai settings/i }).click();
+}
+
+async function readAiDockMetrics(targetPage) {
+  return targetPage.evaluate(() => {
+    const readBox = (selector) => {
+      const element = document.querySelector(selector);
+      if (!element) {
+        return null;
+      }
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return {
+        selector,
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+        bottom: rect.bottom,
+        right: rect.right,
+        overflow: style.overflow,
+        scrollHeight: element.scrollHeight,
+        clientHeight: element.clientHeight,
+      };
+    };
+
+    return {
+      dock: readBox('.ai-dock'),
+      body: readBox('.ai-dock-body'),
+      thread: readBox('.ai-chat-thread'),
+      composer: readBox('.ai-composer'),
+      toolbar: readBox('.ai-composer-toolbar'),
+      settings: readBox('.ai-dock-settings'),
+      range: readBox('.ai-dock-settings input[type="range"]'),
+      button: readBox('.ai-dock-settings .tool-button.wide'),
+    };
+  });
 }
 
 async function assertMobileAiChatLayout(targetPage) {

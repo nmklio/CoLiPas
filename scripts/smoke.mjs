@@ -2469,13 +2469,16 @@ function assertAccountUiGuards() {
   const cssFragments = [
     '.brand-mark img',
     '.avatar-upload-row',
-    'width: min(392px, calc(100vw - 288px))',
+    'width: min(432px, calc(100vw - 288px))',
     'box-shadow: 0 26px 72px rgba(12, 30, 35, 0.18)',
     'display: flex',
     '.ai-dock-body.chat-mode',
     'grid-template-rows: auto auto minmax(0, 1fr) auto auto',
     '.ai-dock-body.settings-mode',
+    'grid-template-rows: minmax(0, 1fr)',
     'overflow: hidden',
+    '.ai-dock-settings input[type="range"]',
+    'grid-template-columns: minmax(0, 1fr) auto',
     'border-radius: 999px',
     '.ai-empty-panel',
     '.ai-status-stack',
@@ -2792,8 +2795,8 @@ function assertCustomApiSecretNotPersisted() {
     '.api-integration-row',
     '.api-integration-row b',
     'grid-template-columns: minmax(0, 1fr)',
-    'width: min(392px, calc(100vw - 288px))',
-    'height: min(590px, calc(100vh - 128px))',
+    'width: min(432px, calc(100vw - 288px))',
+    'height: min(640px, calc(100vh - 96px))',
   ];
   for (const fragment of requiredStyleFragments) {
     if (!globalStyleSource.includes(fragment)) {
@@ -2846,6 +2849,7 @@ function assertSqlitePersistenceGuards() {
   const inventoryServiceSource = fs.readFileSync(new URL('../src/server/services/inventoryService.ts', import.meta.url), 'utf8');
   const auditServiceSource = fs.readFileSync(new URL('../src/server/services/auditService.ts', import.meta.url), 'utf8');
   const appSource = fs.readFileSync(new URL('../src/server/app.ts', import.meta.url), 'utf8');
+  const sshAccessSource = fs.readFileSync(new URL('../src/server/services/sshAccessService.ts', import.meta.url), 'utf8');
   const combined = [databaseSource, inventoryServiceSource, auditServiceSource, appSource].join('\n');
   const requiredFragments = [
     "import { DatabaseSync } from 'node:sqlite'",
@@ -2884,6 +2888,16 @@ function assertSqlitePersistenceGuards() {
   const refreshServerMetricsBody = inventoryServiceSource.match(/export async function refreshServerMetrics\(\) \{[\s\S]*?\n\}/)?.[0] ?? '';
   if (!refreshServerMetricsBody || refreshServerMetricsBody.includes('persistInventory()') || refreshServerMetricsBody.includes('replaceServerRows')) {
     throw new Error('Overview metric refresh must not rewrite SQLite inventory rows');
+  }
+
+  const sshMetricFragments = [
+    'sleep 0.5',
+    'normalizeLiveCpuMetric(values.cpu, hasCpuSample)',
+    'hasCpuSample && clamped < 1',
+  ];
+  const missingSshMetricFragments = sshMetricFragments.filter((fragment) => !sshAccessSource.includes(fragment));
+  if (missingSshMetricFragments.length) {
+    throw new Error(`SSH live CPU metric guard is incomplete: ${missingSshMetricFragments.join(', ')}`);
   }
 
   const healthRouteBody = appSource.match(/app\.get\('\/api\/health'[\s\S]*?\n  \}\);/)?.[0] ?? '';
@@ -3928,6 +3942,9 @@ function assertSecurityAuditRelationsAreSpecific() {
     '.ai-message.assistant.done .ai-message-content',
     '.ai-message.assistant.cached .ai-message-content',
     'AI cached answer should match the first local rule answer',
+    'assertDesktopAiDockLayout',
+    'desktop-ai-dock-chat',
+    'desktop-ai-dock-settings',
     'assertOperationsResultTraceRoundTrip',
     'waitForAuditEvents(targetPage, traceIdFromUrl)',
     'assertMobileConsoleAndMap',
