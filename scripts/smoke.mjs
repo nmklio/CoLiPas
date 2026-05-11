@@ -2087,6 +2087,7 @@ function assertAccountUiGuards() {
   const loginSource = fs.readFileSync(new URL('../src/app/LoginPage.tsx', import.meta.url), 'utf8');
   const marketingSource = fs.readFileSync(new URL('../src/app/MarketingPage.tsx', import.meta.url), 'utf8');
   const appSource = fs.readFileSync(new URL('../src/app/App.tsx', import.meta.url), 'utf8');
+  const ciSource = fs.readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
   const serverAppSource = fs.readFileSync(new URL('../src/server/app.ts', import.meta.url), 'utf8');
   const authSource = fs.readFileSync(new URL('../src/server/services/authService.ts', import.meta.url), 'utf8');
   const inventorySource = fs.readFileSync(new URL('../src/modules/servers/ServerInventory.tsx', import.meta.url), 'utf8');
@@ -2108,6 +2109,13 @@ function assertAccountUiGuards() {
   }
   if (!appSource.includes('<span>{accountDisplayLabel}</span>') || !appSource.includes('title={sessionTooltip}')) {
     throw new Error('Account settings entry must display the custom profile label instead of the raw login username');
+  }
+  if (
+    !loginSource.includes('href="https://github.com/nmklio/CoLiPas"')
+    || !loginSource.includes('login-github-link')
+    || !marketingSource.includes('deploy-inline-link')
+  ) {
+    throw new Error('Deployment and login pages must expose a GitHub repository jump button');
   }
 
   const avatarFragments = [
@@ -2161,10 +2169,16 @@ function assertAccountUiGuards() {
     'flex: 1 1 210px',
     'border-radius: 999px',
     '.ai-empty-panel',
+    '.login-github-link',
+    '.deploy-inline-link',
   ];
   const missingCss = cssFragments.filter((fragment) => !globalCss.includes(fragment));
   if (missingCss.length) {
     throw new Error(`Account/AI UI CSS guards are incomplete: ${missingCss.join(', ')}`);
+  }
+
+  if (!ciSource.includes('npx playwright install --with-deps chromium')) {
+    throw new Error('GitHub Actions must install Chromium before browser E2E smoke tests');
   }
 
   for (const key of ['account.avatarImage', 'account.removeAvatarImage', 'account.avatarImageInvalid', 'account.avatarImageTooLarge']) {
@@ -3407,6 +3421,11 @@ function assertSecurityAuditRelationsAreSpecific() {
     'mobile-security-audit',
     'Browser visual evidence',
     'uniqueByteCount',
+    'assertLoginGitHubLink',
+    "getByRole('link', { name: /^GitHub$/i })",
+    "chromium.launch(executablePath ? { executablePath, headless: true } : { headless: true })",
+    '/usr/bin/chromium',
+    '/usr/bin/google-chrome',
   ];
   const missingBrowserFragments = browserRequiredFragments.filter((fragment) => !browserE2eSource.includes(fragment));
   if (missingBrowserFragments.length) {

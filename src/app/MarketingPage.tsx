@@ -8,6 +8,7 @@ import {
   CloudCog,
   Eye,
   EyeOff,
+  Github,
   Globe2,
   KeyRound,
   Layers3,
@@ -132,6 +133,10 @@ export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
           <button type="button" className="marketing-link-button" onClick={scrollToLogin}>
             演示后台
           </button>
+          <a className="marketing-secondary compact" href="https://github.com/nmklio/CoLiPas" target="_blank" rel="noreferrer">
+            <Github size={16} />
+            GitHub
+          </a>
           <button type="button" className="marketing-primary small" onClick={scrollToLogin}>
             立即体验
           </button>
@@ -253,6 +258,10 @@ export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
             <div>
               <h3>获取项目</h3>
               <p>从 GitHub 下载源码，安装依赖并执行生产构建。</p>
+              <a className="deploy-inline-link" href="https://github.com/nmklio/CoLiPas" target="_blank" rel="noreferrer">
+                <Github size={15} />
+                打开 GitHub 仓库
+              </a>
             </div>
           </article>
           <article>

@@ -9,14 +9,10 @@ const traceId = process.env.E2E_TRACE_ID ?? 'srv-trace-00000000-0000-4000-8000-0
 const executablePath = process.env.E2E_BROWSER_PATH || findSystemBrowser();
 const evidenceDir = path.resolve('output', 'browser-e2e');
 
-if (!executablePath) {
-  throw new Error('Browser E2E requires Chromium, Chrome, or Edge. Set E2E_BROWSER_PATH or install a supported browser.');
-}
-
 fs.rmSync(evidenceDir, { recursive: true, force: true });
 fs.mkdirSync(evidenceDir, { recursive: true });
 
-const browser = await chromium.launch({ executablePath, headless: true });
+const browser = await chromium.launch(executablePath ? { executablePath, headless: true } : { headless: true });
 const consoleProblems = [];
 const page = await createE2ePage({ viewport: { width: 1440, height: 980 } });
 let temporaryServerId = '';
@@ -73,10 +69,20 @@ async function openAndLogin(targetPage, url) {
     timeout: 30000,
   });
 
+  await assertLoginGitHubLink(targetPage);
   await targetPage.locator('input[autocomplete="username"]').fill(username);
   await targetPage.locator('input[autocomplete="current-password"]').fill(password);
   await targetPage.getByRole('button', { name: /sign in/i }).click();
   await targetPage.locator('.topbar').waitFor({ timeout: 15000 });
+}
+
+async function assertLoginGitHubLink(targetPage) {
+  const link = targetPage.getByRole('link', { name: /^GitHub$/i });
+  await link.waitFor({ timeout: 5000 });
+  const href = await link.getAttribute('href');
+  if (href !== 'https://github.com/nmklio/CoLiPas') {
+    throw new Error(`Login GitHub link points to ${href}`);
+  }
 }
 
 async function assertSyntheticTraceDeepLink(targetPage, expectedTraceId) {
@@ -466,6 +472,11 @@ async function assertSingleColumnStack(targetPage, selector, label) {
 function findSystemBrowser() {
   const candidates = [
     process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/snap/bin/chromium',
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',

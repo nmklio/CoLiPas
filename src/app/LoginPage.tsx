@@ -1,5 +1,5 @@
 import { FormEvent, useState } from 'react';
-import { Bot, Eye, EyeOff, Globe2, LockKeyhole, Server, ShieldCheck } from 'lucide-react';
+import { Bot, Eye, EyeOff, Github, Globe2, LockKeyhole, Server, ShieldCheck } from 'lucide-react';
 import { languageOptions, useI18n } from '../i18n';
 
 interface LoginPageProps {
@@ -35,6 +35,16 @@ export function LoginPage({ loading, error, onLogin }: LoginPageProps) {
           <h1 id="login-title">{t('login.title')}</h1>
           <span>{t('login.description')}</span>
         </div>
+
+        <a
+          className="login-github-link"
+          href="https://github.com/nmklio/CoLiPas"
+          target="_blank"
+          rel="noreferrer"
+        >
+          <Github size={17} />
+          <span>GitHub</span>
+        </a>
 
         <div className="login-feature-grid" aria-label={t('login.features')}>
           <span><Server size={16} /> {t('login.featureAssets')}</span>
