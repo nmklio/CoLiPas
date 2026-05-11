@@ -1217,6 +1217,26 @@ fi
 run_as_app git reset --hard "$REMOTE_HEAD"
 run_as_app npm ci
 run_as_app npm run build
+DEPLOYED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+if [ -f "$APP_DIR/.env" ]; then
+  tmp_env="$(mktemp)"
+  grep -Ev '^(RELEASE_TARGET_NAME|RELEASE_CHANNEL|RELEASE_DEPLOYMENT_MODE|RELEASE_PUBLIC_URL|RELEASE_GIT_COMMIT|RELEASE_ARTIFACT_ID|RELEASE_DEPLOYED_AT)=' "$APP_DIR/.env" > "$tmp_env" || true
+  {
+    cat "$tmp_env"
+    printf 'RELEASE_TARGET_NAME=%s\n' "$SERVER_NAME"
+    printf 'RELEASE_CHANNEL=%s\n' "production"
+    printf 'RELEASE_DEPLOYMENT_MODE=%s\n' "systemd"
+    printf 'RELEASE_PUBLIC_URL=%s\n' "https://$SERVER_NAME"
+    printf 'RELEASE_GIT_COMMIT=%s\n' "$REMOTE_HEAD"
+    printf 'RELEASE_ARTIFACT_ID=%s\n' "systemd-$BRANCH"
+    printf 'RELEASE_DEPLOYED_AT=%s\n' "$DEPLOYED_AT"
+  } > "$APP_DIR/.env"
+  rm -f "$tmp_env"
+  if [ "$(id -u)" -eq 0 ]; then
+    chown "$APP_USER:$APP_USER" "$APP_DIR/.env"
+    chmod 0600 "$APP_DIR/.env"
+  fi
+fi
 if [ "$(id -u)" -eq 0 ]; then
   install_runtime_update_script
   install -m 0644 "$APP_DIR/deploy/colipas.service" /etc/systemd/system/colipas.service

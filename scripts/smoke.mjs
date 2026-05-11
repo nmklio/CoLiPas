@@ -71,6 +71,12 @@ if (releaseVerifyToken) {
     || !Number.isInteger(releaseVerifyBody.readiness?.score)
     || !Number.isInteger(releaseVerifyBody.audit?.total)
     || !Number.isInteger(releaseVerifyBody.inventory?.servers?.total)
+    || releaseVerifyBody.deployment?.targetName !== 'verify-local'
+    || releaseVerifyBody.deployment?.channel !== 'grey'
+    || releaseVerifyBody.deployment?.deploymentMode !== 'node'
+    || releaseVerifyBody.deployment?.gitCommit !== 'abcdef123456'
+    || releaseVerifyBody.deployment?.publicHost !== '[redacted-host]'
+    || releaseVerifyBody.deployment?.configured !== true
     || releaseVerifyBody.frontend?.scripts?.some((script) => typeof script.path !== 'string' || !/^[a-f0-9]{16}$/.test(script.hash))
   ) {
     throw new Error('/api/release/verify returned incomplete read-only verification payload');
@@ -336,6 +342,7 @@ const getChecks = [
       ['ready', 'review', 'blocked'].includes(body.status) &&
       Array.isArray(body.checks) &&
       body.checks.some((check) => check.id === 'api-allowlist') &&
+      body.checks.some((check) => check.id === 'deployment-evidence' && check.relatedModule === 'deployment' && check.value === 'abcdef123456') &&
       body.checks.some((check) => check.id === 'runtime-secret-posture' && check.severity === 'fail') &&
       body.summary?.totalChecks === body.checks.length &&
       body.history?.trend?.snapshotCount >= 0 &&
@@ -2239,6 +2246,9 @@ function assertAccountUiGuards() {
   const verifyProductionSource = fs.readFileSync(new URL('../scripts/verify-production.mjs', import.meta.url), 'utf8');
   const releaseDeploySource = fs.readFileSync(new URL('../scripts/release-deploy.ps1', import.meta.url), 'utf8');
   const publicPagesCheckSource = fs.readFileSync(new URL('../scripts/public-pages-check.mjs', import.meta.url), 'utf8');
+  const dockerfileSource = fs.readFileSync(new URL('../Dockerfile', import.meta.url), 'utf8');
+  const composeSource = fs.readFileSync(new URL('../docker-compose.yml', import.meta.url), 'utf8');
+  const systemdSource = fs.readFileSync(new URL('../deploy/colipas.service', import.meta.url), 'utf8');
 
   if (loginSource.includes("useState('admin')") || loginSource.includes('value="admin"')) {
     throw new Error('Login page must not prefill the admin username');
@@ -2297,6 +2307,22 @@ function assertAccountUiGuards() {
   const missingPublicPageGuard = publicPageGuardFragments.filter((fragment) => !publicPageGuardSource.includes(fragment));
   if (missingPublicPageGuard.length) {
     throw new Error(`Public landing/docs/admin browser validation is incomplete: ${missingPublicPageGuard.join(', ')}`);
+  }
+
+  const deploymentEvidenceGuardFragments = [
+    'RELEASE_GIT_COMMIT',
+    'RELEASE_TARGET_NAME',
+    'RELEASE_PUBLIC_URL',
+    'RELEASE_DEPLOYMENT_MODE',
+    'RELEASE_DEPLOYED_AT',
+    'ARG RELEASE_GIT_COMMIT',
+    'RELEASE_ARTIFACT_ID',
+    'Environment=RELEASE_DEPLOYMENT_MODE=systemd',
+  ];
+  const deploymentEvidenceGuardSource = `${verifyProductionSource}\n${releaseDeploySource}\n${dockerfileSource}\n${composeSource}\n${systemdSource}`;
+  const missingDeploymentEvidenceGuard = deploymentEvidenceGuardFragments.filter((fragment) => !deploymentEvidenceGuardSource.includes(fragment));
+  if (missingDeploymentEvidenceGuard.length) {
+    throw new Error(`Deployment evidence environment propagation is incomplete: ${missingDeploymentEvidenceGuard.join(', ')}`);
   }
 
   const avatarFragments = [
@@ -2819,6 +2845,13 @@ async function assertReleaseDeployTargetPlanGuards() {
         publicBaseUrl: 'https://cp.example.com',
         publicMode: 'admin',
       },
+      {
+        name: 'disabled-extra',
+        enabled: false,
+        host: 'unused-alias',
+        user: 'root',
+        command: 'sudo unused',
+      },
     ],
   };
   const shell = process.platform === 'win32' ? 'powershell' : 'pwsh';
@@ -2849,6 +2882,7 @@ async function assertReleaseDeployTargetPlanGuards() {
     targets[0].host !== 'colipas-prod'
     || targets[1].host !== 'colipas-cp'
     || targets[1].command !== 'sudo /usr/local/sbin/colipas-cp-update'
+    || targets.some((target) => Object.hasOwn(target, 'enabled'))
     || targets.some((target) => /\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(JSON.stringify(target)))
   ) {
     throw new Error('Release deploy plan did not preserve sanitized multi-target routing');
@@ -3492,6 +3526,9 @@ function assertSecurityAuditRelationsAreSpecific() {
     'navigator.clipboard.writeText(evidenceBrief.text)',
     'security-evidence-brief',
     'security-evidence-metrics',
+    'data-release-deployment-evidence="true"',
+    'parseDeploymentEvidence(deploymentCheck.evidence)',
+    'copy.evidenceDeploymentDetail(evidenceBrief.deployment.channel, evidenceBrief.deployment.deploymentMode, evidenceBrief.deployment.publicHost)',
     'copy.evidenceBriefCopied',
     'copy.evidenceAuditDetail(activeAuditIssues.blocked, activeAuditIssues.failed, successRate, auditTotal)',
     'security-trace-filter-actions',
@@ -3575,6 +3612,7 @@ function assertSecurityAuditRelationsAreSpecific() {
     '.security-evidence-metrics',
     '.security-evidence-footer',
     '.security-evidence-metric.fail',
+    '.security-deployment-evidence',
     '.config-state.action',
   ];
   const missingCss = cssFragments.filter((fragment) => !globalCss.includes(fragment));
@@ -3602,6 +3640,7 @@ function assertSecurityAuditRelationsAreSpecific() {
     'buildReleaseReadinessReport(config)',
     'buildDiagnosticExport(config)',
     'buildReleaseVerification(config)',
+    'buildReleaseDeploymentEvidence(config)',
     'recordReleaseReadinessSnapshot(config)',
     'export function buildReleaseReadiness(config',
     'export function buildReleaseReadinessReport(config',
@@ -3613,6 +3652,8 @@ function assertSecurityAuditRelationsAreSpecific() {
     "replace(/\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b/g, '[redacted-ip]')",
     "featureMarkers: Object.fromEntries(featureMarkers.map((marker) => [marker, combinedContent.includes(marker)]))",
     'runtime-secret-posture',
+    'deployment-evidence',
+    "relatedModule: 'deployment'",
     'config.security.adminPasswordDefault',
     'sanitizeReportText',
     'writeAppSetting(readinessHistorySettingId',

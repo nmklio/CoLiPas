@@ -185,6 +185,8 @@ export interface OperationTaskResponse {
 
 export type ReleaseReadinessSeverity = 'info' | 'warn' | 'fail';
 
+export type ReleaseReadinessModule = 'ai' | 'api' | 'audit' | 'database' | 'deployment' | 'events' | 'runtime' | 'security' | 'servers' | 'ssh';
+
 export interface ReleaseReadinessCheck {
   id: string;
   label: string;
@@ -193,7 +195,7 @@ export interface ReleaseReadinessCheck {
   value: string;
   evidence: string;
   recommendedAction: string;
-  relatedModule: 'ai' | 'api' | 'audit' | 'database' | 'events' | 'runtime' | 'security' | 'servers' | 'ssh';
+  relatedModule: ReleaseReadinessModule;
 }
 
 export type ReleaseReadinessStatus = 'ready' | 'review' | 'blocked';
@@ -314,6 +316,18 @@ export interface DiagnosticExportResponse {
   };
 }
 
+export interface ReleaseDeploymentEvidence {
+  targetName: string;
+  channel: string;
+  deploymentMode: string;
+  publicHost: string;
+  gitCommit: string;
+  artifactId: string;
+  deployedAt: string;
+  configured: boolean;
+  evidence: string;
+}
+
 export interface ReleaseVerificationResponse {
   ok: true;
   generatedAt: string;
@@ -321,6 +335,7 @@ export interface ReleaseVerificationResponse {
     nodeEnv: string;
     uptimeSeconds: number;
   };
+  deployment: ReleaseDeploymentEvidence;
   frontend: {
     indexHash: string;
     scripts: Array<{

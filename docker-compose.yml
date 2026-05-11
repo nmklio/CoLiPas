@@ -1,11 +1,19 @@
 services:
   colipas:
-    build: .
+    build:
+      context: .
+      args:
+        RELEASE_GIT_COMMIT: ${RELEASE_GIT_COMMIT:-unknown}
+        RELEASE_ARTIFACT_ID: ${RELEASE_ARTIFACT_ID:-docker-compose}
     restart: unless-stopped
     ports:
       - "8080:8080"
     env_file:
       - .env
+    environment:
+      RELEASE_DEPLOYMENT_MODE: ${RELEASE_DEPLOYMENT_MODE:-docker}
+      RELEASE_GIT_COMMIT: ${RELEASE_GIT_COMMIT:-unknown}
+      RELEASE_ARTIFACT_ID: ${RELEASE_ARTIFACT_ID:-docker-compose}
     volumes:
       - colipas-data:/app/.data
     healthcheck:

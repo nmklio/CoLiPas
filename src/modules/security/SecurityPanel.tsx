@@ -20,7 +20,7 @@ import { getLocale, useI18n } from '../../i18n';
 import { OperationEvent } from '../../types';
 import { fetchDiagnosticExport, fetchReleaseReadiness, fetchReleaseReadinessReport, recordReleaseReadinessSnapshot, remediateSecurityRisk } from '../../services/apiClient';
 import type { SecurityRemediationResponse } from '../../services/apiClient';
-import type { ReleaseReadinessResponse } from '../../types';
+import type { ReleaseDeploymentEvidence, ReleaseReadinessResponse } from '../../types';
 
 interface SecurityPanelProps {
   events: OperationEvent[];
@@ -119,6 +119,7 @@ interface ReleaseEvidenceBrief {
   generatedLabel: string;
   metrics: ReleaseEvidenceMetric[];
   blockers: string[];
+  deployment: ReleaseDeploymentEvidence | null;
   nextAction: string;
   text: string;
 }
@@ -372,6 +373,11 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
       return;
     }
 
+    if (check.relatedModule === 'deployment') {
+      focusRemediation();
+      return;
+    }
+
     if (check.relatedModule === 'audit') {
       setRelationFilter(null);
       setActiveTraceId('');
@@ -591,6 +597,13 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
             <p>{evidenceBrief.blockers.length > 0 ? evidenceBrief.blockers.join(' / ') : copy.evidenceBriefNoBlockers}</p>
           </div>
         </div>
+        {evidenceBrief.deployment && (
+          <div className="security-deployment-evidence" data-release-deployment-evidence="true">
+            <span>{copy.evidenceDeploymentTitle}</span>
+            <strong>{evidenceBrief.deployment.targetName} · {evidenceBrief.deployment.gitCommit}</strong>
+            <small>{copy.evidenceDeploymentDetail(evidenceBrief.deployment.channel, evidenceBrief.deployment.deploymentMode, evidenceBrief.deployment.publicHost)}</small>
+          </div>
+        )}
         <small className="security-evidence-generated">{copy.evidenceBriefGenerated(evidenceBrief.generatedLabel)}</small>
       </article>
 
@@ -1386,6 +1399,8 @@ function buildReleaseEvidenceBrief(input: {
   const checksDetail = readiness ? copy.readinessIssues(readiness.summary.failures, readiness.summary.warnings) : copy.readinessCalculating;
   const blockers = readiness?.blockers.slice(0, 3).map((check) => sanitizeEvidenceBriefText(`${check.label}: ${check.value}`)) ?? [];
   const nextAction = sanitizeEvidenceBriefText(readiness?.nextBestAction ?? copy.readinessCalculating);
+  const deploymentCheck = readiness?.checks.find((check) => check.id === 'deployment-evidence');
+  const deployment = deploymentCheck ? parseDeploymentEvidence(deploymentCheck.evidence) : null;
   const metrics: ReleaseEvidenceMetric[] = [
     {
       label: copy.evidenceMetricReadiness,
@@ -1419,16 +1434,44 @@ function buildReleaseEvidenceBrief(input: {
     `${copy.evidenceMetricChecks}: ${metrics[1].value} (${metrics[1].detail})`,
     `${copy.evidenceMetricAudit}: ${metrics[2].value} (${metrics[2].detail})`,
     `${copy.evidenceMetricQueue}: ${metrics[3].value} (${metrics[3].detail})`,
+    deployment ? `${copy.evidenceDeploymentTitle}: ${deployment.targetName} / ${deployment.gitCommit} / ${deployment.publicHost}` : '',
     `${copy.evidenceBriefBlockersTitle}: ${blockers.length > 0 ? blockers.join('; ') : copy.evidenceBriefNoBlockers}`,
     `${copy.evidenceBriefNextAction}: ${nextAction}`,
-  ];
+  ].filter(Boolean);
 
   return {
     generatedLabel,
     metrics,
     blockers,
+    deployment,
     nextAction,
     text: textLines.join('\n'),
+  };
+}
+
+function parseDeploymentEvidence(value: string): ReleaseDeploymentEvidence | null {
+  const fields = Object.fromEntries(
+    value
+      .split('/')
+      .map((part) => part.trim().split('='))
+      .filter((part): part is [string, string] => part.length === 2 && Boolean(part[0]) && Boolean(part[1]))
+      .map(([key, fieldValue]) => [key, sanitizeEvidenceBriefText(fieldValue)]),
+  );
+
+  if (!fields.target && !fields.commit) {
+    return null;
+  }
+
+  return {
+    targetName: fields.target ?? 'unknown',
+    channel: fields.channel ?? 'unknown',
+    deploymentMode: fields.mode ?? 'unknown',
+    publicHost: fields.host ?? 'not configured',
+    gitCommit: fields.commit ?? 'unknown',
+    artifactId: fields.artifact ?? 'not configured',
+    deployedAt: fields.deployed ?? 'not configured',
+    configured: fields.commit !== 'unknown' || fields.host !== 'not configured',
+    evidence: sanitizeEvidenceBriefText(value),
   };
 }
 
@@ -1536,6 +1579,7 @@ interface SecurityCopy {
   evidenceMetricChecks: string;
   evidenceMetricAudit: string;
   evidenceMetricQueue: string;
+  evidenceDeploymentTitle: string;
   traceApplied: (id: string, count: number) => string;
   remediationTitle: string;
   remediationClear: string;
@@ -1584,6 +1628,7 @@ interface SecurityCopy {
   evidenceBriefGenerated: (time: string) => string;
   evidenceAuditDetail: (blocked: number, failed: number, successRate: number, total: number) => string;
   evidenceQueueDetail: (count: number) => string;
+  evidenceDeploymentDetail: (channel: string, mode: string, host: string) => string;
   auditStatus: (status: AuditStatusFilter) => string;
 }
 
@@ -1710,6 +1755,7 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     evidenceMetricChecks: '检查覆盖',
     evidenceMetricAudit: '活跃审计问题',
     evidenceMetricQueue: '事件队列',
+    evidenceDeploymentTitle: '部署证据',
     remediationTitle: '风险处置',
     remediationClear: '暂无待处置',
     noRemediation: '当前没有需要处理的风险项。',
@@ -1767,6 +1813,7 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     evidenceBriefGenerated: (time) => `证据生成：${time}`,
     evidenceAuditDetail: (blocked, failed, successRate, total) => `${blocked} 个阻断 / ${failed} 个失败，成功率 ${successRate}%（${total} 条）`,
     evidenceQueueDetail: (count) => count > 0 ? `${count} 个待处理事件需闭环` : '无待处理事件',
+    evidenceDeploymentDetail: (channel, mode, host) => `${channel} / ${mode} / ${host}`,
     auditStatus: (status) => ({
       all: '全部',
       success: '成功',
@@ -1870,6 +1917,7 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     evidenceMetricChecks: 'Check coverage',
     evidenceMetricAudit: 'Active audit issues',
     evidenceMetricQueue: 'Event queue',
+    evidenceDeploymentTitle: 'Deployment evidence',
     remediationTitle: 'Risk remediation',
     remediationClear: 'Nothing to handle',
     noRemediation: 'No risk item requires action right now.',
@@ -1927,6 +1975,7 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     evidenceBriefGenerated: (time) => `Evidence generated: ${time}`,
     evidenceAuditDetail: (blocked, failed, successRate, total) => `${blocked} blocked / ${failed} failed, ${successRate}% success across ${total} audits`,
     evidenceQueueDetail: (count) => count > 0 ? `${count} open events need closure` : 'No open events',
+    evidenceDeploymentDetail: (channel, mode, host) => `${channel} / ${mode} / ${host}`,
     auditStatus: (status) => ({
       all: 'All',
       success: 'Success',
@@ -2030,6 +2079,7 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     evidenceMetricChecks: 'チェック範囲',
     evidenceMetricAudit: '有効な監査課題',
     evidenceMetricQueue: 'イベントキュー',
+    evidenceDeploymentTitle: 'デプロイ証跡',
     remediationTitle: 'リスク対応',
     remediationClear: '対応不要',
     noRemediation: '現在対応が必要なリスク項目はありません。',
@@ -2087,6 +2137,7 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     evidenceBriefGenerated: (time) => `証跡生成: ${time}`,
     evidenceAuditDetail: (blocked, failed, successRate, total) => `${blocked} 件ブロック / ${failed} 件失敗、${total} 件中成功率 ${successRate}%`,
     evidenceQueueDetail: (count) => count > 0 ? `${count} 件の未対応イベントを閉じる必要があります` : '未対応イベントなし',
+    evidenceDeploymentDetail: (channel, mode, host) => `${channel} / ${mode} / ${host}`,
     auditStatus: (status) => ({
       all: 'すべて',
       success: '成功',

@@ -12,6 +12,7 @@ import { RuntimeConfig } from '../config.js';
 import { getDatabasePath, readAppSetting, writeAppSetting } from './database.js';
 import { listAuditEntries } from './auditService.js';
 import { resolveServerLifecycleStatus } from '../../shared/serverFilters.js';
+import { buildReleaseDeploymentEvidence } from './deploymentEvidenceService.js';
 
 const readinessHistorySettingId = 'release-readiness-history';
 const maxReadinessSnapshots = 12;
@@ -22,6 +23,7 @@ export function buildReleaseReadiness(config: RuntimeConfig): ReleaseReadinessRe
   const connectedServers = servers.filter((server) => resolveServerLifecycleStatus(server) !== 'unconnected');
   const openEvents = operationEvents.filter((event) => event.status === 'open');
   const databaseName = getDatabasePath().split(/[\\/]/).pop() ?? 'unknown';
+  const deploymentEvidence = buildReleaseDeploymentEvidence(config);
   const defaultSecretIssues = [
     config.security.adminPasswordDefault ? 'admin password' : '',
     config.security.sessionSecretDefault ? 'session secret' : '',
@@ -48,6 +50,18 @@ export function buildReleaseReadiness(config: RuntimeConfig): ReleaseReadinessRe
       evidence: `SQLite store opened as ${databaseName}`,
       recommendedAction: 'Keep database backup and WAL checkpoint checks in the release runbook.',
       relatedModule: 'database',
+    },
+    {
+      id: 'deployment-evidence',
+      label: 'Deployment evidence',
+      severity: deploymentEvidence.configured ? 'info' : 'warn',
+      passed: deploymentEvidence.configured,
+      value: deploymentEvidence.gitCommit,
+      evidence: deploymentEvidence.evidence,
+      recommendedAction: deploymentEvidence.configured
+        ? 'Keep RELEASE_TARGET_NAME, RELEASE_PUBLIC_URL, and RELEASE_GIT_COMMIT updated from the release pipeline.'
+        : 'Set RELEASE_TARGET_NAME, RELEASE_PUBLIC_URL, and RELEASE_GIT_COMMIT so every running instance reports sanitized deployment coverage.',
+      relatedModule: 'deployment',
     },
     {
       id: 'runtime-secret-posture',

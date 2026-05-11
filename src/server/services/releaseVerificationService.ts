@@ -6,6 +6,7 @@ import type { RuntimeConfig } from '../config.js';
 import { buildReleaseReadiness } from './releaseReadinessService.js';
 import { listAuditEntries } from './auditService.js';
 import { listCloudAccounts, listOperationEvents, listServers } from './inventoryService.js';
+import { buildReleaseDeploymentEvidence } from './deploymentEvidenceService.js';
 
 export function isReleaseVerificationEnabled(config: RuntimeConfig) {
   return config.releaseVerification.tokenConfigured;
@@ -27,6 +28,7 @@ export function buildReleaseVerification(config: RuntimeConfig): ReleaseVerifica
   const cloudAccounts = listCloudAccounts();
   const operationEvents = listOperationEvents();
   const frontend = inspectFrontendBundle();
+  const deployment = buildReleaseDeploymentEvidence(config);
   const auditByStatus = auditEntries.reduce(
     (summary, entry) => {
       summary[entry.status] += 1;
@@ -42,6 +44,7 @@ export function buildReleaseVerification(config: RuntimeConfig): ReleaseVerifica
       nodeEnv: config.nodeEnv,
       uptimeSeconds: Math.round(process.uptime()),
     },
+    deployment,
     frontend,
     readiness: {
       score: readiness.score,

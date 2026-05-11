@@ -12,6 +12,11 @@ RUN npm run build
 FROM node:24-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
+ARG RELEASE_GIT_COMMIT=unknown
+ARG RELEASE_ARTIFACT_ID=docker-runtime
+ENV RELEASE_DEPLOYMENT_MODE=docker \
+    RELEASE_GIT_COMMIT=$RELEASE_GIT_COMMIT \
+    RELEASE_ARTIFACT_ID=$RELEASE_ARTIFACT_ID
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/build ./build

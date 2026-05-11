@@ -115,6 +115,11 @@ Create `.env` from `.env.example` and replace every default before exposing the 
 | `COLIPAS_DATA_DIR` | Runtime data directory. Defaults to `.data`. |
 | `COLIPAS_DB_PATH` | Optional SQLite database path. Defaults to `COLIPAS_DATA_DIR/colipas.sqlite`. |
 | `CREDENTIAL_ENCRYPTION_KEY` | Long random key used to encrypt stored SSH credentials. |
+| `RELEASE_VERIFY_TOKEN` | Optional bearer token for `/api/release/verify`; set a long random value only for guarded release checks. |
+| `RELEASE_TARGET_NAME` / `RELEASE_CHANNEL` | Safe labels shown in release readiness and verification evidence, such as `production-systemd` and `production`. |
+| `RELEASE_DEPLOYMENT_MODE` | Deployment mode label, for example `systemd`, `docker`, or `node`. |
+| `RELEASE_PUBLIC_URL` | Public URL used only to derive a sanitized hostname for release evidence; literal IP addresses are redacted. |
+| `RELEASE_GIT_COMMIT` / `RELEASE_ARTIFACT_ID` / `RELEASE_DEPLOYED_AT` | Optional build metadata populated by the release pipeline for audit-friendly deployment evidence. |
 
 ## Production Deploy
 
@@ -139,11 +144,14 @@ curl -fsS http://127.0.0.1:8080/api/health
 ```
 
 The included `docker-compose.yml` mounts a named volume at `/app/.data` so SQLite data, audit records, encrypted SSH metadata, and account settings survive container rebuilds.
+It also forwards `RELEASE_GIT_COMMIT`, `RELEASE_ARTIFACT_ID`, and `RELEASE_DEPLOYMENT_MODE` into the container so the security panel can show which sanitized build is running.
 
 To update a Docker deployment:
 
 ```bash
 git pull --ff-only
+export RELEASE_GIT_COMMIT="$(git rev-parse HEAD)"
+export RELEASE_ARTIFACT_ID="docker-$(date -u +%Y%m%d%H%M%S)"
 docker compose up -d --build
 docker compose logs --tail=80 colipas
 ```

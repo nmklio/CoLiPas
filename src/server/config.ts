@@ -16,6 +16,13 @@ const envSchema = z.object({
   RELEASE_VERIFY_TOKEN: z.string().default('').refine((value) => value === '' || value.length >= 24, {
     message: 'RELEASE_VERIFY_TOKEN must be empty or at least 24 characters',
   }),
+  RELEASE_TARGET_NAME: z.string().default(''),
+  RELEASE_CHANNEL: z.string().default(''),
+  RELEASE_DEPLOYMENT_MODE: z.string().default(''),
+  RELEASE_PUBLIC_URL: z.string().default(''),
+  RELEASE_GIT_COMMIT: z.string().default(''),
+  RELEASE_ARTIFACT_ID: z.string().default(''),
+  RELEASE_DEPLOYED_AT: z.string().default(''),
 });
 
 export const defaultRuntimeSecrets = {
@@ -59,6 +66,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     releaseVerification: {
       token: parsed.RELEASE_VERIFY_TOKEN,
       tokenConfigured: parsed.RELEASE_VERIFY_TOKEN.length >= 24,
+    },
+    release: {
+      targetName: parsed.RELEASE_TARGET_NAME,
+      channel: parsed.RELEASE_CHANNEL,
+      deploymentMode: parsed.RELEASE_DEPLOYMENT_MODE,
+      publicUrl: parsed.RELEASE_PUBLIC_URL,
+      gitCommit: parsed.RELEASE_GIT_COMMIT,
+      artifactId: parsed.RELEASE_ARTIFACT_ID,
+      deployedAt: parsed.RELEASE_DEPLOYED_AT,
     },
   };
 }

@@ -8,6 +8,7 @@ Type=simple
 WorkingDirectory=/opt/colipas
 EnvironmentFile=/opt/colipas/.env
 Environment=NODE_ENV=production
+Environment=RELEASE_DEPLOYMENT_MODE=systemd
 ExecStart=/usr/bin/node build/server/index.js
 Restart=on-failure
 RestartSec=5
