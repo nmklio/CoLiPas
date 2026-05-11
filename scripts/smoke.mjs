@@ -2140,6 +2140,9 @@ function assertAccountUiGuards() {
   const inventorySource = fs.readFileSync(new URL('../src/modules/servers/ServerInventory.tsx', import.meta.url), 'utf8');
   const globalCss = fs.readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
   const i18nSource = fs.readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
+  const verifyProductionSource = fs.readFileSync(new URL('../scripts/verify-production.mjs', import.meta.url), 'utf8');
+  const releaseDeploySource = fs.readFileSync(new URL('../scripts/release-deploy.ps1', import.meta.url), 'utf8');
+  const publicPagesCheckSource = fs.readFileSync(new URL('../scripts/public-pages-check.mjs', import.meta.url), 'utf8');
 
   if (loginSource.includes("useState('admin')") || loginSource.includes('value="admin"')) {
     throw new Error('Login page must not prefill the admin username');
@@ -2173,6 +2176,29 @@ function assertAccountUiGuards() {
     || !serverUpdateSource.includes('rel="icon" href="data:image/svg+xml')
   ) {
     throw new Error('Deployment, docs, and login pages must expose public navigation without fake docs links');
+  }
+
+  const publicPageGuardFragments = [
+    "PUBLIC_PAGES_MODE: 'admin'",
+    "['scripts/public-pages-check.mjs']",
+    'Production public page browser validation',
+    'PUBLIC_PAGES_BASE_URL = "https://c.miao7777.com"',
+    'buildLandingCheck',
+    'buildDocsCheck',
+    'buildAdminCheck',
+    'assertNoHorizontalOverflow',
+    'assertNoBadBoxes',
+    'assertSensitiveTextAbsent',
+    "path.resolve('output', 'public-pages-check')",
+    '/docs.html',
+    '/admin/',
+    'https://github.com/nmklio/CoLiPas',
+    'input[autocomplete="username"]',
+  ];
+  const publicPageGuardSource = `${verifyProductionSource}\n${releaseDeploySource}\n${publicPagesCheckSource}`;
+  const missingPublicPageGuard = publicPageGuardFragments.filter((fragment) => !publicPageGuardSource.includes(fragment));
+  if (missingPublicPageGuard.length) {
+    throw new Error(`Public landing/docs/admin browser validation is incomplete: ${missingPublicPageGuard.join(', ')}`);
   }
 
   const avatarFragments = [

@@ -90,6 +90,13 @@ try {
       E2E_ADMIN_PASSWORD: 'NextPassword123',
     },
   });
+  await run(process.execPath, ['scripts/public-pages-check.mjs'], {
+    env: {
+      ...process.env,
+      PUBLIC_PAGES_BASE_URL: baseUrl,
+      PUBLIC_PAGES_MODE: 'admin',
+    },
+  });
   await run(process.execPath, ['scripts/concurrency-check.mjs'], {
     env: {
       ...process.env,

@@ -228,4 +228,15 @@ Run-Step "Update server" {
   ssh -i $SshKey -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new "$RemoteUser@$RemoteHost" $RemoteCommand
 }
 
+Run-Step "Production public page browser validation" {
+  $env:PUBLIC_PAGES_BASE_URL = "https://c.miao7777.com"
+  $env:PUBLIC_PAGES_MODE = "public"
+  try {
+    node scripts/public-pages-check.mjs
+  } finally {
+    Remove-Item Env:\PUBLIC_PAGES_BASE_URL -ErrorAction SilentlyContinue
+    Remove-Item Env:\PUBLIC_PAGES_MODE -ErrorAction SilentlyContinue
+  }
+}
+
 Write-Host "CoLiPas release deploy completed."
