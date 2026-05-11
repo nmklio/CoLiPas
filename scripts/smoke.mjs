@@ -1416,7 +1416,15 @@ const shellCloseResponse = await fetch(`${baseUrl}/api/servers/shells/${shellBod
 if (!shellCloseResponse.ok) {
   throw new Error(`/api/servers/shells/:sessionId DELETE returned HTTP ${shellCloseResponse.status}`);
 }
-console.log('ok /api/servers/shells realtime stream');
+const shellClosedWriteResponse = await fetch(`${baseUrl}/api/servers/shells/${shellBody.sessionId}/input`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ input: 'whoami\n' }),
+});
+if (shellClosedWriteResponse.status !== 404) {
+  throw new Error(`/api/servers/shells/:sessionId/input after DELETE expected 404, got HTTP ${shellClosedWriteResponse.status}`);
+}
+console.log('ok /api/servers/shells realtime stream and close cleanup');
 
 const shellLongResponse = await fetch(`${baseUrl}/api/servers/shells`, {
   method: 'POST',
@@ -3389,12 +3397,17 @@ function assertSshTerminalRealtimeGuards() {
     'writeServerShell(sessionId, data)',
     'function interruptTerminalCommand()',
     "writeServerShell(sessionId, '\\u0003')",
+    'const [terminalShellId, setTerminalShellId]',
+    'terminalLifecycleSeqRef.current += 1',
+    'isCurrentTerminalLifecycle(server.id, lifecycleSeq)',
+    'closeServerShell(shell.sessionId).catch(() => undefined)',
     'resizeServerShell(terminalShellIdRef.current, getTerminalDimensions())',
     'function closeSshConsole()',
     'setSshConsoleOpen(false)',
     'setSshPanelServerId(\'\')',
     'setLoginProbe(null)',
     'setSshRunning(false)',
+    'setSshInterrupting(false)',
     "setActionMessage(t('servers.sshDisconnectedMessage'",
     'terminalShellServerIdRef.current',
     'terminalDataSubscriptionRef.current?.dispose()',
@@ -3427,6 +3440,7 @@ function assertSshTerminalRealtimeGuards() {
     'servers.disconnectSsh',
     'servers.sshDisconnectedMessage',
     'servers.sendCtrlC',
+    'servers.sshInterrupting',
     'servers.sshInterruptSent',
     'servers.sshInterruptUnavailable',
   ];

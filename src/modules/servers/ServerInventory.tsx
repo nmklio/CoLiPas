@@ -95,6 +95,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const [sshConsoleOpen, setSshConsoleOpen] = useState(false);
   const sshConsoleReplayHistoryRef = useRef(true);
   const [sshRunning, setSshRunning] = useState(false);
+  const [sshInterrupting, setSshInterrupting] = useState(false);
+  const [terminalShellId, setTerminalShellId] = useState<string | null>(null);
   const [loginProbe, setLoginProbe] = useState<LoginProbe | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [formDismissed, setFormDismissed] = useState(false);
@@ -115,6 +117,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const terminalCssInjectedRef = useRef(false);
   const sshConsoleOpenRef = useRef(false);
   const sshPanelServerIdRef = useRef('');
+  const terminalLifecycleSeqRef = useRef(0);
   const formRef = useRef(form);
   const privateKeyFileRef = useRef<HTMLInputElement | null>(null);
   const identityRequestSeqRef = useRef(0);
@@ -158,7 +161,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const regionScopeKey = scopedRegions.join('|');
 
   useEffect(() => () => {
-    closeActiveShellSession();
+    closeActiveShellSession(false);
     disposeXterm();
   }, []);
   const formVisible = formOpen || Boolean(editingServerId) || (allServers.length === 0 && !formDismissed);
@@ -731,16 +734,16 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                       <button type="button" aria-label={t('servers.clearTerminalOutput')} title={t('servers.clearTerminalOutput')} onClick={clearTerminalOutput}>
                         <Eraser size={14} />
                       </button>
-                      <button type="button" aria-label={t('servers.sendCtrlC')} title={t('servers.sendCtrlC')} onClick={interruptTerminalCommand} disabled={!terminalShellIdRef.current}>
+                      <button type="button" aria-label={t('servers.sendCtrlC')} title={t('servers.sendCtrlC')} onClick={interruptTerminalCommand} disabled={!terminalShellId || sshInterrupting}>
                         <span className="ssh-terminal-shortcut-glyph" aria-hidden="true">^C</span>
                       </button>
                     </div>
                     <div className="ssh-terminal-state">
-                      <span className={terminalShellIdRef.current ? 'live' : sshRunning ? 'pending' : ''} aria-hidden="true" />
-                      <small>{terminalShellIdRef.current ? t('servers.sshConnected') : sshRunning ? t('servers.runningSsh') : t('servers.sshConnect')}</small>
-                      {(sshRunning || terminalShellIdRef.current) && (
+                      <span className={terminalShellId ? 'live' : sshRunning ? 'pending' : ''} aria-hidden="true" />
+                      <small>{sshInterrupting ? t('servers.sshInterrupting') : terminalShellId ? t('servers.sshConnected') : sshRunning ? t('servers.runningSsh') : t('servers.sshConnect')}</small>
+                      {(sshRunning || terminalShellId) && (
                         <button type="button" onClick={closeSshConsole}>
-                          {terminalShellIdRef.current ? t('servers.disconnectSsh') : t('common.cancel')}
+                          {terminalShellId ? t('servers.disconnectSsh') : t('common.cancel')}
                         </button>
                       )}
                     </div>
@@ -961,10 +964,13 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       return;
     }
 
+    terminalLifecycleSeqRef.current += 1;
     if (terminalShellServerIdRef.current && terminalShellServerIdRef.current !== server.id) {
       closeActiveShellSession();
       disposeXterm();
     }
+    sshPanelServerIdRef.current = server.id;
+    sshConsoleOpenRef.current = true;
     setSshPanelServerId(server.id);
     setLoginProbe(null);
     sshConsoleReplayHistoryRef.current = !terminalShellIdRef.current || terminalShellServerIdRef.current !== server.id;
@@ -973,24 +979,32 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
 
   function closeSshConsole() {
     const serverName = activeSshServer?.name;
+    terminalLifecycleSeqRef.current += 1;
+    sshConsoleOpenRef.current = false;
+    sshPanelServerIdRef.current = '';
     closeActiveShellSession();
     disposeXterm();
     setSshConsoleOpen(false);
     setSshPanelServerId('');
     setLoginProbe(null);
     setSshRunning(false);
+    setSshInterrupting(false);
     if (serverName) {
       setActionMessage(t('servers.sshDisconnectedMessage', { name: serverName }));
     }
   }
 
   async function startTerminalLogin(server: ServerNode) {
+    const lifecycleSeq = terminalLifecycleSeqRef.current;
     if (terminalShellIdRef.current && terminalShellServerIdRef.current === server.id) {
       await attachExistingTerminal(server);
       return;
     }
 
     const terminal = await ensureXterm();
+    if (!isCurrentTerminalLifecycle(server.id, lifecycleSeq)) {
+      return;
+    }
     setSshRunning(true);
     closeActiveShellSession();
     terminalShellServerIdRef.current = server.id;
@@ -1000,7 +1014,12 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
 
     try {
       const shell = await openServerShell(server.id, getTerminalDimensions());
+      if (!isCurrentTerminalLifecycle(server.id, lifecycleSeq)) {
+        closeServerShell(shell.sessionId).catch(() => undefined);
+        return;
+      }
       terminalShellIdRef.current = shell.sessionId;
+      setTerminalShellId(shell.sessionId);
       attachTerminalInput(shell.sessionId);
       const stream = streamServerShell(
         shell.sessionId,
@@ -1022,6 +1041,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
             terminal.writeln('\r\nConnection closed.');
             terminal.scrollToBottom();
             terminalShellIdRef.current = null;
+            setTerminalShellId(null);
             terminalShellServerIdRef.current = null;
             terminalDataSubscriptionRef.current?.dispose();
             terminalDataSubscriptionRef.current = null;
@@ -1096,6 +1116,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
             terminal.writeln('\r\nConnection closed.');
             terminal.scrollToBottom();
             terminalShellIdRef.current = null;
+            setTerminalShellId(null);
             terminalShellServerIdRef.current = null;
             terminalDataSubscriptionRef.current?.dispose();
             terminalDataSubscriptionRef.current = null;
@@ -1314,12 +1335,13 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   }
 
   function interruptTerminalCommand() {
-    const sessionId = terminalShellIdRef.current;
+    const sessionId = terminalShellId;
     if (!sessionId) {
       setActionMessage(t('servers.sshInterruptUnavailable'));
       return;
     }
 
+    setSshInterrupting(true);
     writeServerShell(sessionId, '\u0003')
       .then(() => {
         setActionMessage(t('servers.sshInterruptSent'));
@@ -1327,6 +1349,9 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       })
       .catch((error) => {
         setActionMessage(error instanceof Error ? error.message : 'SSH interrupt failed');
+      })
+      .finally(() => {
+        setSshInterrupting(false);
       });
   }
 
@@ -1362,9 +1387,12 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     }
   }
 
-  function closeActiveShellSession() {
+  function closeActiveShellSession(syncState = true) {
     const sessionId = terminalShellIdRef.current;
     terminalShellIdRef.current = null;
+    if (syncState) {
+      setTerminalShellId(null);
+    }
     terminalShellServerIdRef.current = null;
     terminalDataSubscriptionRef.current?.dispose();
     terminalDataSubscriptionRef.current = null;
@@ -1373,6 +1401,10 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     if (sessionId) {
       closeServerShell(sessionId).catch(() => undefined);
     }
+  }
+
+  function isCurrentTerminalLifecycle(serverId: string, lifecycleSeq: number) {
+    return sshConsoleOpenRef.current && sshPanelServerIdRef.current === serverId && terminalLifecycleSeqRef.current === lifecycleSeq;
   }
 
   function getTerminalDimensions() {

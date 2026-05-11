@@ -246,6 +246,16 @@ async function assertSshTerminalPanel(targetPage) {
     });
     await targetPage.reload({ waitUntil: 'networkidle' });
     await targetPage.locator('.server-workspace-row').filter({ hasText: sshServer.name }).waitFor({ timeout: 10000 });
+
+    await targetPage.locator('.server-workspace-row').filter({ hasText: sshServer.name }).getByRole('button', { name: /^SSH$/i }).click();
+    await targetPage.locator('.ssh-console').waitFor({ timeout: 10000 });
+    await targetPage.locator('.ssh-console-header .icon-button').click();
+    await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });
+    await targetPage.waitForTimeout(600);
+    if (await targetPage.locator('.action-message').filter({ hasText: /live ssh terminal connected/i }).count()) {
+      throw new Error('SSH panel close raced with login and left a connected state message');
+    }
+
     await targetPage.locator('.server-workspace-row').filter({ hasText: sshServer.name }).getByRole('button', { name: /^SSH$/i }).click();
     await targetPage.locator('.ssh-console').waitFor({ timeout: 10000 });
     await targetPage.locator('.ssh-terminal-screen .xterm').waitFor({ timeout: 10000 });
@@ -333,6 +343,7 @@ async function assertSshTerminalPanel(targetPage) {
       return terminalText.includes('hanging until interrupt');
     }, undefined, { timeout: 10000 });
     await targetPage.getByRole('button', { name: /send ctrl\+c/i }).click();
+    await targetPage.getByText(/sending interrupt/i).waitFor({ timeout: 5000 }).catch(() => undefined);
     await targetPage.waitForFunction(() => {
       const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
       return terminalText.includes('^C') && terminalText.includes('simulated$');
