@@ -83,6 +83,18 @@ async function assertLoginGitHubLink(targetPage) {
   if (href !== 'https://github.com/nmklio/CoLiPas') {
     throw new Error(`Login GitHub link points to ${href}`);
   }
+
+  const [linkBox, headerBox, copyBox] = await Promise.all([
+    link.boundingBox(),
+    targetPage.locator('.login-panel-header').boundingBox(),
+    targetPage.locator('.login-copy').boundingBox(),
+  ]);
+  if (!linkBox || !headerBox || !copyBox) {
+    throw new Error('Login GitHub link layout boxes were unavailable');
+  }
+  if (linkBox.y >= copyBox.y || linkBox.y + linkBox.height > headerBox.y + headerBox.height + 3) {
+    throw new Error('Login GitHub link should stay in the brand header, above the login hero copy');
+  }
 }
 
 async function assertSyntheticTraceDeepLink(targetPage, expectedTraceId) {

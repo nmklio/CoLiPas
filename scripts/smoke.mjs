@@ -2114,9 +2114,12 @@ function assertAccountUiGuards() {
   if (
     !loginSource.includes('href="https://github.com/nmklio/CoLiPas"')
     || !loginSource.includes('login-github-link')
+    || !loginSource.includes('aria-label="GitHub"')
+    || !loginSource.includes('login-panel-header')
     || !marketingSource.includes('deploy-inline-link')
-    || !serverUpdateSource.includes('patch_landing_github_link')
+    || !serverUpdateSource.includes('patch_landing_page_ui')
     || !serverUpdateSource.includes('https://github.com/nmklio/CoLiPas')
+    || !serverUpdateSource.includes('colipas landing balanced ui')
   ) {
     throw new Error('Deployment and login pages must expose a GitHub repository jump button');
   }
@@ -2172,6 +2175,7 @@ function assertAccountUiGuards() {
     'flex: 1 1 210px',
     'border-radius: 999px',
     '.ai-empty-panel',
+    '.login-panel-header',
     '.login-github-link',
     '.deploy-inline-link',
   ];

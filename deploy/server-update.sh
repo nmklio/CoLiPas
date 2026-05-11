@@ -18,9 +18,9 @@ run_as_app() {
   fi
 }
 
-patch_landing_github_link() {
+patch_landing_page_ui() {
   if ! command -v node >/dev/null 2>&1; then
-    echo "WARN: node is unavailable; skipping landing page GitHub link patch" >&2
+    echo "WARN: node is unavailable; skipping landing page UI patch" >&2
     return 0
   fi
 
@@ -43,23 +43,28 @@ const fs = require('node:fs');
 
 const file = process.env.LANDING_FILE;
 let html = fs.readFileSync(file, 'utf8');
-if (html.includes('https://github.com/nmklio/CoLiPas')) {
-  process.exit(0);
+let changed = false;
+
+function replaceOnce(pattern, replacement) {
+  const next = html.replace(pattern, replacement);
+  if (next !== html) {
+    html = next;
+    changed = true;
+  }
 }
 
-let changed = false;
-html = html.replace(/<a class="nav-action" href="\/admin\/">([\s\S]*?)<\/a>/, (_match, label) => {
-  changed = true;
-  return `<div class="nav-actions"><a class="nav-github" href="https://github.com/nmklio/CoLiPas" target="_blank" rel="noreferrer">GitHub</a><a class="nav-action" href="/admin/">${label}</a></div>`;
-});
+if (!html.includes('https://github.com/nmklio/CoLiPas')) {
+  replaceOnce(/<a class="nav-action" href="\/admin\/">([\s\S]*?)<\/a>/, (_match, label) => (
+    `<div class="nav-actions"><a class="nav-github" href="https://github.com/nmklio/CoLiPas" target="_blank" rel="noreferrer">GitHub</a><a class="nav-action" href="/admin/">${label}</a></div>`
+  ));
 
-html = html.replace(/<a class="button" href="#deploy">([\s\S]*?)<\/a>/, (_match, label) => {
-  changed = true;
-  return `<a class="button" href="#deploy">${label}</a><a class="button github-button" href="https://github.com/nmklio/CoLiPas" target="_blank" rel="noreferrer">GitHub</a>`;
-});
+  replaceOnce(/<a class="button" href="#deploy">([\s\S]*?)<\/a>/, (_match, label) => (
+    `<a class="button" href="#deploy">${label}</a><a class="button github-button" href="https://github.com/nmklio/CoLiPas" target="_blank" rel="noreferrer">GitHub</a>`
+  ));
+}
 
 if (!html.includes('.nav-actions {')) {
-  html = html.replace('.nav-action {', `.nav-actions {
+  replaceOnce('.nav-action {', `.nav-actions {
   justify-self: end;
   display: inline-flex;
   align-items: center;
@@ -67,7 +72,7 @@ if (!html.includes('.nav-actions {')) {
 }
 .nav-action,
 .nav-github {`);
-  html = html.replace(/box-shadow: 0 16px 34px rgba\(37, 99, 235, \.22\);\n}\n\.hero \{/, `box-shadow: 0 16px 34px rgba(37, 99, 235, .22);
+  replaceOnce(/box-shadow: 0 16px 34px rgba\(37, 99, 235, \.22\);\n}\n\.hero \{/, `box-shadow: 0 16px 34px rgba(37, 99, 235, .22);
 }
 .nav-github {
   color: #122033;
@@ -76,28 +81,69 @@ if (!html.includes('.nav-actions {')) {
   box-shadow: none;
 }
 .hero {`);
-  changed = true;
 }
 
 if (!html.includes('.github-button {')) {
-  html = html.replace('.button:hover {', `.github-button {
+  replaceOnce('.button:hover {', `.github-button {
   color: #fff;
   background: var(--blue);
   border-color: var(--blue);
   box-shadow: 0 16px 34px rgba(37, 99, 235, .18);
 }
 .button:hover {`);
-  changed = true;
 }
 
 if (!html.includes('@media (max-width: 640px) {\n  .nav-actions')) {
-  html = html.replace('@media (max-width: 640px) {', `@media (max-width: 640px) {
+  replaceOnce('@media (max-width: 640px) {', `@media (max-width: 640px) {
   .nav-actions {
     justify-self: stretch;
     display: grid;
     grid-template-columns: 1fr 1fr;
   }`);
-  changed = true;
+}
+
+if (!html.includes('/* colipas landing balanced ui */')) {
+  replaceOnce('</style>', `/* colipas landing balanced ui */
+@media (min-width: 981px) {
+  .wrap { width: min(1060px, calc(100% - 56px)); }
+  .nav { height: 74px; }
+  .hero {
+    min-height: calc(100vh - 74px);
+    padding: clamp(54px, 7vh, 78px) 0 56px;
+    grid-template-columns: minmax(0, .96fr) minmax(380px, .86fr);
+    gap: clamp(44px, 6vw, 74px);
+  }
+  h1 {
+    max-width: 580px;
+    font-size: clamp(48px, 4.45vw, 64px);
+    line-height: 1.02;
+  }
+  .lead {
+    max-width: 560px;
+    font-size: 16px;
+    line-height: 1.72;
+  }
+  .product-preview {
+    max-width: 520px;
+    justify-self: end;
+  }
+  .mini-console {
+    min-height: 284px;
+    grid-template-columns: .94fr 1.06fr;
+  }
+  .stats {
+    max-width: 520px;
+    margin-top: 32px;
+  }
+}
+@media (min-width: 1280px) {
+  .hero { transform: translateY(-10px); }
+}
+@media (max-width: 640px) {
+  .hero-buttons .github-button { width: 100%; }
+  .product-preview { border-radius: 14px; }
+}
+</style>`);
 }
 
 if (!html.includes('https://github.com/nmklio/CoLiPas')) {
@@ -109,11 +155,11 @@ if (changed) {
 }
 NODE
     patched=1
-    echo "CoLiPas landing page GitHub link ready: $landing_file"
+    echo "CoLiPas landing page UI ready: $landing_file"
   done
 
   if [ "$patched" -eq 0 ]; then
-    echo "WARN: CoLiPas landing page was not found; skipped GitHub link patch" >&2
+    echo "WARN: CoLiPas landing page was not found; skipped landing UI patch" >&2
   fi
 }
 
@@ -233,7 +279,7 @@ if [ "$LOCAL_HEAD" = "$REMOTE_HEAD" ]; then
   if [ "$(id -u)" -eq 0 ]; then
     install_runtime_update_script
     install_nginx_config
-    patch_landing_github_link
+    patch_landing_page_ui
     nginx -t
     systemctl reload nginx
   fi
@@ -248,7 +294,7 @@ if [ "$(id -u)" -eq 0 ]; then
   install_runtime_update_script
   install -m 0644 "$APP_DIR/deploy/colipas.service" /etc/systemd/system/colipas.service
   install_nginx_config
-  patch_landing_github_link
+  patch_landing_page_ui
   systemctl daemon-reload
   nginx -t
   systemctl reload nginx

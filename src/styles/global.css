@@ -1194,9 +1194,17 @@ body {
   pointer-events: none;
 }
 
-.login-brand {
+.login-panel-header {
   position: relative;
   z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.login-brand {
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1274,11 +1282,11 @@ body {
 .login-github-link {
   position: relative;
   z-index: 1;
-  width: fit-content;
-  min-height: 40px;
+  flex: 0 0 auto;
+  min-height: 38px;
   border: 1px solid #c8dfe3;
   border-radius: 8px;
-  padding: 0 14px;
+  padding: 0 13px;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -6973,6 +6981,20 @@ pre {
   .login-panel,
   .login-card {
     padding: 16px;
+  }
+
+  .login-panel-header {
+    align-items: flex-start;
+  }
+
+  .login-github-link {
+    min-width: 42px;
+    justify-content: center;
+    padding-inline: 11px;
+  }
+
+  .login-github-link span {
+    display: none;
   }
 
   .login-copy h1 {

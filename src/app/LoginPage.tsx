@@ -22,12 +22,25 @@ export function LoginPage({ loading, error, onLogin }: LoginPageProps) {
   return (
     <main className="login-shell">
       <section className="login-panel" aria-labelledby="login-title">
-        <div className="login-brand">
-          <div className="brand-mark">CP</div>
-          <div>
-            <strong>CoLiPas</strong>
-            <span>{t('login.subtitle')}</span>
+        <div className="login-panel-header">
+          <div className="login-brand">
+            <div className="brand-mark">CP</div>
+            <div>
+              <strong>CoLiPas</strong>
+              <span>{t('login.subtitle')}</span>
+            </div>
           </div>
+
+          <a
+            className="login-github-link"
+            href="https://github.com/nmklio/CoLiPas"
+            target="_blank"
+            rel="noreferrer"
+            aria-label="GitHub"
+          >
+            <Github size={17} />
+            <span>GitHub</span>
+          </a>
         </div>
 
         <div className="login-copy">
@@ -35,16 +48,6 @@ export function LoginPage({ loading, error, onLogin }: LoginPageProps) {
           <h1 id="login-title">{t('login.title')}</h1>
           <span>{t('login.description')}</span>
         </div>
-
-        <a
-          className="login-github-link"
-          href="https://github.com/nmklio/CoLiPas"
-          target="_blank"
-          rel="noreferrer"
-        >
-          <Github size={17} />
-          <span>GitHub</span>
-        </a>
 
         <div className="login-feature-grid" aria-label={t('login.features')}>
           <span><Server size={16} /> {t('login.featureAssets')}</span>
