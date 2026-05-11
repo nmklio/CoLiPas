@@ -148,6 +148,7 @@ function ConvertTo-DeployTargets {
         sshKey = Get-PropertyValue $item "sshKey" $SshKey
         publicBaseUrl = Get-PropertyValue $item "publicBaseUrl" $ProductionBaseUrl
         publicMode = Get-PropertyValue $item "publicMode" "public"
+        deploymentMode = Get-PropertyValue $item "deploymentMode" "systemd"
         skipPublicValidation = Get-PropertyBool $item "skipPublicValidation" $false
       }
     }
@@ -174,6 +175,7 @@ function Get-DeployTargets {
     sshKey = $SshKey
     publicBaseUrl = $ProductionBaseUrl
     publicMode = "public"
+    deploymentMode = "systemd"
   })
 }
 
@@ -189,6 +191,7 @@ function Write-DeployPlan {
       sshKey = $_.sshKey
       publicBaseUrl = $_.publicBaseUrl
       publicMode = $_.publicMode
+      deploymentMode = $_.deploymentMode
       skipPublicValidation = $_.skipPublicValidation
     }
   } | ConvertTo-Json -Depth 5
@@ -202,10 +205,30 @@ function Invoke-TargetUpdate {
   if ($resolvedSshKey) {
     $sshArgs += @("-i", $resolvedSshKey, "-o", "IdentitiesOnly=yes")
   }
-  $sshArgs += @("-o", "StrictHostKeyChecking=accept-new", "$($Target.user)@$($Target.host)", $Target.command)
+  $head = (git rev-parse "HEAD").Trim()
+  if ($LASTEXITCODE -ne 0 -or -not $head) {
+    throw "Unable to read local HEAD for deployment evidence."
+  }
+  $safeTargetName = ConvertTo-ShellSingleQuoted $Target.name
+  $safeMode = ConvertTo-ShellSingleQuoted $Target.deploymentMode
+  $safePublicUrl = ConvertTo-ShellSingleQuoted $Target.publicBaseUrl
+  $safeCommit = ConvertTo-ShellSingleQuoted $head
+  $safeArtifact = ConvertTo-ShellSingleQuoted "$($Target.name)-$Branch"
+  $evidenceCommand = "RELEASE_TARGET_NAME=$safeTargetName RELEASE_CHANNEL='production' RELEASE_DEPLOYMENT_MODE=$safeMode RELEASE_PUBLIC_URL=$safePublicUrl RELEASE_GIT_COMMIT=$safeCommit RELEASE_ARTIFACT_ID=$safeArtifact $($Target.command)"
+  $sshArgs += @("-o", "StrictHostKeyChecking=accept-new", "$($Target.user)@$($Target.host)", $evidenceCommand)
 
   Write-Host "Updating target $($Target.name) via $($Target.host)."
   & ssh @sshArgs
+}
+
+function ConvertTo-ShellSingleQuoted {
+  param([string]$Value)
+
+  if ($null -eq $Value) {
+    return "''"
+  }
+
+  return "'" + $Value.Replace("'", "'\''") + "'"
 }
 
 function Push-GitHub {

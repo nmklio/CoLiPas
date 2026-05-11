@@ -2249,6 +2249,7 @@ function assertAccountUiGuards() {
   const dockerfileSource = fs.readFileSync(new URL('../Dockerfile', import.meta.url), 'utf8');
   const composeSource = fs.readFileSync(new URL('../docker-compose.yml', import.meta.url), 'utf8');
   const systemdSource = fs.readFileSync(new URL('../deploy/colipas.service', import.meta.url), 'utf8');
+  const dockerUpdateSource = fs.readFileSync(new URL('../deploy/docker-update.sh', import.meta.url), 'utf8');
 
   if (loginSource.includes("useState('admin')") || loginSource.includes('value="admin"')) {
     throw new Error('Login page must not prefill the admin username');
@@ -2315,11 +2316,15 @@ function assertAccountUiGuards() {
     'RELEASE_PUBLIC_URL',
     'RELEASE_DEPLOYMENT_MODE',
     'RELEASE_DEPLOYED_AT',
+    'ConvertTo-ShellSingleQuoted',
+    'RELEASE_ARTIFACT_ID=$safeArtifact',
+    'docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" up -d --build --remove-orphans',
+    "grep -Ev '^(RELEASE_TARGET_NAME|RELEASE_CHANNEL|RELEASE_DEPLOYMENT_MODE|RELEASE_PUBLIC_URL|RELEASE_GIT_COMMIT|RELEASE_ARTIFACT_ID|RELEASE_DEPLOYED_AT)=' .env",
     'ARG RELEASE_GIT_COMMIT',
     'RELEASE_ARTIFACT_ID',
     'Environment=RELEASE_DEPLOYMENT_MODE=systemd',
   ];
-  const deploymentEvidenceGuardSource = `${verifyProductionSource}\n${releaseDeploySource}\n${dockerfileSource}\n${composeSource}\n${systemdSource}`;
+  const deploymentEvidenceGuardSource = `${verifyProductionSource}\n${releaseDeploySource}\n${dockerfileSource}\n${composeSource}\n${systemdSource}\n${dockerUpdateSource}`;
   const missingDeploymentEvidenceGuard = deploymentEvidenceGuardFragments.filter((fragment) => !deploymentEvidenceGuardSource.includes(fragment));
   if (missingDeploymentEvidenceGuard.length) {
     throw new Error(`Deployment evidence environment propagation is incomplete: ${missingDeploymentEvidenceGuard.join(', ')}`);
@@ -2835,6 +2840,7 @@ async function assertReleaseDeployTargetPlanGuards() {
         sshKey: '~/.ssh/colipas_deploy_rsa',
         publicBaseUrl: 'https://colipas.example.com',
         publicMode: 'public',
+        deploymentMode: 'systemd',
       },
       {
         name: 'docker-secondary',
@@ -2844,6 +2850,7 @@ async function assertReleaseDeployTargetPlanGuards() {
         sshKey: '~/.ssh/colipas_deploy_rsa',
         publicBaseUrl: 'https://cp.example.com',
         publicMode: 'admin',
+        deploymentMode: 'docker',
       },
       {
         name: 'disabled-extra',
@@ -2882,6 +2889,8 @@ async function assertReleaseDeployTargetPlanGuards() {
     targets[0].host !== 'colipas-prod'
     || targets[1].host !== 'colipas-cp'
     || targets[1].command !== 'sudo /usr/local/sbin/colipas-cp-update'
+    || targets[0].deploymentMode !== 'systemd'
+    || targets[1].deploymentMode !== 'docker'
     || targets.some((target) => Object.hasOwn(target, 'enabled'))
     || targets.some((target) => /\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(JSON.stringify(target)))
   ) {
