@@ -118,20 +118,6 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
   const externalAiAvailable = Boolean(provider.apiKey.trim() || serverAiConfigured);
   const showSessionList = sessionsOpen && (sessions.length > 1 || activeSession.messages.length > 0);
   const lastUserQuestion = useMemo(() => findLastUserQuestion(activeSession.messages), [activeSession.messages]);
-  const contextStats = useMemo(() => {
-    const usedTokens = estimateTokens([
-      prompt,
-      activeSession.question,
-      ...activeSession.messages.map((message) => message.content),
-    ].join('\n'));
-    const limitTokens = getModelContextLimit(provider.model);
-
-    return {
-      usedTokens,
-      limitTokens,
-      percent: Math.min(100, Math.round((usedTokens / limitTokens) * 100)),
-    };
-  }, [activeSession.messages, activeSession.question, prompt, provider.model]);
   const scopeLabel = activeSession.selectedServerId === 'all'
     ? t('ai.allServers')
     : selectedServers[0]?.name ?? t('ai.allServers');
@@ -566,12 +552,6 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
                   ))}
                 </select>
               </label>
-              <span
-                className="ai-context-limit"
-                title={t('ai.tokens', { used: formatCompactNumber(contextStats.usedTokens), limit: formatCompactNumber(contextStats.limitTokens) })}
-              >
-                {formatCompactNumber(contextStats.usedTokens)} / {formatCompactNumber(contextStats.limitTokens)}
-              </span>
             </div>
             {showSessionList && (
               <div className="ai-session-list" aria-label={t('ai.sessions')}>
@@ -1079,33 +1059,6 @@ function formatMessageMeta(
     return `${model} / ${t('ai.generatedAt', { time: formatDateTime(message.meta.generatedAt, language) })}`;
   }
   return model;
-}
-
-function estimateTokens(value: string) {
-  const asciiChars = value.replace(/[^\x00-\x7F]/g, '').length;
-  const nonAsciiChars = value.length - asciiChars;
-  return Math.max(1, Math.ceil(asciiChars / 4 + nonAsciiChars / 1.6));
-}
-
-function getModelContextLimit(model: string) {
-  const normalized = model.toLowerCase();
-  if (normalized.includes('gpt-5.5')) {
-    return 128000;
-  }
-  if (normalized.includes('gpt-5.4') || normalized.includes('gpt-4.1')) {
-    return 64000;
-  }
-  if (normalized.includes('qwen') || normalized.includes('deepseek')) {
-    return 32000;
-  }
-  return 42000;
-}
-
-function formatCompactNumber(value: number) {
-  if (value >= 1000) {
-    return `${Number((value / 1000).toFixed(value >= 10000 ? 0 : 1))}K`;
-  }
-  return String(value);
 }
 
 function buildAiResponseCacheKey(

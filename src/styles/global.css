@@ -5477,29 +5477,6 @@ pre {
   box-shadow: inset 0 0 0 2px #ffffff;
 }
 
-.ai-context-limit {
-  height: 31px;
-  min-width: 68px;
-  border: 1px solid #d3e1e4;
-  border-radius: 8px;
-  padding: 0 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: #ffffff;
-  color: #425a62;
-  font-size: 12px;
-  font-weight: 850;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.ai-context-limit.active {
-  border-color: #7fc6bd;
-  background: #f0fbf8;
-  color: var(--brand-strong);
-}
-
 .ai-live-dot.active {
   border-color: #7fc6bd;
   background: var(--brand);
@@ -6754,8 +6731,7 @@ pre {
 .curl-box button,
 .ai-dock-actions button,
 .ai-composer-icon,
-.ai-model-select,
-.ai-context-limit {
+.ai-model-select {
   transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease, transform 0.16s ease;
 }
 
