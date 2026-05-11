@@ -215,6 +215,33 @@ powershell -ExecutionPolicy Bypass -File scripts/install-release-hook.ps1
 
 The hook is stored only under your local `.git/hooks/post-commit`. It is not committed to the repository and it still blocks deployment when tests fail, the tree is dirty, GitHub push fails, or the server update command fails.
 
+### Forgot the Admin Password
+
+CoLiPas never stores the admin password in plain text. Passwords are stored as `scrypt` hashes in SQLite, so a forgotten password must be reset instead of recovered.
+
+Native Linux deployment:
+
+```bash
+cd /opt/colipas
+sudo -u colipas env COLIPAS_RESET_PASSWORD='NewStrongPassword123' npm run reset:admin
+sudo systemctl restart colipas
+```
+
+Docker Compose deployment:
+
+```bash
+docker compose exec -e COLIPAS_RESET_PASSWORD='NewStrongPassword123' colipas npm run reset:admin
+docker compose restart colipas
+```
+
+Optional flags are available when your deployment uses a non-default account or database path:
+
+```bash
+node scripts/reset-admin-password.mjs --username admin --db /opt/colipas/.data/colipas.sqlite --password 'NewStrongPassword123'
+```
+
+The reset script only updates the `admin-account` row in `app_settings`. It does not delete servers, SSH credentials, audit entries, AI cache, custom API settings, or other runtime data.
+
 ## Server Onboarding
 
 Add servers from the Servers page with provider, region, public/private IP, OS, tags, and optional custom cloud provider names.

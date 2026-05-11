@@ -104,7 +104,40 @@ try {
       SMOKE_ADMIN_PASSWORD: 'NextPassword123',
     },
   });
+  await run(process.execPath, ['scripts/reset-admin-password.mjs'], {
+    env: {
+      ...process.env,
+      COLIPAS_DATA_DIR: verifyDataDir,
+      COLIPAS_RESET_PASSWORD: 'RecoveredPassword123',
+    },
+  });
+  await assertLoginRejected('NextPassword123', 'old admin password was rejected after reset');
+  await assertLoginAccepted('RecoveredPassword123', 'reset admin password accepted by login API');
 } finally {
   await stopServer(server);
   removeVerifyDataDir();
+}
+
+async function assertLoginAccepted(password, label) {
+  const response = await postLogin(password);
+  if (!response.ok) {
+    throw new Error(`${label}: expected login success, got HTTP ${response.status}`);
+  }
+  console.log(`ok ${label}`);
+}
+
+async function assertLoginRejected(password, label) {
+  const response = await postLogin(password);
+  if (response.status !== 401) {
+    throw new Error(`${label}: expected HTTP 401, got HTTP ${response.status}`);
+  }
+  console.log(`ok ${label}`);
+}
+
+async function postLogin(password) {
+  return fetch(`${baseUrl}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'admin', password }),
+  });
 }
