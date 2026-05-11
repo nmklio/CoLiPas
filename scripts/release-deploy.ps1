@@ -18,6 +18,7 @@ if ($LASTEXITCODE -ne 0 -or -not $RepoRoot) {
   throw "Unable to locate the git repository root."
 }
 Set-Location $RepoRoot
+$script:PublishedCommitSha = ""
 
 function Run-Step {
   param(
@@ -205,7 +206,10 @@ function Invoke-TargetUpdate {
   if ($resolvedSshKey) {
     $sshArgs += @("-i", $resolvedSshKey, "-o", "IdentitiesOnly=yes")
   }
-  $head = (git rev-parse "HEAD").Trim()
+  $head = $script:PublishedCommitSha
+  if ([string]::IsNullOrWhiteSpace($head)) {
+    $head = (git rev-parse "HEAD").Trim()
+  }
   if ($LASTEXITCODE -ne 0 -or -not $head) {
     throw "Unable to read local HEAD for deployment evidence."
   }
@@ -219,6 +223,9 @@ function Invoke-TargetUpdate {
 
   Write-Host "Updating target $($Target.name) via $($Target.host)."
   & ssh @sshArgs
+  if ($LASTEXITCODE -ne 0) {
+    throw "Target $($Target.name) update failed with exit code $LASTEXITCODE."
+  }
 }
 
 function ConvertTo-ShellSingleQuoted {
@@ -234,6 +241,7 @@ function ConvertTo-ShellSingleQuoted {
 function Push-GitHub {
   git push origin $Branch
   if ($LASTEXITCODE -eq 0) {
+    $script:PublishedCommitSha = (git rev-parse "HEAD").Trim()
     return
   }
 
@@ -255,6 +263,7 @@ function Push-GitHub {
   $remoteTree = $remoteCommit.tree.sha
   if ($remoteTree -eq $headTree) {
     Write-Host "GitHub already has the current tree at $remoteSha."
+    $script:PublishedCommitSha = $remoteSha
     $global:LASTEXITCODE = 0
     return
   }
@@ -376,6 +385,7 @@ function Push-GitHub {
     throw "GitHub API ref update did not return expected commit."
   }
 
+  $script:PublishedCommitSha = $newCommit.sha
   Write-Warning "GitHub API produced commit $($newCommit.sha) for local HEAD $head. The tree matches, so aligning the local branch to the published ref."
   git fetch origin $Branch
   if ($LASTEXITCODE -ne 0) {

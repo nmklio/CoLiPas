@@ -9,6 +9,7 @@ SERVER_NAME="${COLIPAS_SERVER_NAME:-c.miao7777.com}"
 LANDING_ROOT="${COLIPAS_LANDING_ROOT:-/var/www/colipas-landing}"
 SSL_CERTIFICATE="${COLIPAS_SSL_CERTIFICATE:-/etc/letsencrypt/live/$SERVER_NAME/fullchain.pem}"
 SSL_CERTIFICATE_KEY="${COLIPAS_SSL_CERTIFICATE_KEY:-/etc/letsencrypt/live/$SERVER_NAME/privkey.pem}"
+RELEASE_VERIFY_TOKEN_VALUE=""
 
 run_as_app() {
   if [ "$(id -u)" -eq 0 ]; then
@@ -1103,6 +1104,23 @@ verify_release_evidence() {
     node "$APP_DIR/deploy/release-evidence-check.mjs"
 }
 
+generate_release_verify_token() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32
+    return
+  fi
+
+  node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+}
+
+current_release_verify_token() {
+  if [ ! -f "$APP_DIR/.env" ]; then
+    return 0
+  fi
+
+  grep -E '^RELEASE_VERIFY_TOKEN=' "$APP_DIR/.env" | tail -1 | cut -d= -f2- || true
+}
+
 install_nginx_config() {
   if [ -f "$LANDING_ROOT/index.html" ] && [ -f "$SSL_CERTIFICATE" ] && [ -f "$SSL_CERTIFICATE_KEY" ]; then
     cat >/etc/nginx/sites-available/colipas.conf <<NGINX
@@ -1230,11 +1248,16 @@ run_as_app git reset --hard "$REMOTE_HEAD"
 run_as_app npm ci
 run_as_app npm run build
 DEPLOYED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+RELEASE_VERIFY_TOKEN_VALUE="$(current_release_verify_token)"
+if [ "${#RELEASE_VERIFY_TOKEN_VALUE}" -lt 24 ]; then
+  RELEASE_VERIFY_TOKEN_VALUE="$(generate_release_verify_token)"
+fi
 if [ -f "$APP_DIR/.env" ]; then
   tmp_env="$(mktemp)"
-  grep -Ev '^(RELEASE_TARGET_NAME|RELEASE_CHANNEL|RELEASE_DEPLOYMENT_MODE|RELEASE_PUBLIC_URL|RELEASE_GIT_COMMIT|RELEASE_ARTIFACT_ID|RELEASE_DEPLOYED_AT)=' "$APP_DIR/.env" > "$tmp_env" || true
+  grep -Ev '^(RELEASE_VERIFY_TOKEN|RELEASE_TARGET_NAME|RELEASE_CHANNEL|RELEASE_DEPLOYMENT_MODE|RELEASE_PUBLIC_URL|RELEASE_GIT_COMMIT|RELEASE_ARTIFACT_ID|RELEASE_DEPLOYED_AT)=' "$APP_DIR/.env" > "$tmp_env" || true
   {
     cat "$tmp_env"
+    printf 'RELEASE_VERIFY_TOKEN=%s\n' "$RELEASE_VERIFY_TOKEN_VALUE"
     printf 'RELEASE_TARGET_NAME=%s\n' "$SERVER_NAME"
     printf 'RELEASE_CHANNEL=%s\n' "production"
     printf 'RELEASE_DEPLOYMENT_MODE=%s\n' "systemd"
