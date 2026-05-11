@@ -282,7 +282,11 @@ export async function openStoredSshShell(
     : openRealSshShell(credential, mode, options);
 }
 
-export function subscribeSshShellSession(sessionId: string, listener: SshShellListener) {
+export function subscribeSshShellSession(
+  sessionId: string,
+  listener: SshShellListener,
+  options: { replayHistory?: boolean } = {},
+) {
   const session = activeSshShellSessions.get(sessionId);
   if (!session || session.closed) {
     throw new HttpError(404, 'SSH shell session not found', 'SSH_SHELL_NOT_FOUND');
@@ -290,7 +294,9 @@ export function subscribeSshShellSession(sessionId: string, listener: SshShellLi
 
   session.listeners.add(listener);
   session.touch();
-  session.history.forEach(listener);
+  if (options.replayHistory !== false) {
+    session.history.forEach(listener);
+  }
 
   return () => {
     session.listeners.delete(listener);
@@ -595,7 +601,6 @@ function openSimulatedSshShell(mode: SshVerifyMode): SshShellSessionResult {
 
         if (char >= ' ' && char !== '\u001b') {
           inputBuffer += char;
-          emitSshShellEvent(shell, { type: 'stdout', content: char });
         }
       }
     },

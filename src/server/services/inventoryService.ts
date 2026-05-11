@@ -450,12 +450,16 @@ export async function openServerShell(input: unknown) {
   };
 }
 
-export function subscribeServerShell(input: unknown, onEvent: (event: SshShellStreamEvent) => void) {
+export function subscribeServerShell(
+  input: unknown,
+  onEvent: (event: SshShellStreamEvent) => void,
+) {
   const parsed = z.object({
     sessionId: z.string().min(1),
+    replay: z.coerce.number().int().optional(),
   }).parse(input);
 
-  return subscribeSshShellSession(parsed.sessionId, onEvent);
+  return subscribeSshShellSession(parsed.sessionId, onEvent, { replayHistory: parsed.replay !== 0 });
 }
 
 export function writeServerShell(input: unknown) {

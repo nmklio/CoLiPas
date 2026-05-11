@@ -794,8 +794,10 @@ export function streamServerShell(
   sessionId: string,
   onEvent: (event: ServerShellStreamEvent) => void,
   onError: (error: Error) => void,
+  options: { replayHistory?: boolean } = {},
 ) {
-  const source = new EventSource(`/api/servers/shells/${encodeURIComponent(sessionId)}/stream`);
+  const replayHistoryQuery = options.replayHistory === false ? '?replay=0' : '';
+  const source = new EventSource(`/api/servers/shells/${encodeURIComponent(sessionId)}/stream${replayHistoryQuery}`);
   source.onmessage = (event) => {
     try {
       onEvent(JSON.parse(event.data) as ServerShellStreamEvent);

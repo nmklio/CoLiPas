@@ -93,6 +93,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const [editingServerId, setEditingServerId] = useState('');
   const [sshPanelServerId, setSshPanelServerId] = useState('');
   const [sshConsoleOpen, setSshConsoleOpen] = useState(false);
+  const sshConsoleReplayHistoryRef = useRef(true);
   const [sshRunning, setSshRunning] = useState(false);
   const [loginProbe, setLoginProbe] = useState<LoginProbe | null>(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -317,8 +318,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
         </article>
         <article>
           <span><Globe2 size={16} /> {t('servers.summaryScope')}</span>
-          <strong>{visibleProviderCount}</strong>
-          <small>{t('servers.summaryRegions', { count: visibleRegionCount })}</small>
+          <strong>{visibleRegionCount}</strong>
+          <small>{visibleProviderCount > 0 ? t('servers.summaryProviders', { count: visibleProviderCount }) : t('common.none')}</small>
         </article>
       </div>
 
@@ -948,6 +949,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     }
     setSshPanelServerId(server.id);
     setLoginProbe(null);
+    sshConsoleReplayHistoryRef.current = !terminalShellIdRef.current || terminalShellServerIdRef.current !== server.id;
     setSshConsoleOpen(true);
   }
 
@@ -967,6 +969,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     terminalShellServerIdRef.current = server.id;
     terminal.reset();
     terminal.writeln(`Connecting to ${server.ssh?.username}@${server.ssh?.host}:${server.ssh?.port}...`);
+    terminal.scrollToBottom();
 
     try {
       const shell = await openServerShell(server.id, getTerminalDimensions());
@@ -980,14 +983,17 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
           }
           if (event.type === 'stdout' && event.content) {
             terminal.write(event.content);
+            terminal.scrollToBottom();
             return;
           }
           if (event.type === 'stderr' && event.content) {
             terminal.write(event.content);
+            terminal.scrollToBottom();
             return;
           }
           if (event.type === 'close') {
             terminal.writeln('\r\nConnection closed.');
+            terminal.scrollToBottom();
             terminalShellIdRef.current = null;
             terminalShellServerIdRef.current = null;
             terminalDataSubscriptionRef.current?.dispose();
@@ -998,14 +1004,17 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
           if (event.type === 'error') {
             if (sshConsoleOpenRef.current) {
               terminal.writeln(`\r\n${event.message ?? 'SSH shell stream failed'}`);
+              terminal.scrollToBottom();
             }
           }
         },
         (error) => {
           if (terminalShellIdRef.current && sshConsoleOpenRef.current) {
             terminal.writeln(`\r\n${error.message}`);
+            terminal.scrollToBottom();
           }
         },
+        { replayHistory: sshConsoleReplayHistoryRef.current },
       );
       terminalShellStreamRef.current = stream;
 
@@ -1020,6 +1029,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       setLoginProbe(mergedProbe);
       setActionMessage(t('servers.sshConnectedMessage', { name: server.name }));
       scheduleTerminalFit(true);
+      terminal.scrollToBottom();
       window.setTimeout(() => terminal.focus(), 30);
     } catch (error) {
       closeActiveShellSession();
@@ -1052,10 +1062,12 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
           }
           if ((event.type === 'stdout' || event.type === 'stderr') && event.content) {
             terminal.write(event.content);
+            terminal.scrollToBottom();
             return;
           }
           if (event.type === 'close') {
             terminal.writeln('\r\nConnection closed.');
+            terminal.scrollToBottom();
             terminalShellIdRef.current = null;
             terminalShellServerIdRef.current = null;
             terminalDataSubscriptionRef.current?.dispose();
@@ -1066,14 +1078,17 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
           if (event.type === 'error') {
             if (sshConsoleOpenRef.current) {
               terminal.writeln(`\r\n${event.message ?? 'SSH shell stream failed'}`);
+              terminal.scrollToBottom();
             }
           }
         },
         (error) => {
           if (terminalShellIdRef.current && sshConsoleOpenRef.current) {
             terminal.writeln(`\r\n${error.message}`);
+            terminal.scrollToBottom();
           }
         },
+        { replayHistory: sshConsoleReplayHistoryRef.current },
       );
       terminalShellStreamRef.current = stream;
     }
@@ -1087,6 +1102,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       uname: `${server.os} ${server.publicIp}`,
     });
     scheduleTerminalFit(true);
+    terminal.scrollToBottom();
     window.setTimeout(() => terminal.focus(), 30);
   }
 
@@ -1215,7 +1231,9 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   }
 
   function appendTerminalOutput(command: string, output: string) {
-    xtermRef.current?.writeln(`\r\n${command}\r\n${output}`);
+    const terminal = xtermRef.current;
+    terminal?.writeln(`\r\n${command}\r\n${output}`);
+    terminal?.scrollToBottom();
   }
 
   function stopTerminalCommand() {

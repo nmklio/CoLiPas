@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+COLIPAS_RELEASE_CONFIG_FILE="${COLIPAS_RELEASE_CONFIG:-/etc/default/colipas-release}"
+if [ -f "$COLIPAS_RELEASE_CONFIG_FILE" ]; then
+  # shellcheck source=/dev/null
+  . "$COLIPAS_RELEASE_CONFIG_FILE"
+fi
+
 APP_DIR="${COLIPAS_APP_DIR:-/opt/colipas}"
 SERVICE_NAME="${COLIPAS_SERVICE_NAME:-colipas}"
 BRANCH="${COLIPAS_BRANCH:-master}"
@@ -1158,6 +1164,21 @@ write_release_evidence_env() {
       chown "$APP_USER:$APP_USER" "$APP_DIR/.env"
       chmod 0600 "$APP_DIR/.env"
     fi
+  fi
+
+  if [ "$(id -u)" -eq 0 ]; then
+    install -d -m 0755 /etc/default
+    cat >/etc/default/colipas-release <<DEFAULTS
+COLIPAS_SERVER_NAME=$SERVER_NAME
+RELEASE_PUBLIC_URL=$PUBLIC_URL
+RELEASE_TARGET_NAME=$SERVER_NAME
+RELEASE_CHANNEL=production
+RELEASE_DEPLOYMENT_MODE=systemd
+RELEASE_GIT_COMMIT=$commit_sha
+RELEASE_ARTIFACT_ID=systemd-$BRANCH
+RELEASE_DEPLOYED_AT=$deployed_at
+DEFAULTS
+    chmod 0644 /etc/default/colipas-release
   fi
 }
 

@@ -504,7 +504,13 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
       response.setHeader('X-Accel-Buffering', 'no');
       response.flushHeaders();
 
-      unsubscribe = subscribeServerShell({ sessionId: request.params.sessionId }, writeEvent);
+      unsubscribe = subscribeServerShell(
+        {
+          sessionId: request.params.sessionId,
+          replay: request.query.replay,
+        },
+        writeEvent,
+      );
       response.write(': connected\n\n');
       flushSse(response);
       response.on('close', () => {
