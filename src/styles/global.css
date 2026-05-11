@@ -3596,6 +3596,19 @@ td span,
   gap: 6px;
 }
 
+.ssh-terminal-session-count {
+  min-height: 24px;
+  border: 1px solid rgba(151, 193, 196, 0.22);
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.055);
+  color: #bad4d9;
+  font-size: 11px;
+  font-weight: 820;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
 .ssh-terminal-tools button {
   width: 28px;
   min-height: 28px;
@@ -7622,6 +7635,11 @@ pre {
   .ssh-terminal-controls {
     width: 100%;
     justify-content: space-between;
+    gap: 8px;
+  }
+
+  .ssh-terminal-session-count {
+    padding-inline: 7px;
   }
 
   .ssh-terminal-state {

@@ -259,6 +259,7 @@ async function assertSshTerminalPanel(targetPage) {
     await targetPage.locator('.server-workspace-row').filter({ hasText: sshServer.name }).getByRole('button', { name: /^SSH$/i }).click();
     await targetPage.locator('.ssh-console').waitFor({ timeout: 10000 });
     await targetPage.locator('.ssh-terminal-screen .xterm').waitFor({ timeout: 10000 });
+    await targetPage.locator('.ssh-terminal-session-count').filter({ hasText: /sessions 1/i }).waitFor({ timeout: 10000 });
     await targetPage.locator('.ssh-terminal-screen').click();
     await targetPage.keyboard.type('whoami', { delay: 10 });
     await targetPage.keyboard.press('Enter');
@@ -359,6 +360,11 @@ async function assertSshTerminalPanel(targetPage) {
     await targetPage.getByRole('button', { name: /disconnect/i }).click();
     await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });
     await targetPage.locator('.action-message').filter({ hasText: /disconnected/i }).waitFor({ timeout: 5000 });
+    await targetPage.waitForFunction(async () => {
+      const response = await fetch('/api/servers/shells/status');
+      const status = await response.json();
+      return status.activeCount === 0;
+    }, undefined, { timeout: 5000 });
     await targetPage.locator('.server-workspace-row').filter({ hasText: sshServer.name }).getByRole('button', { name: /^SSH$/i }).click();
     await targetPage.locator('.ssh-console').waitFor({ timeout: 10000 });
     await targetPage.waitForFunction(() => {
@@ -372,7 +378,12 @@ async function assertSshTerminalPanel(targetPage) {
     await targetPage.locator('.ssh-console-header .icon-button').click();
     await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });
     await targetPage.locator('.action-message').filter({ hasText: /disconnected/i }).waitFor({ timeout: 5000 });
-    console.log('ok browser e2e covers interactive xterm SSH terminal, copy/clear tools, and panel disconnect cleanup');
+    await targetPage.waitForFunction(async () => {
+      const response = await fetch('/api/servers/shells/status');
+      const status = await response.json();
+      return status.activeCount === 0;
+    }, undefined, { timeout: 5000 });
+    console.log('ok browser e2e covers interactive xterm SSH terminal, copy/clear tools, status count, and panel disconnect cleanup');
   } finally {
     await deleteTemporaryAssetServer(targetPage, sshServer.id).catch(() => undefined);
   }

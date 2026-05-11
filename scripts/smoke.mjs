@@ -42,6 +42,10 @@ const unauthenticatedAccountResponse = await fetch(`${baseUrl}/api/account`);
 if (unauthenticatedAccountResponse.status !== 401) {
   throw new Error(`/api/account expected 401 before login, got ${unauthenticatedAccountResponse.status}`);
 }
+const unauthenticatedShellStatusResponse = await fetch(`${baseUrl}/api/servers/shells/status`);
+if (unauthenticatedShellStatusResponse.status !== 401) {
+  throw new Error(`/api/servers/shells/status expected 401 before login, got ${unauthenticatedShellStatusResponse.status}`);
+}
 const unauthenticatedPasswordResponse = await fetch(`${baseUrl}/api/account/password`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
@@ -1375,6 +1379,20 @@ if (blankCommandResponse.status !== 400) {
 }
 console.log('ok /api/servers/commands blocks blank command');
 
+const shellInitialStatusResponse = await fetch(`${baseUrl}/api/servers/shells/status`, { headers: authHeaders });
+if (!shellInitialStatusResponse.ok) {
+  throw new Error(`/api/servers/shells/status initial returned HTTP ${shellInitialStatusResponse.status}`);
+}
+const shellInitialStatus = await shellInitialStatusResponse.json();
+if (
+  shellInitialStatus.activeCount !== 0
+  || shellInitialStatus.byMode?.simulate !== 0
+  || JSON.stringify(shellInitialStatus).match(/sessionId|203\.0\.113\.10|smoke-password|root@|whoami|uptime/)
+) {
+  throw new Error('/api/servers/shells/status initial payload was unexpected or leaked sensitive shell details');
+}
+console.log('ok /api/servers/shells/status starts empty and sanitized');
+
 const shellResponse = await fetch(`${baseUrl}/api/servers/shells`, {
   method: 'POST',
   headers: { ...authHeaders, 'Content-Type': 'application/json' },
@@ -1390,6 +1408,20 @@ if (shellResponse.status !== 201) {
 const shellBody = await shellResponse.json();
 if (shellBody.serverId !== connectedServer.id || !shellBody.sessionId || !/^srv-trace-[a-f0-9-]{36}$/.test(shellBody.correlationId)) {
   throw new Error('/api/servers/shells returned unexpected payload');
+}
+const shellOpenStatusResponse = await fetch(`${baseUrl}/api/servers/shells/status`, { headers: authHeaders });
+if (!shellOpenStatusResponse.ok) {
+  throw new Error(`/api/servers/shells/status open returned HTTP ${shellOpenStatusResponse.status}`);
+}
+const shellOpenStatus = await shellOpenStatusResponse.json();
+if (
+  shellOpenStatus.activeCount !== 1
+  || shellOpenStatus.byMode?.simulate !== 1
+  || !shellOpenStatus.oldestConnectedAt
+  || !shellOpenStatus.newestConnectedAt
+  || JSON.stringify(shellOpenStatus).includes(shellBody.sessionId)
+) {
+  throw new Error('/api/servers/shells/status did not expose sanitized active shell stats');
 }
 const shellWriteResponse = await fetch(`${baseUrl}/api/servers/shells/${shellBody.sessionId}/input`, {
   method: 'POST',
@@ -1424,7 +1456,15 @@ const shellClosedWriteResponse = await fetch(`${baseUrl}/api/servers/shells/${sh
 if (shellClosedWriteResponse.status !== 404) {
   throw new Error(`/api/servers/shells/:sessionId/input after DELETE expected 404, got HTTP ${shellClosedWriteResponse.status}`);
 }
-console.log('ok /api/servers/shells realtime stream and close cleanup');
+const shellClosedStatusResponse = await fetch(`${baseUrl}/api/servers/shells/status`, { headers: authHeaders });
+if (!shellClosedStatusResponse.ok) {
+  throw new Error(`/api/servers/shells/status closed returned HTTP ${shellClosedStatusResponse.status}`);
+}
+const shellClosedStatus = await shellClosedStatusResponse.json();
+if (shellClosedStatus.activeCount !== 0 || shellClosedStatus.byMode?.simulate !== 0 || shellClosedStatus.oldestConnectedAt !== null) {
+  throw new Error('/api/servers/shells/status did not return to zero after close');
+}
+console.log('ok /api/servers/shells realtime stream, sanitized status, and close cleanup');
 
 const shellLongResponse = await fetch(`${baseUrl}/api/servers/shells`, {
   method: 'POST',
@@ -3397,6 +3437,10 @@ function assertSshTerminalRealtimeGuards() {
     'writeServerShell(sessionId, data)',
     'function interruptTerminalCommand()',
     "writeServerShell(sessionId, '\\u0003')",
+    'fetchServerShellStatus',
+    'activeShellCount',
+    'servers.activeShellSessionsShort',
+    'refreshShellStatus',
     'const [terminalShellId, setTerminalShellId]',
     'terminalLifecycleSeqRef.current += 1',
     'isCurrentTerminalLifecycle(server.id, lifecycleSeq)',
@@ -3443,6 +3487,8 @@ function assertSshTerminalRealtimeGuards() {
     'servers.sshInterrupting',
     'servers.sshInterruptSent',
     'servers.sshInterruptUnavailable',
+    'servers.activeShellSessions',
+    'servers.activeShellSessionsShort',
   ];
   const missingToolLabels = requiredToolLabels.filter((key) => !inventorySource.includes(key) || !fs.readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8').includes(key));
   if (missingToolLabels.length) {
@@ -3473,6 +3519,9 @@ function assertSshTerminalRealtimeGuards() {
     "content: `^C\\r\\n${simulatedShellPrompt}`",
     'stream.setWindow(rows, cols',
     'sshShellIdleTimeoutMs',
+    'export function getSshShellSessionStats',
+    'oldestConnectedAt',
+    'newestConnectedAt',
   ];
   const missingBackend = requiredBackendFragments.filter((fragment) => !sshServiceSource.includes(fragment));
   if (missingBackend.length) {
@@ -3481,6 +3530,7 @@ function assertSshTerminalRealtimeGuards() {
 
   const requiredApiFragments = [
     "app.post('/api/servers/shells'",
+    "app.get('/api/servers/shells/status'",
     "app.get('/api/servers/shells/:sessionId/stream'",
     "app.post('/api/servers/shells/:sessionId/input'",
     "app.delete('/api/servers/shells/:sessionId'",
@@ -3497,6 +3547,7 @@ function assertSshTerminalRealtimeGuards() {
     'export async function writeServerShell',
     'export async function resizeServerShell',
     'export async function closeServerShell',
+    'export async function fetchServerShellStatus',
   ];
   const missingClient = requiredClientFragments.filter((fragment) => !apiClientSource.includes(fragment));
   if (missingClient.length) {

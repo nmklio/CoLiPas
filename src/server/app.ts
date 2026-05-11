@@ -22,6 +22,7 @@ import {
   closeServerShell,
   connectServer,
   deleteServer,
+  getServerShellStatus,
   inspectServerIdentity,
   listCloudAccounts,
   listOperationEvents,
@@ -487,6 +488,10 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
     } catch (error) {
       next(error);
     }
+  });
+
+  app.get('/api/servers/shells/status', (_request, response) => {
+    response.json(getServerShellStatus());
   });
 
   app.get('/api/servers/shells/:sessionId/stream', (request, response, next) => {

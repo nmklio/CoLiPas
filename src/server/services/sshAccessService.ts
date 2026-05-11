@@ -114,6 +114,13 @@ export interface SshShellSessionResult {
   connectedAt: string;
 }
 
+export interface SshShellSessionStats {
+  activeCount: number;
+  byMode: Record<SshVerifyMode, number>;
+  oldestConnectedAt: string | null;
+  newestConnectedAt: string | null;
+}
+
 export interface SshShellStreamEvent {
   type: 'start' | 'stdout' | 'stderr' | 'close' | 'error';
   content?: string;
@@ -321,6 +328,38 @@ export function closeSshShellSession(sessionId: string) {
     return;
   }
   session.close('closed');
+}
+
+export function getSshShellSessionStats(): SshShellSessionStats {
+  const stats: SshShellSessionStats = {
+    activeCount: 0,
+    byMode: {
+      assetOnly: 0,
+      real: 0,
+      simulate: 0,
+    },
+    oldestConnectedAt: null,
+    newestConnectedAt: null,
+  };
+
+  for (const session of activeSshShellSessions.values()) {
+    if (session.closed) {
+      continue;
+    }
+
+    stats.activeCount += 1;
+    stats.byMode[session.mode] += 1;
+
+    if (!stats.oldestConnectedAt || session.connectedAt < stats.oldestConnectedAt) {
+      stats.oldestConnectedAt = session.connectedAt;
+    }
+
+    if (!stats.newestConnectedAt || session.connectedAt > stats.newestConnectedAt) {
+      stats.newestConnectedAt = session.connectedAt;
+    }
+  }
+
+  return stats;
 }
 
 export async function collectSshMetrics(credential: StoredSshCredential, mode: SshVerifyMode) {

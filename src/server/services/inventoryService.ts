@@ -24,6 +24,7 @@ import {
   buildStoredSshCredential,
   closeSshShellSession,
   collectSshMetrics,
+  getSshShellSessionStats,
   openStoredSshShell,
   resizeSshShellSession,
   runStoredSshCommand,
@@ -487,6 +488,10 @@ export function closeServerShell(input: unknown) {
   }).parse(input);
   closeSshShellSession(parsed.sessionId);
   return { ok: true };
+}
+
+export function getServerShellStatus() {
+  return getSshShellSessionStats();
 }
 
 export function setServerRuntimeStatus(serverId: string, status: Extract<ServerStatus, 'running' | 'stopped' | 'warning'>) {

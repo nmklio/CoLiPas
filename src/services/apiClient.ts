@@ -138,6 +138,13 @@ export interface ServerShellResponse {
   connectedAt: string;
 }
 
+export interface ServerShellStatusResponse {
+  activeCount: number;
+  byMode: Record<SshVerifyMode, number>;
+  oldestConnectedAt: string | null;
+  newestConnectedAt: string | null;
+}
+
 export interface ServerShellStreamEvent {
   type: 'start' | 'stdout' | 'stderr' | 'close' | 'error';
   content?: string;
@@ -750,6 +757,16 @@ export async function openServerShell(
   }
 
   return (await response.json()) as ServerShellResponse;
+}
+
+export async function fetchServerShellStatus(fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/servers/shells/status');
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as ServerShellStatusResponse;
 }
 
 export async function writeServerShell(sessionId: string, input: string, fetcher: typeof fetch = fetch) {
