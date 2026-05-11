@@ -64,6 +64,10 @@ function replaceAll(pattern, replacement) {
 replaceAll(/\/\* colipas landing balanced ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\/style>)/g, '');
 replaceAll(/<a class="button github-button" href="https:\/\/github\.com\/nmklio\/CoLiPas"[^>]*>GitHub<\/a>/g, '');
 
+if (!html.includes('href="/docs.html"')) {
+  replaceOnce(/(<a href="#deploy">[\s\S]*?<\/a>)/, '$1\n      <a href="/docs.html">文档</a>');
+}
+
 if (!html.includes('https://github.com/nmklio/CoLiPas')) {
   replaceOnce(/<a class="nav-action" href="\/admin\/">([\s\S]*?)<\/a>/, (_match, label) => (
     `<div class="nav-actions"><a class="nav-github" href="https://github.com/nmklio/CoLiPas" target="_blank" rel="noreferrer">GitHub</a><a class="nav-action" href="/admin/">${label}</a></div>`
@@ -454,6 +458,7 @@ write_docs_page() {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230f766e'/%3E%3Ctext x='32' y='39' font-size='24' text-anchor='middle' font-family='Arial' font-weight='700' fill='white'%3ECP%3C/text%3E%3C/svg%3E">
   <title>CoLiPas 使用文档</title>
   <style>
     :root {

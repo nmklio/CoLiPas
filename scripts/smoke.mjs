@@ -2166,9 +2166,11 @@ function assertAccountUiGuards() {
     || !serverUpdateSource.includes('patch_landing_page_ui')
     || !serverUpdateSource.includes('write_docs_page')
     || !serverUpdateSource.includes('https://github.com/nmklio/CoLiPas')
+    || !serverUpdateSource.includes('href="/docs.html"')
     || !serverUpdateSource.includes('colipas landing balanced ui')
     || !serverUpdateSource.includes('try_files /docs.html =404')
     || !serverUpdateSource.includes('CoLiPas docs page ready')
+    || !serverUpdateSource.includes('rel="icon" href="data:image/svg+xml')
   ) {
     throw new Error('Deployment, docs, and login pages must expose public navigation without fake docs links');
   }
