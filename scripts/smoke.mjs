@@ -19,6 +19,7 @@ assertCustomApiSecretNotPersisted();
 assertOverviewMapInteractionGuards();
 assertMapRegionScopeLifecycleGuards();
 assertOverviewServerFilterLinkage();
+assertSessionCookieSecurityGuards();
 assertServerIdentityDetectionGuards();
 assertServerStatusLifecycleGuards();
 assertSshTerminalRealtimeGuards();
@@ -158,6 +159,10 @@ if (JSON.stringify(loginBody).match(/sessionId|scrypt|salt|passwordChangedAt/)) 
 const sessionCookie = loginResponse.headers.get('set-cookie')?.split(';')[0];
 if (!sessionCookie) {
   throw new Error('/api/auth/login did not set a session cookie');
+}
+const sessionSetCookie = loginResponse.headers.get('set-cookie') ?? '';
+if (new URL(baseUrl).protocol === 'http:' && /;\s*Secure\b/i.test(sessionSetCookie)) {
+  throw new Error('/api/auth/login set Secure on a local HTTP session cookie');
 }
 authHeaders.Cookie = sessionCookie;
 console.log('ok /api/auth/login');
@@ -2803,6 +2808,33 @@ function assertCustomApiSecretNotPersisted() {
   }
 
   console.log('ok custom API integration center and localStorage token guard');
+}
+
+function assertSessionCookieSecurityGuards() {
+  const configSource = fs.readFileSync(new URL('../src/server/config.ts', import.meta.url), 'utf8');
+  const authSource = fs.readFileSync(new URL('../src/server/services/authService.ts', import.meta.url), 'utf8');
+  const requiredFragments = [
+    'COLIPAS_SECURE_COOKIES',
+    "parsed.RELEASE_PUBLIC_URL.toLowerCase().startsWith('https://')",
+    'secureCookies:',
+    'secure: config.auth.secureCookies',
+  ];
+  const sources = `${configSource}\n${authSource}`;
+  const missing = requiredFragments.filter((fragment) => !sources.includes(fragment));
+  if (missing.length) {
+    throw new Error(`Session cookie security guard is incomplete: ${missing.join(', ')}`);
+  }
+
+  const insecureFragments = [
+    "secure: config.nodeEnv === 'production' && process.env.COLIPAS_SECURE_COOKIES === '1'",
+    "secure: process.env.COLIPAS_SECURE_COOKIES === '1'",
+  ];
+  const insecure = insecureFragments.filter((fragment) => authSource.includes(fragment));
+  if (insecure.length) {
+    throw new Error(`Session cookie Secure flag must not depend only on manual env toggles: ${insecure.join(', ')}`);
+  }
+
+  console.log('ok session cookies auto-enable Secure for HTTPS production URLs');
 }
 
 function assertSqlitePersistenceGuards() {

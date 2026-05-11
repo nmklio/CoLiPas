@@ -212,7 +212,7 @@ function setSessionCookie(response: Response, session: SessionRecord, config: Ru
   response.cookie(cookieName, token, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: config.nodeEnv === 'production' && process.env.COLIPAS_SECURE_COOKIES === '1',
+    secure: config.auth.secureCookies,
     path: '/',
     maxAge: config.auth.sessionTtlMs,
   });

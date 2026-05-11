@@ -23,6 +23,7 @@ const envSchema = z.object({
   RELEASE_GIT_COMMIT: z.string().default(''),
   RELEASE_ARTIFACT_ID: z.string().default(''),
   RELEASE_DEPLOYED_AT: z.string().default(''),
+  COLIPAS_SECURE_COOKIES: z.enum(['0', '1']).optional(),
 });
 
 export const defaultRuntimeSecrets = {
@@ -56,6 +57,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       adminPassword: parsed.ADMIN_PASSWORD,
       sessionSecret: parsed.SESSION_SECRET,
       sessionTtlMs: parsed.SESSION_TTL_HOURS * 60 * 60 * 1000,
+      secureCookies: parsed.NODE_ENV === 'production' && (
+        parsed.COLIPAS_SECURE_COOKIES === '1'
+        || parsed.RELEASE_PUBLIC_URL.toLowerCase().startsWith('https://')
+      ),
     },
     security: {
       adminPasswordDefault: parsed.ADMIN_PASSWORD === defaultRuntimeSecrets.adminPassword,
