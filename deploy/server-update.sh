@@ -1,10 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+INCOMING_COLIPAS_SERVER_NAME="${COLIPAS_SERVER_NAME:-}"
+INCOMING_RELEASE_PUBLIC_URL="${RELEASE_PUBLIC_URL:-}"
+INCOMING_RELEASE_TARGET_NAME="${RELEASE_TARGET_NAME:-}"
+INCOMING_RELEASE_CHANNEL="${RELEASE_CHANNEL:-}"
+INCOMING_RELEASE_DEPLOYMENT_MODE="${RELEASE_DEPLOYMENT_MODE:-}"
+INCOMING_RELEASE_GIT_COMMIT="${RELEASE_GIT_COMMIT:-}"
+INCOMING_RELEASE_ARTIFACT_ID="${RELEASE_ARTIFACT_ID:-}"
+INCOMING_RELEASE_DEPLOYED_AT="${RELEASE_DEPLOYED_AT:-}"
+
 COLIPAS_RELEASE_CONFIG_FILE="${COLIPAS_RELEASE_CONFIG:-/etc/default/colipas-release}"
 if [ -f "$COLIPAS_RELEASE_CONFIG_FILE" ]; then
   # shellcheck source=/dev/null
   . "$COLIPAS_RELEASE_CONFIG_FILE"
+fi
+
+[ -n "$INCOMING_COLIPAS_SERVER_NAME" ] && COLIPAS_SERVER_NAME="$INCOMING_COLIPAS_SERVER_NAME"
+[ -n "$INCOMING_RELEASE_PUBLIC_URL" ] && RELEASE_PUBLIC_URL="$INCOMING_RELEASE_PUBLIC_URL"
+[ -n "$INCOMING_RELEASE_TARGET_NAME" ] && RELEASE_TARGET_NAME="$INCOMING_RELEASE_TARGET_NAME"
+[ -n "$INCOMING_RELEASE_CHANNEL" ] && RELEASE_CHANNEL="$INCOMING_RELEASE_CHANNEL"
+[ -n "$INCOMING_RELEASE_DEPLOYMENT_MODE" ] && RELEASE_DEPLOYMENT_MODE="$INCOMING_RELEASE_DEPLOYMENT_MODE"
+[ -n "$INCOMING_RELEASE_GIT_COMMIT" ] && RELEASE_GIT_COMMIT="$INCOMING_RELEASE_GIT_COMMIT"
+[ -n "$INCOMING_RELEASE_ARTIFACT_ID" ] && RELEASE_ARTIFACT_ID="$INCOMING_RELEASE_ARTIFACT_ID"
+[ -n "$INCOMING_RELEASE_DEPLOYED_AT" ] && RELEASE_DEPLOYED_AT="$INCOMING_RELEASE_DEPLOYED_AT"
+if [ -n "$INCOMING_RELEASE_PUBLIC_URL" ] && [ -z "$INCOMING_COLIPAS_SERVER_NAME" ]; then
+  unset COLIPAS_SERVER_NAME
 fi
 
 APP_DIR="${COLIPAS_APP_DIR:-/opt/colipas}"
@@ -1130,6 +1151,29 @@ generate_release_verify_token() {
   node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 }
 
+ensure_fallback_ssl_certificate() {
+  local fallback_cert="/etc/ssl/certs/colipas-selfsigned.crt"
+  local fallback_key="/etc/ssl/private/colipas-selfsigned.key"
+
+  if [ -f "$fallback_cert" ] && [ -f "$fallback_key" ]; then
+    return 0
+  fi
+
+  if ! command -v openssl >/dev/null 2>&1; then
+    return 1
+  fi
+
+  install -d -m 0755 /etc/ssl/certs
+  install -d -m 0710 /etc/ssl/private
+  openssl req -x509 -nodes -newkey rsa:2048 -days 365 \
+    -keyout "$fallback_key" \
+    -out "$fallback_cert" \
+    -subj "/CN=$SERVER_NAME" \
+    -addext "subjectAltName=DNS:$SERVER_NAME" >/dev/null 2>&1
+  chmod 0644 "$fallback_cert"
+  chmod 0600 "$fallback_key"
+}
+
 current_release_verify_token() {
   if [ ! -f "$APP_DIR/.env" ]; then
     return 0
@@ -1141,6 +1185,10 @@ current_release_verify_token() {
 write_release_evidence_env() {
   local deployed_at="${1:-$(date -u +"%Y-%m-%dT%H:%M:%SZ")}"
   local commit_sha="${2:-$REMOTE_HEAD}"
+  local release_target_name="${RELEASE_TARGET_NAME:-$SERVER_NAME}"
+  local release_channel="${RELEASE_CHANNEL:-production}"
+  local release_deployment_mode="${RELEASE_DEPLOYMENT_MODE:-systemd}"
+  local release_artifact_id="${RELEASE_ARTIFACT_ID:-systemd-$BRANCH}"
   RELEASE_VERIFY_TOKEN_VALUE="$(current_release_verify_token)"
   if [ "${#RELEASE_VERIFY_TOKEN_VALUE}" -lt 24 ]; then
     RELEASE_VERIFY_TOKEN_VALUE="$(generate_release_verify_token)"
@@ -1151,12 +1199,12 @@ write_release_evidence_env() {
     {
       cat "$tmp_env"
       printf 'RELEASE_VERIFY_TOKEN=%s\n' "$RELEASE_VERIFY_TOKEN_VALUE"
-      printf 'RELEASE_TARGET_NAME=%s\n' "$SERVER_NAME"
-      printf 'RELEASE_CHANNEL=%s\n' "production"
-      printf 'RELEASE_DEPLOYMENT_MODE=%s\n' "systemd"
+      printf 'RELEASE_TARGET_NAME=%s\n' "$release_target_name"
+      printf 'RELEASE_CHANNEL=%s\n' "$release_channel"
+      printf 'RELEASE_DEPLOYMENT_MODE=%s\n' "$release_deployment_mode"
       printf 'RELEASE_PUBLIC_URL=%s\n' "$PUBLIC_URL"
       printf 'RELEASE_GIT_COMMIT=%s\n' "$commit_sha"
-      printf 'RELEASE_ARTIFACT_ID=%s\n' "systemd-$BRANCH"
+      printf 'RELEASE_ARTIFACT_ID=%s\n' "$release_artifact_id"
       printf 'RELEASE_DEPLOYED_AT=%s\n' "$deployed_at"
     } > "$APP_DIR/.env"
     rm -f "$tmp_env"
@@ -1171,11 +1219,11 @@ write_release_evidence_env() {
     cat >/etc/default/colipas-release <<DEFAULTS
 COLIPAS_SERVER_NAME=$SERVER_NAME
 RELEASE_PUBLIC_URL=$PUBLIC_URL
-RELEASE_TARGET_NAME=$SERVER_NAME
-RELEASE_CHANNEL=production
-RELEASE_DEPLOYMENT_MODE=systemd
+RELEASE_TARGET_NAME=$release_target_name
+RELEASE_CHANNEL=$release_channel
+RELEASE_DEPLOYMENT_MODE=$release_deployment_mode
 RELEASE_GIT_COMMIT=$commit_sha
-RELEASE_ARTIFACT_ID=systemd-$BRANCH
+RELEASE_ARTIFACT_ID=$release_artifact_id
 RELEASE_DEPLOYED_AT=$deployed_at
 DEFAULTS
     chmod 0644 /etc/default/colipas-release
@@ -1183,7 +1231,17 @@ DEFAULTS
 }
 
 install_nginx_config() {
-  if [ -f "$LANDING_ROOT/index.html" ] && [ -f "$SSL_CERTIFICATE" ] && [ -f "$SSL_CERTIFICATE_KEY" ]; then
+  local nginx_ssl_certificate="$SSL_CERTIFICATE"
+  local nginx_ssl_certificate_key="$SSL_CERTIFICATE_KEY"
+
+  if [ ! -f "$nginx_ssl_certificate" ] || [ ! -f "$nginx_ssl_certificate_key" ]; then
+    if ensure_fallback_ssl_certificate; then
+      nginx_ssl_certificate="/etc/ssl/certs/colipas-selfsigned.crt"
+      nginx_ssl_certificate_key="/etc/ssl/private/colipas-selfsigned.key"
+    fi
+  fi
+
+  if [ -f "$LANDING_ROOT/index.html" ] && [ -f "$nginx_ssl_certificate" ] && [ -f "$nginx_ssl_certificate_key" ]; then
     cat >/etc/nginx/sites-available/colipas.conf <<NGINX
 server {
   listen 80;
@@ -1204,8 +1262,8 @@ server {
   listen [::]:443 ssl http2;
   server_name $SERVER_NAME;
 
-  ssl_certificate $SSL_CERTIFICATE;
-  ssl_certificate_key $SSL_CERTIFICATE_KEY;
+  ssl_certificate $nginx_ssl_certificate;
+  ssl_certificate_key $nginx_ssl_certificate_key;
   ssl_protocols TLSv1.2 TLSv1.3;
   ssl_session_cache shared:SSL:10m;
   ssl_session_timeout 10m;
