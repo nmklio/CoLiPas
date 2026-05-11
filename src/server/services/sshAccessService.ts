@@ -567,13 +567,12 @@ function openSimulatedSshShell(mode: SshVerifyMode): SshShellSessionResult {
     write: (input) => {
       if (input.includes('\u0003')) {
         interrupted = true;
+        inputBuffer = '';
         if (pendingTimer) {
           clearTimeout(pendingTimer);
           pendingTimer = null;
         }
         emitSshShellEvent(shell, { type: 'stdout', content: `^C\r\n${simulatedShellPrompt}` });
-        emitSshShellEvent(shell, { type: 'close', signal: 'SIGINT' });
-        finalizeSshShellSession(shell);
         return;
       }
 

@@ -731,6 +731,9 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                       <button type="button" aria-label={t('servers.clearTerminalOutput')} title={t('servers.clearTerminalOutput')} onClick={clearTerminalOutput}>
                         <Eraser size={14} />
                       </button>
+                      <button type="button" aria-label={t('servers.sendCtrlC')} title={t('servers.sendCtrlC')} onClick={interruptTerminalCommand} disabled={!terminalShellIdRef.current}>
+                        <span className="ssh-terminal-shortcut-glyph" aria-hidden="true">^C</span>
+                      </button>
                     </div>
                     <div className="ssh-terminal-state">
                       <span className={terminalShellIdRef.current ? 'live' : sshRunning ? 'pending' : ''} aria-hidden="true" />
@@ -1308,6 +1311,23 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     terminal.clear();
     setActionMessage(t('servers.terminalCleared'));
     terminal.focus();
+  }
+
+  function interruptTerminalCommand() {
+    const sessionId = terminalShellIdRef.current;
+    if (!sessionId) {
+      setActionMessage(t('servers.sshInterruptUnavailable'));
+      return;
+    }
+
+    writeServerShell(sessionId, '\u0003')
+      .then(() => {
+        setActionMessage(t('servers.sshInterruptSent'));
+        xtermRef.current?.focus();
+      })
+      .catch((error) => {
+        setActionMessage(error instanceof Error ? error.message : 'SSH interrupt failed');
+      });
   }
 
   function getVisibleTerminalText(terminal: XTerm) {

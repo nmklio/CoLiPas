@@ -1500,13 +1500,39 @@ if (!shellInterruptWriteResponse.ok) {
 }
 const shellInterruptedText = await readSseUntil(
   shellInterruptStreamResponse,
-  (text) => text.includes('"type":"close"') && text.includes('SIGINT') && text.includes('^C'),
+  (text) => text.includes('^C') && text.includes('simulated$'),
   5000,
 );
 if (!shellInterruptedText.includes('hanging until interrupt')) {
   throw new Error('/api/servers/shells interrupt test missed the running command evidence');
 }
-console.log('ok /api/servers/shells interrupts a running terminal command');
+if (shellInterruptedText.includes('"type":"close"')) {
+  throw new Error('/api/servers/shells interrupt closed the shell instead of returning to prompt');
+}
+const shellPostInterruptWriteResponse = await fetch(`${baseUrl}/api/servers/shells/${shellInterruptBody.sessionId}/input`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ input: 'whoami\n' }),
+});
+if (!shellPostInterruptWriteResponse.ok) {
+  throw new Error(`/api/servers/shells/:sessionId/input post-interrupt command returned HTTP ${shellPostInterruptWriteResponse.status}`);
+}
+const shellPostInterruptStreamResponse = await fetch(`${baseUrl}/api/servers/shells/${shellInterruptBody.sessionId}/stream`, {
+  headers: authHeaders,
+});
+if (!shellPostInterruptStreamResponse.ok) {
+  throw new Error(`/api/servers/shells/:sessionId/stream post-interrupt returned HTTP ${shellPostInterruptStreamResponse.status}`);
+}
+const shellPostInterruptText = await readSseUntil(
+  shellPostInterruptStreamResponse,
+  (text) => text.includes('simulated$ whoami') && text.includes('command simulated.'),
+  5000,
+);
+if (shellPostInterruptText.includes('"type":"close"')) {
+  throw new Error('/api/servers/shells interrupt closed the shell instead of returning to prompt');
+}
+await fetch(`${baseUrl}/api/servers/shells/${shellInterruptBody.sessionId}`, { method: 'DELETE', headers: authHeaders });
+console.log('ok /api/servers/shells interrupts a running terminal command without closing the shell');
 
 const actionResponse = await fetch(`${baseUrl}/api/servers/actions`, {
   method: 'POST',
@@ -3361,6 +3387,8 @@ function assertSshTerminalRealtimeGuards() {
     'terminal.write(event.content)',
     'xtermRef.current?.onData((data) => {',
     'writeServerShell(sessionId, data)',
+    'function interruptTerminalCommand()',
+    "writeServerShell(sessionId, '\\u0003')",
     'resizeServerShell(terminalShellIdRef.current, getTerminalDimensions())',
     'function closeSshConsole()',
     'setSshConsoleOpen(false)',
@@ -3398,6 +3426,9 @@ function assertSshTerminalRealtimeGuards() {
     'servers.terminalCleared',
     'servers.disconnectSsh',
     'servers.sshDisconnectedMessage',
+    'servers.sendCtrlC',
+    'servers.sshInterruptSent',
+    'servers.sshInterruptUnavailable',
   ];
   const missingToolLabels = requiredToolLabels.filter((key) => !inventorySource.includes(key) || !fs.readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8').includes(key));
   if (missingToolLabels.length) {
@@ -3425,7 +3456,7 @@ function assertSshTerminalRealtimeGuards() {
     "for (const char of input)",
     "runSimulatedShellCommand(shell, command",
     "input.includes('\\u0003')",
-    "signal: 'SIGINT'",
+    "content: `^C\\r\\n${simulatedShellPrompt}`",
     'stream.setWindow(rows, cols',
     'sshShellIdleTimeoutMs',
   ];

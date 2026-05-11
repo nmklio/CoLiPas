@@ -326,6 +326,24 @@ async function assertSshTerminalPanel(targetPage) {
       const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
       return terminalText.includes('simulated$ pwd') && terminalText.includes('command simulated.');
     }, undefined, { timeout: 10000 });
+    await targetPage.keyboard.type('colipas-hang', { delay: 10 });
+    await targetPage.keyboard.press('Enter');
+    await targetPage.waitForFunction(() => {
+      const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
+      return terminalText.includes('hanging until interrupt');
+    }, undefined, { timeout: 10000 });
+    await targetPage.getByRole('button', { name: /send ctrl\+c/i }).click();
+    await targetPage.waitForFunction(() => {
+      const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
+      return terminalText.includes('^C') && terminalText.includes('simulated$');
+    }, undefined, { timeout: 5000 });
+    await targetPage.locator('.action-message').filter({ hasText: /sent ctrl\+c/i }).waitFor({ timeout: 5000 });
+    await targetPage.keyboard.type('id', { delay: 10 });
+    await targetPage.keyboard.press('Enter');
+    await targetPage.waitForFunction(() => {
+      const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
+      return terminalText.includes('simulated$ id') && terminalText.includes('command simulated.');
+    }, undefined, { timeout: 10000 });
     await assertElementWithinViewport(targetPage, '.ssh-console', 'desktop SSH console');
     await targetPage.getByRole('button', { name: /disconnect/i }).click();
     await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });
