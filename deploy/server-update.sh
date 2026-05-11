@@ -1243,7 +1243,80 @@ server {
 }
 NGINX
   else
-    install -m 0644 "$APP_DIR/deploy/nginx.conf" /etc/nginx/sites-available/colipas.conf
+    cat >/etc/nginx/sites-available/colipas.conf <<NGINX
+server {
+  listen 80;
+  listen [::]:80;
+  server_name $SERVER_NAME;
+
+  root $LANDING_ROOT;
+  index index.html;
+  client_max_body_size 2m;
+
+  add_header X-Frame-Options "SAMEORIGIN" always;
+  add_header X-Content-Type-Options "nosniff" always;
+  add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+  location ^~ /.well-known/acme-challenge/ {
+    root /var/www/html;
+  }
+
+  location = / {
+    try_files /index.html =404;
+  }
+
+  location = /docs.html {
+    try_files /docs.html =404;
+  }
+
+  location = /docs {
+    return 302 /docs.html;
+  }
+
+  location = /admin {
+    return 302 /admin/;
+  }
+
+  location ^~ /admin/ {
+    proxy_pass http://127.0.0.1:8080/;
+    proxy_http_version 1.1;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto http;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+    proxy_buffering off;
+  }
+
+  location ^~ /api/ {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_http_version 1.1;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto http;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+    proxy_buffering off;
+  }
+
+  location ^~ /assets/ {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_http_version 1.1;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto http;
+    expires 1h;
+    add_header Cache-Control "public, max-age=3600";
+  }
+}
+NGINX
   fi
 
   ln -sfn /etc/nginx/sites-available/colipas.conf /etc/nginx/sites-enabled/colipas.conf
