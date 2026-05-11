@@ -30,6 +30,7 @@ assertCustomApiProxySecurityGuards();
 assertSqlitePersistenceGuards();
 assertBuildChunkingGuards();
 assertRepositoryPreviewAssetGuards();
+await assertReleaseDeployTargetPlanGuards();
 
 const unauthenticatedOverviewResponse = await fetch(`${baseUrl}/api/overview`);
 if (unauthenticatedOverviewResponse.status !== 401) {
@@ -2276,8 +2277,10 @@ function assertAccountUiGuards() {
   const publicPageGuardFragments = [
     "PUBLIC_PAGES_MODE: 'admin'",
     "['scripts/public-pages-check.mjs']",
-    'Production public page browser validation',
-    'PUBLIC_PAGES_BASE_URL = "https://c.miao7777.com"',
+    'Production target browser validation',
+    '$env:PUBLIC_PAGES_BASE_URL = $target.publicBaseUrl',
+    'foreach ($target in $DeployTargets)',
+    'skipPublicValidation',
     'buildLandingCheck',
     'buildDocsCheck',
     'buildAdminCheck',
@@ -2792,6 +2795,66 @@ function assertRepositoryPreviewAssetGuards() {
   }
 
   console.log('ok repository preview asset stays outside deployed public assets');
+}
+
+async function assertReleaseDeployTargetPlanGuards() {
+  const { spawnSync } = await import('node:child_process');
+  const plan = {
+    targets: [
+      {
+        name: 'systemd-primary',
+        host: 'colipas-prod',
+        user: 'colipas-deploy',
+        command: 'sudo /usr/local/sbin/colipas-update',
+        sshKey: '~/.ssh/colipas_deploy_rsa',
+        publicBaseUrl: 'https://colipas.example.com',
+        publicMode: 'public',
+      },
+      {
+        name: 'docker-secondary',
+        host: 'colipas-cp',
+        user: 'root',
+        command: 'sudo /usr/local/sbin/colipas-cp-update',
+        sshKey: '~/.ssh/colipas_deploy_rsa',
+        publicBaseUrl: 'https://cp.example.com',
+        publicMode: 'admin',
+      },
+    ],
+  };
+  const shell = process.platform === 'win32' ? 'powershell' : 'pwsh';
+  const result = spawnSync(shell, [
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    'scripts/release-deploy.ps1',
+    '-PlanOnly',
+    '-TargetsJson',
+    JSON.stringify(plan),
+  ], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+  });
+
+  if (result.status !== 0) {
+    throw new Error(`Release deploy plan guard failed: ${result.stderr || result.stdout}`);
+  }
+
+  const parsed = JSON.parse(result.stdout.trim());
+  const targets = Array.isArray(parsed) ? parsed : [parsed];
+  if (targets.length !== 2) {
+    throw new Error(`Release deploy plan should include two enabled targets, got ${targets.length}`);
+  }
+  if (
+    targets[0].host !== 'colipas-prod'
+    || targets[1].host !== 'colipas-cp'
+    || targets[1].command !== 'sudo /usr/local/sbin/colipas-cp-update'
+    || targets.some((target) => /\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(JSON.stringify(target)))
+  ) {
+    throw new Error('Release deploy plan did not preserve sanitized multi-target routing');
+  }
+
+  console.log('ok release deploy supports sanitized multi-target publish plans');
 }
 
 function assertOverviewMapInteractionGuards() {

@@ -4,10 +4,20 @@ param(
   [string]$RemoteCommand = "sudo /usr/local/sbin/colipas-update",
   [string]$Branch = "master",
   [string]$SshKey = "$env:USERPROFILE\.ssh\colipas_deploy_rsa",
-  [string]$GitHubRepo = "nmklio/CoLiPas"
+  [string]$GitHubRepo = "nmklio/CoLiPas",
+  [string]$TargetsFile = "release-targets.local.json",
+  [string]$TargetsJson = "",
+  [string]$ProductionBaseUrl = "https://c.miao7777.com",
+  [switch]$PlanOnly
 )
 
 $ErrorActionPreference = "Stop"
+
+$RepoRoot = (git rev-parse --show-toplevel).Trim()
+if ($LASTEXITCODE -ne 0 -or -not $RepoRoot) {
+  throw "Unable to locate the git repository root."
+}
+Set-Location $RepoRoot
 
 function Run-Step {
   param(
@@ -16,6 +26,7 @@ function Run-Step {
   )
 
   Write-Host "==> $Title"
+  $global:LASTEXITCODE = 0
   & $Command
   if ($LASTEXITCODE -ne 0) {
     throw "$Title failed with exit code $LASTEXITCODE"
@@ -37,6 +48,164 @@ function Require-Command {
   }
 
   return $command.Source
+}
+
+function Resolve-LocalPath {
+  param([string]$Value)
+
+  if (-not $Value) {
+    return ""
+  }
+
+  $expanded = [Environment]::ExpandEnvironmentVariables($Value)
+  if ($expanded -eq "~" -or $expanded.StartsWith("~/") -or $expanded.StartsWith("~\")) {
+    return Join-Path $env:USERPROFILE $expanded.Substring(2)
+  }
+
+  if ([System.IO.Path]::IsPathRooted($expanded)) {
+    return $expanded
+  }
+
+  return Join-Path $RepoRoot $expanded
+}
+
+function Get-PropertyValue {
+  param(
+    [object]$Object,
+    [string]$Name,
+    [string]$Default = ""
+  )
+
+  if ($null -eq $Object) {
+    return $Default
+  }
+
+  $property = $Object.PSObject.Properties[$Name]
+  if ($null -eq $property -or $null -eq $property.Value) {
+    return $Default
+  }
+
+  $value = [string]$property.Value
+  if ([string]::IsNullOrWhiteSpace($value)) {
+    return $Default
+  }
+
+  return $value
+}
+
+function Get-PropertyBool {
+  param(
+    [object]$Object,
+    [string]$Name,
+    [bool]$Default = $false
+  )
+
+  if ($null -eq $Object) {
+    return $Default
+  }
+
+  $property = $Object.PSObject.Properties[$Name]
+  if ($null -eq $property -or $null -eq $property.Value) {
+    return $Default
+  }
+
+  return [System.Convert]::ToBoolean($property.Value)
+}
+
+function ConvertTo-DeployTargets {
+  param([object]$Config)
+
+  $rawTargets = @()
+  if ($null -ne $Config -and $null -ne $Config.PSObject.Properties["targets"]) {
+    $rawTargets = @($Config.targets)
+  } elseif ($null -ne $Config) {
+    $rawTargets = @($Config)
+  }
+
+  $targets = @()
+  foreach ($item in $rawTargets) {
+    if (Get-PropertyBool $item "enabled" $true) {
+      $hostName = Get-PropertyValue $item "host" $RemoteHost
+      $userName = Get-PropertyValue $item "user" $RemoteUser
+      $command = Get-PropertyValue $item "command" $RemoteCommand
+      $targetName = Get-PropertyValue $item "name" $hostName
+
+      if ([string]::IsNullOrWhiteSpace($hostName)) {
+        throw "Release target '$targetName' is missing host."
+      }
+      if ([string]::IsNullOrWhiteSpace($userName)) {
+        throw "Release target '$targetName' is missing user."
+      }
+      if ([string]::IsNullOrWhiteSpace($command)) {
+        throw "Release target '$targetName' is missing command."
+      }
+
+      $targets += [pscustomobject]@{
+        name = $targetName
+        host = $hostName
+        user = $userName
+        command = $command
+        sshKey = Get-PropertyValue $item "sshKey" $SshKey
+        publicBaseUrl = Get-PropertyValue $item "publicBaseUrl" $ProductionBaseUrl
+        publicMode = Get-PropertyValue $item "publicMode" "public"
+        skipPublicValidation = Get-PropertyBool $item "skipPublicValidation" $false
+      }
+    }
+  }
+
+  return @($targets)
+}
+
+function Get-DeployTargets {
+  if (-not [string]::IsNullOrWhiteSpace($TargetsJson)) {
+    return ConvertTo-DeployTargets ($TargetsJson | ConvertFrom-Json)
+  }
+
+  $resolvedTargetsFile = Resolve-LocalPath $TargetsFile
+  if (Test-Path $resolvedTargetsFile) {
+    return ConvertTo-DeployTargets (Get-Content -LiteralPath $resolvedTargetsFile -Raw | ConvertFrom-Json)
+  }
+
+  return ConvertTo-DeployTargets ([pscustomobject]@{
+    name = $RemoteHost
+    host = $RemoteHost
+    user = $RemoteUser
+    command = $RemoteCommand
+    sshKey = $SshKey
+    publicBaseUrl = $ProductionBaseUrl
+    publicMode = "public"
+  })
+}
+
+function Write-DeployPlan {
+  param([object[]]$Targets)
+
+  $Targets | ForEach-Object {
+    [pscustomobject]@{
+      name = $_.name
+      host = $_.host
+      user = $_.user
+      command = $_.command
+      sshKey = $_.sshKey
+      publicBaseUrl = $_.publicBaseUrl
+      publicMode = $_.publicMode
+      skipPublicValidation = $_.skipPublicValidation
+    }
+  } | ConvertTo-Json -Depth 5
+}
+
+function Invoke-TargetUpdate {
+  param([object]$Target)
+
+  $sshArgs = @()
+  $resolvedSshKey = Resolve-LocalPath $Target.sshKey
+  if ($resolvedSshKey) {
+    $sshArgs += @("-i", $resolvedSshKey, "-o", "IdentitiesOnly=yes")
+  }
+  $sshArgs += @("-o", "StrictHostKeyChecking=accept-new", "$($Target.user)@$($Target.host)", $Target.command)
+
+  Write-Host "Updating target $($Target.name) via $($Target.host)."
+  & ssh @sshArgs
 }
 
 function Push-GitHub {
@@ -205,6 +374,16 @@ function Push-GitHub {
   Write-Host "GitHub API pushed $($newCommit.sha)."
 }
 
+$DeployTargets = @(Get-DeployTargets)
+if ($DeployTargets.Count -eq 0) {
+  throw "No release deploy targets are enabled."
+}
+
+if ($PlanOnly) {
+  Write-DeployPlan $DeployTargets
+  exit 0
+}
+
 Run-Step "Local grey test" {
   npm test
 }
@@ -224,18 +403,32 @@ Run-Step "Push GitHub" {
   Push-GitHub
 }
 
-Run-Step "Update server" {
-  ssh -i $SshKey -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new "$RemoteUser@$RemoteHost" $RemoteCommand
+Run-Step "Update server targets" {
+  foreach ($target in $DeployTargets) {
+    Invoke-TargetUpdate $target
+  }
 }
 
-Run-Step "Production public page browser validation" {
-  $env:PUBLIC_PAGES_BASE_URL = "https://c.miao7777.com"
-  $env:PUBLIC_PAGES_MODE = "public"
-  try {
-    node scripts/public-pages-check.mjs
-  } finally {
-    Remove-Item Env:\PUBLIC_PAGES_BASE_URL -ErrorAction SilentlyContinue
-    Remove-Item Env:\PUBLIC_PAGES_MODE -ErrorAction SilentlyContinue
+Run-Step "Production target browser validation" {
+  foreach ($target in $DeployTargets) {
+    if ($target.skipPublicValidation) {
+      Write-Host "Skipping browser validation for target $($target.name)."
+      continue
+    }
+    if ([string]::IsNullOrWhiteSpace($target.publicBaseUrl)) {
+      Write-Host "Skipping browser validation for target $($target.name): no publicBaseUrl."
+      continue
+    }
+
+    Write-Host "Validating $($target.name) at $($target.publicBaseUrl) in $($target.publicMode) mode."
+    $env:PUBLIC_PAGES_BASE_URL = $target.publicBaseUrl
+    $env:PUBLIC_PAGES_MODE = $target.publicMode
+    try {
+      node scripts/public-pages-check.mjs
+    } finally {
+      Remove-Item Env:\PUBLIC_PAGES_BASE_URL -ErrorAction SilentlyContinue
+      Remove-Item Env:\PUBLIC_PAGES_MODE -ErrorAction SilentlyContinue
+    }
   }
 }
 

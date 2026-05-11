@@ -6,3 +6,4 @@ build/
 output/
 *.log
 *.tsbuildinfo
+release-targets.local.json

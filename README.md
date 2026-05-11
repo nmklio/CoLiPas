@@ -205,7 +205,40 @@ For repeat releases, install `deploy/server-update.sh` on the server as `/usr/lo
 powershell -ExecutionPolicy Bypass -File scripts/release-deploy.ps1
 ```
 
-The release script runs `npm test` first, requires a clean working tree, pushes GitHub, then triggers the server update command over SSH. Configure the SSH target as a private local host alias such as `colipas-prod`.
+The release script runs `npm test` first, requires a clean working tree, pushes GitHub, then triggers each configured server update command over SSH. With no extra configuration it uses a private local host alias such as `colipas-prod`.
+
+For multi-server releases, create an untracked `release-targets.local.json` on your workstation. Keep only SSH aliases in this file; do not commit real IP addresses, passwords, private keys, or runtime data.
+
+```json
+{
+  "targets": [
+    {
+      "name": "primary-systemd",
+      "host": "colipas-prod",
+      "user": "colipas-deploy",
+      "sshKey": "~/.ssh/colipas_deploy_rsa",
+      "command": "sudo /usr/local/sbin/colipas-update",
+      "publicBaseUrl": "https://colipas.example.com",
+      "publicMode": "public"
+    },
+    {
+      "name": "secondary-docker",
+      "host": "colipas-docker",
+      "user": "root",
+      "sshKey": "~/.ssh/colipas_deploy_rsa",
+      "command": "sudo /usr/local/sbin/colipas-cp-update",
+      "publicBaseUrl": "https://cp.example.com",
+      "publicMode": "admin"
+    }
+  ]
+}
+```
+
+Preview the resolved release plan without running tests, pushing, or touching servers:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/release-deploy.ps1 -PlanOnly
+```
 
 To make local commits publish automatically after the same guarded checks, install the optional local hook:
 
