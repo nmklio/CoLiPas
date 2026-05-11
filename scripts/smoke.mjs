@@ -3354,6 +3354,8 @@ function assertSshTerminalRealtimeGuards() {
     "import('@xterm/xterm')",
     "import('@xterm/addon-fit')",
     "import('@xterm/xterm/css/xterm.css?inline')",
+    'injectTerminalCss(xtermCss.default)',
+    "document.getElementById('colipas-xterm-css')",
     'openServerShell(server.id, getTerminalDimensions())',
     'streamServerShell(',
     'terminal.write(event.content)',

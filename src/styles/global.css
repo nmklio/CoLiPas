@@ -3387,8 +3387,8 @@ td span,
 }
 
 .ssh-console {
-  width: min(1180px, calc(100vw - 44px));
-  height: min(760px, calc(100vh - 44px));
+  width: min(1220px, calc(100vw - 36px));
+  height: min(780px, calc(100vh - 36px));
   max-height: calc(100vh - 44px);
   border: 1px solid rgba(125, 172, 176, 0.34);
   border-radius: 8px;
@@ -3400,11 +3400,11 @@ td span,
 }
 
 .ssh-console-header {
-  min-height: 82px;
-  padding: 14px 16px;
+  min-height: 76px;
+  padding: 13px 16px;
   border-bottom: 1px solid rgba(132, 179, 183, 0.22);
   background:
-    linear-gradient(135deg, #0b282d, #103b42);
+    linear-gradient(135deg, #08272c, #0f3b3f);
   color: #f8fafc;
   display: flex;
   align-items: flex-start;
@@ -3465,26 +3465,26 @@ td span,
 .ssh-console-body {
   min-height: 0;
   display: grid;
-  grid-template-columns: 244px minmax(0, 1fr);
+  grid-template-columns: 236px minmax(0, 1fr);
   background: #081417;
 }
 
 .ssh-console-meta {
   min-height: 0;
-  padding: 12px;
+  padding: 10px;
   border-right: 1px solid rgba(132, 179, 183, 0.18);
   background:
-    linear-gradient(180deg, #102b31, #0b2025);
+    linear-gradient(180deg, #0f2930, #0a1f24);
   display: grid;
   align-content: start;
-  gap: 9px;
+  gap: 8px;
 }
 
 .ssh-console-meta > div {
   border: 1px solid rgba(151, 193, 196, 0.18);
   border-radius: 8px;
-  padding: 10px 11px;
-  background: rgba(255, 255, 255, 0.055);
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.05);
   display: grid;
   gap: 4px;
 }
@@ -3534,39 +3534,53 @@ td span,
   height: 100%;
   border: 0;
   border-radius: 0;
-  background: #070a0b;
+  background: #05090a;
   color: #e8f1e8;
   box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.03);
   overflow: hidden;
   display: grid;
-  grid-template-rows: 34px minmax(0, 1fr);
+  grid-template-rows: 38px minmax(0, 1fr);
 }
 
 .ssh-terminal-titlebar {
-  min-height: 34px;
-  padding: 0 13px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  background: #101719;
+  min-height: 38px;
+  padding: 0 14px;
+  border-bottom: 1px solid rgba(126, 161, 166, 0.16);
+  background: #0e1517;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  font-family: "Cascadia Code", Consolas, monospace;
-  font-size: 12px;
+  gap: 12px;
 }
 
-.ssh-terminal-titlebar span {
+.ssh-terminal-target {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+  font-family: "Cascadia Code", Consolas, monospace;
+}
+
+.ssh-terminal-target span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #93f0a4;
   font-weight: 800;
+  font-size: 12px;
 }
 
-.ssh-terminal-titlebar small {
+.ssh-terminal-target small {
+  color: #809aa0;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ssh-terminal-state small {
   flex: 0 0 auto;
   color: #9cb0b5;
+  font-size: 12px;
+  font-weight: 760;
 }
 
 .ssh-terminal-state {
@@ -3576,11 +3590,29 @@ td span,
   gap: 8px;
 }
 
+.ssh-terminal-state > span {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #64747a;
+  box-shadow: 0 0 0 3px rgba(100, 116, 122, 0.12);
+}
+
+.ssh-terminal-state > span.live {
+  background: #5ef08c;
+  box-shadow: 0 0 0 3px rgba(94, 240, 140, 0.14);
+}
+
+.ssh-terminal-state > span.pending {
+  background: #f9d66d;
+  box-shadow: 0 0 0 3px rgba(249, 214, 109, 0.14);
+}
+
 .ssh-terminal-state button {
-  min-height: 24px;
+  min-height: 26px;
   border: 1px solid rgba(255, 139, 139, 0.36);
   border-radius: 6px;
-  padding: 0 9px;
+  padding: 0 10px;
   background: rgba(255, 139, 139, 0.1);
   color: #ffb4b4;
   font-size: 12px;
@@ -3594,12 +3626,9 @@ td span,
 
 .ssh-terminal-screen {
   min-height: 0;
-  padding: 8px 10px;
+  padding: 10px 12px;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 100% 0, rgba(20, 122, 75, 0.09), transparent 32%),
-    repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 18px),
-    #070b0d;
+  background: #030708;
   position: relative;
 }
 
@@ -3607,6 +3636,15 @@ td span,
   width: 100%;
   height: 100%;
   padding: 0;
+}
+
+.ssh-terminal-screen .xterm-helpers {
+  position: absolute !important;
+  inset: 0 auto auto 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
 }
 
 .ssh-terminal-screen .xterm-viewport,
@@ -3621,7 +3659,21 @@ td span,
 }
 
 .ssh-terminal-screen .xterm-helper-textarea {
-  opacity: 0;
+  position: absolute !important;
+  left: -10000px !important;
+  top: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  opacity: 0 !important;
+  color: transparent !important;
+  background: transparent !important;
+  resize: none !important;
+  overflow: hidden !important;
+  white-space: nowrap !important;
 }
 
 .ssh-terminal-screen .xterm-cursor-layer {

@@ -112,6 +112,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const terminalShellIdRef = useRef<string | null>(null);
   const terminalShellServerIdRef = useRef<string | null>(null);
   const terminalShellStreamRef = useRef<EventSource | null>(null);
+  const terminalCssInjectedRef = useRef(false);
   const sshConsoleOpenRef = useRef(false);
   const sshPanelServerIdRef = useRef('');
   const formRef = useRef(form);
@@ -718,8 +719,12 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
               </aside>
               <div className="ssh-terminal-shell" onClick={() => xtermRef.current?.focus()}>
                 <div className="ssh-terminal-titlebar">
-                  <span>{activeSshServer.ssh.username}@{loginProbe?.host ?? activeSshServer.ssh.host}</span>
+                  <div className="ssh-terminal-target">
+                    <span>{activeSshServer.ssh.username}@{loginProbe?.host ?? activeSshServer.ssh.host}</span>
+                    <small>{activeSshServer.os}</small>
+                  </div>
                   <div className="ssh-terminal-state">
+                    <span className={terminalShellIdRef.current ? 'live' : sshRunning ? 'pending' : ''} aria-hidden="true" />
                     <small>{terminalShellIdRef.current ? t('servers.sshConnected') : sshRunning ? t('servers.runningSsh') : t('servers.sshConnect')}</small>
                     {(sshRunning || terminalShellIdRef.current) && (
                       <button type="button" onClick={stopTerminalCommand}>
@@ -1182,12 +1187,27 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
         import('@xterm/xterm'),
         import('@xterm/addon-fit'),
         import('@xterm/xterm/css/xterm.css?inline'),
-      ]).then(([terminalModule, fitModule]) => ({
-        TerminalCtor: terminalModule.Terminal,
-        FitAddonCtor: fitModule.FitAddon,
-      }));
+      ]).then(([terminalModule, fitModule, xtermCss]) => {
+        injectTerminalCss(xtermCss.default);
+        return {
+          TerminalCtor: terminalModule.Terminal,
+          FitAddonCtor: fitModule.FitAddon,
+        };
+      });
     }
     return terminalRuntimeRef.current;
+  }
+
+  function injectTerminalCss(cssText: string) {
+    if (terminalCssInjectedRef.current || document.getElementById('colipas-xterm-css')) {
+      terminalCssInjectedRef.current = true;
+      return;
+    }
+    const style = document.createElement('style');
+    style.id = 'colipas-xterm-css';
+    style.textContent = cssText;
+    document.head.appendChild(style);
+    terminalCssInjectedRef.current = true;
   }
 
   function attachTerminalInput(sessionId: string) {

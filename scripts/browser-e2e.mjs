@@ -262,12 +262,25 @@ async function assertSshTerminalPanel(targetPage) {
       const lineTexts = Array.from(document.querySelectorAll('.ssh-terminal-screen .xterm-rows > div')).map((element) => element.textContent ?? '');
       const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
       const trailingPromptCount = lineTexts.filter((text) => /^root@[\w.-]+:.+[#$]\s*$/.test(text.trim())).length;
+      const helperTextarea = document.querySelector('.ssh-terminal-screen .xterm-helper-textarea');
+      const helperStyle = helperTextarea ? window.getComputedStyle(helperTextarea) : null;
+      const helperRect = helperTextarea?.getBoundingClientRect();
+      const firstLine = lineTexts[0] ?? '';
       return {
+        firstLine,
         lineTexts,
         terminalText,
         trailingPromptCount,
         hasCommandInput: Boolean(document.querySelector('.ssh-terminal-input-line input')),
         hasXtermTextarea: Boolean(document.querySelector('.ssh-terminal-screen .xterm-helper-textarea')),
+        helperTextareaVisible: Boolean(
+          helperStyle &&
+          helperStyle.opacity !== '0' &&
+          helperStyle.color !== 'rgba(0, 0, 0, 0)' &&
+          helperRect &&
+          helperRect.width > 1 &&
+          helperRect.height > 1,
+        ),
       };
     });
 
@@ -276,6 +289,9 @@ async function assertSshTerminalPanel(targetPage) {
     }
     if (terminalState.hasCommandInput || !terminalState.hasXtermTextarea) {
       throw new Error('SSH terminal still uses a command input instead of xterm keyboard capture');
+    }
+    if (terminalState.helperTextareaVisible || /whoami{2,}|bbbb{4,}|[a-z]{18,}/i.test(terminalState.firstLine)) {
+      throw new Error(`SSH terminal leaked keyboard buffer into the visible top row: ${terminalState.firstLine}`);
     }
     if (terminalState.trailingPromptCount > 0) {
       throw new Error(`SSH terminal rendered duplicate remote prompt history rows: ${terminalState.lineTexts.join(' | ')}`);
