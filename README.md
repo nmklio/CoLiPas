@@ -118,23 +118,86 @@ Create `.env` from `.env.example` and replace every default before exposing the 
 
 ## Production Deploy
 
-CoLiPas runs as a single Linux service. A typical deployment:
+CoLiPas can be deployed either as a Docker service or as a native Linux systemd service. Both modes expose one production HTTP service on `8080`; put Nginx, Caddy, or your cloud load balancer in front for HTTPS.
+
+### Docker Compose
+
+Use this path when you want the fastest reproducible deployment and do not need Node.js installed on the host.
+
+```bash
+git clone https://github.com/nmklio/CoLiPas.git
+cd CoLiPas
+cp .env.example .env
+```
+
+Edit `.env` before the first start. At minimum, replace `ADMIN_PASSWORD`, `SESSION_SECRET`, `CREDENTIAL_ENCRYPTION_KEY`, `CORS_ORIGIN`, and the optional AI provider settings.
+
+```bash
+docker compose up -d --build
+docker compose ps
+curl -fsS http://127.0.0.1:8080/api/health
+```
+
+The included `docker-compose.yml` mounts a named volume at `/app/.data` so SQLite data, audit records, encrypted SSH metadata, and account settings survive container rebuilds.
+
+To update a Docker deployment:
+
+```bash
+git pull --ff-only
+docker compose up -d --build
+docker compose logs --tail=80 colipas
+```
+
+### Docker CLI
+
+Use plain Docker when you prefer to wire your own volume, network, or supervisor.
+
+```bash
+git clone https://github.com/nmklio/CoLiPas.git
+cd CoLiPas
+cp .env.example .env
+docker build -t colipas:latest .
+docker volume create colipas-data
+docker run -d --name colipas --restart unless-stopped \
+  --env-file .env \
+  -p 8080:8080 \
+  -v colipas-data:/app/.data \
+  colipas:latest
+curl -fsS http://127.0.0.1:8080/api/health
+```
+
+### Native Linux + systemd
+
+Use this path when you want direct host integration, SSH tooling, journald logs, and a locked-down service user. Install Node.js 24 LTS or newer, Git, and Nginx first.
 
 ```bash
 sudo useradd --system --home /opt/colipas --shell /usr/sbin/nologin colipas
 sudo mkdir -p /opt/colipas
 sudo chown -R colipas:colipas /opt/colipas
-git clone https://github.com/nmklio/CoLiPas.git /opt/colipas
+sudo -u colipas git clone https://github.com/nmklio/CoLiPas.git /opt/colipas
 cd /opt/colipas
-cp .env.example .env
-npm ci
-npm test
+sudo -u colipas cp .env.example .env
+sudo -u colipas npm ci
+sudo -u colipas npm test
 sudo cp deploy/colipas.service /etc/systemd/system/colipas.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now colipas
+systemctl status colipas --no-pager
+curl -fsS http://127.0.0.1:8080/api/health
 ```
 
-Use `deploy/nginx.conf` as a reverse-proxy starting point. It is tuned for long-running AI and SSH streams with buffering disabled.
+The systemd unit creates `/opt/colipas/.data` with private permissions and only grants the service write access to that runtime data directory. Keep `.env`, `.data`, SSH private keys, server IPs, and deployment credentials outside public web roots and outside Git.
+
+### Reverse Proxy
+
+Use `deploy/nginx.conf` as a reverse-proxy starting point. It is tuned for long-running AI and SSH streams with buffering disabled and a `2m` upload limit for profile images. Replace `server_name` and TLS certificate paths before using it on a new domain.
+
+```bash
+sudo cp deploy/nginx.conf /etc/nginx/sites-available/colipas.conf
+sudo ln -sfn /etc/nginx/sites-available/colipas.conf /etc/nginx/sites-enabled/colipas.conf
+sudo nginx -t
+sudo systemctl reload nginx
+```
 
 For repeat releases, install `deploy/server-update.sh` on the server as `/usr/local/sbin/colipas-update`, then run the local guarded release flow:
 
@@ -142,7 +205,7 @@ For repeat releases, install `deploy/server-update.sh` on the server as `/usr/lo
 powershell -ExecutionPolicy Bypass -File scripts/release-deploy.ps1
 ```
 
-The release script runs `npm test` first, requires a clean working tree, pushes GitHub, then triggers the server update command over SSH. Configure the SSH target as a private local host alias such as `colipas-prod`; keep `.env`, `.data`, SSH private keys, server IPs, and deployment credentials outside public web roots and outside Git.
+The release script runs `npm test` first, requires a clean working tree, pushes GitHub, then triggers the server update command over SSH. Configure the SSH target as a private local host alias such as `colipas-prod`.
 
 To make local commits publish automatically after the same guarded checks, install the optional local hook:
 
