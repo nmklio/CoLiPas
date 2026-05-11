@@ -346,7 +346,7 @@ function connectSsh(input: SshCredentialInput, host: string) {
     const client = new Client();
     const timer = setTimeout(() => {
       client.destroy();
-      reject(new HttpError(408, 'SSH 连接超时，请先确认服务器 22 端口、防火墙、安全组和 SSH 凭据；也可以先选择“仅登记资产”。', 'SSH_TIMEOUT'));
+      reject(new HttpError(408, 'SSH connection timed out. Check port 22, firewall, security group, and credentials, or use asset-only mode first.', 'SSH_TIMEOUT'));
     }, sshReadyTimeoutMs);
 
     client
@@ -357,7 +357,7 @@ function connectSsh(input: SshCredentialInput, host: string) {
       })
       .on('error', (error) => {
         clearTimeout(timer);
-        reject(new HttpError(422, `SSH 连接失败：${redactSensitiveText(error.message)}`, 'SSH_CONNECT_FAILED'));
+        reject(new HttpError(422, `SSH connection failed: ${redactSensitiveText(error.message)}`, 'SSH_CONNECT_FAILED'));
       })
       .connect({
         host,
@@ -380,7 +380,7 @@ function execSshCommand(credential: StoredSshCredential, command: string) {
     let errorOutput = '';
     const timer = setTimeout(() => {
       client.destroy();
-      reject(new HttpError(408, 'SSH 诊断超时，请检查服务器 SSH 连通性。', 'SSH_DIAGNOSTIC_TIMEOUT'));
+      reject(new HttpError(408, 'SSH diagnostic timed out. Check SSH connectivity.', 'SSH_DIAGNOSTIC_TIMEOUT'));
     }, 12000);
 
     client
@@ -553,6 +553,7 @@ function openSimulatedSshShell(mode: SshVerifyMode): SshShellSessionResult {
   const sessionId = crypto.randomUUID();
   let pendingTimer: ReturnType<typeof setTimeout> | null = null;
   let interrupted = false;
+  let inputBuffer = '';
   const shell = registerSshShellSession({
     id: sessionId,
     mode,
@@ -570,38 +571,33 @@ function openSimulatedSshShell(mode: SshVerifyMode): SshShellSessionResult {
         return;
       }
 
-      const command = input.replace(/\r?\n$/, '').trim();
-      if (!command) {
-        emitSshShellEvent(shell, { type: 'stdout', content: simulatedShellPrompt });
-        return;
-      }
-      if (command === 'clear') {
-        emitSshShellEvent(shell, { type: 'stdout', content: `\x1b[2J\x1b[H${simulatedShellPrompt}` });
-        return;
-      }
-      if (command === 'colipas-long-output') {
-        emitSshShellEvent(shell, { type: 'stdout', content: `\r\n${simulatedShellPrompt}${command}\r\n` });
-        for (let index = 1; index <= 80; index += 1) {
-          emitSshShellEvent(shell, { type: 'stdout', content: `long-output-${String(index).padStart(2, '0')}\r\n` });
+      for (const char of input) {
+        if (char === '\u007f') {
+          inputBuffer = inputBuffer.slice(0, -1);
+          emitSshShellEvent(shell, { type: 'stdout', content: '\b \b' });
+          continue;
         }
-        emitSshShellEvent(shell, { type: 'stdout', content: simulatedShellPrompt });
-        return;
+
+        if (char === '\r' || char === '\n') {
+          const command = inputBuffer.trim();
+          inputBuffer = '';
+          runSimulatedShellCommand(shell, command, {
+            setPendingTimer: (timer) => {
+              pendingTimer = timer;
+            },
+            setInterrupted: (nextInterrupted) => {
+              interrupted = nextInterrupted;
+            },
+            getInterrupted: () => interrupted,
+          });
+          continue;
+        }
+
+        if (char >= ' ' && char !== '\u001b') {
+          inputBuffer += char;
+          emitSshShellEvent(shell, { type: 'stdout', content: char });
+        }
       }
-      if (command === 'colipas-hang') {
-        interrupted = false;
-        emitSshShellEvent(shell, { type: 'stdout', content: `\r\n${simulatedShellPrompt}${command}\r\nhanging until interrupt\r\n` });
-        pendingTimer = setTimeout(() => {
-          pendingTimer = null;
-          if (!interrupted && !shell.closed) {
-            emitSshShellEvent(shell, { type: 'stdout', content: `still-running\r\n${simulatedShellPrompt}` });
-          }
-        }, 5000);
-        return;
-      }
-      emitSshShellEvent(shell, {
-        type: 'stdout',
-        content: redactSensitiveText(`\r\n${simulatedShellPrompt}${command}\r\n命令已模拟执行。\r\n${simulatedShellPrompt}`),
-      });
     },
     resize: () => undefined,
     close: () => {
@@ -622,6 +618,50 @@ function openSimulatedSshShell(mode: SshVerifyMode): SshShellSessionResult {
     mode,
     connectedAt,
   };
+}
+
+function runSimulatedShellCommand(
+  shell: ActiveSshShellSession,
+  command: string,
+  state: {
+    setPendingTimer: (timer: ReturnType<typeof setTimeout> | null) => void;
+    setInterrupted: (interrupted: boolean) => void;
+    getInterrupted: () => boolean;
+  },
+) {
+  emitSshShellEvent(shell, { type: 'stdout', content: '\r\n' });
+  if (!command) {
+    emitSshShellEvent(shell, { type: 'stdout', content: simulatedShellPrompt });
+    return;
+  }
+  if (command === 'clear') {
+    emitSshShellEvent(shell, { type: 'stdout', content: `\x1b[2J\x1b[H${simulatedShellPrompt}` });
+    return;
+  }
+  if (command === 'colipas-long-output') {
+    emitSshShellEvent(shell, { type: 'stdout', content: `${simulatedShellPrompt}${command}\r\n` });
+    for (let index = 1; index <= 80; index += 1) {
+      emitSshShellEvent(shell, { type: 'stdout', content: `long-output-${String(index).padStart(2, '0')}\r\n` });
+    }
+    emitSshShellEvent(shell, { type: 'stdout', content: simulatedShellPrompt });
+    return;
+  }
+  if (command === 'colipas-hang') {
+    state.setInterrupted(false);
+    emitSshShellEvent(shell, { type: 'stdout', content: `${simulatedShellPrompt}${command}\r\nhanging until interrupt\r\n` });
+    const timer = setTimeout(() => {
+      state.setPendingTimer(null);
+      if (!state.getInterrupted() && !shell.closed) {
+        emitSshShellEvent(shell, { type: 'stdout', content: `still-running\r\n${simulatedShellPrompt}` });
+      }
+    }, 5000);
+    state.setPendingTimer(timer);
+    return;
+  }
+  emitSshShellEvent(shell, {
+    type: 'stdout',
+    content: redactSensitiveText(`${simulatedShellPrompt}${command}\r\ncommand simulated.\r\n${simulatedShellPrompt}`),
+  });
 }
 
 function openRealSshShell(

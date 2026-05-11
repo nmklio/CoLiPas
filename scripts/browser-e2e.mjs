@@ -248,29 +248,34 @@ async function assertSshTerminalPanel(targetPage) {
     await targetPage.locator('.server-workspace-row').filter({ hasText: sshServer.name }).waitFor({ timeout: 10000 });
     await targetPage.locator('.server-workspace-row').filter({ hasText: sshServer.name }).getByRole('button', { name: /^SSH$/i }).click();
     await targetPage.locator('.ssh-console').waitFor({ timeout: 10000 });
-    await targetPage.locator('.ssh-terminal-input-line input').fill('whoami');
+    await targetPage.locator('.ssh-terminal-screen .xterm').waitFor({ timeout: 10000 });
+    await targetPage.locator('.ssh-terminal-screen').click();
+    await targetPage.keyboard.type('whoami', { delay: 10 });
     await targetPage.keyboard.press('Enter');
-    await targetPage.waitForFunction(() => document.querySelector('.ssh-terminal-screen')?.textContent?.includes('simulated$ whoami'), undefined, { timeout: 10000 });
-    await targetPage.waitForFunction(() => document.querySelectorAll('.ssh-terminal-input-line').length === 1, undefined, { timeout: 5000 });
+    await targetPage.waitForFunction(() => {
+      const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
+      return terminalText.includes('simulated$ whoami') && terminalText.includes('command simulated.');
+    }, undefined, { timeout: 10000 });
+    await targetPage.waitForFunction(() => document.querySelectorAll('.ssh-terminal-input-line').length === 0, undefined, { timeout: 5000 });
 
     const terminalState = await targetPage.evaluate(() => {
-      const lineTexts = Array.from(document.querySelectorAll('.ssh-terminal-line')).map((element) => element.textContent ?? '');
-      const inputPrompt = document.querySelector('.ssh-terminal-input-line span')?.textContent ?? '';
-      const blankLineCount = lineTexts.filter((text) => text === '').length;
+      const lineTexts = Array.from(document.querySelectorAll('.ssh-terminal-screen .xterm-rows > div')).map((element) => element.textContent ?? '');
+      const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
       const trailingPromptCount = lineTexts.filter((text) => /^root@[\w.-]+:.+[#$]\s*$/.test(text.trim())).length;
       return {
         lineTexts,
-        inputPrompt,
-        blankLineCount,
+        terminalText,
         trailingPromptCount,
+        hasCommandInput: Boolean(document.querySelector('.ssh-terminal-input-line input')),
+        hasXtermTextarea: Boolean(document.querySelector('.ssh-terminal-screen .xterm-helper-textarea')),
       };
     });
 
-    if (!terminalState.inputPrompt.includes('root@') || !/[#$]\s$/.test(terminalState.inputPrompt)) {
-      throw new Error(`SSH terminal input prompt did not reflect simulated shell state: ${terminalState.inputPrompt}`);
+    if (!terminalState.terminalText.includes('simulated$ whoami') || !terminalState.terminalText.includes('command simulated.')) {
+      throw new Error(`SSH terminal did not stream simulated interactive command output: ${terminalState.terminalText}`);
     }
-    if (terminalState.blankLineCount > 1) {
-      throw new Error(`SSH terminal rendered excessive blank history rows: ${terminalState.blankLineCount}`);
+    if (terminalState.hasCommandInput || !terminalState.hasXtermTextarea) {
+      throw new Error('SSH terminal still uses a command input instead of xterm keyboard capture');
     }
     if (terminalState.trailingPromptCount > 0) {
       throw new Error(`SSH terminal rendered duplicate remote prompt history rows: ${terminalState.lineTexts.join(' | ')}`);
@@ -280,7 +285,7 @@ async function assertSshTerminalPanel(targetPage) {
     await assertElementWithinViewport(targetPage, '.ssh-console', 'desktop SSH console');
     await targetPage.locator('.ssh-console-header .icon-button').click();
     await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });
-    console.log('ok browser e2e covers SSH terminal panel prompt rendering');
+    console.log('ok browser e2e covers interactive xterm SSH terminal');
   } finally {
     await deleteTemporaryAssetServer(targetPage, sshServer.id).catch(() => undefined);
   }

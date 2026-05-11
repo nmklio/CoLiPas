@@ -21,6 +21,8 @@
     "@types/d3-geo": "^3.1.0",
     "@types/topojson-client": "^3.1.5",
     "@vitejs/plugin-react": "^5.1.2",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "compression": "^1.8.1",
     "cors": "^2.8.6",
     "d3-geo": "^3.1.1",

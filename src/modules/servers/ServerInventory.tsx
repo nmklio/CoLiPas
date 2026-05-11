@@ -1,4 +1,7 @@
-import { FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { Terminal as XTerm, type IDisposable } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import '@xterm/xterm/css/xterm.css';
 import { ChevronUp, Cpu, Database, Edit3, FileKey2, Globe2, KeyRound, Plus, Power, PowerOff, RotateCcw, Search, Server, ShieldCheck, Terminal, Trash2, X } from 'lucide-react';
 import { Language, useI18n } from '../../i18n';
 import {
@@ -9,6 +12,7 @@ import {
   executeServerAction,
   inspectServerIdentity,
   openServerShell,
+  resizeServerShell,
   streamServerShell,
   writeServerShell,
   type ServerIdentityResponse,
@@ -38,17 +42,8 @@ const actionCommands: Record<'powerOn' | 'shutdown' | 'reboot', string> = {
   shutdown: 'nohup sh -c "shutdown -h now" >/dev/null 2>&1 & echo "shutdown scheduled"',
   reboot: 'nohup sh -c "reboot" >/dev/null 2>&1 & echo "reboot scheduled"',
 };
-const terminalLineLimit = 500;
 const serverRenderBatchSize = 120;
 const serverRenderBatchStep = 120;
-
-type TerminalLineKind = 'banner' | 'command' | 'output' | 'error' | 'system';
-
-interface TerminalLine {
-  id: string;
-  kind: TerminalLineKind;
-  text: string;
-}
 
 interface LoginProbe {
   uname?: string;
@@ -100,19 +95,18 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const [sshPanelServerId, setSshPanelServerId] = useState('');
   const [sshConsoleOpen, setSshConsoleOpen] = useState(false);
   const [sshRunning, setSshRunning] = useState(false);
-  const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([]);
   const [loginProbe, setLoginProbe] = useState<LoginProbe | null>(null);
-  const [commandHistory, setCommandHistory] = useState<string[]>([]);
-  const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [formDismissed, setFormDismissed] = useState(false);
   const [visibleServerLimit, setVisibleServerLimit] = useState(serverRenderBatchSize);
-  const terminalInputRef = useRef<HTMLInputElement | null>(null);
-  const terminalBodyRef = useRef<HTMLDivElement | null>(null);
-  const terminalAbortRef = useRef<AbortController | null>(null);
+  const terminalContainerRef = useRef<HTMLDivElement | null>(null);
+  const xtermRef = useRef<XTerm | null>(null);
+  const fitAddonRef = useRef<FitAddon | null>(null);
+  const terminalDataSubscriptionRef = useRef<IDisposable | null>(null);
+  const terminalResizeObserverRef = useRef<ResizeObserver | null>(null);
+  const terminalResizeTimerRef = useRef<number | null>(null);
   const terminalShellIdRef = useRef<string | null>(null);
   const terminalShellStreamRef = useRef<EventSource | null>(null);
-  const terminalCommandBufferRef = useRef('');
   const formRef = useRef(form);
   const privateKeyFileRef = useRef<HTMLInputElement | null>(null);
   const identityRequestSeqRef = useRef(0);
@@ -123,15 +117,6 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const visibleServerRows = useMemo(() => servers.slice(0, visibleServerLimit), [servers, visibleServerLimit]);
   const hiddenServerCount = Math.max(servers.length - visibleServerRows.length, 0);
   const activeSshServer = allServers.find((server) => server.id === sshPanelServerId) ?? null;
-  const visibleTerminalLines = useMemo(
-    () => terminalLines.filter((line, index, lines) => !isTrailingRemotePromptLine(
-      line,
-      index,
-      lines,
-      loginProbe?.user || activeSshServer?.ssh?.username,
-    )),
-    [activeSshServer?.ssh?.username, loginProbe?.user, terminalLines],
-  );
   const visibleMaxLoadServer = useMemo(
     () => [...servers].sort((left, right) => maxServerLoad(right) - maxServerLoad(left))[0],
     [servers],
@@ -144,8 +129,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const regionScopeKey = scopedRegions.join('|');
 
   useEffect(() => () => {
-    terminalAbortRef.current?.abort();
     closeActiveShellSession();
+    disposeXterm();
   }, []);
   const formVisible = formOpen || Boolean(editingServerId) || (allServers.length === 0 && !formDismissed);
 
@@ -158,38 +143,18 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   }, [form]);
 
   useEffect(() => {
-    if (!sshConsoleOpen) {
-      return;
-    }
-
-    window.setTimeout(() => {
-      clearTerminalInput();
-      terminalInputRef.current?.focus();
-    }, 30);
-  }, [sshConsoleOpen, activeSshServer?.id]);
-
-  useEffect(() => {
-    if (!sshConsoleOpen) {
-      return;
-    }
-
-    terminalBodyRef.current?.scrollTo({
-      top: terminalBodyRef.current.scrollHeight,
-      behavior: 'auto',
-    });
-  }, [sshConsoleOpen, terminalLines, sshRunning]);
-
-  useEffect(() => {
     if (!sshConsoleOpen || !activeSshServer?.ssh?.connected) {
       return;
     }
 
+    ensureXterm();
     startTerminalLogin(activeSshServer).catch(() => undefined);
   }, [sshConsoleOpen, activeSshServer?.id]);
 
   useEffect(() => {
     if (!sshConsoleOpen) {
       closeActiveShellSession();
+      disposeXterm();
     }
   }, [sshConsoleOpen]);
 
@@ -225,7 +190,6 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       if (sshPanelServerId === server.id) {
         setSshPanelServerId('');
         setSshConsoleOpen(false);
-        setTerminalLines([]);
         setLoginProbe(null);
       }
       setActionMessage(t('servers.deleted', { name: server.name }));
@@ -722,7 +686,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                   </button>
                 </div>
               </aside>
-              <div className="ssh-terminal-shell" onClick={() => terminalInputRef.current?.focus()}>
+              <div className="ssh-terminal-shell" onClick={() => xtermRef.current?.focus()}>
                 <div className="ssh-terminal-titlebar">
                   <span>{activeSshServer.ssh.username}@{loginProbe?.host ?? activeSshServer.ssh.host}</span>
                   <div className="ssh-terminal-state">
@@ -734,21 +698,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     )}
                   </div>
                 </div>
-                <div ref={terminalBodyRef} className="ssh-terminal-screen">
-                  {visibleTerminalLines.map((line) => (
-                    <div key={line.id} className={`ssh-terminal-line ${line.kind}`}>{line.text}</div>
-                  ))}
-                  <div className="ssh-terminal-input-line">
-                    <span>{terminalPrompt()}</span>
-                    <input
-                      ref={terminalInputRef}
-                      autoComplete="off"
-                      spellCheck={false}
-                      onChange={handleTerminalInput}
-                      onKeyDown={handleTerminalKeyDown}
-                    />
-                  </div>
-                </div>
+                <div ref={terminalContainerRef} className="ssh-terminal-screen" aria-label="Interactive SSH terminal" />
               </div>
             </div>
           </div>
@@ -964,58 +914,53 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     }
 
     setSshPanelServerId(server.id);
-    clearTerminalInput();
-    terminalCommandBufferRef.current = '';
-    setTerminalLines([]);
     setLoginProbe(null);
-    setHistoryIndex(null);
     setSshConsoleOpen(true);
   }
 
   function closeSshConsole() {
-    terminalAbortRef.current?.abort();
-    terminalAbortRef.current = null;
     closeActiveShellSession();
     setSshConsoleOpen(false);
-    terminalCommandBufferRef.current = '';
-    clearTerminalInput();
+    disposeXterm();
   }
 
   async function startTerminalLogin(server: ServerNode) {
+    const terminal = ensureXterm();
     setSshRunning(true);
     closeActiveShellSession();
-    terminalCommandBufferRef.current = '';
-    setTerminalLines([
-      createTerminalLine('system', `Connecting to ${server.ssh?.username}@${server.ssh?.host}:${server.ssh?.port}...`),
-    ]);
+    terminal.reset();
+    terminal.writeln(`Connecting to ${server.ssh?.username}@${server.ssh?.host}:${server.ssh?.port}...`);
 
     try {
       const shell = await openServerShell(server.id, getTerminalDimensions());
       terminalShellIdRef.current = shell.sessionId;
+      attachTerminalInput(shell.sessionId);
       const stream = streamServerShell(
         shell.sessionId,
         (event) => {
           if (event.type === 'stdout' && event.content) {
-            appendTerminalStreamChunk(stripAnsiControl(event.content), 'output');
+            terminal.write(event.content);
             return;
           }
           if (event.type === 'stderr' && event.content) {
-            appendTerminalStreamChunk(stripAnsiControl(event.content), 'error');
+            terminal.write(event.content);
             return;
           }
           if (event.type === 'close') {
-            appendTerminalRaw('Connection closed.', 'system');
+            terminal.writeln('\r\nConnection closed.');
             terminalShellIdRef.current = null;
+            terminalDataSubscriptionRef.current?.dispose();
+            terminalDataSubscriptionRef.current = null;
             terminalShellStreamRef.current?.close();
             terminalShellStreamRef.current = null;
           }
           if (event.type === 'error') {
-            appendTerminalRaw(event.message ?? 'SSH shell stream failed', 'error');
+            terminal.writeln(`\r\n${event.message ?? 'SSH shell stream failed'}`);
           }
         },
         (error) => {
           if (terminalShellIdRef.current) {
-            appendTerminalRaw(error.message, 'error');
+            terminal.writeln(`\r\n${error.message}`);
           }
         },
       );
@@ -1031,6 +976,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
 
       setLoginProbe(mergedProbe);
       setActionMessage(t('servers.sshConnectedMessage', { name: server.name }));
+      scheduleTerminalFit(true);
+      window.setTimeout(() => terminal.focus(), 30);
     } catch (error) {
       closeActiveShellSession();
       setLoginProbe({
@@ -1038,169 +985,122 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
         user: server.ssh?.username || 'root',
         pwd: '~',
       });
-      setTerminalLines([
-        createTerminalLine('error', error instanceof Error ? error.message : 'SSH login failed'),
-      ]);
+      terminal.reset();
+      terminal.writeln(error instanceof Error ? error.message : 'SSH login failed');
       setActionMessage(error instanceof Error ? error.message : 'SSH login failed');
     } finally {
       setSshRunning(false);
     }
   }
 
-  async function executeTerminalCommand(command?: string, server = activeSshServer) {
-    const rawCommand = command ?? readTerminalInput();
-    const trimmedCommand = rawCommand.trim();
-    if (!server?.ssh?.connected || trimmedCommand.length === 0) {
-      return;
+  function ensureXterm() {
+    if (xtermRef.current) {
+      return xtermRef.current;
     }
 
-    if (trimmedCommand === 'clear') {
-      setTerminalLines([]);
-      terminalCommandBufferRef.current = '';
-      clearTerminalInput();
-      setHistoryIndex(null);
-      return;
+    const terminal = new XTerm({
+      cursorBlink: true,
+      convertEol: false,
+      fontFamily: '"Cascadia Code", Consolas, "SFMono-Regular", monospace',
+      fontSize: 13,
+      lineHeight: 1.25,
+      scrollback: 6000,
+      disableStdin: false,
+      allowProposedApi: false,
+      theme: {
+        background: '#070b0d',
+        foreground: '#e8f1e8',
+        cursor: '#ffffff',
+        selectionBackground: '#275c44',
+        black: '#0b1113',
+        red: '#ff8b8b',
+        green: '#7cff91',
+        yellow: '#f9d66d',
+        blue: '#7ab7ff',
+        magenta: '#d8a8ff',
+        cyan: '#81e6d9',
+        white: '#f8fafc',
+        brightBlack: '#64748b',
+        brightRed: '#ffb4b4',
+        brightGreen: '#a7ffb4',
+        brightYellow: '#ffe8a3',
+        brightBlue: '#add2ff',
+        brightMagenta: '#eccbff',
+        brightCyan: '#b2f5ea',
+        brightWhite: '#ffffff',
+      },
+    });
+    const fitAddon = new FitAddon();
+    terminal.loadAddon(fitAddon);
+    xtermRef.current = terminal;
+    fitAddonRef.current = fitAddon;
+
+    if (terminalContainerRef.current) {
+      terminal.open(terminalContainerRef.current);
+      scheduleTerminalFit(false);
+      terminal.focus();
+      const resizeObserver = new ResizeObserver(() => scheduleTerminalFit(true));
+      resizeObserver.observe(terminalContainerRef.current);
+      terminalResizeObserverRef.current = resizeObserver;
     }
 
-    if (trimmedCommand === 'exit' || trimmedCommand === 'logout') {
-      setTerminalLines((current) => [
-        ...current,
-        createTerminalLine('command', `${terminalPrompt()}${trimmedCommand}`),
-        createTerminalLine('system', 'Connection closed.'),
-      ]);
-      clearTerminalInput();
-      setHistoryIndex(null);
-      window.setTimeout(closeSshConsole, 350);
+    return terminal;
+  }
+
+  function attachTerminalInput(sessionId: string) {
+    terminalDataSubscriptionRef.current?.dispose();
+    terminalDataSubscriptionRef.current = xtermRef.current?.onData((data) => {
+      writeServerShell(sessionId, data).catch((error) => {
+        xtermRef.current?.writeln(`\r\n${error instanceof Error ? error.message : 'SSH input failed'}`);
+      });
+    }) ?? null;
+  }
+
+  function scheduleTerminalFit(pushResize: boolean) {
+    if (terminalResizeTimerRef.current !== null) {
+      window.clearTimeout(terminalResizeTimerRef.current);
+    }
+    terminalResizeTimerRef.current = window.setTimeout(() => {
+      terminalResizeTimerRef.current = null;
+      fitTerminal(pushResize);
+    }, 20);
+  }
+
+  function fitTerminal(pushResize: boolean) {
+    const terminal = xtermRef.current;
+    const fitAddon = fitAddonRef.current;
+    if (!terminal || !fitAddon || !terminalContainerRef.current) {
       return;
     }
-
-    setActionMessage('');
-    setCommandHistory((current) => [
-      trimmedCommand,
-      ...current.filter((item) => item !== trimmedCommand),
-    ].slice(0, 40));
-    setHistoryIndex(null);
 
     try {
-      let sessionId = terminalShellIdRef.current;
-      if (!sessionId) {
-        await startTerminalLogin(server);
-        sessionId = terminalShellIdRef.current;
-      }
-      if (!sessionId) {
-        throw new Error('SSH shell is not connected');
-      }
-
-      await writeServerShell(sessionId, `${normalizeInteractiveCommand(trimmedCommand)}\n`);
-      setActionMessage(t('servers.commandSent', { name: server.name }));
-    } catch (error) {
-      appendTerminalRaw(error instanceof Error ? error.message : 'SSH command failed', 'error');
-      setActionMessage(error instanceof Error ? error.message : 'SSH command failed');
-    } finally {
-      clearTerminalInput();
-      window.setTimeout(() => terminalInputRef.current?.focus(), 30);
-    }
-  }
-
-  function handleTerminalKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      if (event.nativeEvent.isComposing) {
-        return;
-      }
-      const command = event.currentTarget.value;
-      clearTerminalInput();
-      executeTerminalCommand(command).catch(() => undefined);
+      fitAddon.fit();
+    } catch {
       return;
     }
 
-    if (event.key === 'ArrowUp' && commandHistory.length > 0) {
-      event.preventDefault();
-      const nextIndex = historyIndex === null ? 0 : Math.min(historyIndex + 1, commandHistory.length - 1);
-      setHistoryIndex(nextIndex);
-      setTerminalInput(commandHistory[nextIndex] ?? '');
-      return;
-    }
-
-    if (event.key === 'ArrowDown' && commandHistory.length > 0) {
-      event.preventDefault();
-      if (historyIndex === null || historyIndex <= 0) {
-        setHistoryIndex(null);
-        clearTerminalInput();
-        return;
-      }
-      const nextIndex = historyIndex - 1;
-      setHistoryIndex(nextIndex);
-      setTerminalInput(commandHistory[nextIndex] ?? '');
-    }
-  }
-
-  function handleTerminalInput() {
-    if (historyIndex !== null) {
-      setHistoryIndex(null);
+    if (pushResize && terminalShellIdRef.current) {
+      resizeServerShell(terminalShellIdRef.current, getTerminalDimensions()).catch(() => undefined);
     }
   }
 
   function appendTerminalOutput(command: string, output: string) {
-    appendTerminalStreamChunk(`${command}\n${output}\n`, 'output');
-  }
-
-  function appendTerminalRaw(output: string, kind: TerminalLineKind = 'output') {
-    setTerminalLines((current) => limitTerminalLines([...current, ...splitTerminalLines(output, kind)]));
-  }
-
-  function appendTerminalStreamChunk(chunk: string, kind: TerminalLineKind = 'output') {
-    const normalized = chunk
-      .replace(/\x1b\[2J/g, '')
-      .replace(/\x1b\[H/g, '')
-      .replace(/\r\n/g, '\n')
-      .replace(/\r/g, '\n');
-    const previousPartialLine = kind === 'output' ? terminalCommandBufferRef.current : '';
-    const parts = normalized.split('\n');
-    const nextPartialLine = kind === 'output'
-      ? normalized.endsWith('\n')
-        ? ''
-        : normalized.includes('\n')
-          ? parts[parts.length - 1] ?? ''
-          : `${previousPartialLine}${normalized}`
-      : '';
-    setTerminalLines((current) => {
-      const next = [...current];
-      parts.forEach((part, index) => {
-        const isLast = index === parts.length - 1;
-        const isFinalEmptySegment = isLast && normalized.endsWith('\n');
-        if (isFinalEmptySegment) {
-          return;
-        }
-
-        if (index === 0 && previousPartialLine && next.length > 0 && next[next.length - 1].kind === kind) {
-          next[next.length - 1] = {
-            ...next[next.length - 1],
-            text: `${next[next.length - 1].text}${part}`,
-          };
-        } else if (part || !isLast) {
-          next.push(createTerminalLine(kind, part));
-        }
-      });
-      return limitTerminalLines(next);
-    });
-    terminalCommandBufferRef.current = nextPartialLine;
-    updateShellPromptState(normalized, previousPartialLine);
+    xtermRef.current?.writeln(`\r\n${command}\r\n${output}`);
   }
 
   function stopTerminalCommand() {
     if (terminalShellIdRef.current) {
       writeServerShell(terminalShellIdRef.current, '\u0003').catch(() => undefined);
-      appendTerminalRaw('^C', 'system');
       return;
     }
-    terminalAbortRef.current?.abort();
-    terminalAbortRef.current = null;
+    closeActiveShellSession();
   }
 
   function closeActiveShellSession() {
     const sessionId = terminalShellIdRef.current;
     terminalShellIdRef.current = null;
+    terminalDataSubscriptionRef.current?.dispose();
+    terminalDataSubscriptionRef.current = null;
     terminalShellStreamRef.current?.close();
     terminalShellStreamRef.current = null;
     if (sessionId) {
@@ -1209,52 +1109,35 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   }
 
   function getTerminalDimensions() {
-    const width = terminalBodyRef.current?.clientWidth ?? 960;
-    const height = terminalBodyRef.current?.clientHeight ?? 520;
+    const terminal = xtermRef.current;
+    if (terminal) {
+      return {
+        cols: Math.max(20, Math.min(240, terminal.cols || 100)),
+        rows: Math.max(8, Math.min(80, terminal.rows || 30)),
+      };
+    }
+
+    const width = terminalContainerRef.current?.clientWidth ?? 960;
+    const height = terminalContainerRef.current?.clientHeight ?? 520;
     return {
       cols: Math.max(80, Math.min(180, Math.floor(width / 8))),
       rows: Math.max(24, Math.min(60, Math.floor(height / 18))),
     };
   }
 
-  function updateShellPromptState(chunk: string, currentCommand: string) {
-    const combined = `${currentCommand}${chunk}`.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-    const lines = combined.split('\n');
-    const promptLine = [...lines].reverse().find((line) => /\S/.test(line)) ?? '';
-    const expectedUser = loginProbe?.user || activeSshServer?.ssh?.username;
-    const prompt = parseShellPrompt(promptLine, expectedUser);
-    if (!prompt) {
-      return;
+  function disposeXterm() {
+    if (terminalResizeTimerRef.current !== null) {
+      window.clearTimeout(terminalResizeTimerRef.current);
+      terminalResizeTimerRef.current = null;
     }
-
-    setLoginProbe((current) => ({
-      host: prompt.host || current?.host || activeSshServer?.ssh?.host || activeSshServer?.publicIp,
-      user: prompt.user || current?.user || activeSshServer?.ssh?.username || 'root',
-      date: current?.date,
-      uname: current?.uname,
-      pwd: prompt.pwd || current?.pwd || '~',
-    }));
-  }
-
-  function terminalPrompt() {
-    const user = loginProbe?.user || activeSshServer?.ssh?.username || 'root';
-    const host = loginProbe?.host || activeSshServer?.ssh?.host || activeSshServer?.publicIp || 'localhost';
-    const suffix = user === 'root' ? '#' : '$';
-    return `${user}@${host}:${formatPromptPath(loginProbe?.pwd, user)}${suffix} `;
-  }
-
-  function readTerminalInput() {
-    return terminalInputRef.current?.value ?? '';
-  }
-
-  function clearTerminalInput() {
-    setTerminalInput('');
-  }
-
-  function setTerminalInput(value: string) {
-    if (terminalInputRef.current) {
-      terminalInputRef.current.value = value;
-    }
+    terminalResizeObserverRef.current?.disconnect();
+    terminalResizeObserverRef.current = null;
+    terminalDataSubscriptionRef.current?.dispose();
+    terminalDataSubscriptionRef.current = null;
+    fitAddonRef.current?.dispose();
+    fitAddonRef.current = null;
+    xtermRef.current?.dispose();
+    xtermRef.current = null;
   }
 
   function resetForm() {
@@ -1431,86 +1314,6 @@ function serverStatusText(server: ServerNode, language: Language) {
 
 function maxServerLoad(server: ServerNode) {
   return Math.max(server.cpu, server.memory, server.disk);
-}
-
-function createTerminalLine(kind: TerminalLineKind, text: string): TerminalLine {
-  return {
-    id: `terminal-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    kind,
-    text,
-  };
-}
-
-function splitTerminalLines(output: string, kind: TerminalLineKind): TerminalLine[] {
-  return (output || '')
-    .split('\n')
-    .map((line) => line.replace(/\r$/, ''))
-    .map((line) => createTerminalLine(kind, line));
-}
-
-function limitTerminalLines(lines: TerminalLine[]) {
-  return lines.length > terminalLineLimit ? lines.slice(-terminalLineLimit) : lines;
-}
-
-function stripAnsiControl(output: string) {
-  return output
-    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
-    .replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, '');
-}
-
-function parseShellPrompt(line: string, expectedUser?: string) {
-  const escapedUser = expectedUser ? escapeRegExp(expectedUser) : '[\\w.-]+';
-  const match = line.match(new RegExp(`^(${escapedUser})@([\\w.-]+):(.+?)[#$]\\s*$`));
-  if (!match) {
-    return null;
-  }
-  return {
-    user: match[1],
-    host: match[2],
-    pwd: match[3],
-  };
-}
-
-function isTrailingRemotePromptLine(
-  line: TerminalLine,
-  index: number,
-  lines: TerminalLine[],
-  expectedUser?: string,
-) {
-  if (line.kind !== 'output' || index !== lines.length - 1) {
-    return false;
-  }
-
-  const text = line.text.trim();
-  return Boolean(parseShellPrompt(text, expectedUser)) || /^simulated[$#]\s*$/.test(text);
-}
-
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function normalizeInteractiveCommand(command: string) {
-  if (/^\s*ping(\s|$)/i.test(command) && !/\s(-c|-n)\s*\d+/i.test(command)) {
-    return `${command} -c 4`;
-  }
-  return command;
-}
-
-function formatPromptPath(pwd = '~', user = 'root') {
-  if (!pwd || pwd === '/root' || pwd === `/home/${user}`) {
-    return '~';
-  }
-
-  if (pwd.startsWith('/root/')) {
-    return `~${pwd.slice('/root'.length)}`;
-  }
-
-  const homePrefix = `/home/${user}/`;
-  if (pwd.startsWith(homePrefix)) {
-    return `~/${pwd.slice(homePrefix.length)}`;
-  }
-
-  return pwd;
 }
 
 function ActionButton({ label, icon, disabled, onClick }: { label: string; icon: ReactNode; disabled?: boolean; onClick: () => void }) {

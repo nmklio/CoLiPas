@@ -3594,73 +3594,38 @@ td span,
 
 .ssh-terminal-screen {
   min-height: 0;
-  padding: 10px 12px 14px;
-  overflow: auto;
+  padding: 8px 10px;
+  overflow: hidden;
   background:
     radial-gradient(circle at 100% 0, rgba(20, 122, 75, 0.09), transparent 32%),
     repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 18px),
     #070b0d;
-  font-family: "Cascadia Code", Consolas, monospace;
-  font-size: 12.5px;
-  line-height: 1.38;
-  white-space: pre;
-  overflow-wrap: normal;
+  position: relative;
 }
 
-.ssh-terminal-line {
-  min-height: 17px;
-  color: #e8f1e8;
-  white-space: pre;
-}
-
-.ssh-terminal-line.banner {
-  color: #f1f5f9;
-}
-
-.ssh-terminal-line.command {
-  color: #7cff91;
-  font-weight: 750;
-}
-
-.ssh-terminal-line.output {
-  color: #dce8df;
-}
-
-.ssh-terminal-line.error {
-  color: #ff8b8b;
-}
-
-.ssh-terminal-line.system {
-  color: #8ef58d;
-}
-
-.ssh-terminal-input-line {
-  min-height: 20px;
-  display: flex;
-  align-items: center;
-  color: #7cff91;
-  font-weight: 800;
-}
-
-.ssh-terminal-input-line span {
-  flex: 0 0 auto;
-  white-space: pre;
-}
-
-.ssh-terminal-input-line input {
-  min-width: 20px;
-  flex: 1;
-  border: 0;
-  outline: 0;
+.ssh-terminal-screen .xterm {
+  width: 100%;
+  height: 100%;
   padding: 0;
-  color: #f8fafc;
-  background: transparent;
-  caret-color: #ffffff;
-  font: inherit;
 }
 
-.ssh-terminal-input-line input:disabled {
-  color: #94a3b8;
+.ssh-terminal-screen .xterm-viewport,
+.ssh-terminal-screen .xterm-screen {
+  background: transparent !important;
+}
+
+.ssh-terminal-screen .xterm-viewport {
+  overflow-y: auto;
+  scrollbar-color: rgba(168, 216, 208, 0.5) transparent;
+  scrollbar-width: thin;
+}
+
+.ssh-terminal-screen .xterm-helper-textarea {
+  opacity: 0;
+}
+
+.ssh-terminal-screen .xterm-cursor-layer {
+  animation: none;
 }
 
 .icon-actions button,

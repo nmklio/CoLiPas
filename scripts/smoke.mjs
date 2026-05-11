@@ -3345,20 +3345,19 @@ function assertSshTerminalRealtimeGuards() {
   const apiClientSource = fs.readFileSync(new URL('../src/services/apiClient.ts', import.meta.url), 'utf8');
 
   const requiredFrontendFragments = [
+    "import { Terminal as XTerm",
+    "import { FitAddon } from '@xterm/addon-fit'",
     'openServerShell(server.id, getTerminalDimensions())',
     'streamServerShell(',
-    'writeServerShell(sessionId, `${normalizeInteractiveCommand(trimmedCommand)}\\n`)',
+    'terminal.write(event.content)',
+    'xtermRef.current?.onData((data) => {',
+    'writeServerShell(sessionId, data)',
+    'resizeServerShell(terminalShellIdRef.current, getTerminalDimensions())',
     "writeServerShell(terminalShellIdRef.current, '\\u0003')",
+    'terminalDataSubscriptionRef.current?.dispose()',
+    'terminalResizeObserverRef.current',
     'terminalShellStreamRef.current?.close()',
-    'const terminalLineLimit = 500',
-    'limitTerminalLines(',
-    'visibleTerminalLines.map',
-    'isTrailingRemotePromptLine(',
-    'terminalCommandBufferRef.current = nextPartialLine',
     'const canOpenTerminal = connected',
-    "|| /^simulated[$#]\\s*$/.test(text)",
-    "const match = line.match(new RegExp(`^(${escapedUser})@",
-    "t('servers.commandSent'",
   ];
   const missingFrontend = requiredFrontendFragments.filter((fragment) => !inventorySource.includes(fragment));
   if (missingFrontend.length) {
@@ -3368,6 +3367,9 @@ function assertSshTerminalRealtimeGuards() {
   if (inventorySource.includes('disabled={sshRunning}')) {
     throw new Error('SSH terminal input must remain usable while the remote process is running');
   }
+  if (inventorySource.includes('ssh-terminal-input-line') || inventorySource.includes('normalizeInteractiveCommand')) {
+    throw new Error('SSH terminal must not use a command-submit input or rewrite interactive command text');
+  }
 
   const requiredBackendFragments = [
     'client.shell({',
@@ -3376,6 +3378,9 @@ function assertSshTerminalRealtimeGuards() {
     'emitSshShellEvent(session, { type: \'stdout\'',
     "command === 'colipas-long-output'",
     "command === 'colipas-hang'",
+    "let inputBuffer = ''",
+    "for (const char of input)",
+    "runSimulatedShellCommand(shell, command",
     "input.includes('\\u0003')",
     "signal: 'SIGINT'",
     'stream.setWindow(rows, cols',
@@ -3402,6 +3407,7 @@ function assertSshTerminalRealtimeGuards() {
   const requiredClientFragments = [
     'new EventSource(`/api/servers/shells/',
     'export async function writeServerShell',
+    'export async function resizeServerShell',
     'export async function closeServerShell',
   ];
   const missingClient = requiredClientFragments.filter((fragment) => !apiClientSource.includes(fragment));
