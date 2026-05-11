@@ -8,7 +8,16 @@ import { z } from 'zod';
 import type { CloudProvider, ServerNode, ServerStatus } from '../../types.js';
 import { HttpError } from '../httpErrors.js';
 import { recordAudit } from './auditService.js';
-import { isTableEmpty, loadJsonRows, replaceCredentialRows, replaceServerRows } from './database.js';
+import {
+  deleteCredentialRow,
+  deleteServerRow,
+  isTableEmpty,
+  loadJsonRows,
+  replaceCredentialRows,
+  replaceServerRows,
+  upsertCredentialRow,
+  upsertServerRow,
+} from './database.js';
 import { redactSensitiveText } from './sensitiveRedaction.js';
 import {
   StoredSshCredential,
@@ -171,8 +180,7 @@ export async function connectServer(input: unknown) {
   if (ssh) {
     persistedCredentials.set(server.id, buildStoredSshCredential(parsed.ssh, ssh.host));
   }
-  persistInventory();
-  persistCredentials();
+  persistServer(server);
 
   if (ssh) {
     recordAudit({
@@ -239,13 +247,13 @@ export async function updateServer(serverId: string, input: unknown) {
     } else {
       persistedCredentials.delete(server.id);
     }
-    persistCredentials();
+    persistCredential(server.id);
   } else if (parsed.ssh?.verifyMode === 'assetOnly') {
     persistedCredentials.delete(server.id);
-    persistCredentials();
+    deleteCredentialRow(server.id);
   }
 
-  persistInventory();
+  persistServer(server);
   recordAudit({
     action: 'SERVER_UPDATE',
     actor: 'operator',
@@ -267,8 +275,8 @@ export function deleteServer(serverId: string) {
 
   const [server] = servers.splice(index, 1);
   persistedCredentials.delete(server.id);
-  persistInventory();
-  persistCredentials();
+  deleteServerRow(server.id);
+  deleteCredentialRow(server.id);
 
   recordAudit({
     action: 'SERVER_DELETE',
@@ -501,6 +509,15 @@ function persistInventory() {
   replaceServerRows(servers);
 }
 
+function persistServer(server: ServerNode) {
+  upsertServerRow(server);
+  if (hasConnectedCredential(server)) {
+    persistCredential(server.id);
+  } else {
+    deleteCredentialRow(server.id);
+  }
+}
+
 function loadPersistedCredentials() {
   try {
     if (isTableEmpty('credentials') && fs.existsSync(credentialsPath)) {
@@ -520,6 +537,15 @@ function loadPersistedCredentials() {
 
 function persistCredentials() {
   replaceCredentialRows(Object.fromEntries(persistedCredentials));
+}
+
+function persistCredential(serverId: string) {
+  const credential = persistedCredentials.get(serverId);
+  if (credential) {
+    upsertCredentialRow(serverId, credential);
+  } else {
+    deleteCredentialRow(serverId);
+  }
 }
 
 function driftServerMetrics(server: ServerNode) {

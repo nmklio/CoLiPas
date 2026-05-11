@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import { operationEvents } from '../../data/mockData.js';
-import { isTableEmpty, loadJsonRows, replaceAuditRows } from './database.js';
+import { insertAuditRow, isTableEmpty, loadJsonRows, replaceAuditRows } from './database.js';
 
 export type AuditAction =
   | 'HEALTH_CHECK'
@@ -129,5 +129,8 @@ function loadPersistedAuditEntries() {
 }
 
 function persistAuditEntries() {
-  replaceAuditRows(auditEntries);
+  const [latestEntry] = auditEntries;
+  if (latestEntry) {
+    insertAuditRow(latestEntry);
+  }
 }

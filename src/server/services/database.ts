@@ -63,6 +63,15 @@ export function replaceServerRows(items: Array<{ id: string }>) {
   }
 }
 
+export function upsertServerRow(item: { id: string }) {
+  upsertJsonRow('servers', item.id, item);
+}
+
+export function deleteServerRow(id: string) {
+  ensureDatabase().prepare('DELETE FROM servers WHERE id = ?').run(id);
+  checkpointDatabaseIfNeeded();
+}
+
 export function replaceCredentialRows(items: Record<string, unknown>) {
   const db = ensureDatabase();
   const now = new Date().toISOString();
@@ -80,6 +89,15 @@ export function replaceCredentialRows(items: Record<string, unknown>) {
     db.exec('ROLLBACK');
     throw error;
   }
+}
+
+export function upsertCredentialRow(id: string, credential: unknown) {
+  upsertJsonRow('credentials', id, credential);
+}
+
+export function deleteCredentialRow(id: string) {
+  ensureDatabase().prepare('DELETE FROM credentials WHERE id = ?').run(id);
+  checkpointDatabaseIfNeeded();
 }
 
 export function replaceAuditRows(items: Array<{ id: string; createdAt: string }>) {
@@ -100,6 +118,23 @@ export function replaceAuditRows(items: Array<{ id: string; createdAt: string }>
   }
 }
 
+export function insertAuditRow(item: { id: string; createdAt: string }) {
+  const db = ensureDatabase();
+  db.prepare(`
+    INSERT OR REPLACE INTO audit_entries (id, payload, created_at)
+    VALUES (?, ?, ?)
+  `).run(item.id, JSON.stringify(item), item.createdAt);
+  db.prepare(`
+    DELETE FROM audit_entries
+    WHERE id NOT IN (
+      SELECT id FROM audit_entries
+      ORDER BY created_at DESC
+      LIMIT 200
+    )
+  `).run();
+  checkpointDatabaseIfNeeded();
+}
+
 export function isTableEmpty(table: 'servers' | 'credentials' | 'audit_entries') {
   const row = ensureDatabase().prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number };
   return row.count === 0;
@@ -117,6 +152,17 @@ function checkpointDatabaseIfNeeded() {
   } catch {
     // Keep writes successful if checkpointing is temporarily blocked by another reader.
   }
+}
+
+function upsertJsonRow(table: 'servers' | 'credentials', id: string, payload: unknown) {
+  const db = ensureDatabase();
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO ${table} (id, payload, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at
+  `).run(id, JSON.stringify(payload), now);
+  checkpointDatabaseIfNeeded();
 }
 
 function ensureDatabase() {
