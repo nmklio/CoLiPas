@@ -3362,11 +3362,13 @@ function assertSshTerminalRealtimeGuards() {
     'xtermRef.current?.onData((data) => {',
     'writeServerShell(sessionId, data)',
     'resizeServerShell(terminalShellIdRef.current, getTerminalDimensions())',
-    "writeServerShell(terminalShellIdRef.current, '\\u0003')",
     'function closeSshConsole()',
     'setSshConsoleOpen(false)',
+    'setSshPanelServerId(\'\')',
+    'setLoginProbe(null)',
+    'setSshRunning(false)',
+    "setActionMessage(t('servers.sshDisconnectedMessage'",
     'terminalShellServerIdRef.current',
-    'attachExistingTerminal(server)',
     'terminalDataSubscriptionRef.current?.dispose()',
     'terminalResizeObserverRef.current',
     'terminalShellStreamRef.current?.close()',
@@ -3394,17 +3396,19 @@ function assertSshTerminalRealtimeGuards() {
     'servers.clearTerminalOutput',
     'servers.terminalCopied',
     'servers.terminalCleared',
+    'servers.disconnectSsh',
+    'servers.sshDisconnectedMessage',
   ];
   const missingToolLabels = requiredToolLabels.filter((key) => !inventorySource.includes(key) || !fs.readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8').includes(key));
   if (missingToolLabels.length) {
     throw new Error(`SSH terminal tool i18n or UI wiring is incomplete: ${missingToolLabels.join(', ')}`);
   }
-  const closeSshConsoleMatch = inventorySource.match(/function closeSshConsole\(\)\s*\{(?<body>[^}]+)\}/);
+  const closeSshConsoleMatch = inventorySource.match(/function closeSshConsole\(\)\s*\{(?<body>[\s\S]+?)\n  \}\n\n  async function startTerminalLogin/);
   if (!closeSshConsoleMatch?.groups?.body?.includes('setSshConsoleOpen(false)')) {
     throw new Error('SSH terminal close handler must hide the modal');
   }
-  if (closeSshConsoleMatch.groups.body.includes('closeActiveShellSession(')) {
-    throw new Error('Closing the SSH panel must hide the modal without disconnecting the active shell');
+  if (!closeSshConsoleMatch.groups.body.includes('closeActiveShellSession()') || !closeSshConsoleMatch.groups.body.includes('disposeXterm()')) {
+    throw new Error('Closing the SSH panel must disconnect the active shell and dispose xterm');
   }
   if (!viteSource.includes("return 'vendor-terminal'")) {
     throw new Error('xterm runtime must stay in a separate terminal chunk');

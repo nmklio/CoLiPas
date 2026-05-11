@@ -557,7 +557,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       )}
 
       {actionMessage && (
-        <div className="validation-box action-trace-box">
+        <div className="validation-box action-trace-box action-message">
           <span>{actionMessage}</span>
           {lastActionTraceId && (
             <button type="button" className="inline-trace-button" onClick={() => onAuditTraceOpen?.(lastActionTraceId)}>
@@ -736,8 +736,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                       <span className={terminalShellIdRef.current ? 'live' : sshRunning ? 'pending' : ''} aria-hidden="true" />
                       <small>{terminalShellIdRef.current ? t('servers.sshConnected') : sshRunning ? t('servers.runningSsh') : t('servers.sshConnect')}</small>
                       {(sshRunning || terminalShellIdRef.current) && (
-                        <button type="button" onClick={stopTerminalCommand}>
-                          {terminalShellIdRef.current ? t('servers.interruptSsh') : t('common.cancel')}
+                        <button type="button" onClick={closeSshConsole}>
+                          {terminalShellIdRef.current ? t('servers.disconnectSsh') : t('common.cancel')}
                         </button>
                       )}
                     </div>
@@ -969,7 +969,16 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   }
 
   function closeSshConsole() {
+    const serverName = activeSshServer?.name;
+    closeActiveShellSession();
+    disposeXterm();
     setSshConsoleOpen(false);
+    setSshPanelServerId('');
+    setLoginProbe(null);
+    setSshRunning(false);
+    if (serverName) {
+      setActionMessage(t('servers.sshDisconnectedMessage', { name: serverName }));
+    }
   }
 
   async function startTerminalLogin(server: ServerNode) {
@@ -1331,14 +1340,6 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     if (!copied) {
       throw new Error('clipboard copy failed');
     }
-  }
-
-  function stopTerminalCommand() {
-    if (terminalShellIdRef.current) {
-      writeServerShell(terminalShellIdRef.current, '\u0003').catch(() => undefined);
-      return;
-    }
-    closeActiveShellSession();
   }
 
   function closeActiveShellSession() {

@@ -297,7 +297,7 @@ async function assertSshTerminalPanel(targetPage) {
       throw new Error(`SSH terminal rendered duplicate remote prompt history rows: ${terminalState.lineTexts.join(' | ')}`);
     }
 
-    await targetPage.getByRole('button', { name: /interrupt/i }).waitFor({ timeout: 5000 });
+    await targetPage.getByRole('button', { name: /disconnect/i }).waitFor({ timeout: 5000 });
     await targetPage.evaluate(() => {
       window.__colipasCopiedTerminalText = '';
       Object.defineProperty(navigator, 'clipboard', {
@@ -327,21 +327,23 @@ async function assertSshTerminalPanel(targetPage) {
       return terminalText.includes('simulated$ pwd') && terminalText.includes('command simulated.');
     }, undefined, { timeout: 10000 });
     await assertElementWithinViewport(targetPage, '.ssh-console', 'desktop SSH console');
-    await targetPage.locator('.ssh-console-header .icon-button').click();
+    await targetPage.getByRole('button', { name: /disconnect/i }).click();
     await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });
+    await targetPage.locator('.action-message').filter({ hasText: /disconnected/i }).waitFor({ timeout: 5000 });
     await targetPage.locator('.server-workspace-row').filter({ hasText: sshServer.name }).getByRole('button', { name: /^SSH$/i }).click();
     await targetPage.locator('.ssh-console').waitFor({ timeout: 10000 });
     await targetPage.waitForFunction(() => {
       const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
-      return terminalText.includes('simulated$ pwd') && terminalText.includes('command simulated.');
+      return terminalText.includes('CoLiPas simulated SSH shell') && terminalText.includes('simulated$');
     }, undefined, { timeout: 10000 });
     const reopenedText = await targetPage.locator('.ssh-terminal-screen .xterm-rows').textContent();
-    if (!reopenedText?.includes('simulated$ pwd')) {
-      throw new Error('SSH terminal did not preserve the live shell buffer after closing the panel');
+    if (reopenedText?.includes('simulated$ pwd')) {
+      throw new Error('SSH terminal preserved the old shell buffer after disconnecting the panel');
     }
     await targetPage.locator('.ssh-console-header .icon-button').click();
     await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });
-    console.log('ok browser e2e covers interactive xterm SSH terminal, copy/clear tools, and panel reopen persistence');
+    await targetPage.locator('.action-message').filter({ hasText: /disconnected/i }).waitFor({ timeout: 5000 });
+    console.log('ok browser e2e covers interactive xterm SSH terminal, copy/clear tools, and panel disconnect cleanup');
   } finally {
     await deleteTemporaryAssetServer(targetPage, sshServer.id).catch(() => undefined);
   }
