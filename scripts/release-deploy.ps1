@@ -218,7 +218,13 @@ function Invoke-TargetUpdate {
   $safePublicUrl = ConvertTo-ShellSingleQuoted $Target.publicBaseUrl
   $safeCommit = ConvertTo-ShellSingleQuoted $head
   $safeArtifact = ConvertTo-ShellSingleQuoted "$($Target.name)-$Branch"
-  $evidenceCommand = "RELEASE_TARGET_NAME=$safeTargetName RELEASE_CHANNEL='production' RELEASE_DEPLOYMENT_MODE=$safeMode RELEASE_PUBLIC_URL=$safePublicUrl RELEASE_GIT_COMMIT=$safeCommit RELEASE_ARTIFACT_ID=$safeArtifact $($Target.command)"
+  $releaseEnv = "RELEASE_TARGET_NAME=$safeTargetName RELEASE_CHANNEL='production' RELEASE_DEPLOYMENT_MODE=$safeMode RELEASE_PUBLIC_URL=$safePublicUrl RELEASE_GIT_COMMIT=$safeCommit RELEASE_ARTIFACT_ID=$safeArtifact"
+  $targetCommand = [string]$Target.command
+  if ($targetCommand -match '^\s*sudo\s+(.+)$') {
+    $evidenceCommand = "sudo env $releaseEnv $($Matches[1])"
+  } else {
+    $evidenceCommand = "$releaseEnv $targetCommand"
+  }
   $sshArgs += @("-o", "StrictHostKeyChecking=accept-new", "$($Target.user)@$($Target.host)", $evidenceCommand)
 
   Write-Host "Updating target $($Target.name) via $($Target.host)."
@@ -458,6 +464,10 @@ Run-Step "Production target browser validation" {
     $env:PUBLIC_PAGES_MODE = $target.publicMode
     try {
       node scripts/public-pages-check.mjs
+      $validationExitCode = $LASTEXITCODE
+      if ($validationExitCode -ne 0) {
+        throw "Production browser validation failed for target $($target.name) with exit code $validationExitCode."
+      }
     } finally {
       Remove-Item Env:\PUBLIC_PAGES_BASE_URL -ErrorAction SilentlyContinue
       Remove-Item Env:\PUBLIC_PAGES_MODE -ErrorAction SilentlyContinue
