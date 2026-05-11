@@ -2360,6 +2360,9 @@ function assertAccountUiGuards() {
   if (!ciSource.includes('npx playwright install --with-deps chromium')) {
     throw new Error('GitHub Actions must install Chromium before browser E2E smoke tests');
   }
+  if (!ciSource.includes('actions/checkout@v6') || !ciSource.includes('actions/setup-node@v6') || !ciSource.includes('node-version: 24')) {
+    throw new Error('GitHub Actions must use Node 24-compatible v6 actions to avoid deprecated Node 20 runner warnings');
+  }
 
   for (const key of ['account.avatarImage', 'account.removeAvatarImage', 'account.avatarImageInvalid', 'account.avatarImageTooLarge']) {
     const count = (i18nSource.match(new RegExp(key.replace('.', '\\.'), 'g')) ?? []).length;
