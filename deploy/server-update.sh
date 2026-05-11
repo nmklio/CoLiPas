@@ -1121,6 +1121,35 @@ current_release_verify_token() {
   grep -E '^RELEASE_VERIFY_TOKEN=' "$APP_DIR/.env" | tail -1 | cut -d= -f2- || true
 }
 
+write_release_evidence_env() {
+  local deployed_at="${1:-$(date -u +"%Y-%m-%dT%H:%M:%SZ")}"
+  local commit_sha="${2:-$REMOTE_HEAD}"
+  RELEASE_VERIFY_TOKEN_VALUE="$(current_release_verify_token)"
+  if [ "${#RELEASE_VERIFY_TOKEN_VALUE}" -lt 24 ]; then
+    RELEASE_VERIFY_TOKEN_VALUE="$(generate_release_verify_token)"
+  fi
+  if [ -f "$APP_DIR/.env" ]; then
+    tmp_env="$(mktemp)"
+    grep -Ev '^(RELEASE_VERIFY_TOKEN|RELEASE_TARGET_NAME|RELEASE_CHANNEL|RELEASE_DEPLOYMENT_MODE|RELEASE_PUBLIC_URL|RELEASE_GIT_COMMIT|RELEASE_ARTIFACT_ID|RELEASE_DEPLOYED_AT)=' "$APP_DIR/.env" > "$tmp_env" || true
+    {
+      cat "$tmp_env"
+      printf 'RELEASE_VERIFY_TOKEN=%s\n' "$RELEASE_VERIFY_TOKEN_VALUE"
+      printf 'RELEASE_TARGET_NAME=%s\n' "$SERVER_NAME"
+      printf 'RELEASE_CHANNEL=%s\n' "production"
+      printf 'RELEASE_DEPLOYMENT_MODE=%s\n' "systemd"
+      printf 'RELEASE_PUBLIC_URL=%s\n' "https://$SERVER_NAME"
+      printf 'RELEASE_GIT_COMMIT=%s\n' "$commit_sha"
+      printf 'RELEASE_ARTIFACT_ID=%s\n' "systemd-$BRANCH"
+      printf 'RELEASE_DEPLOYED_AT=%s\n' "$deployed_at"
+    } > "$APP_DIR/.env"
+    rm -f "$tmp_env"
+    if [ "$(id -u)" -eq 0 ]; then
+      chown "$APP_USER:$APP_USER" "$APP_DIR/.env"
+      chmod 0600 "$APP_DIR/.env"
+    fi
+  fi
+}
+
 install_nginx_config() {
   if [ -f "$LANDING_ROOT/index.html" ] && [ -f "$SSL_CERTIFICATE" ] && [ -f "$SSL_CERTIFICATE_KEY" ]; then
     cat >/etc/nginx/sites-available/colipas.conf <<NGINX
@@ -1232,6 +1261,8 @@ LOCAL_HEAD="$(run_as_app git rev-parse HEAD)"
 REMOTE_HEAD="$(run_as_app git rev-parse "origin/$BRANCH")"
 
 if [ "$LOCAL_HEAD" = "$REMOTE_HEAD" ]; then
+  DEPLOYED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  write_release_evidence_env "$DEPLOYED_AT" "$REMOTE_HEAD"
   if [ "$(id -u)" -eq 0 ]; then
     install_runtime_update_script
     patch_landing_page_ui
@@ -1240,6 +1271,9 @@ if [ "$LOCAL_HEAD" = "$REMOTE_HEAD" ]; then
     nginx -t
     systemctl reload nginx
   fi
+  systemctl restart "$SERVICE_NAME"
+  systemctl is-active --quiet "$SERVICE_NAME"
+  verify_release_evidence
   echo "CoLiPas already up to date at $LOCAL_HEAD"
   exit 0
 fi
@@ -1248,30 +1282,7 @@ run_as_app git reset --hard "$REMOTE_HEAD"
 run_as_app npm ci
 run_as_app npm run build
 DEPLOYED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-RELEASE_VERIFY_TOKEN_VALUE="$(current_release_verify_token)"
-if [ "${#RELEASE_VERIFY_TOKEN_VALUE}" -lt 24 ]; then
-  RELEASE_VERIFY_TOKEN_VALUE="$(generate_release_verify_token)"
-fi
-if [ -f "$APP_DIR/.env" ]; then
-  tmp_env="$(mktemp)"
-  grep -Ev '^(RELEASE_VERIFY_TOKEN|RELEASE_TARGET_NAME|RELEASE_CHANNEL|RELEASE_DEPLOYMENT_MODE|RELEASE_PUBLIC_URL|RELEASE_GIT_COMMIT|RELEASE_ARTIFACT_ID|RELEASE_DEPLOYED_AT)=' "$APP_DIR/.env" > "$tmp_env" || true
-  {
-    cat "$tmp_env"
-    printf 'RELEASE_VERIFY_TOKEN=%s\n' "$RELEASE_VERIFY_TOKEN_VALUE"
-    printf 'RELEASE_TARGET_NAME=%s\n' "$SERVER_NAME"
-    printf 'RELEASE_CHANNEL=%s\n' "production"
-    printf 'RELEASE_DEPLOYMENT_MODE=%s\n' "systemd"
-    printf 'RELEASE_PUBLIC_URL=%s\n' "https://$SERVER_NAME"
-    printf 'RELEASE_GIT_COMMIT=%s\n' "$REMOTE_HEAD"
-    printf 'RELEASE_ARTIFACT_ID=%s\n' "systemd-$BRANCH"
-    printf 'RELEASE_DEPLOYED_AT=%s\n' "$DEPLOYED_AT"
-  } > "$APP_DIR/.env"
-  rm -f "$tmp_env"
-  if [ "$(id -u)" -eq 0 ]; then
-    chown "$APP_USER:$APP_USER" "$APP_DIR/.env"
-    chmod 0600 "$APP_DIR/.env"
-  fi
-fi
+write_release_evidence_env "$DEPLOYED_AT" "$REMOTE_HEAD"
 if [ "$(id -u)" -eq 0 ]; then
   install_runtime_update_script
   install -m 0644 "$APP_DIR/deploy/colipas.service" /etc/systemd/system/colipas.service
