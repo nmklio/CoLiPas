@@ -1724,20 +1724,27 @@ button:disabled {
 
 .language-switcher {
   min-height: 34px;
+  max-width: 132px;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 4px;
   border: 1px solid var(--line);
   border-radius: 7px;
-  padding: 0 9px;
+  padding: 0 7px;
   color: var(--muted);
   background: rgba(255, 255, 255, 0.88);
   font-size: 12px;
   font-weight: 800;
 }
 
+.language-switcher-label {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .language-switcher select {
-  min-width: 76px;
+  min-width: 44px;
+  max-width: 66px;
   border: 0;
   outline: 0;
   color: var(--text);
@@ -7381,11 +7388,13 @@ pre {
   }
 
   .language-switcher {
-    min-width: 112px;
+    min-width: 88px;
+    max-width: 108px;
   }
 
   .language-switcher select {
-    min-width: 52px;
+    min-width: 40px;
+    max-width: 56px;
   }
 
   .session-chip {

@@ -2296,6 +2296,14 @@ function assertAiProviderSecretNotPersisted() {
     throw new Error('loadStoredProvider must ignore legacy apiKey values from localStorage');
   }
 
+  if (!aiConsoleSource.includes('aiProviderSessionKey') || !aiConsoleSource.includes('window.sessionStorage.setItem(aiProviderSessionKey')) {
+    throw new Error('AI API key should persist only in sessionStorage so page reloads do not require re-entry');
+  }
+
+  if (aiConsoleSource.includes('window.localStorage.setItem(aiProviderSessionKey') || aiConsoleSource.includes('localStorage.setItem(aiProviderSessionKey')) {
+    throw new Error('AI API key session cache must not use localStorage');
+  }
+
   if (!aiConsoleSource.includes('modelRequestSeqRef') || !aiConsoleSource.includes('modelRequestSeqRef.current !== requestSeq')) {
     throw new Error('AI model refresh must ignore stale model-list responses');
   }
@@ -2308,7 +2316,7 @@ function assertAiProviderSecretNotPersisted() {
     throw new Error('AI console must not persist full chat transcripts to localStorage');
   }
 
-  console.log('ok AI provider storage strips API key and AI chat transcripts stay session-only');
+  console.log('ok AI provider storage strips API key, reload-safe keys stay session-only, and AI chat transcripts stay session-only');
 }
 
 function assertAccountUiGuards() {

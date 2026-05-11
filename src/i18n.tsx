@@ -1138,7 +1138,7 @@ const cleanTranslations: Record<Language, Record<string, string>> = {
     'servers.loadMore': '再加载 {count} 台',
   },
   en: {
-    'ai.apiKeyEphemeral': 'The key stays in page memory only and is not written to localStorage or the repo.',
+    'ai.apiKeyEphemeral': 'The key is kept for this browser tab session so reloads keep it; it is not written to localStorage, the database, or the repo.',
     'ai.useServerKey': 'Leave blank to use the server environment key',
     'ai.realtimeChat': 'Realtime chat',
     'ai.defaultQuestion': 'Type a message. Enter sends, Shift + Enter adds a line.',

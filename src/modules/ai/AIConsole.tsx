@@ -76,6 +76,7 @@ interface StoredAIConsoleState {
 }
 
 const aiProviderStorageKey = 'colipas.aiProvider';
+const aiProviderSessionKey = 'colipas.aiProviderSession';
 const aiStateStorageKey = 'colipas.aiConsoleState';
 const aiResponseCacheStorageKey = 'colipas.aiResponseCache';
 const aiResponseCacheTtlMs = 10 * 60 * 1000;
@@ -824,11 +825,12 @@ function loadStoredProvider(): AIProviderConfig {
     }
 
     const storedProvider = JSON.parse(rawProvider) as Partial<AIProviderConfig>;
+    const sessionProvider = loadSessionProvider();
     return {
       name: typeof storedProvider.name === 'string' && storedProvider.name.trim() ? storedProvider.name : defaultAIProvider.name,
       baseUrl: typeof storedProvider.baseUrl === 'string' && storedProvider.baseUrl.trim() ? storedProvider.baseUrl : defaultAIProvider.baseUrl,
       model: typeof storedProvider.model === 'string' && storedProvider.model.trim() ? storedProvider.model : defaultAIProvider.model,
-      apiKey: defaultAIProvider.apiKey,
+      apiKey: sessionProvider.apiKey,
       temperature: typeof storedProvider.temperature === 'number' && Number.isFinite(storedProvider.temperature)
         ? storedProvider.temperature
         : defaultAIProvider.temperature,
@@ -853,6 +855,41 @@ function persistStoredProvider(provider: AIProviderConfig) {
   }
 
   window.localStorage.setItem(aiProviderStorageKey, JSON.stringify(toStoredProvider(provider)));
+  persistSessionProvider(provider);
+}
+
+function loadSessionProvider(): Pick<AIProviderConfig, 'apiKey'> {
+  if (typeof window === 'undefined') {
+    return { apiKey: defaultAIProvider.apiKey };
+  }
+
+  try {
+    const rawProvider = window.sessionStorage.getItem(aiProviderSessionKey);
+    if (!rawProvider) {
+      return { apiKey: defaultAIProvider.apiKey };
+    }
+
+    const storedProvider = JSON.parse(rawProvider) as Partial<AIProviderConfig>;
+    return {
+      apiKey: typeof storedProvider.apiKey === 'string' ? storedProvider.apiKey : defaultAIProvider.apiKey,
+    };
+  } catch {
+    return { apiKey: defaultAIProvider.apiKey };
+  }
+}
+
+function persistSessionProvider(provider: AIProviderConfig) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const apiKey = provider.apiKey.trim();
+  if (!apiKey) {
+    window.sessionStorage.removeItem(aiProviderSessionKey);
+    return;
+  }
+
+  window.sessionStorage.setItem(aiProviderSessionKey, JSON.stringify({ apiKey }));
 }
 
 function persistConsoleState(state: StoredAIConsoleState) {

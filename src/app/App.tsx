@@ -598,8 +598,8 @@ export function App() {
             </div>
           </div>
           <div className="topbar-actions">
-            <label className="language-switcher">
-              <span>{t('language.label')}</span>
+            <label className="language-switcher" aria-label={t('language.label')}>
+              <span className="language-switcher-label">{t('language.label')}</span>
               <select value={language} onChange={(event) => setLanguage(event.target.value as typeof language)}>
                 {languageOptions.map((option) => (
                   <option key={option.id} value={option.id}>
