@@ -61,6 +61,13 @@ try {
 
   const overview = await getJson(baseUrl, '/api/overview', adminHeaders);
   const serverList = await getJson(baseUrl, '/api/servers', adminHeaders);
+  assert(serverList.body.meta?.total >= serverCount, 'unpaginated server inventory reported total metadata');
+  assert(serverList.body.meta?.returned >= serverCount, 'unpaginated server inventory kept backward-compatible full results');
+  const firstPage = await getJson(baseUrl, '/api/servers?page=1&pageSize=75', adminHeaders);
+  const secondPage = await getJson(baseUrl, '/api/servers?page=2&pageSize=75', adminHeaders);
+  assert(firstPage.body.items?.length === 75, 'server inventory pagination returned the requested first page size');
+  assert(firstPage.body.meta?.total >= serverCount && firstPage.body.meta?.hasMore === true, 'server inventory pagination exposed total and hasMore metadata');
+  assert(secondPage.body.items?.length === 75 && secondPage.body.items[0]?.id !== firstPage.body.items[0]?.id, 'server inventory pagination returned a distinct second page');
   const summary = buildSummary(overview.body, serverList.body);
   writeEvidence(summary);
 

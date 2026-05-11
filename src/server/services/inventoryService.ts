@@ -78,10 +78,67 @@ export function listServers(query: Record<string, unknown>) {
     region: normalizeFilter(query.region, regions, 'all'),
   };
 
+  const filteredItems = filterServers(normalizedServers, filters);
+  const pagination = parseServerPagination(query, filteredItems.length);
+  const items = pagination
+    ? filteredItems.slice(pagination.offset, pagination.offset + pagination.pageSize)
+    : filteredItems;
+
   return {
     filters,
-    items: filterServers(normalizedServers, filters),
+    items,
+    meta: {
+      total: filteredItems.length,
+      returned: items.length,
+      page: pagination?.page ?? 1,
+      pageSize: pagination?.pageSize ?? filteredItems.length,
+      hasMore: pagination ? pagination.offset + items.length < filteredItems.length : false,
+    },
   };
+}
+
+function parseServerPagination(query: Record<string, unknown>, total: number) {
+  if (!hasPaginationValue(query.page) && !hasPaginationValue(query.pageSize) && !hasPaginationValue(query.limit) && !hasPaginationValue(query.offset)) {
+    return null;
+  }
+
+  const pageSize = clampInteger(readFirstQueryValue(query.pageSize ?? query.limit), 1, 500, 120);
+  const explicitOffset = parseInteger(readFirstQueryValue(query.offset));
+  const page = explicitOffset === null
+    ? clampInteger(readFirstQueryValue(query.page), 1, Math.max(1, Math.ceil(Math.max(total, 1) / pageSize)), 1)
+    : Math.floor(Math.max(0, explicitOffset) / pageSize) + 1;
+  const offset = explicitOffset === null ? (page - 1) * pageSize : Math.max(0, explicitOffset);
+
+  return { page, pageSize, offset };
+}
+
+function hasPaginationValue(value: unknown) {
+  const candidate = readFirstQueryValue(value);
+  return typeof candidate === 'string' && candidate.trim().length > 0;
+}
+
+function readFirstQueryValue(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.find((item) => typeof item === 'string');
+  }
+  return value;
+}
+
+function parseInteger(value: unknown) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? parsed : null;
+}
+
+function clampInteger(value: unknown, min: number, max: number, fallback: number) {
+  const parsed = parseInteger(value);
+  if (parsed === null) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, parsed));
 }
 
 const cloudProviderSchema = z.string().trim().min(1).max(80);
