@@ -2089,6 +2089,7 @@ function assertAccountUiGuards() {
   const appSource = fs.readFileSync(new URL('../src/app/App.tsx', import.meta.url), 'utf8');
   const ciSource = fs.readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
   const serverAppSource = fs.readFileSync(new URL('../src/server/app.ts', import.meta.url), 'utf8');
+  const serverUpdateSource = fs.readFileSync(new URL('../deploy/server-update.sh', import.meta.url), 'utf8');
   const authSource = fs.readFileSync(new URL('../src/server/services/authService.ts', import.meta.url), 'utf8');
   const inventorySource = fs.readFileSync(new URL('../src/modules/servers/ServerInventory.tsx', import.meta.url), 'utf8');
   const globalCss = fs.readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
@@ -2114,6 +2115,8 @@ function assertAccountUiGuards() {
     !loginSource.includes('href="https://github.com/nmklio/CoLiPas"')
     || !loginSource.includes('login-github-link')
     || !marketingSource.includes('deploy-inline-link')
+    || !serverUpdateSource.includes('patch_landing_github_link')
+    || !serverUpdateSource.includes('https://github.com/nmklio/CoLiPas')
   ) {
     throw new Error('Deployment and login pages must expose a GitHub repository jump button');
   }
