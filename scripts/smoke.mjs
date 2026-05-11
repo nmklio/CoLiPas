@@ -3400,6 +3400,13 @@ function assertSecurityAuditRelationsAreSpecific() {
     '.security-control-grid',
     '.security-audit-detail-card',
     'mobile servers, operations, custom API, and security layout linkage',
+    'captureVisualEvidence',
+    "path.resolve('output', 'browser-e2e')",
+    'desktop-security-trace',
+    'mobile-map-to-servers',
+    'mobile-security-audit',
+    'Browser visual evidence',
+    'uniqueByteCount',
   ];
   const missingBrowserFragments = browserRequiredFragments.filter((fragment) => !browserE2eSource.includes(fragment));
   if (missingBrowserFragments.length) {

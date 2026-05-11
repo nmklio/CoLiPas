@@ -1,15 +1,20 @@
 import { chromium } from 'playwright';
 import fs from 'node:fs';
+import path from 'node:path';
 
 const baseUrl = process.env.E2E_BASE_URL ?? process.env.SMOKE_BASE_URL ?? 'http://127.0.0.1:18080';
 const username = process.env.E2E_ADMIN_USERNAME ?? process.env.SMOKE_ADMIN_USERNAME ?? 'admin';
 const password = process.env.E2E_ADMIN_PASSWORD ?? process.env.SMOKE_ADMIN_PASSWORD ?? 'admin123456';
 const traceId = process.env.E2E_TRACE_ID ?? 'srv-trace-00000000-0000-4000-8000-000000000000';
 const executablePath = process.env.E2E_BROWSER_PATH || findSystemBrowser();
+const evidenceDir = path.resolve('output', 'browser-e2e');
 
 if (!executablePath) {
   throw new Error('Browser E2E requires Chromium, Chrome, or Edge. Set E2E_BROWSER_PATH or install a supported browser.');
 }
+
+fs.rmSync(evidenceDir, { recursive: true, force: true });
+fs.mkdirSync(evidenceDir, { recursive: true });
 
 const browser = await chromium.launch({ executablePath, headless: true });
 const consoleProblems = [];
@@ -30,6 +35,7 @@ try {
   await deleteTemporaryAssetServer(page, temporaryServer.id);
   temporaryServerId = '';
 
+  await captureVisualEvidence(page, 'desktop-security-trace', ['.security-workbench', '.security-readiness-card']);
   await assertMobileConsoleAndMap();
   await assertMobileModuleLayoutSweep();
 
@@ -273,6 +279,7 @@ async function assertMobileConsoleAndMap() {
     await mobilePage.getByRole('button', { name: /view region servers/i }).click();
     await mobilePage.waitForURL(/#servers$/, { timeout: 10000 });
     await assertNoHorizontalOverflow(mobilePage, 'mobile map to servers linkage');
+    await captureVisualEvidence(mobilePage, 'mobile-map-to-servers', ['.server-workspace-row']);
 
     console.log('ok browser e2e covers mobile account, AI dock, map tooltip, zoom, and region linkage');
   } finally {
@@ -342,6 +349,7 @@ async function assertMobileModuleLayoutSweep() {
     await mobilePage.locator('.security-audit-detail-card').waitFor({ timeout: 5000 });
     await assertElementHorizontallyWithinViewport(mobilePage, '.security-audit-detail-card', 'mobile security audit detail');
     await assertNoHorizontalOverflow(mobilePage, 'mobile module layout sweep');
+    await captureVisualEvidence(mobilePage, 'mobile-security-audit', ['.security-workbench', '.security-audit-detail-card']);
 
     console.log('ok browser e2e covers mobile servers, operations, custom API, and security layout linkage');
   } finally {
@@ -372,6 +380,25 @@ async function waitForAuditEvents(targetPage, expectedTraceId) {
   }
 
   throw new Error(`Timed out waiting for audit records with ${expectedTraceId}, last count ${lastCount}`);
+}
+
+async function captureVisualEvidence(targetPage, name, selectors) {
+  for (const selector of selectors) {
+    await targetPage.locator(selector).first().waitFor({ timeout: 10000 });
+  }
+  const filePath = path.join(evidenceDir, `${name}.png`);
+  const buffer = await targetPage.screenshot({
+    path: filePath,
+    fullPage: false,
+  });
+  if (buffer.length < 12000) {
+    throw new Error(`Browser visual evidence ${name} looks too small or blank: ${buffer.length} bytes`);
+  }
+  const uniqueByteCount = new Set(buffer).size;
+  if (uniqueByteCount < 24) {
+    throw new Error(`Browser visual evidence ${name} has too little pixel entropy: ${uniqueByteCount} unique bytes`);
+  }
+  console.log(`ok browser visual evidence ${name} ${buffer.length} bytes`);
 }
 
 async function assertMobileSection(targetPage, navName, expectedHashPattern, selectors) {
