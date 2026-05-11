@@ -2213,16 +2213,15 @@ function assertAiProviderSecretNotPersisted() {
     throw new Error('AI model refresh must ignore stale model-list responses');
   }
 
-  if (!aiConsoleSource.includes('aiStatePersistTimerRef') || !aiConsoleSource.includes('persistConsoleState(latestConsoleStateRef.current)')) {
-    throw new Error('AI console state persistence must be debounced and flushed on unmount');
+  if (!aiConsoleSource.includes('window.localStorage.removeItem(aiStateStorageKey)')) {
+    throw new Error('AI console must clear legacy persisted chat state from localStorage');
   }
 
-  const persistenceEffectBody = aiConsoleSource.match(/useEffect\(\(\)\s*=>\s*\{[\s\S]*?latestConsoleStateRef\.current\s*=\s*state;([\s\S]*?)\},\s*\[activeSessionId,\s*connectionTest,\s*sessions\]\);/)?.[1] ?? '';
-  if (!persistenceEffectBody || persistenceEffectBody.includes('localStorage.setItem')) {
-    throw new Error('AI console must not synchronously write the full chat state on every input change');
+  if (aiConsoleSource.includes('localStorage.setItem(aiStateStorageKey') || aiConsoleSource.includes('setItem(aiStateStorageKey')) {
+    throw new Error('AI console must not persist full chat transcripts to localStorage');
   }
 
-  console.log('ok AI provider localStorage strips API key and guards stale model refreshes');
+  console.log('ok AI provider storage strips API key and AI chat transcripts stay session-only');
 }
 
 function assertAccountUiGuards() {

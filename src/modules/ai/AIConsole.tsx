@@ -106,7 +106,6 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
   const newChatTimerRef = useRef<number | null>(null);
   const modelRequestSeqRef = useRef(0);
   const aiStatePersistTimerRef = useRef<number | null>(null);
-  const latestConsoleStateRef = useRef<StoredAIConsoleState>(initialState);
   const questionRef = useRef<HTMLTextAreaElement>(null);
   const validation = useMemo(() => validateAIProviderConfig(provider, language), [language, provider]);
   const activeSession = sessions.find((session) => session.id === activeSessionId) ?? sessions[0];
@@ -197,23 +196,13 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
     if (aiStatePersistTimerRef.current) {
       window.clearTimeout(aiStatePersistTimerRef.current);
     }
-    persistConsoleState(latestConsoleStateRef.current);
   }, []);
 
   useEffect(() => {
-    const state: StoredAIConsoleState = {
-      sessions,
-      activeSessionId,
-      connectionTest,
-    };
-    latestConsoleStateRef.current = state;
     if (aiStatePersistTimerRef.current) {
       window.clearTimeout(aiStatePersistTimerRef.current);
-    }
-    aiStatePersistTimerRef.current = window.setTimeout(() => {
-      persistConsoleState(latestConsoleStateRef.current);
       aiStatePersistTimerRef.current = null;
-    }, 320);
+    }
   }, [activeSessionId, connectionTest, sessions]);
 
   useEffect(() => {
@@ -881,7 +870,7 @@ function persistConsoleState(state: StoredAIConsoleState) {
     return;
   }
 
-  window.localStorage.setItem(aiStateStorageKey, JSON.stringify(state));
+  window.localStorage.removeItem(aiStateStorageKey);
 }
 
 function loadStoredConsoleState(newChatTitle: string): StoredAIConsoleState {
@@ -897,30 +886,8 @@ function loadStoredConsoleState(newChatTitle: string): StoredAIConsoleState {
   }
 
   try {
-    const rawState = window.localStorage.getItem(aiStateStorageKey);
-    if (!rawState) {
-      return fallbackState;
-    }
-
-    const storedState = JSON.parse(rawState) as Partial<StoredAIConsoleState>;
-    const sessions = Array.isArray(storedState.sessions)
-      ? normalizeStoredSessions(storedState.sessions.filter(isRecoverableChatSession), newChatTitle)
-      : [];
-
-    if (!sessions.length) {
-      return fallbackState;
-    }
-
-    const activeSessionId = typeof storedState.activeSessionId === 'string'
-      && sessions.some((session) => session.id === storedState.activeSessionId)
-      ? storedState.activeSessionId
-      : sessions[0].id;
-
-    return {
-      sessions,
-      activeSessionId,
-      connectionTest: isValidConnectionTest(storedState.connectionTest) ? storedState.connectionTest : null,
-    };
+    window.localStorage.removeItem(aiStateStorageKey);
+    return fallbackState;
   } catch {
     return fallbackState;
   }
