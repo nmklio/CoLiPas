@@ -67,6 +67,7 @@ const server = spawn(process.execPath, ['build/server/index.js'], {
     ADMIN_USERNAME: 'admin',
     ADMIN_PASSWORD: 'admin123456',
     SESSION_SECRET: 'verify-production-session-secret',
+    RELEASE_VERIFY_TOKEN: 'verify-production-release-token-12345',
     COLIPAS_DATA_DIR: verifyDataDir,
   },
   shell: false,
@@ -79,6 +80,7 @@ try {
     env: {
       ...process.env,
       SMOKE_BASE_URL: baseUrl,
+      SMOKE_RELEASE_VERIFY_TOKEN: 'verify-production-release-token-12345',
     },
   });
   await run(process.execPath, ['scripts/browser-e2e.mjs'], {

@@ -313,3 +313,56 @@ export interface DiagnosticExportResponse {
     openEvents: number;
   };
 }
+
+export interface ReleaseVerificationResponse {
+  ok: true;
+  generatedAt: string;
+  runtime: {
+    nodeEnv: string;
+    uptimeSeconds: number;
+  };
+  frontend: {
+    indexHash: string;
+    scripts: Array<{
+      path: string;
+      bytes: number;
+      hash: string;
+    }>;
+    featureMarkers: Record<string, boolean>;
+  };
+  readiness: {
+    score: number;
+    status: ReleaseReadinessStatus;
+    summary: ReleaseReadinessResponse['summary'];
+    blockerCount: number;
+    nextBestAction: string;
+  };
+  audit: {
+    total: number;
+    byStatus: Record<'success' | 'blocked' | 'failed', number>;
+    last24h: number;
+  };
+  inventory: {
+    servers: {
+      total: number;
+      running: number;
+      stopped: number;
+      unconnected: number;
+      sshConnected: number;
+    };
+    cloudAccounts: {
+      total: number;
+      connected: number;
+      warning: number;
+      disconnected: number;
+    };
+    openEvents: number;
+    regions: number;
+  };
+  security: {
+    adminPasswordDefault: boolean;
+    sessionSecretDefault: boolean;
+    credentialEncryptionKeyConfigured: boolean;
+    credentialEncryptionKeyDefault: boolean;
+  };
+}

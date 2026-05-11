@@ -6,6 +6,7 @@ const baseUrl = process.env.SMOKE_BASE_URL ?? 'http://127.0.0.1:8080';
 const authHeaders = {};
 const smokeUsername = process.env.SMOKE_ADMIN_USERNAME ?? 'admin';
 const initialSmokePassword = process.env.SMOKE_ADMIN_PASSWORD ?? 'admin123456';
+const releaseVerifyToken = process.env.SMOKE_RELEASE_VERIFY_TOKEN ?? process.env.RELEASE_VERIFY_TOKEN ?? '';
 let currentSmokePassword = initialSmokePassword;
 
 assertAiProviderSecretNotPersisted();
@@ -52,6 +53,51 @@ if (unauthenticatedPasswordResponse.status !== 401) {
   throw new Error(`/api/account/password expected 401 before login, got ${unauthenticatedPasswordResponse.status}`);
 }
 console.log('ok account settings require login');
+
+const releaseVerifyResponse = await fetch(`${baseUrl}/api/release/verify`, {
+  headers: releaseVerifyToken ? { Authorization: `Bearer ${releaseVerifyToken}` } : {},
+});
+if (releaseVerifyToken) {
+  if (!releaseVerifyResponse.ok) {
+    throw new Error(`/api/release/verify returned HTTP ${releaseVerifyResponse.status}`);
+  }
+  const releaseVerifyBody = await releaseVerifyResponse.json();
+  const releaseVerifyPayload = JSON.stringify(releaseVerifyBody);
+  if (
+    releaseVerifyBody.ok !== true
+    || releaseVerifyBody.frontend?.featureMarkers?.['security-evidence-brief'] !== true
+    || releaseVerifyBody.frontend?.featureMarkers?.['cloud-map'] !== true
+    || !Number.isInteger(releaseVerifyBody.readiness?.score)
+    || !Number.isInteger(releaseVerifyBody.audit?.total)
+    || !Number.isInteger(releaseVerifyBody.inventory?.servers?.total)
+    || releaseVerifyBody.frontend?.scripts?.some((script) => typeof script.path !== 'string' || !/^[a-f0-9]{16}$/.test(script.hash))
+  ) {
+    throw new Error('/api/release/verify returned incomplete read-only verification payload');
+  }
+  if (
+    releaseVerifyPayload.includes(initialSmokePassword)
+    || releaseVerifyPayload.includes(releaseVerifyToken)
+    || releaseVerifyPayload.includes('verify-production-session-secret')
+    || releaseVerifyPayload.includes('"publicIp"')
+    || releaseVerifyPayload.includes('"privateIp"')
+    || releaseVerifyPayload.includes('"detail"')
+    || /\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(releaseVerifyPayload)
+    || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(releaseVerifyPayload)
+  ) {
+    throw new Error('/api/release/verify leaked sensitive or asset-identifying material');
+  }
+  const wrongReleaseVerifyResponse = await fetch(`${baseUrl}/api/release/verify`, {
+    headers: { Authorization: 'Bearer wrong-release-verification-token' },
+  });
+  if (wrongReleaseVerifyResponse.status !== 401) {
+    throw new Error(`/api/release/verify expected 401 with wrong token, got ${wrongReleaseVerifyResponse.status}`);
+  }
+  console.log('ok /api/release/verify exposes only token-gated read-only release evidence');
+} else if (releaseVerifyResponse.status !== 404) {
+  throw new Error(`/api/release/verify expected 404 when disabled, got ${releaseVerifyResponse.status}`);
+} else {
+  console.log('ok /api/release/verify is disabled without release token');
+}
 
 const failedLoginResponse = await fetch(`${baseUrl}/api/auth/login`, {
   method: 'POST',
@@ -3335,19 +3381,31 @@ function assertSecurityAuditRelationsAreSpecific() {
   const auditServiceSource = fs.readFileSync(new URL('../src/server/services/auditService.ts', import.meta.url), 'utf8');
   const diagnosticServiceSource = fs.readFileSync(new URL('../src/server/services/diagnosticService.ts', import.meta.url), 'utf8');
   const readinessServiceSource = fs.readFileSync(new URL('../src/server/services/releaseReadinessService.ts', import.meta.url), 'utf8');
+  const releaseVerificationServiceSource = fs.readFileSync(new URL('../src/server/services/releaseVerificationService.ts', import.meta.url), 'utf8');
   const apiClientSource = fs.readFileSync(new URL('../src/services/apiClient.ts', import.meta.url), 'utf8');
   const remediationFragments = [
     "app.get('/api/audit/readiness'",
     "app.post('/api/audit/readiness/snapshots'",
     "app.get('/api/audit/readiness/report'",
     "app.get('/api/audit/diagnostics/export'",
+    "app.get('/api/release/verify'",
+    'isReleaseVerificationEnabled(config)',
+    'isReleaseVerificationAuthorized(config, getBearerToken(request.headers.authorization))',
+    'response.setHeader(\'Cache-Control\', \'no-store\')',
     'buildReleaseReadiness(config)',
     'buildReleaseReadinessReport(config)',
     'buildDiagnosticExport(config)',
+    'buildReleaseVerification(config)',
     'recordReleaseReadinessSnapshot(config)',
     'export function buildReleaseReadiness(config',
     'export function buildReleaseReadinessReport(config',
     'export function buildDiagnosticExport(config',
+    'export function buildReleaseVerification(config',
+    'config.releaseVerification.tokenConfigured',
+    "return crypto.timingSafeEqual(leftBuffer, rightBuffer)",
+    "replace(/\\bsk-[A-Za-z0-9_-]{12,}\\b/g, '[redacted-api-key]')",
+    "replace(/\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b/g, '[redacted-ip]')",
+    "featureMarkers: Object.fromEntries(featureMarkers.map((marker) => [marker, combinedContent.includes(marker)]))",
     'runtime-secret-posture',
     'config.security.adminPasswordDefault',
     'sanitizeReportText',
@@ -3365,7 +3423,7 @@ function assertSecurityAuditRelationsAreSpecific() {
     "target: parsed.target",
     "fetcher('/api/audit/remediate'",
   ];
-  const remediationCombined = [appSource, auditServiceSource, diagnosticServiceSource, readinessServiceSource, apiClientSource].join('\n');
+  const remediationCombined = [appSource, auditServiceSource, diagnosticServiceSource, readinessServiceSource, releaseVerificationServiceSource, apiClientSource].join('\n');
   const missingRemediation = remediationFragments.filter((fragment) => !remediationCombined.includes(fragment));
   if (missingRemediation.length) {
     throw new Error(`Security audit remediation API is incomplete: ${missingRemediation.join(', ')}`);

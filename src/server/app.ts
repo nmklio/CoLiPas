@@ -17,6 +17,7 @@ import { getDatabasePath } from './services/database.js';
 import { buildDiagnosticExport } from './services/diagnosticService.js';
 import { createOperationTask, preflightOperationTask } from './services/operationsService.js';
 import { buildReleaseReadiness, buildReleaseReadinessReport, recordReleaseReadinessSnapshot } from './services/releaseReadinessService.js';
+import { buildReleaseVerification, isReleaseVerificationAuthorized, isReleaseVerificationEnabled } from './services/releaseVerificationService.js';
 import {
   closeServerShell,
   connectServer,
@@ -80,6 +81,21 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
     });
   });
 
+  app.get('/api/release/verify', (request, response) => {
+    if (!isReleaseVerificationEnabled(config)) {
+      response.status(404).json({ error: { code: 'RELEASE_VERIFY_DISABLED', message: 'Release verification is disabled' } });
+      return;
+    }
+
+    if (!isReleaseVerificationAuthorized(config, getBearerToken(request.headers.authorization))) {
+      response.status(401).json({ error: { code: 'RELEASE_VERIFY_UNAUTHORIZED', message: 'Release verification token is invalid' } });
+      return;
+    }
+
+    response.setHeader('Cache-Control', 'no-store');
+    response.json(buildReleaseVerification(config));
+  });
+
   app.post('/api/auth/login', (request, response, next) => {
     try {
       const session = login(request.body, request, response, config);
@@ -125,7 +141,7 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
   });
 
   app.use('/api', (request, _response, next) => {
-    if (request.path === '/health' || request.path.startsWith('/auth/')) {
+    if (request.path === '/health' || request.path === '/release/verify' || request.path.startsWith('/auth/')) {
       next();
       return;
     }
@@ -648,6 +664,15 @@ function getAttemptedUsername(input: unknown) {
 
 function flushSse(response: express.Response) {
   (response as express.Response & { flush?: () => void }).flush?.();
+}
+
+function getBearerToken(value: unknown) {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const match = value.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim();
 }
 
 function isJsonParseError(error: unknown) {
