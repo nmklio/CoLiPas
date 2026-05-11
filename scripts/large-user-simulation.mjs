@@ -65,9 +65,14 @@ try {
   assert(serverList.body.meta?.returned >= serverCount, 'unpaginated server inventory kept backward-compatible full results');
   const firstPage = await getJson(baseUrl, '/api/servers?page=1&pageSize=75', adminHeaders);
   const secondPage = await getJson(baseUrl, '/api/servers?page=2&pageSize=75', adminHeaders);
+  const expectedSecondPageSize = Math.min(75, Math.max(0, serverCount - 75));
   assert(firstPage.body.items?.length === 75, 'server inventory pagination returned the requested first page size');
-  assert(firstPage.body.meta?.total >= serverCount && firstPage.body.meta?.hasMore === true, 'server inventory pagination exposed total and hasMore metadata');
-  assert(secondPage.body.items?.length === 75 && secondPage.body.items[0]?.id !== firstPage.body.items[0]?.id, 'server inventory pagination returned a distinct second page');
+  assert(firstPage.body.meta?.total >= serverCount && firstPage.body.meta?.hasMore === serverCount > 75, 'server inventory pagination exposed total and hasMore metadata');
+  assert(
+    secondPage.body.items?.length === expectedSecondPageSize
+      && (expectedSecondPageSize === 0 || secondPage.body.items[0]?.id !== firstPage.body.items[0]?.id),
+    'server inventory pagination returned a distinct second page',
+  );
   const summary = buildSummary(overview.body, serverList.body);
   writeEvidence(summary);
 
@@ -355,6 +360,9 @@ async function withPage(viewport, callback) {
 
 async function loginInBrowser(page, url) {
   await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
+  if (await page.locator('.topbar').first().isVisible().catch(() => false)) {
+    return;
+  }
   await page.locator('input[autocomplete="username"]').fill(adminUsername);
   await page.locator('input[autocomplete="current-password"]').fill(adminPassword);
   await page.getByRole('button', { name: /sign in/i }).click();
