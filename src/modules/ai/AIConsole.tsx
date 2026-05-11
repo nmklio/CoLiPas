@@ -1,18 +1,23 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import {
+  Ban,
   Bot,
   ChevronDown,
+  CheckCircle2,
   CircleStop,
   History,
   MessageCircle,
+  PlayCircle,
   PanelRightClose,
   PlugZap,
   Plus,
   RefreshCw,
   RotateCcw,
   Send,
+  ShieldCheck,
   Settings2,
   Sparkles,
+  Terminal,
   Trash2,
   X,
 } from 'lucide-react';
@@ -22,12 +27,14 @@ import {
   streamAiAnalysis,
   AiAnalysisResponse,
   AiChatRequestMessage,
+  createOperationTask,
   fetchAiModels,
   fetchConfigSummary,
+  preflightOperationTask,
   testAiConnection,
   AiConnectionTestResponse,
 } from '../../services/apiClient';
-import { AIProviderConfig, OperationEvent, ServerNode } from '../../types';
+import { AIProviderConfig, OperationEvent, OperationTaskRequest, OperationTaskResponse, ServerNode } from '../../types';
 import { buildOpsPrompt, validateAIProviderConfig } from './aiConfig';
 
 interface AIConsoleProps {
@@ -38,6 +45,7 @@ interface AIConsoleProps {
   onCollapse: () => void;
   onExpand: () => void;
   onSeedQuestionConsumed: () => void;
+  onTaskFinished?: () => Promise<void> | void;
 }
 
 type AiChatRole = 'user' | 'assistant';
@@ -82,8 +90,113 @@ const aiResponseCacheStorageKey = 'colipas.aiResponseCache';
 const aiResponseCacheTtlMs = 10 * 60 * 1000;
 const aiResponseCacheMaxEntries = 60;
 const fallbackModelOptions = ['gpt-5.5', 'gpt-5.4', 'gpt-4.1-mini', 'deepseek-chat', 'qwen-plus'];
+const aiExecutionCopyByLanguage: Record<string, {
+  plan: string;
+  target: string;
+  command: string;
+  executionMode: string;
+  allow: string;
+  cancel: string;
+  reason: string;
+  reasonPlaceholder: string;
+  submit: string;
+  cancelHint: string;
+  allowHint: string;
+  decisionTitle: string;
+  run: string;
+  running: string;
+  blocked: string;
+  failed: string;
+  success: string;
+  failedShort: string;
+  noOutput: string;
+  allConnected: string;
+  allServers: string;
+  selectedServers: string;
+  cancelled: string;
+  queued: string;
+}> = {
+  zh: {
+    plan: 'AI 执行计划',
+    target: '目标',
+    command: '即将执行的命令',
+    executionMode: '前台执行',
+    allow: '1. 允许执行',
+    cancel: '2. 取消',
+    reason: '3.',
+    reasonPlaceholder: '输入拒绝原因',
+    submit: '提交',
+    cancelHint: '取消后不会触发 operations 执行，仅保留本地提示。',
+    allowHint: '允许后会先经过 preflight，再进入 operations/SSH 审计链。',
+    decisionTitle: '执行确认',
+    run: '预检并执行',
+    running: '执行中',
+    blocked: '执行预检未通过',
+    failed: '执行失败',
+    success: '成功',
+    failedShort: '失败',
+    noOutput: '暂无输出',
+    allConnected: '全部已连接',
+    allServers: '全部服务器',
+    selectedServers: '指定服务器',
+    cancelled: '已取消执行',
+    queued: '待确认',
+  },
+  en: {
+    plan: 'AI execution plan',
+    target: 'Target',
+    command: 'Command to run',
+    executionMode: 'Foreground execution',
+    allow: '1. Allow execution',
+    cancel: '2. Cancel',
+    reason: '3.',
+    reasonPlaceholder: 'Rejection reason',
+    submit: 'Submit',
+    cancelHint: 'Canceling will not trigger operations execution. The note stays local.',
+    allowHint: 'Allowing will go through preflight first, then the operations/SSH audit chain.',
+    decisionTitle: 'Execution confirmation',
+    run: 'Preflight and run',
+    running: 'Running',
+    blocked: 'Execution blocked by preflight',
+    failed: 'Execution failed',
+    success: 'Success',
+    failedShort: 'Failed',
+    noOutput: 'No output yet',
+    allConnected: 'all connected',
+    allServers: 'all servers',
+    selectedServers: 'selected servers',
+    cancelled: 'Execution canceled',
+    queued: 'Awaiting confirmation',
+  },
+  ja: {
+    plan: 'AI 実行プラン',
+    target: '対象',
+    command: '実行予定のコマンド',
+    executionMode: 'フロント実行',
+    allow: '1. 実行を許可',
+    cancel: '2. キャンセル',
+    reason: '3.',
+    reasonPlaceholder: '拒否理由を入力',
+    submit: '送信',
+    cancelHint: 'キャンセルしても operations は実行されず、注記のみローカルに残ります。',
+    allowHint: '許可すると preflight の後で operations/SSH 監査チェーンに進みます。',
+    decisionTitle: '実行確認',
+    run: '事前確認して実行',
+    running: '実行中',
+    blocked: '事前確認で実行がブロックされました',
+    failed: '実行に失敗しました',
+    success: '成功',
+    failedShort: '失敗',
+    noOutput: '出力はまだありません',
+    allConnected: '接続済みすべて',
+    allServers: 'すべてのサーバー',
+    selectedServers: '選択したサーバー',
+    cancelled: '実行をキャンセルしました',
+    queued: '確認待ち',
+  },
+};
 
-export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse, onExpand, onSeedQuestionConsumed }: AIConsoleProps) {
+export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse, onExpand, onSeedQuestionConsumed, onTaskFinished }: AIConsoleProps) {
   const { language, t } = useI18n();
   const [initialState] = useState(() => loadStoredConsoleState(t('ai.newChatTitle')));
   const [initialProvider] = useState(() => loadStoredProvider());
@@ -102,6 +215,11 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [newChatReady, setNewChatReady] = useState(false);
+  const [aiTaskRunning, setAiTaskRunning] = useState(false);
+  const [aiTaskDecision, setAiTaskDecision] = useState<'allow' | 'cancel'>('allow');
+  const [aiTaskReason, setAiTaskReason] = useState('');
+  const [aiTaskMessage, setAiTaskMessage] = useState('');
+  const [aiTaskResult, setAiTaskResult] = useState<OperationTaskResponse | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const chatThreadRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -110,6 +228,7 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
   const aiStatePersistTimerRef = useRef<number | null>(null);
   const questionRef = useRef<HTMLTextAreaElement>(null);
   const validation = useMemo(() => validateAIProviderConfig(provider, language), [language, provider]);
+  const executionCopy = aiExecutionCopyByLanguage[language] ?? aiExecutionCopyByLanguage.zh;
   const activeSession = sessions.find((session) => session.id === activeSessionId) ?? sessions[0];
   const selectedServers = useMemo(
     () => (activeSession.selectedServerId === 'all' ? servers : servers.filter((server) => server.id === activeSession.selectedServerId)),
@@ -120,6 +239,10 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
   const externalAiAvailable = Boolean(provider.apiKey.trim() || serverAiConfigured);
   const showSessionList = sessionsOpen && (sessions.length > 1 || activeSession.messages.length > 0);
   const lastUserQuestion = useMemo(() => findLastUserQuestion(activeSession.messages), [activeSession.messages]);
+  const executionPlan = activeSession.analysis?.executionPlan ?? null;
+  const executionPlanKey = executionPlan
+    ? `${executionPlan.operation}|${executionPlan.targetMode}|${executionPlan.serverIds.join(',')}|${executionPlan.command ?? ''}|${executionPlan.title}`
+    : '';
   const scopeLabel = activeSession.selectedServerId === 'all'
     ? t('ai.allServers')
     : selectedServers[0]?.name ?? t('ai.allServers');
@@ -192,6 +315,13 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
       aiStatePersistTimerRef.current = null;
     }
   }, [activeSessionId, connectionTest, sessions]);
+
+  useEffect(() => {
+    setAiTaskDecision('allow');
+    setAiTaskReason('');
+    setAiTaskMessage('');
+    setAiTaskResult(null);
+  }, [activeSession.id, executionPlanKey]);
 
   useEffect(() => {
     const chatThread = chatThreadRef.current;
@@ -433,6 +563,50 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
       .catch(() => undefined);
   }
 
+  async function handleExecuteAiPlan() {
+    const plan = executionPlan;
+    if (!plan || aiTaskRunning) {
+      return;
+    }
+
+    if (aiTaskDecision === 'cancel') {
+      setAiTaskResult(null);
+      setAiTaskMessage(aiTaskReason.trim() ? `${executionCopy.cancelled}: ${aiTaskReason.trim()}` : executionCopy.cancelled);
+      return;
+    }
+
+    setAiTaskRunning(true);
+    setAiTaskMessage('');
+    setAiTaskResult(null);
+    try {
+      const payload: OperationTaskRequest = {
+        type: plan.operation,
+        targetMode: plan.targetMode,
+        serverIds: plan.targetMode === 'selected' ? plan.serverIds : [],
+        command: plan.operation === 'sshCommand' ? plan.command : undefined,
+        reason: plan.reason,
+        confirmed: Boolean(plan.confirmed),
+      };
+      const preflight = await preflightOperationTask(payload);
+      if (!preflight.ok) {
+        setAiTaskMessage(preflight.issues[0]?.message ?? executionCopy.blocked);
+        return;
+      }
+
+      const result = await createOperationTask({
+        ...payload,
+        correlationId: preflight.correlationId,
+      });
+      setAiTaskResult(result);
+      setAiTaskMessage(result.message);
+      await onTaskFinished?.();
+    } catch (requestError) {
+      setAiTaskMessage(requestError instanceof Error ? requestError.message : executionCopy.failed);
+    } finally {
+      setAiTaskRunning(false);
+    }
+  }
+
   if (collapsed) {
     return (
       <button type="button" className="ai-launcher" aria-label={t('ai.launch')} title={t('ai.launch')} onClick={onExpand}>
@@ -621,6 +795,67 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
               )}
               <div ref={chatEndRef} />
             </div>
+
+            {executionPlan && (
+              <div className="ai-execution-card" aria-label={executionCopy.plan}>
+                <div className="ai-execution-head">
+                  <span><Terminal size={15} /> {executionCopy.plan}</span>
+                  <strong>{executionCopy.queued}</strong>
+                </div>
+                <div className="ai-execution-command">
+                  <strong>{executionPlan.title}</strong>
+                  <span>{executionCopy.command}</span>
+                  <code>{formatExecutionCommand(executionPlan)}</code>
+                </div>
+                <div className="ai-execution-tags" aria-label={executionCopy.target}>
+                  <span><Terminal size={13} /> {formatExecutionTargets(executionPlan.serverIds, executionPlan.targetMode, servers, executionCopy)}</span>
+                  <span>{executionPlan.operation}</span>
+                  <span>{executionCopy.executionMode}</span>
+                </div>
+                <small><ShieldCheck size={13} /> {executionPlan.safetyNote}</small>
+                <div className="ai-execution-choice-group" aria-label={executionCopy.decisionTitle}>
+                  <button
+                    type="button"
+                    className={aiTaskDecision === 'allow' ? 'ai-execution-choice active' : 'ai-execution-choice'}
+                    onClick={() => setAiTaskDecision('allow')}
+                    disabled={aiTaskRunning}
+                  >
+                    <CheckCircle2 size={14} />
+                    {executionCopy.allow}
+                  </button>
+                  <button
+                    type="button"
+                    className={aiTaskDecision === 'cancel' ? 'ai-execution-choice active danger' : 'ai-execution-choice'}
+                    onClick={() => setAiTaskDecision('cancel')}
+                    disabled={aiTaskRunning}
+                  >
+                    <Ban size={14} />
+                    {executionCopy.cancel}
+                  </button>
+                  <div className="ai-execution-reason">
+                    <span>{executionCopy.reason}</span>
+                    <input
+                      value={aiTaskReason}
+                      onChange={(event) => setAiTaskReason(event.target.value)}
+                      disabled={aiTaskRunning}
+                      placeholder={executionCopy.reasonPlaceholder}
+                    />
+                    <button type="button" onClick={handleExecuteAiPlan} disabled={aiTaskRunning || Boolean(runningSessionId)}>
+                      {aiTaskRunning ? executionCopy.running : executionCopy.submit}
+                    </button>
+                  </div>
+                </div>
+                {aiTaskMessage && <div className={aiTaskResult?.status === 'failed' ? 'error-box' : 'validation-box'}>{aiTaskMessage}</div>}
+                {aiTaskResult && (
+                  <div className="ai-execution-result">
+                    <span>{aiTaskResult.summary.success} {executionCopy.success} / {aiTaskResult.summary.failed} {executionCopy.failedShort}</span>
+                    {aiTaskResult.outputs.slice(0, 2).map((output) => (
+                      <pre key={`${aiTaskResult.id}-${output.serverId}`}>{output.serverName}: {output.output || output.error || executionCopy.noOutput}</pre>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="ai-composer" aria-label={t('ai.chatInput')}>
               <textarea
@@ -813,6 +1048,49 @@ function assistantMessageToAnalysis(message: AiChatMessage, prompt: string): AiA
   };
 }
 
+function formatExecutionTargets(
+  serverIds: string[],
+  targetMode: string,
+  servers: ServerNode[],
+  copy: (typeof aiExecutionCopyByLanguage)[string],
+) {
+  if (targetMode === 'allConnected') {
+    return `${copy.allConnected} (${servers.filter((server) => server.ssh?.connected).length})`;
+  }
+  if (targetMode === 'allServers') {
+    return `${copy.allServers} (${servers.length})`;
+  }
+
+  const serverNames = serverIds
+    .map((serverId) => servers.find((server) => server.id === serverId)?.name ?? serverId)
+    .slice(0, 3);
+  return serverNames.length > 0 ? serverNames.join(', ') : copy.selectedServers;
+}
+
+function formatExecutionCommand(plan: NonNullable<AiAnalysisResponse['executionPlan']>) {
+  if (plan.command?.trim()) {
+    return plan.command.trim();
+  }
+
+  if (plan.operation === 'healthCheck') {
+    return 'hostname && date && free -h && df -h / && uptime';
+  }
+
+  if (plan.operation === 'shutdown') {
+    return 'systemctl poweroff';
+  }
+
+  if (plan.operation === 'reboot') {
+    return 'systemctl reboot';
+  }
+
+  if (plan.operation === 'powerOn') {
+    return 'cloud lifecycle power-on';
+  }
+
+  return plan.summary;
+}
+
 function loadStoredProvider(): AIProviderConfig {
   if (typeof window === 'undefined') {
     return { ...defaultAIProvider };
@@ -958,7 +1236,25 @@ function isValidAiAnalysis(value: unknown): value is AiAnalysisResponse {
     && typeof analysis.model === 'string'
     && typeof analysis.prompt === 'string'
     && typeof analysis.answer === 'string'
-    && typeof analysis.simulated === 'boolean';
+    && typeof analysis.simulated === 'boolean'
+    && (analysis.executionPlan === undefined || isValidAiExecutionPlan(analysis.executionPlan));
+}
+
+function isValidAiExecutionPlan(value: unknown): value is NonNullable<AiAnalysisResponse['executionPlan']> {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const plan = value as Partial<NonNullable<AiAnalysisResponse['executionPlan']>>;
+  return typeof plan.title === 'string'
+    && typeof plan.summary === 'string'
+    && (plan.targetMode === 'allServers' || plan.targetMode === 'allConnected' || plan.targetMode === 'selected')
+    && Array.isArray(plan.serverIds)
+    && plan.serverIds.every((serverId) => typeof serverId === 'string')
+    && (plan.operation === 'assetSync' || plan.operation === 'healthCheck' || plan.operation === 'sshCommand' || plan.operation === 'powerOn' || plan.operation === 'shutdown' || plan.operation === 'reboot')
+    && (plan.command === undefined || typeof plan.command === 'string')
+    && typeof plan.reason === 'string'
+    && typeof plan.safetyNote === 'string';
 }
 
 function isValidConnectionTest(value: unknown): value is AiConnectionTestResponse {

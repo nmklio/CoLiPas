@@ -31,6 +31,19 @@ export interface AiAnalysisResponse {
   simulated: boolean;
   cached?: boolean;
   generatedAt?: string;
+  executionPlan?: AiExecutionPlan;
+}
+
+export interface AiExecutionPlan {
+  title: string;
+  summary: string;
+  targetMode: 'allServers' | 'allConnected' | 'selected';
+  serverIds: string[];
+  operation: 'assetSync' | 'healthCheck' | 'sshCommand' | 'powerOn' | 'shutdown' | 'reboot';
+  command?: string;
+  reason: string;
+  confirmed?: boolean;
+  safetyNote: string;
 }
 
 export interface AiConnectionTestResponse {
@@ -89,7 +102,8 @@ export async function streamAiAnalysis(
   }
 
   if (!aiProvider.apiKey) {
-    const answer = buildSimulatedAnswer(selectedServers, context.events, question, selectedServer, includeOperationsContext);
+    const localResult = buildSimulatedAnswer(selectedServers, context.events, question, selectedServer, includeOperationsContext);
+    const { answer, executionPlan } = localResult;
     await sendAnswerInChunks(answer, send, 18);
     const result = withGeneratedAt({
       provider: publicProviderEndpoint(aiProvider.baseUrl),
@@ -98,6 +112,7 @@ export async function streamAiAnalysis(
       answer,
       simulated: true,
       cached: false,
+      executionPlan,
     });
     setCachedAiResponse(cacheKey, result);
     return result;
@@ -149,6 +164,7 @@ export async function streamAiAnalysis(
     answer: finalAnswer,
     simulated: false,
     cached: false,
+    executionPlan: buildExecutionPlan(selectedServers, selectedServer, question, includeOperationsContext),
   });
   setCachedAiResponse(cacheKey, result);
 
@@ -525,12 +541,14 @@ function buildSimulatedAnswer(
   includeOperationsContext = true,
 ) {
   if (!includeOperationsContext) {
-    return [
-      'Local fallback reply. No external AI API key is configured for this request.',
-      `Question: ${question}`,
-      '',
-      'The realtime chat pipeline is available, but external model output needs a valid API key or server-side AI_API_KEY.',
-    ].join('\n');
+    return {
+      answer: [
+        'Local fallback reply. No external AI API key is configured for this request.',
+        `Question: ${question}`,
+        '',
+        'The realtime chat pipeline is available, but external model output needs a valid API key or server-side AI_API_KEY.',
+      ].join('\n'),
+    };
   }
 
   const openEvents = events.filter((event) => event.status === 'open');
@@ -545,16 +563,18 @@ function buildSimulatedAnswer(
     .slice(0, 5);
 
   if (!servers.length) {
-    return [
-      'Local rule analysis. No API key is configured, so CoLiPas did not call an external model.',
-      `Question: ${question}`,
-      '',
-      'No server assets are available in the selected scope.',
-      'Next actions:',
-      '1. Register servers with name, public IP, region, and operating system.',
-      '2. Add SSH password or private key only when remote diagnosis or repair is needed.',
-      '3. Ask again after assets are connected; the answer will use inventory, events, and SSH state.',
-    ].join('\n');
+    return {
+      answer: [
+        'Local rule analysis. No API key is configured, so CoLiPas did not call an external model.',
+        `Question: ${question}`,
+        '',
+        'No server assets are available in the selected scope.',
+        'Next actions:',
+        '1. Register servers with name, public IP, region, and operating system.',
+        '2. Add SSH password or private key only when remote diagnosis or repair is needed.',
+        '3. Ask again after assets are connected; the answer will use inventory, events, and SSH state.',
+      ].join('\n'),
+    };
   }
 
   const scopeText = selectedServer
@@ -584,21 +604,27 @@ function buildSimulatedAnswer(
       : 'No open events are present; continue watching resource and SSH availability trends.',
   ];
 
-  return [
-    'Local rule analysis. No API key is configured, so CoLiPas did not call an external model.',
-    `Question: ${question}`,
-    `Scope: ${scopeText}. SSH connected ${connectedCount}/${servers.length}, unconnected ${unconnectedCount}, stopped ${stoppedCount}.`,
-    '',
-    'Prioritized risks:',
-    ...riskLines,
-    '',
-    'Why:',
-    '- The rule engine uses only the current inventory snapshot, SSH state, CPU/memory/disk thresholds, and open events.',
-    `- Open events: ${openEvents.length ? openEvents.map((event) => `${event.severity}:${event.title}`).join('; ') : 'none'}.`,
-    '',
-    'Next actions:',
-    ...actionLines.map((line, index) => `${index + 1}. ${line}`),
-  ].join('\n');
+  return {
+    answer: [
+      'Local rule analysis. No API key is configured, so CoLiPas did not call an external model.',
+      `Question: ${question}`,
+      `Scope: ${scopeText}. SSH connected ${connectedCount}/${servers.length}, unconnected ${unconnectedCount}, stopped ${stoppedCount}.`,
+      '',
+      'Prioritized risks:',
+      ...riskLines,
+      '',
+      'Why:',
+      '- The rule engine uses only the current inventory snapshot, SSH state, CPU/memory/disk thresholds, and open events.',
+      `- Open events: ${openEvents.length ? openEvents.map((event) => `${event.severity}:${event.title}`).join('; ') : 'none'}.`,
+      '',
+      'Next actions:',
+      ...actionLines.map((line, index) => `${index + 1}. ${line}`),
+      '',
+      'Executable card:',
+      '- Use the guarded action card below to run a preflighted SSH check through the operations service.',
+    ].join('\n'),
+    executionPlan: buildExecutionPlan(servers, selectedServer, question, includeOperationsContext),
+  };
 }
 
 function riskScore(server: ServerNode, events: OperationEvent[]) {
@@ -629,6 +655,65 @@ function riskReasons(server: ServerNode, events: OperationEvent[]) {
     reasons.push('critical open event exists');
   }
   return reasons;
+}
+
+function buildExecutionPlan(
+  servers: ServerNode[],
+  selectedServer: ServerNode | undefined,
+  question: string,
+  includeOperationsContext: boolean,
+): AiExecutionPlan | undefined {
+  if (!includeOperationsContext) {
+    return undefined;
+  }
+
+  const targetServers = selectedServer ? [selectedServer] : servers;
+  if (targetServers.length === 0) {
+    return undefined;
+  }
+
+  const connectedTargets = targetServers.filter((server) => server.ssh?.connected);
+  if (connectedTargets.length === 0) {
+    return undefined;
+  }
+
+  const primaryServer = connectedTargets[0];
+  const normalizedQuestion = question.toLowerCase();
+  const targetMode = selectedServer ? 'selected' : 'allConnected';
+  const serverIds = selectedServer ? [selectedServer.id] : connectedTargets.map((server) => server.id);
+  const wantsShutdown = /shutdown|power\s*off|halt|关机|停机|关闭/i.test(question);
+  const wantsReboot = /restart|reboot|重启|重新启动/i.test(question);
+  const wantsHealth = /health|diagnostic|diag|status|cpu|memory|disk|load|uptime|状态|诊断|健康|负载|内存|磁盘/i.test(normalizedQuestion);
+
+  if (wantsShutdown || wantsReboot) {
+    const operation = wantsShutdown ? 'shutdown' : 'reboot';
+    return {
+      title: `${operation === 'shutdown' ? 'Shutdown' : 'Reboot'} ${selectedServer ? primaryServer.name : 'connected servers'}`,
+      summary: `AI prepared a guarded ${operation} task for ${serverIds.length} SSH-connected server(s).`,
+      targetMode,
+      serverIds,
+      operation,
+      reason: `AI suggested ${operation} after operator question: ${question.slice(0, 120)}`,
+      confirmed: true,
+      safetyNote: 'This is a high-impact lifecycle action and still runs through operations preflight and audit logging.',
+    };
+  }
+
+  const command = wantsHealth
+    ? 'hostname && uptime && df -h /'
+    : 'uname -a && uptime && whoami';
+
+  return {
+    title: `Run SSH check on ${selectedServer ? primaryServer.name : 'connected servers'}`,
+    summary: `AI prepared a safe SSH inspection for ${serverIds.length} SSH-connected server(s).`,
+    targetMode,
+    serverIds,
+    operation: wantsHealth ? 'healthCheck' : 'sshCommand',
+    command,
+    reason: `AI guided server inspection after operator question: ${question.slice(0, 120)}`,
+    confirmed: false,
+    safetyNote: 'This command is submitted through operations preflight first, then executed by the existing SSH service.',
+  };
 }
 
 async function sendAnswerInChunks(answer: string, send: (chunk: string) => void, delayMs: number) {

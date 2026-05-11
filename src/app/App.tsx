@@ -761,6 +761,7 @@ export function App() {
           onCollapse={() => setAiCollapsed(true)}
           onExpand={() => setAiCollapsed(false)}
           onSeedQuestionConsumed={() => setAiSeedQuestion('')}
+          onTaskFinished={refreshOverview}
         />
 
         {settingsOpen && (

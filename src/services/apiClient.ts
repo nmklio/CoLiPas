@@ -5,6 +5,8 @@ import {
   CloudProvider,
   CustomApiConfig,
   OperationEvent,
+  OperationTaskTargetMode,
+  OperationTaskType,
   OperationTaskPreflightResponse,
   OperationTaskRequest,
   OperationTaskResponse,
@@ -36,6 +38,19 @@ export interface AiAnalysisResponse {
   simulated: boolean;
   cached?: boolean;
   generatedAt?: string;
+  executionPlan?: AiExecutionPlan;
+}
+
+export interface AiExecutionPlan {
+  title: string;
+  summary: string;
+  targetMode: OperationTaskTargetMode;
+  serverIds: string[];
+  operation: OperationTaskType;
+  command?: string;
+  reason: string;
+  confirmed?: boolean;
+  safetyNote: string;
 }
 
 export interface AiChatRequestMessage {

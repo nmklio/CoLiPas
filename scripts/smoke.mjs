@@ -482,6 +482,9 @@ const aiBody = await aiResponse.json();
 if (!aiBody.answer || aiBody.simulated !== true) {
   throw new Error('/api/ai/analyze returned unexpected payload');
 }
+if (aiBody.executionPlan && (!Array.isArray(aiBody.executionPlan.serverIds) || typeof aiBody.executionPlan.safetyNote !== 'string')) {
+  throw new Error('/api/ai/analyze returned a malformed execution plan');
+}
 console.log('ok /api/ai/analyze');
 
 const aiStreamResponse = await fetch(`${baseUrl}/api/ai/stream`, {
@@ -505,6 +508,9 @@ if (!aiStreamResponse.ok) {
 const aiStreamText = await aiStreamResponse.text();
 if (!aiStreamText.includes('"type":"chunk"') || !aiStreamText.includes('"type":"done"')) {
   throw new Error('/api/ai/stream returned unexpected SSE payload');
+}
+if (aiStreamText.includes('"executionPlan"') && !aiStreamText.includes('"safetyNote"')) {
+  throw new Error('/api/ai/stream returned a malformed execution plan');
 }
 console.log('ok /api/ai/stream');
 
@@ -556,6 +562,110 @@ if (aiForceRefreshStreamText.includes('"cached":true')) {
   throw new Error('/api/ai/stream forceRefresh must bypass response cache');
 }
 console.log('ok /api/ai/stream forceRefresh bypasses cache');
+
+const aiExecutableServerResponse = await fetch(`${baseUrl}/api/servers`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    name: `smoke-ai-exec-${Date.now()}`,
+    provider: 'Smoke Lab',
+    region: 'US - Los Angeles',
+    publicIp: '203.0.113.77',
+    privateIp: '10.88.0.77',
+    os: 'Debian 12',
+    tags: ['smoke', 'ai-execution'],
+    ssh: {
+      host: 'simulated-smoke.local',
+      port: 22,
+      username: 'root',
+      authType: 'password',
+      password: 'smoke-simulated-only',
+      verifyMode: 'simulate',
+    },
+  }),
+});
+if (aiExecutableServerResponse.status !== 201) {
+  throw new Error(`/api/servers AI executable setup returned HTTP ${aiExecutableServerResponse.status}`);
+}
+const aiExecutableServer = await aiExecutableServerResponse.json();
+try {
+  const aiExecutableResponse = await fetch(`${baseUrl}/api/ai/analyze`, {
+    method: 'POST',
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      question: 'Run a safe SSH uptime check',
+      provider: {
+        name: 'Smoke AI',
+        baseUrl: 'https://api.example.com/v1',
+        model: 'smoke-model',
+        apiKey: '',
+        temperature: 0.2,
+      },
+      serverId: aiExecutableServer.id,
+    }),
+  });
+  if (!aiExecutableResponse.ok) {
+    throw new Error(`/api/ai/analyze executable request returned HTTP ${aiExecutableResponse.status}`);
+  }
+  const aiExecutableBody = await aiExecutableResponse.json();
+  if (
+    !aiExecutableBody.executionPlan
+    || aiExecutableBody.executionPlan.targetMode !== 'selected'
+    || aiExecutableBody.executionPlan.serverIds[0] !== aiExecutableServer.id
+    || !['healthCheck', 'sshCommand'].includes(aiExecutableBody.executionPlan.operation)
+    || typeof aiExecutableBody.executionPlan.safetyNote !== 'string'
+  ) {
+    throw new Error('/api/ai/analyze did not return a guarded selected-server execution plan');
+  }
+  const aiPlanPreflightResponse = await fetch(`${baseUrl}/api/operations/tasks/preflight`, {
+    method: 'POST',
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      type: aiExecutableBody.executionPlan.operation,
+      targetMode: aiExecutableBody.executionPlan.targetMode,
+      serverIds: aiExecutableBody.executionPlan.serverIds,
+      command: aiExecutableBody.executionPlan.command,
+      reason: aiExecutableBody.executionPlan.reason,
+      confirmed: Boolean(aiExecutableBody.executionPlan.confirmed),
+    }),
+  });
+  if (!aiPlanPreflightResponse.ok) {
+    throw new Error(`/api/operations/tasks/preflight AI plan returned HTTP ${aiPlanPreflightResponse.status}`);
+  }
+  const aiPlanPreflight = await aiPlanPreflightResponse.json();
+  if (!aiPlanPreflight.ok || !aiPlanPreflight.correlationId?.startsWith('ops-trace-')) {
+    throw new Error('/api/operations/tasks/preflight blocked the guarded AI execution plan');
+  }
+  const aiPlanTaskResponse = await fetch(`${baseUrl}/api/operations/tasks`, {
+    method: 'POST',
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      type: aiExecutableBody.executionPlan.operation,
+      targetMode: aiExecutableBody.executionPlan.targetMode,
+      serverIds: aiExecutableBody.executionPlan.serverIds,
+      command: aiExecutableBody.executionPlan.command,
+      reason: aiExecutableBody.executionPlan.reason,
+      confirmed: Boolean(aiExecutableBody.executionPlan.confirmed),
+      correlationId: aiPlanPreflight.correlationId,
+    }),
+  });
+  if (!aiPlanTaskResponse.ok) {
+    throw new Error(`/api/operations/tasks AI plan returned HTTP ${aiPlanTaskResponse.status}: ${await aiPlanTaskResponse.text()}`);
+  }
+  const aiPlanTask = await aiPlanTaskResponse.json();
+  if (aiPlanTask.status !== 'completed' || aiPlanTask.summary.success !== 1 || !JSON.stringify(aiPlanTask.outputs).includes('simulated')) {
+    throw new Error('/api/operations/tasks did not execute the guarded AI plan on simulated SSH');
+  }
+  console.log('ok AI execution plan preflights and runs through operations service');
+} finally {
+  const deleteAiExecutableServerResponse = await fetch(`${baseUrl}/api/servers/${aiExecutableServer.id}`, {
+    method: 'DELETE',
+    headers: authHeaders,
+  });
+  if (!deleteAiExecutableServerResponse.ok) {
+    throw new Error(`/api/servers/:serverId DELETE AI executable smoke server returned HTTP ${deleteAiExecutableServerResponse.status}`);
+  }
+}
 
 const shortAiStreamResponse = await fetch(`${baseUrl}/api/ai/stream`, {
   method: 'POST',
@@ -2588,6 +2698,9 @@ function assertAiResponseCachingGuards() {
     'Local rule analysis. No API key is configured',
     'Question: ${question}',
     'riskReasons(server',
+    'executionPlan',
+    'function buildExecutionPlan(',
+    'safetyNote',
   ];
   const missingBackend = backendFragments.filter((fragment) => !aiServiceSource.includes(fragment));
   if (missingBackend.length) {
@@ -2616,6 +2729,18 @@ function assertAiResponseCachingGuards() {
     "t('ai.cachedResult')",
     "t('ai.forceRegenerate')",
     "t('ai.cacheHit')",
+    'aiExecutionCopyByLanguage',
+    'handleExecuteAiPlan',
+    'aiTaskDecision',
+    'aiTaskReason',
+    'formatExecutionCommand(executionPlan)',
+    'ai-execution-choice-group',
+    'preflightOperationTask(payload)',
+    'createOperationTask({',
+    'ai-execution-card',
+    'message.status === \'cached\'',
+    'cachedResult.answer',
+    'meta: analysisToMessageMeta(result)',
   ];
   const missingFrontend = frontendFragments.filter((fragment) => !aiConsoleSource.includes(fragment));
   if (missingFrontend.length) {
@@ -2627,6 +2752,7 @@ function assertAiResponseCachingGuards() {
     'forceRefresh: options.forceRefresh === true',
     'messages: options.messages ?? []',
     'signal: options.signal',
+    'executionPlan?: AiExecutionPlan',
   ];
   const missingApi = apiFragments.filter((fragment) => !apiClientSource.includes(fragment));
   if (missingApi.length) {
@@ -3948,8 +4074,14 @@ function assertSecurityAuditRelationsAreSpecific() {
     'avatar and display name updated',
     'open ai chat',
     '.ai-message.assistant.done .ai-message-content',
-    '.ai-message.assistant.cached .ai-message-content',
+    'waitForFunction((expectedAnswer) => {',
+    'lastAssistant.classList.contains(\'cached\')',
     'AI cached answer should match the first local rule answer',
+    '.ai-execution-card',
+    '.ai-execution-command code',
+    'allow execution',
+    'getByRole(\'button\', { name: /^submit$/i })',
+    '.ai-execution-result pre',
     'assertDesktopAiDockLayout',
     'desktop-ai-dock-chat',
     'desktop-ai-dock-settings',

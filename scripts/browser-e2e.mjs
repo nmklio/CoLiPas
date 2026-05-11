@@ -132,6 +132,7 @@ async function assertReleaseEvidenceBrief(targetPage) {
 
 async function assertAccountSettingsAndAiChat(targetPage) {
   const profileName = `Ops E2E ${Date.now().toString().slice(-5)}`;
+  let aiSshServerId = '';
   await targetPage.locator('.account-settings-trigger').click();
   await targetPage.locator('.account-modal').waitFor({ timeout: 5000 });
   await targetPage.getByLabel(/display name/i).fill(profileName);
@@ -142,30 +143,60 @@ async function assertAccountSettingsAndAiChat(targetPage) {
   await targetPage.locator('.account-modal').waitFor({ state: 'hidden', timeout: 5000 });
   await targetPage.locator('.account-settings-trigger').filter({ hasText: profileName }).waitFor({ timeout: 5000 });
 
-  await targetPage.getByRole('button', { name: /^AI System$/i }).click();
-  await targetPage.waitForURL(/#ai$/, { timeout: 10000 });
-  await targetPage.getByRole('button', { name: /open ai chat/i }).click();
-  await targetPage.locator('.ai-dock').waitFor({ timeout: 10000 });
-  await targetPage.getByRole('textbox', { name: /question/i }).fill('List the current highest server risk in one sentence');
-  await targetPage.getByRole('button', { name: /^send$/i }).click();
-  await targetPage.locator('.ai-message.assistant.done .ai-message-content').first().waitFor({ timeout: 20000 });
-  const firstAnswer = (await targetPage.locator('.ai-message.assistant .ai-message-content').last().textContent())?.trim() ?? '';
-  if (firstAnswer.length < 20) {
-    throw new Error(`AI chat should return a substantive local answer, got ${firstAnswer.length} chars`);
+  try {
+    const aiSshServer = await createTemporarySimulatedSshServer(targetPage, 'browser-e2e-ai-exec');
+    aiSshServerId = aiSshServer.id;
+
+    await targetPage.getByRole('button', { name: /^AI System$/i }).click();
+    await targetPage.waitForURL(/#ai$/, { timeout: 10000 });
+    await targetPage.getByRole('button', { name: /open ai chat/i }).click();
+    await targetPage.locator('.ai-dock').waitFor({ timeout: 10000 });
+    await targetPage.locator('#ai-server-select').selectOption(aiSshServer.id);
+    await targetPage.getByRole('textbox', { name: /question/i }).fill('Run a safe SSH uptime check');
+    await targetPage.getByRole('button', { name: /^send$/i }).click();
+    await targetPage.locator('.ai-message.assistant.done .ai-message-content').first().waitFor({ timeout: 20000 });
+    const firstAnswer = (await targetPage.locator('.ai-message.assistant .ai-message-content').last().textContent())?.trim() ?? '';
+    if (firstAnswer.length < 20) {
+      throw new Error(`AI chat should return a substantive local answer, got ${firstAnswer.length} chars`);
+    }
+    await targetPage.locator('.ai-execution-card').waitFor({ timeout: 10000 });
+    await targetPage.locator('.ai-execution-command code').filter({ hasText: /hostname|uptime|df -h/i }).waitFor({ timeout: 10000 });
+
+    await targetPage.getByRole('button', { name: /new ai chat/i }).click();
+    await targetPage.locator('#ai-server-select').selectOption(aiSshServer.id);
+    await targetPage.getByRole('textbox', { name: /question/i }).fill('Run a safe SSH uptime check');
+    await targetPage.getByRole('button', { name: /^send$/i }).click();
+    await targetPage.waitForFunction((expectedAnswer) => {
+      const assistantCards = Array.from(document.querySelectorAll('.ai-message.assistant'));
+      const lastAssistant = assistantCards[assistantCards.length - 1];
+      if (!lastAssistant) {
+        return false;
+      }
+      const content = lastAssistant.querySelector('.ai-message-content')?.textContent?.trim() ?? '';
+      return content === expectedAnswer && lastAssistant.classList.contains('cached');
+    }, firstAnswer, { timeout: 15000 });
+    const cachedAnswer = (await targetPage.locator('.ai-message.assistant').last().locator('.ai-message-content').textContent())?.trim() ?? '';
+    if (cachedAnswer !== firstAnswer) {
+      throw new Error('AI cached answer should match the first local rule answer for the same prompt');
+    }
+
+    await targetPage.locator('.ai-execution-card').waitFor({ timeout: 10000 });
+    await targetPage.getByRole('button', { name: /allow execution/i }).click();
+    await targetPage.getByRole('button', { name: /^submit$/i }).click();
+    await targetPage.locator('.ai-execution-result pre').first().waitFor({ timeout: 15000 });
+    const executionText = await targetPage.locator('.ai-execution-result').innerText();
+    if (!executionText.includes(aiSshServer.name) || !executionText.includes('simulated')) {
+      throw new Error(`AI execution card did not run through simulated SSH: ${executionText}`);
+    }
+
+    await assertDesktopAiDockLayout(targetPage);
+
+    console.log('ok browser e2e covers account profile save, AI executable SSH plan, cached chat, and AI dock layout');
+  } finally {
+    if (aiSshServerId) {
+      await deleteTemporaryAssetServer(targetPage, aiSshServerId).catch(() => undefined);
+    }
   }
-
-  await targetPage.getByRole('button', { name: /new ai chat/i }).click();
-  await targetPage.getByRole('textbox', { name: /question/i }).fill('List the current highest server risk in one sentence');
-  await targetPage.getByRole('button', { name: /^send$/i }).click();
-  await targetPage.locator('.ai-message.assistant.cached .ai-message-content').first().waitFor({ timeout: 10000 });
-  const cachedAnswer = (await targetPage.locator('.ai-message.assistant.cached .ai-message-content').last().textContent())?.trim() ?? '';
-  if (cachedAnswer !== firstAnswer) {
-    throw new Error('AI cached answer should match the first local rule answer for the same prompt');
-  }
-
-  await assertDesktopAiDockLayout(targetPage);
-
-  console.log('ok browser e2e covers account profile save, AI cached chat, and AI dock layout');
 }
 
 async function createTemporaryAssetServer(targetPage, namePrefix = 'browser-e2e-asset') {
