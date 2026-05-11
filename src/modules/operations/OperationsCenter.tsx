@@ -307,6 +307,12 @@ export function OperationsCenter({ events, servers, onTaskFinished, onAuditTrace
 
   const taskMeta = useMemo(() => buildTaskMeta(language), [language]);
   const activeTask = tasks.find((task) => task.id === activeTaskId) ?? tasks[0] ?? null;
+  const canOpenActiveTaskTrace = Boolean(
+    activeTask
+      && activeTask.status !== 'queued'
+      && activeTask.status !== 'running'
+      && activeTask.correlationId.startsWith('ops-trace-'),
+  );
   const sshRequiredTask = taskType !== 'assetSync';
   const eligibleServers = sshRequiredTask ? connectedServers : servers;
   const eligibleServerIds = useMemo(() => new Set(eligibleServers.map((server) => server.id)), [eligibleServers]);
@@ -706,10 +712,12 @@ export function OperationsCenter({ events, servers, onTaskFinished, onAuditTrace
           {activeTask && (
             <div className="ops-result-actions">
               <span>{activeTask.summary.success} {copy.success} / {activeTask.summary.failed} {copy.failed} / {activeTask.summary.skipped} {copy.skipped}</span>
-              <button type="button" className="inline-trace-button" onClick={() => onAuditTraceOpen?.(activeTask.correlationId)}>
-                <ShieldCheck size={14} />
-                {copy.viewTrace}
-              </button>
+              {canOpenActiveTaskTrace && (
+                <button type="button" className="inline-trace-button" onClick={() => onAuditTraceOpen?.(activeTask.correlationId)}>
+                  <ShieldCheck size={14} />
+                  {copy.viewTrace}
+                </button>
+              )}
             </div>
           )}
         </div>

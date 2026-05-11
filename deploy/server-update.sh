@@ -5,6 +5,10 @@ APP_DIR="${COLIPAS_APP_DIR:-/opt/colipas}"
 SERVICE_NAME="${COLIPAS_SERVICE_NAME:-colipas}"
 BRANCH="${COLIPAS_BRANCH:-master}"
 APP_USER="${COLIPAS_APP_USER:-colipas}"
+SERVER_NAME="${COLIPAS_SERVER_NAME:-c.miao7777.com}"
+LANDING_ROOT="${COLIPAS_LANDING_ROOT:-/var/www/colipas-landing}"
+SSL_CERTIFICATE="${COLIPAS_SSL_CERTIFICATE:-/etc/letsencrypt/live/$SERVER_NAME/fullchain.pem}"
+SSL_CERTIFICATE_KEY="${COLIPAS_SSL_CERTIFICATE_KEY:-/etc/letsencrypt/live/$SERVER_NAME/privkey.pem}"
 
 run_as_app() {
   if [ "$(id -u)" -eq 0 ]; then
@@ -21,6 +25,7 @@ patch_landing_github_link() {
   fi
 
   local candidates=(
+    "$LANDING_ROOT/index.html"
     "/var/www/colipas/index.html"
     "/var/www/html/index.html"
     "$APP_DIR/output/colipas-landing-index.html"
@@ -112,6 +117,107 @@ NODE
   fi
 }
 
+install_runtime_update_script() {
+  if [ -f "$APP_DIR/deploy/server-update.sh" ]; then
+    install -m 0755 "$APP_DIR/deploy/server-update.sh" /usr/local/sbin/colipas-update
+  fi
+}
+
+install_nginx_config() {
+  if [ -f "$LANDING_ROOT/index.html" ] && [ -f "$SSL_CERTIFICATE" ] && [ -f "$SSL_CERTIFICATE_KEY" ]; then
+    cat >/etc/nginx/sites-available/colipas.conf <<NGINX
+server {
+  listen 80;
+  listen [::]:80;
+  server_name $SERVER_NAME;
+
+  location ^~ /.well-known/acme-challenge/ {
+    root /var/www/html;
+  }
+
+  location / {
+    return 301 https://\$host\$request_uri;
+  }
+}
+
+server {
+  listen 443 ssl http2;
+  listen [::]:443 ssl http2;
+  server_name $SERVER_NAME;
+
+  ssl_certificate $SSL_CERTIFICATE;
+  ssl_certificate_key $SSL_CERTIFICATE_KEY;
+  ssl_protocols TLSv1.2 TLSv1.3;
+  ssl_session_cache shared:SSL:10m;
+  ssl_session_timeout 10m;
+
+  root $LANDING_ROOT;
+  index index.html;
+  client_max_body_size 2m;
+
+  add_header X-Frame-Options "SAMEORIGIN" always;
+  add_header X-Content-Type-Options "nosniff" always;
+  add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+  location = / {
+    try_files /index.html =404;
+  }
+
+  location = /docs.html {
+    try_files /index.html =404;
+  }
+
+  location = /admin {
+    return 302 /admin/;
+  }
+
+  location ^~ /admin/ {
+    proxy_pass http://127.0.0.1:8080/;
+    proxy_http_version 1.1;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+    proxy_buffering off;
+  }
+
+  location ^~ /api/ {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_http_version 1.1;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+    proxy_buffering off;
+  }
+
+  location ^~ /assets/ {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_http_version 1.1;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    expires 1h;
+    add_header Cache-Control "public, max-age=3600";
+  }
+}
+NGINX
+  else
+    install -m 0644 "$APP_DIR/deploy/nginx.conf" /etc/nginx/sites-available/colipas.conf
+  fi
+
+  ln -sfn /etc/nginx/sites-available/colipas.conf /etc/nginx/sites-enabled/colipas.conf
+}
+
 cd "$APP_DIR"
 
 if [ ! -d .git ]; then
@@ -125,6 +231,8 @@ REMOTE_HEAD="$(run_as_app git rev-parse "origin/$BRANCH")"
 
 if [ "$LOCAL_HEAD" = "$REMOTE_HEAD" ]; then
   if [ "$(id -u)" -eq 0 ]; then
+    install_runtime_update_script
+    install_nginx_config
     patch_landing_github_link
     nginx -t
     systemctl reload nginx
@@ -137,9 +245,9 @@ run_as_app git reset --hard "$REMOTE_HEAD"
 run_as_app npm ci
 run_as_app npm run build
 if [ "$(id -u)" -eq 0 ]; then
+  install_runtime_update_script
   install -m 0644 "$APP_DIR/deploy/colipas.service" /etc/systemd/system/colipas.service
-  install -m 0644 "$APP_DIR/deploy/nginx.conf" /etc/nginx/sites-available/colipas.conf
-  ln -sfn /etc/nginx/sites-available/colipas.conf /etc/nginx/sites-enabled/colipas.conf
+  install_nginx_config
   patch_landing_github_link
   systemctl daemon-reload
   nginx -t
