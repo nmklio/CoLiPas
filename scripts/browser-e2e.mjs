@@ -751,6 +751,12 @@ async function assertDesktopAiDockLayout(targetPage) {
   if (metrics.thread.bottom > metrics.composer.y + 3) {
     throw new Error(`Desktop AI chat thread overlaps composer: ${JSON.stringify(metrics)}`);
   }
+  if (metrics.execution && metrics.execution.bottom > metrics.composer.y + 3) {
+    throw new Error(`Desktop AI execution card should sit above composer: ${JSON.stringify(metrics)}`);
+  }
+  if (metrics.status && metrics.composer.bottom > metrics.status.y + 3) {
+    throw new Error(`Desktop AI status stack should sit below composer: ${JSON.stringify(metrics)}`);
+  }
   if (metrics.composer.right > metrics.dock.right + 3 || metrics.toolbar.right > metrics.dock.right + 3) {
     throw new Error(`Desktop AI composer escapes dock width: ${JSON.stringify(metrics)}`);
   }
@@ -803,11 +809,13 @@ async function readAiDockMetrics(targetPage) {
       dock: readBox('.ai-dock'),
       body: readBox('.ai-dock-body'),
       thread: readBox('.ai-chat-thread'),
-      composer: readBox('.ai-composer'),
-      toolbar: readBox('.ai-composer-toolbar'),
-      settings: readBox('.ai-dock-settings'),
-      range: readBox('.ai-dock-settings input[type="range"]'),
-      button: readBox('.ai-dock-settings .tool-button.wide'),
+    composer: readBox('.ai-composer'),
+    execution: readBox('.ai-execution-card'),
+    toolbar: readBox('.ai-composer-toolbar'),
+    status: readBox('.ai-status-stack'),
+    settings: readBox('.ai-dock-settings'),
+    range: readBox('.ai-dock-settings input[type="range"]'),
+    button: readBox('.ai-dock-settings .tool-button.wide'),
     };
   });
 }
@@ -886,6 +894,7 @@ async function assertMobileAiChatLayout(targetPage) {
   const liveStrip = requireBox('.ai-live-strip');
   const thread = requireBox('.ai-chat-thread');
   const composer = requireBox('.ai-composer');
+  const execution = metrics.boxes['.ai-execution-card'];
   const statusStack = metrics.boxes['.ai-status-stack'];
 
   if (metrics.scrollWidth > metrics.viewport.width + 1) {
@@ -905,6 +914,9 @@ async function assertMobileAiChatLayout(targetPage) {
   }
   if (thread.bottom > composer.y + tolerance) {
     throw new Error(`Mobile AI chat thread overlaps composer: ${JSON.stringify({ thread, composer })}`);
+  }
+  if (execution && execution.bottom > composer.y + tolerance) {
+    throw new Error(`Mobile AI execution card should sit above composer: ${JSON.stringify({ execution, composer })}`);
   }
   if (statusStack && composer.bottom > statusStack.y + tolerance) {
     throw new Error(`Mobile AI composer overlaps status stack: ${JSON.stringify({ composer, statusStack })}`);
