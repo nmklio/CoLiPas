@@ -101,8 +101,24 @@ export async function streamAiAnalysis(
     return { ...cached, cached: true };
   }
 
+  const localResult = buildSimulatedAnswer(selectedServers, context.events, question, selectedServer, includeOperationsContext, chatHistory, context.shellEvidence ?? []);
+  if (isLocalEvidenceBoundaryAnswer(localResult.answer)) {
+    const { answer, executionPlan } = localResult;
+    await sendAnswerInChunks(answer, send, 18);
+    const result = withGeneratedAt({
+      provider: publicProviderEndpoint(aiProvider.baseUrl),
+      model: aiProvider.model,
+      prompt,
+      answer,
+      simulated: true,
+      cached: false,
+      executionPlan,
+    });
+    setCachedAiResponse(cacheKey, result);
+    return result;
+  }
+
   if (!aiProvider.apiKey) {
-    const localResult = buildSimulatedAnswer(selectedServers, context.events, question, selectedServer, includeOperationsContext, chatHistory, context.shellEvidence ?? []);
     const { answer, executionPlan } = localResult;
     await sendAnswerInChunks(answer, send, 18);
     const result = withGeneratedAt({
@@ -492,12 +508,18 @@ function buildAnalysisPrompt(
   }
 
   const shellEvidenceText = formatShellEvidenceForPrompt(shellEvidence);
+  const hasPriorExecutionEvidence = extractPriorExecutionEvidence(chatHistory).length > 0;
+  const hasShellEvidence = Boolean(shellEvidenceText.trim());
   return [
     buildOpsPrompt(servers, events),
     '',
     `Analysis scope: ${selectedServer ? `${selectedServer.name} (${selectedServer.publicIp || 'no public IP'})` : 'all servers'}`,
     chatHistory.length ? `Prior conversation turns available: ${chatHistory.length}` : 'Prior conversation turns available: 0',
     chatHistory.length ? 'Use prior assistant messages that begin with "Execution evidence:" as factual SSH/operations output evidence.' : '',
+    'Factual SSH command output is available only from prior assistant messages that begin with "Execution evidence:" or from non-empty Recent sanitized SSH terminal evidence.',
+    hasPriorExecutionEvidence || hasShellEvidence
+      ? 'When answering about current users, IP addresses, routes, or command output, cite only explicit command output present in the evidence. Shell prompts such as root@host are context only and do not prove command results.'
+      : 'No factual SSH execution evidence is available. Do not state the current user, IP address, route table, command output, or claim a command ran; tell the operator to run the guarded execution card or live SSH terminal first.',
     shellEvidenceText ? `Recent sanitized SSH terminal evidence:\n${shellEvidenceText}` : 'Recent sanitized SSH terminal evidence: none',
     `User question: ${question}`,
   ].filter(Boolean).join('\n');
@@ -514,6 +536,33 @@ function buildSimulatedAnswer(
 ) {
   const priorEvidence = extractPriorExecutionEvidence(chatHistory);
   const latestShellEvidence = shellEvidence.filter((item) => item.transcript.trim()).slice(0, 3);
+  const executionPlan = buildExecutionPlan(servers, selectedServer, question, includeOperationsContext);
+  const combinedEvidenceText = [
+    ...priorEvidence,
+    ...latestShellEvidence.map((item) => item.transcript),
+  ].join('\n');
+  if (
+    includeOperationsContext
+    && questionNeedsLiveSshEvidence(question)
+    && !evidenceAppearsRelevantToQuestion(question, combinedEvidenceText)
+  ) {
+    return {
+      answer: [
+        'Local evidence boundary. CoLiPas has not captured relevant SSH command output for this question yet.',
+        `Question: ${question}`,
+        '',
+        'What this means:',
+        '- I cannot state the current user, IP address, route table, or command output until a guarded SSH command or live terminal output provides that evidence.',
+        '- A shell prompt such as root@host is only terminal context; it is not enough to prove the result of whoami, ip addr, or ip route.',
+        '',
+        'Next action:',
+        executionPlan?.command
+          ? `- Use the guarded action card below to run: ${executionPlan.command}`
+          : '- Open the live SSH terminal, run the needed command, then ask again with the captured output.',
+      ].join('\n'),
+      executionPlan,
+    };
+  }
   if (includeOperationsContext && (priorEvidence.length > 0 || latestShellEvidence.length > 0)) {
     const evidenceLines = [
       ...priorEvidence.slice(-3).map((content, index) => `${index + 1}. Prior AI-run operation:\n${content}`),
@@ -530,7 +579,7 @@ function buildSimulatedAnswer(
         'Conclusion:',
         '- The answer above is based on the captured, sanitized execution output. If you need deeper diagnosis, run the next guarded SSH check and ask again.',
       ].join('\n'),
-      executionPlan: buildExecutionPlan(servers, selectedServer, question, includeOperationsContext),
+      executionPlan,
     };
   }
 
@@ -617,7 +666,7 @@ function buildSimulatedAnswer(
       'Executable card:',
       '- Use the guarded action card below to run a preflighted SSH check through the operations service.',
     ].join('\n'),
-    executionPlan: buildExecutionPlan(servers, selectedServer, question, includeOperationsContext),
+    executionPlan,
   };
 }
 
@@ -657,6 +706,46 @@ function extractPriorExecutionEvidence(chatHistory: AiChatMessage[]) {
     .map((message) => message.content.trim().slice(0, 3000));
 }
 
+function questionNeedsLiveSshEvidence(question: string) {
+  return /ip\s+addr|ip\s+-brief|ip\s+route|route\s+-n|ifconfig|whoami|\bid\b|current\s+user|command\s+output|ssh\s+output|公网|内网|当前用户|当前\s*用户|命令输出|执行结果|输出|路由|网络|网卡|地址/i.test(question);
+}
+
+function questionNeedsNetworkEvidence(question: string) {
+  return /ip\s+addr|ip\s+-brief|ip\s+route|route\s+-n|ifconfig|\bip\b|公网|内网|路由|网络|网卡|地址/i.test(question);
+}
+
+function questionNeedsUserEvidence(question: string) {
+  return /whoami|\bid\b|current\s+user|当前用户|当前\s*用户/i.test(question);
+}
+
+function isLocalEvidenceBoundaryAnswer(answer: string) {
+  return answer.startsWith('Local evidence boundary.');
+}
+
+function evidenceAppearsRelevantToQuestion(question: string, evidenceText: string) {
+  if (!evidenceText.trim()) {
+    return false;
+  }
+
+  const wantsNetwork = /ip\s+addr|ip\s+-brief|ip\s+route|route\s+-n|ifconfig|\bip\b|公网|内网|路由|网络|网卡|地址/i.test(question);
+  const wantsUser = /whoami|\bid\b|current\s+user|当前用户|当前\s*用户/i.test(question);
+  const wantsCommandOutput = /command\s+output|ssh\s+output|命令输出|执行结果|输出/i.test(question);
+
+  if (wantsNetwork && !/(ip\s+(?:addr|-brief|route)|route\s+-n|ifconfig|\binet\s+\d|\bdefault\s+via\b)/i.test(evidenceText)) {
+    return false;
+  }
+
+  if (wantsUser && !/(^|\n|\r)(?:stdout:\s*)?(?:whoami|id)\b|uid=\d+/i.test(evidenceText)) {
+    return false;
+  }
+
+  if (wantsCommandOutput && !/(Execution evidence:|stdout:|stderr:|command=|simulated\$|\$ |# )/i.test(evidenceText)) {
+    return false;
+  }
+
+  return true;
+}
+
 function formatShellEvidenceForPrompt(shellEvidence: SshShellEvidenceSummary[]) {
   return shellEvidence
     .filter((item) => item.transcript.trim())
@@ -666,6 +755,7 @@ function formatShellEvidenceForPrompt(shellEvidence: SshShellEvidenceSummary[]) 
       `mode=${item.mode}`,
       `active=${item.active}`,
       `updatedAt=${item.updatedAt}`,
+      'note=Terminal prompts are context only. Treat current user, IP, route, and command-output claims as factual only when explicit command output is present below.',
       `transcript:\n${item.transcript.slice(-3000)}`,
     ].join('\n'))
     .join('\n\n');
@@ -713,9 +803,13 @@ function buildExecutionPlan(
     };
   }
 
-  const command = wantsHealth
-    ? 'hostname && uptime && df -h /'
-    : 'uname -a && uptime && whoami';
+  const command = questionNeedsNetworkEvidence(question)
+    ? 'hostname && whoami && ip -brief addr && ip route'
+    : questionNeedsUserEvidence(question)
+      ? 'whoami && id && hostname'
+      : wantsHealth
+        ? 'hostname && uptime && df -h /'
+        : 'uname -a && uptime && whoami';
 
   return {
     title: `Run SSH check on ${selectedServer ? primaryServer.name : 'connected servers'}`,

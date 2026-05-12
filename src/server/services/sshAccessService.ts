@@ -861,7 +861,7 @@ function registerRealShellSession(
 
   stream
     .on('data', (chunk: Buffer) => {
-      emitSshShellEvent(session, { type: 'stdout', content: redactSensitiveText(chunk.toString('utf8')) });
+      emitSshShellEvent(session, { type: 'stdout', content: chunk.toString('utf8') });
     })
     .on('close', (code: number | null, signal: string | null) => {
       emitSshShellEvent(session, { type: 'close', code, signal });
@@ -877,7 +877,7 @@ function registerRealShellSession(
     });
 
   stream.stderr.on('data', (chunk: Buffer) => {
-    emitSshShellEvent(session, { type: 'stderr', content: redactSensitiveText(chunk.toString('utf8')) });
+    emitSshShellEvent(session, { type: 'stderr', content: chunk.toString('utf8') });
   });
 
   return session;
@@ -930,9 +930,11 @@ function registerSshShellSession(input: {
 }
 
 function emitSshShellEvent(session: ActiveSshShellSession, event: SshShellStreamEvent) {
-  const safeEvent = event.content
-    ? { ...event, content: redactSensitiveText(event.content) }
-    : event;
+  const safeEvent = {
+    ...event,
+    content: event.content ? redactSensitiveText(event.content) : event.content,
+    message: event.message ? redactSensitiveText(event.message) : event.message,
+  };
   session.history.push(safeEvent);
   session.history.splice(0, Math.max(0, session.history.length - sshShellHistoryLimit));
   recordSshShellEvidence(session, safeEvent);
@@ -960,8 +962,8 @@ function recordSshShellEvidence(session: ActiveSshShellSession, event: SshShellS
   record.updatedAt = new Date().toISOString();
   record.events.push({
     type: event.type,
-    content: event.content ? redactSensitiveText(event.content) : undefined,
-    message: event.message ? redactSensitiveText(event.message) : undefined,
+    content: event.content,
+    message: event.message,
     at: record.updatedAt,
   });
   record.events.splice(0, Math.max(0, record.events.length - sshShellEvidenceLimit));

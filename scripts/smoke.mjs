@@ -619,6 +619,70 @@ try {
   ) {
     throw new Error('/api/ai/analyze did not return a guarded selected-server execution plan');
   }
+  const aiNoEvidenceResponse = await fetch(`${baseUrl}/api/ai/analyze`, {
+    method: 'POST',
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      question: 'What is the current user and ip addr output?',
+      provider: {
+        name: 'Smoke AI',
+        baseUrl: 'https://api.example.com/v1',
+        model: 'smoke-model',
+        apiKey: '',
+        temperature: 0.2,
+      },
+      serverId: aiExecutableServer.id,
+      forceRefresh: true,
+    }),
+  });
+  if (!aiNoEvidenceResponse.ok) {
+    throw new Error(`/api/ai/analyze no-evidence request returned HTTP ${aiNoEvidenceResponse.status}`);
+  }
+  const aiNoEvidenceBody = await aiNoEvidenceResponse.json();
+  if (
+    !aiNoEvidenceBody.answer?.includes('Local evidence boundary')
+    || !aiNoEvidenceBody.answer.includes('has not captured relevant SSH command output')
+    || !aiNoEvidenceBody.answer.includes('root@host is only terminal context')
+    || !aiNoEvidenceBody.executionPlan?.command?.includes('ip -brief addr')
+    || !aiNoEvidenceBody.executionPlan.command.includes('ip route')
+  ) {
+    throw new Error('/api/ai/analyze no-evidence SSH question did not guard against hallucinated command output');
+  }
+  if (/current user:\s*root|ip addr output:\s*(?!not captured)/i.test(aiNoEvidenceBody.answer)) {
+    throw new Error('/api/ai/analyze no-evidence SSH answer claimed live command results');
+  }
+  const noEvidenceUpstream = await startMockStreamingAi();
+  try {
+    const aiNoEvidenceUpstreamResponse = await fetch(`${baseUrl}/api/ai/analyze`, {
+      method: 'POST',
+      headers: { ...authHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        question: 'What is the current user and ip addr output?',
+        provider: {
+          name: 'Smoke AI upstream',
+          baseUrl: noEvidenceUpstream.baseUrl,
+          model: 'stream-smoke-model',
+          apiKey: 'stream-smoke-key',
+          temperature: 0.2,
+        },
+        serverId: aiExecutableServer.id,
+        forceRefresh: true,
+      }),
+    });
+    if (!aiNoEvidenceUpstreamResponse.ok) {
+      throw new Error(`/api/ai/analyze no-evidence upstream request returned HTTP ${aiNoEvidenceUpstreamResponse.status}`);
+    }
+    const aiNoEvidenceUpstreamBody = await aiNoEvidenceUpstreamResponse.json();
+    if (
+      aiNoEvidenceUpstreamBody.simulated !== true
+      || !aiNoEvidenceUpstreamBody.answer?.includes('Local evidence boundary')
+      || noEvidenceUpstream.requests.length !== 0
+    ) {
+      throw new Error('/api/ai/analyze sent a no-evidence SSH question to upstream AI instead of enforcing the local evidence boundary');
+    }
+  } finally {
+    await noEvidenceUpstream.close();
+  }
   const aiPlanPreflightResponse = await fetch(`${baseUrl}/api/operations/tasks/preflight`, {
     method: 'POST',
     headers: { ...authHeaders, 'Content-Type': 'application/json' },
@@ -2883,6 +2947,12 @@ function assertAiResponseCachingGuards() {
     'extractPriorExecutionEvidence(chatHistory)',
     'formatShellEvidenceForPrompt(shellEvidence)',
     'Recent sanitized SSH terminal evidence',
+    'No factual SSH execution evidence is available',
+    'Local evidence boundary',
+    'questionNeedsLiveSshEvidence',
+    'questionNeedsNetworkEvidence',
+    'isLocalEvidenceBoundaryAnswer',
+    'root@host is only terminal context',
     'Execution evidence:',
   ];
   const missingBackend = backendFragments.filter((fragment) => !aiServiceSource.includes(fragment));
@@ -3812,6 +3882,9 @@ function assertSshTerminalRealtimeGuards() {
     'queueTerminalInput(sessionId, data)',
     'function flushTerminalInput(',
     'terminalInputChainRef.current',
+    'terminalInputInFlightRef',
+    'terminalInputFlushAgainRef',
+    "terminalShellSocketRef.current.sendInput(data)",
     'function interruptTerminalCommand()',
     "sendTerminalInput(sessionId, '\\u0003')",
     'fetchServerShellStatus',
@@ -3896,6 +3969,8 @@ function assertSshTerminalRealtimeGuards() {
     "input.includes('\\u0003')",
     "content: `^C\\r\\n${simulatedShellPrompt}`",
     'stream.setWindow(rows, cols',
+    'content: chunk.toString(\'utf8\')',
+    'content: event.content',
     'sshShellIdleTimeoutMs',
     'export function getSshShellSessionStats',
     'oldestConnectedAt',

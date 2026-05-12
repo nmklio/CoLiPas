@@ -128,6 +128,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const terminalInputBufferRef = useRef('');
   const terminalInputTimerRef = useRef<number | null>(null);
   const terminalInputChainRef = useRef<Promise<void>>(Promise.resolve());
+  const terminalInputInFlightRef = useRef(false);
+  const terminalInputFlushAgainRef = useRef(false);
   const terminalCssInjectedRef = useRef(false);
   const actionMessageTimerRef = useRef<number | null>(null);
   const sshConsoleOpenRef = useRef(false);
@@ -1348,6 +1350,11 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   }
 
   function queueTerminalInput(sessionId: string, data: string) {
+    if (terminalShellTransportRef.current === 'websocket' && terminalShellSocketRef.current) {
+      terminalShellSocketRef.current.sendInput(data);
+      return;
+    }
+
     terminalInputBufferRef.current += data;
     if (data.includes('\r') || data.includes('\n') || data.includes('\u0003')) {
       flushTerminalInput(sessionId);
@@ -1364,24 +1371,34 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     }, 12);
   }
 
-  function flushTerminalInput(sessionId = terminalShellIdRef.current) {
+  function flushTerminalInput(sessionId = terminalShellIdRef.current): Promise<void> {
     if (terminalInputTimerRef.current !== null) {
       window.clearTimeout(terminalInputTimerRef.current);
       terminalInputTimerRef.current = null;
     }
 
-    const input = terminalInputBufferRef.current;
-    if (!input || !sessionId) {
-      terminalInputBufferRef.current = '';
+    if (terminalInputInFlightRef.current) {
+      terminalInputFlushAgainRef.current = true;
       return terminalInputChainRef.current;
     }
 
+    const input = terminalInputBufferRef.current;
     terminalInputBufferRef.current = '';
-    terminalInputChainRef.current = terminalInputChainRef.current
-      .catch(() => undefined)
-      .then(() => sendTerminalInput(sessionId, input))
+    if (!input || !sessionId) {
+      return terminalInputChainRef.current;
+    }
+
+    terminalInputInFlightRef.current = true;
+    terminalInputChainRef.current = sendTerminalInput(sessionId, input)
       .catch((error) => {
         xtermRef.current?.writeln(`\r\n${error instanceof Error ? error.message : 'SSH input failed'}`);
+      })
+      .finally(() => {
+        terminalInputInFlightRef.current = false;
+        if (terminalInputFlushAgainRef.current || terminalInputBufferRef.current) {
+          terminalInputFlushAgainRef.current = false;
+          void flushTerminalInput(sessionId);
+        }
       });
     return terminalInputChainRef.current;
   }
@@ -1400,6 +1417,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       terminalInputTimerRef.current = null;
     }
     terminalInputBufferRef.current = '';
+    terminalInputInFlightRef.current = false;
+    terminalInputFlushAgainRef.current = false;
     terminalInputChainRef.current = Promise.resolve();
   }
 
