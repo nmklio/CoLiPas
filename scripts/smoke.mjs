@@ -1,8 +1,10 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import { generateKeyPairSync } from 'node:crypto';
+import { WebSocket } from 'ws';
 
 const baseUrl = process.env.SMOKE_BASE_URL ?? 'http://127.0.0.1:8080';
+const socketBaseUrl = baseUrl.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:');
 const authHeaders = {};
 const smokeUsername = process.env.SMOKE_ADMIN_USERNAME ?? 'admin';
 const initialSmokePassword = process.env.SMOKE_ADMIN_PASSWORD ?? 'admin123456';
@@ -1641,6 +1643,29 @@ if (shellClosedStatus.activeCount !== 0 || shellClosedStatus.byMode?.simulate !=
   throw new Error('/api/servers/shells/status did not return to zero after close');
 }
 console.log('ok /api/servers/shells realtime stream, sanitized status, and close cleanup');
+
+const wsUnauthorizedClosed = await assertUnauthorizedShellWebSocket();
+if (!wsUnauthorizedClosed) {
+  throw new Error('SSH WebSocket upgrade did not reject unauthenticated access');
+}
+console.log('ok /api/servers/shells websocket upgrade requires login');
+
+const shellSocketServer = await createTemporarySimulatedSshServer({ name: `ws-shell-${Date.now()}` });
+try {
+  const shellSocketResult = await exerciseShellWebSocket(shellSocketServer.id);
+  if (!shellSocketResult.text.includes('simulated$ whoami') || !shellSocketResult.text.includes('command simulated.')) {
+    throw new Error('SSH WebSocket shell did not stream interactive output');
+  }
+  if (!shellSocketResult.text.includes('simulated$') || shellSocketResult.closed !== true) {
+    throw new Error('SSH WebSocket shell did not close cleanly');
+  }
+  console.log('ok /api/servers/shells websocket shell open/input/close round trip');
+} finally {
+  await fetch(`${baseUrl}/api/servers/${shellSocketServer.id}`, {
+    method: 'DELETE',
+    headers: authHeaders,
+  }).catch(() => undefined);
+}
 
 const shellLongResponse = await fetch(`${baseUrl}/api/servers/shells`, {
   method: 'POST',
@@ -3673,6 +3698,7 @@ function assertSshTerminalRealtimeGuards() {
   const inventorySource = fs.readFileSync(new URL('../src/modules/servers/ServerInventory.tsx', import.meta.url), 'utf8');
   const appSource = fs.readFileSync(new URL('../src/server/app.ts', import.meta.url), 'utf8');
   const sshServiceSource = fs.readFileSync(new URL('../src/server/services/sshAccessService.ts', import.meta.url), 'utf8');
+  const sshSocketSource = fs.readFileSync(new URL('../src/server/sshShellSocket.ts', import.meta.url), 'utf8');
   const apiClientSource = fs.readFileSync(new URL('../src/services/apiClient.ts', import.meta.url), 'utf8');
   const viteSource = fs.readFileSync(new URL('../vite.config.ts', import.meta.url), 'utf8');
 
@@ -3686,6 +3712,7 @@ function assertSshTerminalRealtimeGuards() {
     "document.getElementById('colipas-xterm-css')",
     'openServerShell(server.id, getTerminalDimensions())',
     'streamServerShell(',
+    'connectServerShellSocket(',
     'queueTerminalWrite(terminal, event.content)',
     'function flushTerminalWriteBuffer(',
     'window.requestAnimationFrame',
@@ -3694,7 +3721,7 @@ function assertSshTerminalRealtimeGuards() {
     'function flushTerminalInput(',
     'terminalInputChainRef.current',
     'function interruptTerminalCommand()',
-    "writeServerShell(sessionId, '\\u0003')",
+    "sendTerminalInput(sessionId, '\\u0003')",
     'fetchServerShellStatus',
     'activeShellCount',
     'servers.activeShellSessionsShort',
@@ -3703,7 +3730,8 @@ function assertSshTerminalRealtimeGuards() {
     'terminalLifecycleSeqRef.current += 1',
     'isCurrentTerminalLifecycle(server.id, lifecycleSeq)',
     'closeServerShell(shell.sessionId).catch(() => undefined)',
-    'resizeServerShell(terminalShellIdRef.current, getTerminalDimensions())',
+    'pushTerminalResize(terminalShellIdRef.current, getTerminalDimensions())',
+    'terminalShellTransportRef.current === \'websocket\' && terminalShellSocketRef.current',
     'function closeSshConsole()',
     'setSshConsoleOpen(false)',
     'setSshPanelServerId(\'\')',
@@ -3810,6 +3838,21 @@ function assertSshTerminalRealtimeGuards() {
   const missingClient = requiredClientFragments.filter((fragment) => !apiClientSource.includes(fragment));
   if (missingClient.length) {
     throw new Error(`SSH shell API client guard is incomplete: ${missingClient.join(', ')}`);
+  }
+
+  const socketRequired = [
+    "new WebSocketServer({",
+    "if (path !== '/api/servers/shells/ws')",
+    'bindSshShellSocket(webSocket)',
+    "type: 'ready'",
+    "type: 'open'",
+    "type: 'close'",
+    'getCurrentSession(request as Parameters<typeof getCurrentSession>[0], config)',
+    'closeServerShell({ sessionId })',
+  ];
+  const missingSocket = socketRequired.filter((fragment) => !sshSocketSource.includes(fragment));
+  if (missingSocket.length) {
+    throw new Error(`SSH shell websocket bridge guard is incomplete: ${missingSocket.join(', ')}`);
   }
 
   console.log('ok SSH terminal uses live PTY shell streaming and keeps input responsive');
@@ -4435,6 +4478,138 @@ function startMockStreamingAi() {
       });
     });
   });
+}
+
+async function createTemporarySimulatedSshServer(overrides = {}) {
+  const serverResponse = await fetch(`${baseUrl}/api/servers`, {
+    method: 'POST',
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: overrides.name ?? `ws-shell-${Date.now()}`,
+      provider: 'Smoke Lab',
+      region: overrides.region ?? 'US - Los Angeles',
+      publicIp: overrides.publicIp ?? `203.0.113.${Math.floor(Math.random() * 200) + 1}`,
+      privateIp: overrides.privateIp ?? '10.88.0.77',
+      os: overrides.os ?? 'Debian 12',
+      tags: ['smoke', 'ssh', 'websocket'],
+      ssh: {
+        host: overrides.host ?? 'simulated-smoke.local',
+        port: overrides.port ?? 22,
+        username: overrides.username ?? 'root',
+        authType: 'password',
+        password: 'smoke-simulated-only',
+        verifyMode: 'simulate',
+      },
+    }),
+  });
+
+  if (!serverResponse.ok) {
+    throw new Error(`/api/servers websocket setup returned HTTP ${serverResponse.status}`);
+  }
+
+  return await serverResponse.json();
+}
+
+async function assertUnauthorizedShellWebSocket() {
+  const socket = new WebSocket(`${socketBaseUrl}/api/servers/shells/ws`);
+  return await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      socket.close();
+      reject(new Error('SSH WebSocket unauthorized check timed out'));
+    }, 2500);
+
+    socket.addEventListener('open', () => {
+      clearTimeout(timeout);
+      socket.close();
+      reject(new Error('SSH WebSocket unauthorized upgrade unexpectedly opened'));
+    });
+
+    socket.addEventListener('close', () => {
+      clearTimeout(timeout);
+      resolve(true);
+    });
+
+    socket.addEventListener('error', () => {
+      clearTimeout(timeout);
+      resolve(true);
+    });
+
+    socket.on('unexpected-response', (_request, response) => {
+      clearTimeout(timeout);
+      response.resume();
+      resolve(true);
+    });
+  });
+}
+
+async function exerciseShellWebSocket(serverId) {
+  const socket = new WebSocket(`${socketBaseUrl}/api/servers/shells/ws`, {
+    headers: authHeaders,
+  });
+  let readySessionId = '';
+  let text = '';
+  let closed = false;
+  let readyResolver = () => undefined;
+  let readyReject = () => undefined;
+
+  const readyPromise = new Promise((resolve, reject) => {
+    readyResolver = resolve;
+    readyReject = reject;
+  });
+
+  const closePromise = new Promise((resolve, reject) => {
+    socket.addEventListener('close', () => {
+      closed = true;
+      resolve();
+    });
+    socket.addEventListener('error', () => {
+      reject(new Error('SSH WebSocket shell connection failed'));
+    });
+    socket.on('unexpected-response', (_request, response) => {
+      response.resume();
+      reject(new Error('SSH WebSocket shell connection was rejected'));
+    });
+    socket.addEventListener('close', () => {
+      if (!readySessionId) {
+        readyReject(new Error('SSH WebSocket shell closed before readiness'));
+      }
+    });
+  });
+
+  socket.addEventListener('open', () => {
+    socket.send(JSON.stringify({ type: 'open', serverId, cols: 100, rows: 28 }));
+  });
+
+  socket.addEventListener('message', (event) => {
+    const payload = JSON.parse(String(event.data));
+    if (payload.type === 'ready') {
+      readySessionId = payload.sessionId;
+      readyResolver(payload);
+      socket.send(JSON.stringify({ type: 'input', data: 'whoami\n' }));
+      return;
+    }
+    if (payload.type === 'stdout' && payload.content) {
+      text += payload.content;
+      if (text.includes('command simulated.')) {
+        socket.send(JSON.stringify({ type: 'close' }));
+      }
+      return;
+    }
+    if (payload.type === 'close') {
+      closed = true;
+      return;
+    }
+    if (payload.type === 'error') {
+      readyReject(new Error(payload.message ?? 'SSH WebSocket shell returned error'));
+    }
+  });
+
+  await readyPromise;
+  await closePromise;
+  if (!readySessionId) {
+    throw new Error('SSH WebSocket shell did not report session readiness');
+  }
+  return { text, closed, sessionId: readySessionId };
 }
 
 function startMockCustomApi() {

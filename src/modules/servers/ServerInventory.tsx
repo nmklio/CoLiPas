@@ -5,6 +5,7 @@ import { ChevronUp, Copy, Cpu, Database, Edit3, Eraser, FileKey2, Globe2, KeyRou
 import { Language, useI18n } from '../../i18n';
 import {
   closeServerShell,
+  connectServerShellSocket,
   connectServer,
   type ConnectServerPayload,
   deleteServer,
@@ -16,6 +17,8 @@ import {
   streamServerShell,
   writeServerShell,
   type ServerIdentityResponse,
+  type ServerShellStreamEvent,
+  type ServerShellSocketReady,
   updateServer,
 } from '../../services/apiClient';
 import { CloudProvider, ServerNode, ServerStatus, SshAuthType, SshVerifyMode } from '../../types';
@@ -118,6 +121,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const terminalShellIdRef = useRef<string | null>(null);
   const terminalShellServerIdRef = useRef<string | null>(null);
   const terminalShellStreamRef = useRef<EventSource | null>(null);
+  const terminalShellSocketRef = useRef<ReturnType<typeof connectServerShellSocket> | null>(null);
+  const terminalShellTransportRef = useRef<'websocket' | 'compatible' | null>(null);
   const terminalWriteBufferRef = useRef('');
   const terminalWriteRafRef = useRef<number | null>(null);
   const terminalInputBufferRef = useRef('');
@@ -1039,56 +1044,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     terminal.scrollToBottom();
 
     try {
-      const shell = await openServerShell(server.id, getTerminalDimensions());
-      if (!isCurrentTerminalLifecycle(server.id, lifecycleSeq)) {
-        closeServerShell(shell.sessionId).catch(() => undefined);
-        return;
-      }
-      terminalShellIdRef.current = shell.sessionId;
-      setTerminalShellId(shell.sessionId);
-      refreshShellStatus();
-      attachTerminalInput(shell.sessionId);
-      const stream = streamServerShell(
-        shell.sessionId,
-        (event) => {
-          if (sshPanelServerIdRef.current !== server.id) {
-            return;
-          }
-          if ((event.type === 'stdout' || event.type === 'stderr') && event.content) {
-            queueTerminalWrite(terminal, event.content);
-            return;
-          }
-          if (event.type === 'close') {
-            flushTerminalWriteBuffer(terminal);
-            terminal.writeln('\r\nConnection closed.');
-            terminal.scrollToBottom();
-            terminalShellIdRef.current = null;
-            setTerminalShellId(null);
-            terminalShellServerIdRef.current = null;
-            terminalDataSubscriptionRef.current?.dispose();
-            terminalDataSubscriptionRef.current = null;
-            terminalShellStreamRef.current?.close();
-            terminalShellStreamRef.current = null;
-            refreshShellStatus();
-          }
-          if (event.type === 'error') {
-            if (sshConsoleOpenRef.current) {
-              flushTerminalWriteBuffer(terminal);
-              terminal.writeln(`\r\n${event.message ?? 'SSH shell stream failed'}`);
-              terminal.scrollToBottom();
-            }
-          }
-        },
-        (error) => {
-          if (terminalShellIdRef.current && sshConsoleOpenRef.current) {
-            flushTerminalWriteBuffer(terminal);
-            terminal.writeln(`\r\n${error.message}`);
-            terminal.scrollToBottom();
-          }
-        },
-        { replayHistory: sshConsoleReplayHistoryRef.current },
-      );
-      terminalShellStreamRef.current = stream;
+      await openTerminalTransport(server, terminal, lifecycleSeq);
 
       const mergedProbe = {
         host: server.ssh?.host || server.publicIp,
@@ -1101,7 +1057,6 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       setLoginProbe(mergedProbe);
       showActionMessage(t('servers.sshConnectedMessage', { name: server.name }));
       scheduleTerminalFit(true);
-      terminal.scrollToBottom();
       window.setTimeout(() => terminal.focus(), 30);
     } catch (error) {
       closeActiveShellSession();
@@ -1126,38 +1081,10 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       return;
     }
 
-    if (!terminalShellStreamRef.current) {
+    if (!terminalShellStreamRef.current && !terminalShellSocketRef.current) {
       const stream = streamServerShell(
         sessionId,
-        (event) => {
-          if (sshPanelServerIdRef.current !== server.id) {
-            return;
-          }
-          if ((event.type === 'stdout' || event.type === 'stderr') && event.content) {
-            queueTerminalWrite(terminal, event.content);
-            return;
-          }
-          if (event.type === 'close') {
-            flushTerminalWriteBuffer(terminal);
-            terminal.writeln('\r\nConnection closed.');
-            terminal.scrollToBottom();
-            terminalShellIdRef.current = null;
-            setTerminalShellId(null);
-            terminalShellServerIdRef.current = null;
-            terminalDataSubscriptionRef.current?.dispose();
-            terminalDataSubscriptionRef.current = null;
-            terminalShellStreamRef.current?.close();
-            terminalShellStreamRef.current = null;
-            refreshShellStatus();
-          }
-          if (event.type === 'error') {
-            if (sshConsoleOpenRef.current) {
-              flushTerminalWriteBuffer(terminal);
-              terminal.writeln(`\r\n${event.message ?? 'SSH shell stream failed'}`);
-              terminal.scrollToBottom();
-            }
-          }
-        },
+        (event) => handleTerminalStreamEvent(server.id, terminal, event),
         (error) => {
           if (terminalShellIdRef.current && sshConsoleOpenRef.current) {
             flushTerminalWriteBuffer(terminal);
@@ -1181,6 +1108,137 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     scheduleTerminalFit(true);
     terminal.scrollToBottom();
     window.setTimeout(() => terminal.focus(), 30);
+  }
+
+  async function openTerminalTransport(server: ServerNode, terminal: XTerm, lifecycleSeq: number) {
+    try {
+      await openWebSocketTerminalTransport(server, terminal, lifecycleSeq);
+    } catch (socketError) {
+      if (!isCurrentTerminalLifecycle(server.id, lifecycleSeq)) {
+        return;
+      }
+      terminal.writeln('\r\nWebSocket terminal unavailable, falling back to compatible stream mode...');
+      terminal.scrollToBottom();
+      await openCompatibleTerminalTransport(server, terminal, lifecycleSeq);
+      if (socketError instanceof Error) {
+        console.info(`SSH WebSocket fallback: ${socketError.message}`);
+      }
+    }
+  }
+
+  function openWebSocketTerminalTransport(server: ServerNode, terminal: XTerm, lifecycleSeq: number) {
+    return new Promise<void>((resolve, reject) => {
+      let settled = false;
+      let ready = false;
+      const socket = connectServerShellSocket(
+        server.id,
+        getTerminalDimensions(),
+        (event) => handleTerminalStreamEvent(server.id, terminal, event),
+        (event) => {
+          if (!isCurrentTerminalLifecycle(server.id, lifecycleSeq)) {
+            closeServerShell(event.sessionId).catch(() => undefined);
+            socket.close();
+            return;
+          }
+          ready = true;
+          terminalShellIdRef.current = event.sessionId;
+          setTerminalShellId(event.sessionId);
+          terminalShellServerIdRef.current = server.id;
+          attachTerminalInput(event.sessionId);
+          refreshShellStatus();
+          if (!settled) {
+            settled = true;
+            window.clearTimeout(timeout);
+            resolve();
+          }
+        },
+        (error) => {
+          if (!ready && !settled) {
+            settled = true;
+            window.clearTimeout(timeout);
+            terminalShellSocketRef.current = null;
+            terminalShellTransportRef.current = null;
+            socket.close();
+            reject(error);
+            return;
+          }
+          if (terminalShellIdRef.current && sshConsoleOpenRef.current) {
+            flushTerminalWriteBuffer(terminal);
+            terminal.writeln(`\r\n${error.message}`);
+            terminal.scrollToBottom();
+          }
+        },
+      );
+      terminalShellSocketRef.current = socket;
+      terminalShellTransportRef.current = 'websocket';
+      const timeout = window.setTimeout(() => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        terminalShellSocketRef.current = null;
+        terminalShellTransportRef.current = null;
+        socket.close();
+        reject(new Error('SSH WebSocket connection timed out'));
+      }, 5000);
+    });
+  }
+
+  async function openCompatibleTerminalTransport(server: ServerNode, terminal: XTerm, lifecycleSeq: number) {
+    const shell = await openServerShell(server.id, getTerminalDimensions());
+    if (!isCurrentTerminalLifecycle(server.id, lifecycleSeq)) {
+      closeServerShell(shell.sessionId).catch(() => undefined);
+      return;
+    }
+    terminalShellIdRef.current = shell.sessionId;
+    setTerminalShellId(shell.sessionId);
+    terminalShellServerIdRef.current = server.id;
+    terminalShellTransportRef.current = 'compatible';
+    refreshShellStatus();
+    attachTerminalInput(shell.sessionId);
+    const stream = streamServerShell(
+      shell.sessionId,
+      (event) => handleTerminalStreamEvent(server.id, terminal, event),
+      (error) => {
+        if (terminalShellIdRef.current && sshConsoleOpenRef.current) {
+          flushTerminalWriteBuffer(terminal);
+          terminal.writeln(`\r\n${error.message}`);
+          terminal.scrollToBottom();
+        }
+      },
+      { replayHistory: sshConsoleReplayHistoryRef.current },
+    );
+    terminalShellStreamRef.current = stream;
+  }
+
+  function handleTerminalStreamEvent(serverId: string, terminal: XTerm, event: ServerShellStreamEvent) {
+    if (sshPanelServerIdRef.current !== serverId) {
+      return;
+    }
+    if ((event.type === 'stdout' || event.type === 'stderr') && event.content) {
+      queueTerminalWrite(terminal, event.content);
+      return;
+    }
+    if (event.type === 'close') {
+      flushTerminalWriteBuffer(terminal);
+      terminal.writeln('\r\nConnection closed.');
+      terminal.scrollToBottom();
+      terminalShellIdRef.current = null;
+      setTerminalShellId(null);
+      terminalShellServerIdRef.current = null;
+      terminalDataSubscriptionRef.current?.dispose();
+      terminalDataSubscriptionRef.current = null;
+      terminalShellStreamRef.current?.close();
+      terminalShellStreamRef.current = null;
+      terminalShellSocketRef.current = null;
+      terminalShellTransportRef.current = null;
+      refreshShellStatus();
+    }
+    if (event.type === 'error' && sshConsoleOpenRef.current) {
+      flushTerminalWriteBuffer(terminal);
+      terminal.writeln(`\r\n${event.message ?? 'SSH shell stream failed'}`);
+      terminal.scrollToBottom();
+    }
   }
 
   async function ensureXterm() {
@@ -1321,11 +1379,19 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     terminalInputBufferRef.current = '';
     terminalInputChainRef.current = terminalInputChainRef.current
       .catch(() => undefined)
-      .then(() => writeServerShell(sessionId, input))
+      .then(() => sendTerminalInput(sessionId, input))
       .catch((error) => {
         xtermRef.current?.writeln(`\r\n${error instanceof Error ? error.message : 'SSH input failed'}`);
       });
     return terminalInputChainRef.current;
+  }
+
+  function sendTerminalInput(sessionId: string, input: string) {
+    if (terminalShellTransportRef.current === 'websocket' && terminalShellSocketRef.current) {
+      terminalShellSocketRef.current.sendInput(input);
+      return Promise.resolve();
+    }
+    return writeServerShell(sessionId, input);
   }
 
   function clearTerminalInputBuffer() {
@@ -1364,8 +1430,16 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     }
 
     if (pushResize && terminalShellIdRef.current) {
-      resizeServerShell(terminalShellIdRef.current, getTerminalDimensions()).catch(() => undefined);
+      pushTerminalResize(terminalShellIdRef.current, getTerminalDimensions());
     }
+  }
+
+  function pushTerminalResize(sessionId: string, dimensions: { cols: number; rows: number }) {
+    if (terminalShellTransportRef.current === 'websocket' && terminalShellSocketRef.current) {
+      terminalShellSocketRef.current.resize(dimensions);
+      return;
+    }
+    resizeServerShell(sessionId, dimensions).catch(() => undefined);
   }
 
   function appendTerminalOutput(command: string, output: string) {
@@ -1418,7 +1492,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
 
     setSshInterrupting(true);
     flushTerminalInput(sessionId)
-      .then(() => writeServerShell(sessionId, '\u0003'))
+      .then(() => sendTerminalInput(sessionId, '\u0003'))
       .then(() => {
         showActionMessage(t('servers.sshInterruptSent'));
         refreshShellStatus();
@@ -1466,6 +1540,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
 
   function closeActiveShellSession(syncState = true) {
     const sessionId = terminalShellIdRef.current;
+    const transport = terminalShellTransportRef.current;
     terminalShellIdRef.current = null;
     clearTerminalWriteBuffer();
     clearTerminalInputBuffer();
@@ -1477,10 +1552,17 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     terminalDataSubscriptionRef.current = null;
     terminalShellStreamRef.current?.close();
     terminalShellStreamRef.current = null;
+    terminalShellSocketRef.current?.close();
+    terminalShellSocketRef.current = null;
+    terminalShellTransportRef.current = null;
     if (sessionId) {
-      closeServerShell(sessionId)
-        .catch(() => undefined)
-        .finally(() => refreshShellStatus());
+      if (transport === 'websocket') {
+        window.setTimeout(refreshShellStatus, 200);
+      } else {
+        closeServerShell(sessionId)
+          .catch(() => undefined)
+          .finally(() => refreshShellStatus());
+      }
     }
   }
 

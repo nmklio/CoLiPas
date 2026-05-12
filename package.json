@@ -36,6 +36,7 @@
     "topojson-client": "^3.1.0",
     "vite": "^7.2.7",
     "world-atlas": "^2.0.2",
+    "ws": "^8.20.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -46,6 +47,7 @@
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@types/ssh2": "^1.15.5",
+    "@types/ws": "^8.18.1",
     "playwright": "^1.57.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"

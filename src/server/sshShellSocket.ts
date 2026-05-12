@@ -1,0 +1,147 @@
+import type { Server as HttpServer } from 'node:http';
+import { WebSocket, WebSocketServer } from 'ws';
+import type { RuntimeConfig } from './config.js';
+import { getCurrentSession } from './services/authService.js';
+import {
+  closeServerShell,
+  openServerShell,
+  resizeServerShell,
+  subscribeServerShell,
+  writeServerShell,
+} from './services/inventoryService.js';
+import type { SshShellStreamEvent } from './services/sshAccessService.js';
+
+type ClientMessage =
+  | { type: 'open'; serverId?: unknown; cols?: unknown; rows?: unknown }
+  | { type: 'input'; data?: unknown }
+  | { type: 'resize'; cols?: unknown; rows?: unknown }
+  | { type: 'close' };
+
+export function attachSshShellSocketServer(server: HttpServer, config: RuntimeConfig) {
+  const socketServer = new WebSocketServer({
+    noServer: true,
+    maxPayload: 16 * 1024,
+  });
+
+  server.on('upgrade', (request, socket, head) => {
+    const path = new URL(request.url ?? '/', 'http://localhost').pathname;
+    if (path !== '/api/servers/shells/ws') {
+      socket.destroy();
+      return;
+    }
+
+    if (!getCurrentSession(request as Parameters<typeof getCurrentSession>[0], config)) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
+    socketServer.handleUpgrade(request, socket, head, (webSocket) => {
+      socketServer.emit('connection', webSocket, request);
+    });
+  });
+
+  socketServer.on('connection', (webSocket) => {
+    bindSshShellSocket(webSocket);
+  });
+}
+
+function bindSshShellSocket(webSocket: WebSocket) {
+  let sessionId = '';
+  let unsubscribe: (() => void) | null = null;
+  let closing = false;
+
+  const send = (payload: unknown) => {
+    if (webSocket.readyState === WebSocket.OPEN) {
+      webSocket.send(JSON.stringify(payload));
+    }
+  };
+
+  const cleanup = () => {
+    if (closing) {
+      return;
+    }
+    closing = true;
+    unsubscribe?.();
+    unsubscribe = null;
+    if (sessionId) {
+      closeServerShell({ sessionId });
+      sessionId = '';
+    }
+  };
+
+  webSocket.on('message', async (raw) => {
+    try {
+      const message = JSON.parse(raw.toString('utf8')) as ClientMessage;
+      if (message.type === 'open') {
+        if (sessionId || closing) {
+          return;
+        }
+
+        const shell = await openServerShell({
+          serverId: message.serverId,
+          cols: message.cols,
+          rows: message.rows,
+        });
+        if (closing) {
+          closeServerShell({ sessionId: shell.sessionId });
+          return;
+        }
+        sessionId = shell.sessionId;
+        send({
+          type: 'ready',
+          serverId: shell.serverId,
+          serverName: shell.serverName,
+          correlationId: shell.correlationId,
+          sessionId: shell.sessionId,
+          mode: shell.mode,
+          connectedAt: shell.connectedAt,
+        });
+        unsubscribe = subscribeServerShell({ sessionId, replay: 1 }, (event: SshShellStreamEvent) => {
+          send(event);
+          if (event.type === 'close') {
+            cleanup();
+            webSocket.close(1000, 'shell closed');
+          }
+        });
+        if (closing) {
+          cleanup();
+          return;
+        }
+        return;
+      }
+
+      if (!sessionId) {
+        send({ type: 'error', message: 'SSH shell session not ready' });
+        return;
+      }
+
+      if (message.type === 'input') {
+        writeServerShell({ sessionId, input: typeof message.data === 'string' ? message.data : '' });
+        return;
+      }
+
+      if (message.type === 'resize') {
+        resizeServerShell({ sessionId, cols: message.cols, rows: message.rows });
+        return;
+      }
+
+      if (message.type === 'close') {
+        cleanup();
+        send({ type: 'close', signal: 'closed' });
+        webSocket.close(1000, 'closed');
+      }
+    } catch (error) {
+      if (sessionId) {
+        cleanup();
+      }
+      send({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'SSH WebSocket failed',
+      });
+    }
+  });
+
+  webSocket.on('close', cleanup);
+  webSocket.on('error', cleanup);
+}

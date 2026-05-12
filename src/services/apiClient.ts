@@ -169,6 +169,10 @@ export interface ServerShellStreamEvent {
   connectedAt?: string;
 }
 
+export interface ServerShellSocketReady extends ServerShellResponse {
+  type: 'ready';
+}
+
 export interface ServerActionResponse extends ServerCommandResponse {
   id: string;
   action: 'powerOn' | 'shutdown' | 'reboot';
@@ -841,6 +845,73 @@ export function streamServerShell(
     onError(new Error('SSH shell stream disconnected'));
   };
   return source;
+}
+
+export function connectServerShellSocket(
+  serverId: string,
+  dimensions: { cols?: number; rows?: number },
+  onEvent: (event: ServerShellStreamEvent) => void,
+  onReady: (event: ServerShellSocketReady) => void,
+  onError: (error: Error) => void,
+) {
+  const socket = new WebSocket(buildServerShellSocketUrl());
+  let opened = false;
+  let ready = false;
+
+  socket.addEventListener('open', () => {
+    opened = true;
+    socket.send(JSON.stringify({ type: 'open', serverId, ...dimensions }));
+  });
+
+  socket.addEventListener('message', (event) => {
+    try {
+      const payload = JSON.parse(String(event.data)) as ServerShellStreamEvent | ServerShellSocketReady;
+      if (payload.type === 'ready') {
+        ready = true;
+        onReady(payload);
+        return;
+      }
+      onEvent(payload);
+    } catch (error) {
+      onError(error instanceof Error ? error : new Error('Invalid SSH WebSocket event'));
+    }
+  });
+
+  socket.addEventListener('error', () => {
+    onError(new Error('SSH WebSocket connection failed'));
+  });
+
+  socket.addEventListener('close', () => {
+    if (!opened || !ready) {
+      onError(new Error('SSH WebSocket connection closed before opening'));
+    }
+  });
+
+  return {
+    sendInput(input: string) {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'input', data: input }));
+      }
+    },
+    resize(nextDimensions: { cols: number; rows: number }) {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'resize', ...nextDimensions }));
+      }
+    },
+    close() {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'close' }));
+      }
+      if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+        socket.close();
+      }
+    },
+  };
+}
+
+function buildServerShellSocketUrl() {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${window.location.host}/api/servers/shells/ws`;
 }
 
 export async function createOperationTask(payload: OperationTaskRequest, fetcher: typeof fetch = fetch) {
