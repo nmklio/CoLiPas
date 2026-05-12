@@ -394,6 +394,33 @@ async function assertSshTerminalPanel(targetPage) {
       const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
       return terminalText.includes('simulated$ id') && terminalText.includes('command simulated.');
     }, undefined, { timeout: 10000 });
+    const longOutputStartedAt = Date.now();
+    await targetPage.evaluate(() => {
+      window.__colipasSshLongTasks = [];
+      if (!window.__colipasSshLongTaskObserver && 'PerformanceObserver' in window) {
+        try {
+          window.__colipasSshLongTaskObserver = new PerformanceObserver((list) => {
+            window.__colipasSshLongTasks.push(...list.getEntries().map((entry) => Math.round(entry.duration)));
+          });
+          window.__colipasSshLongTaskObserver.observe({ entryTypes: ['longtask'] });
+        } catch {
+          window.__colipasSshLongTaskObserver = null;
+        }
+      }
+    });
+    await targetPage.keyboard.type('colipas-long-output', { delay: 1 });
+    await targetPage.keyboard.press('Enter');
+    await targetPage.waitForFunction(() => {
+      const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
+      return terminalText.includes('long-output-80') && terminalText.includes('simulated$');
+    }, undefined, { timeout: 10000 });
+    const longOutputDurationMs = Date.now() - longOutputStartedAt;
+    const sshLongTaskDurations = await targetPage.evaluate(() => window.__colipasSshLongTasks ?? []);
+    const maxLongTaskMs = sshLongTaskDurations.length > 0 ? Math.max(...sshLongTaskDurations) : 0;
+    if (longOutputDurationMs > 6000 || maxLongTaskMs > 750) {
+      throw new Error(`SSH long output rendered too slowly: ${longOutputDurationMs}ms, max long task ${maxLongTaskMs}ms`);
+    }
+    console.log(`ok browser e2e SSH long output rendered in ${longOutputDurationMs}ms with max long task ${maxLongTaskMs}ms`);
     await assertElementWithinViewport(targetPage, '.ssh-console', 'desktop SSH console');
     await targetPage.getByRole('button', { name: /disconnect/i }).click();
     await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });

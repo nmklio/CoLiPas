@@ -118,6 +118,11 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const terminalShellIdRef = useRef<string | null>(null);
   const terminalShellServerIdRef = useRef<string | null>(null);
   const terminalShellStreamRef = useRef<EventSource | null>(null);
+  const terminalWriteBufferRef = useRef('');
+  const terminalWriteRafRef = useRef<number | null>(null);
+  const terminalInputBufferRef = useRef('');
+  const terminalInputTimerRef = useRef<number | null>(null);
+  const terminalInputChainRef = useRef<Promise<void>>(Promise.resolve());
   const terminalCssInjectedRef = useRef(false);
   const actionMessageTimerRef = useRef<number | null>(null);
   const sshConsoleOpenRef = useRef(false);
@@ -1049,17 +1054,12 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
           if (sshPanelServerIdRef.current !== server.id) {
             return;
           }
-          if (event.type === 'stdout' && event.content) {
-            terminal.write(event.content);
-            terminal.scrollToBottom();
-            return;
-          }
-          if (event.type === 'stderr' && event.content) {
-            terminal.write(event.content);
-            terminal.scrollToBottom();
+          if ((event.type === 'stdout' || event.type === 'stderr') && event.content) {
+            queueTerminalWrite(terminal, event.content);
             return;
           }
           if (event.type === 'close') {
+            flushTerminalWriteBuffer(terminal);
             terminal.writeln('\r\nConnection closed.');
             terminal.scrollToBottom();
             terminalShellIdRef.current = null;
@@ -1073,6 +1073,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
           }
           if (event.type === 'error') {
             if (sshConsoleOpenRef.current) {
+              flushTerminalWriteBuffer(terminal);
               terminal.writeln(`\r\n${event.message ?? 'SSH shell stream failed'}`);
               terminal.scrollToBottom();
             }
@@ -1080,6 +1081,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
         },
         (error) => {
           if (terminalShellIdRef.current && sshConsoleOpenRef.current) {
+            flushTerminalWriteBuffer(terminal);
             terminal.writeln(`\r\n${error.message}`);
             terminal.scrollToBottom();
           }
@@ -1132,11 +1134,11 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
             return;
           }
           if ((event.type === 'stdout' || event.type === 'stderr') && event.content) {
-            terminal.write(event.content);
-            terminal.scrollToBottom();
+            queueTerminalWrite(terminal, event.content);
             return;
           }
           if (event.type === 'close') {
+            flushTerminalWriteBuffer(terminal);
             terminal.writeln('\r\nConnection closed.');
             terminal.scrollToBottom();
             terminalShellIdRef.current = null;
@@ -1150,6 +1152,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
           }
           if (event.type === 'error') {
             if (sshConsoleOpenRef.current) {
+              flushTerminalWriteBuffer(terminal);
               terminal.writeln(`\r\n${event.message ?? 'SSH shell stream failed'}`);
               terminal.scrollToBottom();
             }
@@ -1157,6 +1160,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
         },
         (error) => {
           if (terminalShellIdRef.current && sshConsoleOpenRef.current) {
+            flushTerminalWriteBuffer(terminal);
             terminal.writeln(`\r\n${error.message}`);
             terminal.scrollToBottom();
           }
@@ -1281,10 +1285,56 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   function attachTerminalInput(sessionId: string) {
     terminalDataSubscriptionRef.current?.dispose();
     terminalDataSubscriptionRef.current = xtermRef.current?.onData((data) => {
-      writeServerShell(sessionId, data).catch((error) => {
+      queueTerminalInput(sessionId, data);
+    }) ?? null;
+  }
+
+  function queueTerminalInput(sessionId: string, data: string) {
+    terminalInputBufferRef.current += data;
+    if (data.includes('\r') || data.includes('\n') || data.includes('\u0003')) {
+      flushTerminalInput(sessionId);
+      return;
+    }
+
+    if (terminalInputTimerRef.current !== null) {
+      return;
+    }
+
+    terminalInputTimerRef.current = window.setTimeout(() => {
+      terminalInputTimerRef.current = null;
+      flushTerminalInput(sessionId);
+    }, 12);
+  }
+
+  function flushTerminalInput(sessionId = terminalShellIdRef.current) {
+    if (terminalInputTimerRef.current !== null) {
+      window.clearTimeout(terminalInputTimerRef.current);
+      terminalInputTimerRef.current = null;
+    }
+
+    const input = terminalInputBufferRef.current;
+    if (!input || !sessionId) {
+      terminalInputBufferRef.current = '';
+      return terminalInputChainRef.current;
+    }
+
+    terminalInputBufferRef.current = '';
+    terminalInputChainRef.current = terminalInputChainRef.current
+      .catch(() => undefined)
+      .then(() => writeServerShell(sessionId, input))
+      .catch((error) => {
         xtermRef.current?.writeln(`\r\n${error instanceof Error ? error.message : 'SSH input failed'}`);
       });
-    }) ?? null;
+    return terminalInputChainRef.current;
+  }
+
+  function clearTerminalInputBuffer() {
+    if (terminalInputTimerRef.current !== null) {
+      window.clearTimeout(terminalInputTimerRef.current);
+      terminalInputTimerRef.current = null;
+    }
+    terminalInputBufferRef.current = '';
+    terminalInputChainRef.current = Promise.resolve();
   }
 
   function scheduleTerminalFit(pushResize: boolean) {
@@ -1367,7 +1417,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     }
 
     setSshInterrupting(true);
-    writeServerShell(sessionId, '\u0003')
+    flushTerminalInput(sessionId)
+      .then(() => writeServerShell(sessionId, '\u0003'))
       .then(() => {
         showActionMessage(t('servers.sshInterruptSent'));
         refreshShellStatus();
@@ -1416,6 +1467,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   function closeActiveShellSession(syncState = true) {
     const sessionId = terminalShellIdRef.current;
     terminalShellIdRef.current = null;
+    clearTerminalWriteBuffer();
+    clearTerminalInputBuffer();
     if (syncState) {
       setTerminalShellId(null);
     }
@@ -1488,7 +1541,45 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     };
   }
 
+  function queueTerminalWrite(terminal: XTerm, content: string) {
+    terminalWriteBufferRef.current += content;
+    if (terminalWriteRafRef.current !== null) {
+      return;
+    }
+
+    terminalWriteRafRef.current = window.requestAnimationFrame(() => {
+      terminalWriteRafRef.current = null;
+      flushTerminalWriteBuffer(terminal);
+    });
+  }
+
+  function flushTerminalWriteBuffer(terminal = xtermRef.current) {
+    if (terminalWriteRafRef.current !== null) {
+      window.cancelAnimationFrame(terminalWriteRafRef.current);
+      terminalWriteRafRef.current = null;
+    }
+
+    const content = terminalWriteBufferRef.current;
+    if (!content || !terminal) {
+      terminalWriteBufferRef.current = '';
+      return;
+    }
+
+    terminalWriteBufferRef.current = '';
+    terminal.write(content, () => terminal.scrollToBottom());
+  }
+
+  function clearTerminalWriteBuffer() {
+    if (terminalWriteRafRef.current !== null) {
+      window.cancelAnimationFrame(terminalWriteRafRef.current);
+      terminalWriteRafRef.current = null;
+    }
+    terminalWriteBufferRef.current = '';
+  }
+
   function disposeXterm() {
+    clearTerminalWriteBuffer();
+    clearTerminalInputBuffer();
     if (terminalResizeTimerRef.current !== null) {
       window.clearTimeout(terminalResizeTimerRef.current);
       terminalResizeTimerRef.current = null;
