@@ -643,13 +643,41 @@ try {
     !aiNoEvidenceBody.answer?.includes('Local evidence boundary')
     || !aiNoEvidenceBody.answer.includes('has not captured relevant SSH command output')
     || !aiNoEvidenceBody.answer.includes('root@host is only terminal context')
-    || !aiNoEvidenceBody.executionPlan?.command?.includes('ip -brief addr')
-    || !aiNoEvidenceBody.executionPlan.command.includes('ip route')
+    || !['ip addr', 'hostname && whoami && ip -brief addr && ip route'].includes(aiNoEvidenceBody.executionPlan?.command)
   ) {
     throw new Error('/api/ai/analyze no-evidence SSH question did not guard against hallucinated command output');
   }
   if (/current user:\s*root|ip addr output:\s*(?!not captured)/i.test(aiNoEvidenceBody.answer)) {
     throw new Error('/api/ai/analyze no-evidence SSH answer claimed live command results');
+  }
+  const aiDirectExecutionResponse = await fetch(`${baseUrl}/api/ai/analyze`, {
+    method: 'POST',
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      question: '执行 ip addr',
+      provider: {
+        name: 'Smoke AI',
+        baseUrl: 'https://api.example.com/v1',
+        model: 'smoke-model',
+        apiKey: '',
+        temperature: 0.2,
+      },
+      serverId: aiExecutableServer.id,
+      forceRefresh: true,
+    }),
+  });
+  if (!aiDirectExecutionResponse.ok) {
+    throw new Error(`/api/ai/analyze direct SSH execution request returned HTTP ${aiDirectExecutionResponse.status}`);
+  }
+  const aiDirectExecutionBody = await aiDirectExecutionResponse.json();
+  if (
+    aiDirectExecutionBody.simulated !== true
+    || !aiDirectExecutionBody.answer?.includes('Local guarded execution plan')
+    || aiDirectExecutionBody.answer.includes('I cannot directly execute')
+    || aiDirectExecutionBody.executionPlan?.operation !== 'sshCommand'
+    || aiDirectExecutionBody.executionPlan?.command !== 'ip addr'
+  ) {
+    throw new Error('/api/ai/analyze direct SSH execution request did not produce a runnable ip addr execution card');
   }
   const noEvidenceUpstream = await startMockStreamingAi();
   try {
@@ -679,6 +707,34 @@ try {
       || noEvidenceUpstream.requests.length !== 0
     ) {
       throw new Error('/api/ai/analyze sent a no-evidence SSH question to upstream AI instead of enforcing the local evidence boundary');
+    }
+    const directExecutionUpstreamResponse = await fetch(`${baseUrl}/api/ai/analyze`, {
+      method: 'POST',
+      headers: { ...authHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        question: '执行 ip addr',
+        provider: {
+          name: 'Smoke AI upstream',
+          baseUrl: noEvidenceUpstream.baseUrl,
+          model: 'stream-smoke-model',
+          apiKey: 'stream-smoke-key',
+          temperature: 0.2,
+        },
+        serverId: aiExecutableServer.id,
+        forceRefresh: true,
+      }),
+    });
+    if (!directExecutionUpstreamResponse.ok) {
+      throw new Error(`/api/ai/analyze direct SSH execution upstream request returned HTTP ${directExecutionUpstreamResponse.status}`);
+    }
+    const directExecutionUpstreamBody = await directExecutionUpstreamResponse.json();
+    if (
+      directExecutionUpstreamBody.simulated !== true
+      || !directExecutionUpstreamBody.answer?.includes('Local guarded execution plan')
+      || directExecutionUpstreamBody.executionPlan?.command !== 'ip addr'
+      || noEvidenceUpstream.requests.length !== 0
+    ) {
+      throw new Error('/api/ai/analyze direct SSH execution request should stay local and produce a runnable card');
     }
   } finally {
     await noEvidenceUpstream.close();
@@ -2949,9 +3005,12 @@ function assertAiResponseCachingGuards() {
     'Recent sanitized SSH terminal evidence',
     'No factual SSH execution evidence is available',
     'Local evidence boundary',
+    'Local guarded execution plan',
     'questionNeedsLiveSshEvidence',
+    'questionRequestsDirectSshExecution',
     'questionNeedsNetworkEvidence',
     'isLocalEvidenceBoundaryAnswer',
+    'extractSafeRequestedSshCommand',
     'root@host is only terminal context',
     'Execution evidence:',
   ];

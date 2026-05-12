@@ -453,6 +453,10 @@ function shouldUseOperationsContext(question: string, selectedServer?: ServerNod
     return true;
   }
 
+  if (questionRequestsDirectSshExecution(question) || questionNeedsLiveSshEvidence(question)) {
+    return true;
+  }
+
   const normalized = question.toLowerCase();
   const operationsKeywords = [
     'server',
@@ -541,25 +545,36 @@ function buildSimulatedAnswer(
     ...priorEvidence,
     ...latestShellEvidence.map((item) => item.transcript),
   ].join('\n');
+  const directExecutionRequest = questionRequestsDirectSshExecution(question);
   if (
     includeOperationsContext
     && questionNeedsLiveSshEvidence(question)
     && !evidenceAppearsRelevantToQuestion(question, combinedEvidenceText)
   ) {
     return {
-      answer: [
-        'Local evidence boundary. CoLiPas has not captured relevant SSH command output for this question yet.',
-        `Question: ${question}`,
-        '',
-        'What this means:',
-        '- I cannot state the current user, IP address, route table, or command output until a guarded SSH command or live terminal output provides that evidence.',
-        '- A shell prompt such as root@host is only terminal context; it is not enough to prove the result of whoami, ip addr, or ip route.',
-        '',
-        'Next action:',
-        executionPlan?.command
-          ? `- Use the guarded action card below to run: ${executionPlan.command}`
-          : '- Open the live SSH terminal, run the needed command, then ask again with the captured output.',
-      ].join('\n'),
+      answer: directExecutionRequest
+        ? [
+          'Local guarded execution plan. CoLiPas prepared a safe SSH command card for this request.',
+          `Question: ${question}`,
+          executionPlan?.command ? `Command: ${executionPlan.command}` : 'Command: unavailable',
+          '',
+          'Next action:',
+          '- Review the guarded action card below, then click Submit to run it through operations preflight and audit logging.',
+          '- I will not claim command output until the execution card returns evidence.',
+        ].join('\n')
+        : [
+          'Local evidence boundary. CoLiPas has not captured relevant SSH command output for this question yet.',
+          `Question: ${question}`,
+          '',
+          'What this means:',
+          '- I cannot state the current user, IP address, route table, or command output until a guarded SSH command or live terminal output provides that evidence.',
+          '- A shell prompt such as root@host is only terminal context; it is not enough to prove the result of whoami, ip addr, or ip route.',
+          '',
+          'Next action:',
+          executionPlan?.command
+            ? `- Use the guarded action card below to run: ${executionPlan.command}`
+            : '- Open the live SSH terminal, run the needed command, then ask again with the captured output.',
+        ].join('\n'),
       executionPlan,
     };
   }
@@ -710,6 +725,11 @@ function questionNeedsLiveSshEvidence(question: string) {
   return /ip\s+addr|ip\s+-brief|ip\s+route|route\s+-n|ifconfig|whoami|\bid\b|current\s+user|command\s+output|ssh\s+output|公网|内网|当前用户|当前\s*用户|命令输出|执行结果|输出|路由|网络|网卡|地址/i.test(question);
 }
 
+function questionRequestsDirectSshExecution(question: string) {
+  return Boolean(extractSafeRequestedSshCommand(question))
+    && /run|execute|exec|执行|运行|查看|检查|查一下|命令/i.test(question);
+}
+
 function questionNeedsNetworkEvidence(question: string) {
   return /ip\s+addr|ip\s+-brief|ip\s+route|route\s+-n|ifconfig|\bip\b|公网|内网|路由|网络|网卡|地址/i.test(question);
 }
@@ -719,7 +739,7 @@ function questionNeedsUserEvidence(question: string) {
 }
 
 function isLocalEvidenceBoundaryAnswer(answer: string) {
-  return answer.startsWith('Local evidence boundary.');
+  return answer.startsWith('Local evidence boundary.') || answer.startsWith('Local guarded execution plan.');
 }
 
 function evidenceAppearsRelevantToQuestion(question: string, evidenceText: string) {
@@ -804,12 +824,12 @@ function buildExecutionPlan(
   }
 
   const command = questionNeedsNetworkEvidence(question)
-    ? 'hostname && whoami && ip -brief addr && ip route'
+    ? (extractSafeRequestedSshCommand(question) ?? 'hostname && whoami && ip -brief addr && ip route')
     : questionNeedsUserEvidence(question)
-      ? 'whoami && id && hostname'
+      ? (extractSafeRequestedSshCommand(question) ?? 'whoami && id && hostname')
       : wantsHealth
-        ? 'hostname && uptime && df -h /'
-        : 'uname -a && uptime && whoami';
+        ? (extractSafeRequestedSshCommand(question) ?? 'hostname && uptime && df -h /')
+        : (extractSafeRequestedSshCommand(question) ?? 'uname -a && uptime && whoami');
 
   return {
     title: `Run SSH check on ${selectedServer ? primaryServer.name : 'connected servers'}`,
@@ -822,6 +842,50 @@ function buildExecutionPlan(
     confirmed: false,
     safetyNote: 'This command is submitted through operations preflight first, then executed by the existing SSH service.',
   };
+}
+
+function extractSafeRequestedSshCommand(question: string) {
+  const normalized = question.toLowerCase().replace(/\s+/g, ' ').trim();
+  const compact = normalized.replace(/\s+/g, '');
+
+  if (/\bip\s+-brief\s+addr\b/.test(normalized) || compact.includes('ip-briefaddr')) {
+    return 'ip -brief addr';
+  }
+  if (/\bip\s+addr\b/.test(normalized) || compact.includes('ipaddr')) {
+    return 'ip addr';
+  }
+  if (/\bip\s+route\b/.test(normalized) || compact.includes('iproute')) {
+    return 'ip route';
+  }
+  if (/\bifconfig\b/.test(normalized)) {
+    return 'ifconfig';
+  }
+  if (/\bwhoami\b/.test(normalized)) {
+    return 'whoami';
+  }
+  if (/(^|[^\w-])id($|[^\w-])/.test(normalized)) {
+    return 'id';
+  }
+  if (/\bhostname\b/.test(normalized)) {
+    return 'hostname';
+  }
+  if (/\buptime\b/.test(normalized)) {
+    return 'uptime';
+  }
+  if (/\bdf\s+-h\b/.test(normalized)) {
+    return 'df -h /';
+  }
+  if (/\bfree\s+-h\b/.test(normalized)) {
+    return 'free -h';
+  }
+  if (/\buname\s+-a\b/.test(normalized)) {
+    return 'uname -a';
+  }
+  if (/\bdocker\s+ps\b/.test(normalized)) {
+    return 'docker ps';
+  }
+
+  return undefined;
 }
 
 async function sendAnswerInChunks(answer: string, send: (chunk: string) => void, delayMs: number) {
