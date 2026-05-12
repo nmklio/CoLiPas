@@ -2582,6 +2582,18 @@ function assertAiProviderSecretNotPersisted() {
     throw new Error('AI model refresh must ignore stale model-list responses');
   }
 
+  if (!aiConsoleSource.includes('streamChunkBufferRef') || !aiConsoleSource.includes('aiStreamFlushIntervalMs')) {
+    throw new Error('AI streaming output must be buffered to avoid one React render per network chunk');
+  }
+
+  if (!aiConsoleSource.includes('aiTransientStatusTtlMs') || !aiConsoleSource.includes('setConnectionTest(null)')) {
+    throw new Error('AI transient status chips must auto-clear so they do not squeeze the chat panel');
+  }
+
+  if (!aiConsoleSource.includes('providerCustody') || !aiConsoleSource.includes('ai.keyCustodyDatabase')) {
+    throw new Error('AI settings panel must expose server-side key custody state after saving provider settings');
+  }
+
   if (!aiConsoleSource.includes('window.localStorage.removeItem(aiStateStorageKey)')) {
     throw new Error('AI console must clear legacy persisted chat state from localStorage');
   }
@@ -2751,7 +2763,7 @@ function assertAccountUiGuards() {
   const cssFragments = [
     '.brand-mark img',
     '.avatar-upload-row',
-    'width: min(432px, calc(100vw - 288px))',
+    'width: min(448px, calc(100vw - 288px))',
     'box-shadow: 0 26px 72px rgba(12, 30, 35, 0.18)',
     'display: flex',
     '.ai-dock-body.chat-mode',
@@ -3103,8 +3115,8 @@ function assertCustomApiSecretNotPersisted() {
     '.api-integration-row',
     '.api-integration-row b',
     'grid-template-columns: minmax(0, 1fr)',
-    'width: min(432px, calc(100vw - 288px))',
-    'height: min(640px, calc(100vh - 96px))',
+    'width: min(448px, calc(100vw - 288px))',
+    'height: min(660px, calc(100vh - 88px))',
   ];
   for (const fragment of requiredStyleFragments) {
     if (!globalStyleSource.includes(fragment)) {

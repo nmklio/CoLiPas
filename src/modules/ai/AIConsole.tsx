@@ -52,6 +52,7 @@ interface AIConsoleProps {
 
 type AiChatRole = 'user' | 'assistant';
 type AiMessageStatus = 'done' | 'streaming' | 'cached' | 'error' | 'stopped';
+type AiProviderManagedBy = 'database' | 'environment' | 'none';
 
 interface AiChatMessage {
   id: string;
@@ -85,11 +86,19 @@ interface StoredAIConsoleState {
   connectionTest: AiConnectionTestResponse | null;
 }
 
+interface AiProviderCustodyState {
+  managedBy: AiProviderManagedBy;
+  hasStoredApiKey: boolean;
+  updatedAt: string | null;
+}
+
 const aiProviderStorageKey = 'colipas.aiProvider';
 const aiStateStorageKey = 'colipas.aiConsoleState';
 const aiResponseCacheStorageKey = 'colipas.aiResponseCache';
 const aiResponseCacheTtlMs = 10 * 60 * 1000;
 const aiResponseCacheMaxEntries = 60;
+const aiStreamFlushIntervalMs = 48;
+const aiTransientStatusTtlMs = 7200;
 const fallbackModelOptions = ['gpt-5.5', 'gpt-5.4', 'gpt-4.1-mini', 'deepseek-chat', 'qwen-plus'];
 const aiExecutionCopyByLanguage: Record<string, {
   plan: string;
@@ -217,6 +226,11 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [providerSaving, setProviderSaving] = useState(false);
   const [providerSavedMessage, setProviderSavedMessage] = useState('');
+  const [providerCustody, setProviderCustody] = useState<AiProviderCustodyState>({
+    managedBy: 'none',
+    hasStoredApiKey: false,
+    updatedAt: null,
+  });
   const [newChatReady, setNewChatReady] = useState(false);
   const [aiTaskRunning, setAiTaskRunning] = useState(false);
   const [aiTaskDecision, setAiTaskDecision] = useState<'allow' | 'cancel'>('allow');
@@ -227,6 +241,10 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
   const chatThreadRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const newChatTimerRef = useRef<number | null>(null);
+  const providerSavedTimerRef = useRef<number | null>(null);
+  const transientStatusTimerRef = useRef<number | null>(null);
+  const streamFlushTimerRef = useRef<number | null>(null);
+  const streamChunkBufferRef = useRef(new Map<string, { sessionId: string; messageId: string; content: string; fallbackPrompt: string }>());
   const modelRequestSeqRef = useRef(0);
   const aiStatePersistTimerRef = useRef<number | null>(null);
   const questionRef = useRef<HTMLTextAreaElement>(null);
@@ -277,6 +295,11 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
           return;
         }
         setServerAiConfigured(settings.configured || config.ai.configured);
+        setProviderCustody({
+          managedBy: settings.managedBy ?? config.ai.managedBy ?? (settings.configured || config.ai.configured ? 'environment' : 'none'),
+          hasStoredApiKey: settings.hasStoredApiKey ?? config.ai.hasStoredApiKey ?? false,
+          updatedAt: settings.updatedAt ?? null,
+        });
         setProvider((current) => ({
           ...current,
           name: settings.provider.name || current.name,
@@ -293,6 +316,11 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
             return;
           }
           setServerAiConfigured(config.ai.configured);
+          setProviderCustody({
+            managedBy: config.ai.managedBy ?? (config.ai.configured ? 'environment' : 'none'),
+            hasStoredApiKey: config.ai.hasStoredApiKey ?? false,
+            updatedAt: null,
+          });
           setProvider((current) => ({
             ...current,
             baseUrl: current.baseUrl === defaultAIProvider.baseUrl && config.ai.baseUrl ? config.ai.baseUrl : current.baseUrl,
@@ -317,6 +345,16 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
     if (newChatTimerRef.current) {
       window.clearTimeout(newChatTimerRef.current);
     }
+    if (providerSavedTimerRef.current) {
+      window.clearTimeout(providerSavedTimerRef.current);
+    }
+    if (transientStatusTimerRef.current) {
+      window.clearTimeout(transientStatusTimerRef.current);
+    }
+    if (streamFlushTimerRef.current) {
+      window.clearTimeout(streamFlushTimerRef.current);
+    }
+    streamChunkBufferRef.current.clear();
     if (aiStatePersistTimerRef.current) {
       window.clearTimeout(aiStatePersistTimerRef.current);
     }
@@ -328,6 +366,30 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
       aiStatePersistTimerRef.current = null;
     }
   }, [activeSessionId, connectionTest, sessions]);
+
+  useEffect(() => {
+    if (transientStatusTimerRef.current) {
+      window.clearTimeout(transientStatusTimerRef.current);
+      transientStatusTimerRef.current = null;
+    }
+
+    if (!connectionTest && !modelMessage) {
+      return undefined;
+    }
+
+    transientStatusTimerRef.current = window.setTimeout(() => {
+      setConnectionTest(null);
+      setModelMessage('');
+      transientStatusTimerRef.current = null;
+    }, aiTransientStatusTtlMs);
+
+    return () => {
+      if (transientStatusTimerRef.current) {
+        window.clearTimeout(transientStatusTimerRef.current);
+        transientStatusTimerRef.current = null;
+      }
+    };
+  }, [connectionTest, modelMessage]);
 
   useEffect(() => {
     setAiTaskDecision('allow');
@@ -430,8 +492,9 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
 
     try {
       const result = await streamAiAnalysis(requestQuestion, provider, requestServerId, (chunk) => {
-        appendAssistantMessage(sessionId, assistantMessage.id, chunk, requestPrompt);
+        queueAssistantMessageChunk(sessionId, assistantMessage.id, chunk, requestPrompt);
       }, { forceRefresh: requestForceRefresh, messages: requestHistory, signal: controller.signal });
+      flushAssistantMessageChunks();
       if (useLocalCache) {
         setCachedAiResponse(cacheKey, result);
       }
@@ -441,6 +504,7 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
         meta: analysisToMessageMeta(result),
       }, result);
     } catch (requestError) {
+      flushAssistantMessageChunks();
       const stopped = controller.signal.aborted;
       updateAssistantMessage(sessionId, assistantMessage.id, {
         status: stopped ? 'stopped' : 'error',
@@ -511,6 +575,11 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
     try {
       const settings = await saveAiProviderSettings(provider);
       setServerAiConfigured(settings.configured);
+      setProviderCustody({
+        managedBy: settings.managedBy,
+        hasStoredApiKey: settings.hasStoredApiKey,
+        updatedAt: settings.updatedAt,
+      });
       setProvider((current) => ({
         ...current,
         name: settings.provider.name,
@@ -521,7 +590,13 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
       }));
       setModelOptions((current) => uniqueModels([settings.provider.model, ...current, ...fallbackModelOptions]));
       setProviderSavedMessage(t('ai.providerSaved'));
-      window.setTimeout(() => setProviderSavedMessage(''), 2600);
+      if (providerSavedTimerRef.current) {
+        window.clearTimeout(providerSavedTimerRef.current);
+      }
+      providerSavedTimerRef.current = window.setTimeout(() => {
+        setProviderSavedMessage('');
+        providerSavedTimerRef.current = null;
+      }, 2600);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : t('account.saveFailed'));
     } finally {
@@ -691,6 +766,12 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
         {settingsOpen ? (
           <form className="config-panel ai-dock-settings" onSubmit={(event) => event.preventDefault()}>
             <h3><Settings2 size={18} /> {t('ai.llmSettings')}</h3>
+            <div className={providerCustody.managedBy === 'none' ? 'ai-provider-custody empty' : 'ai-provider-custody ok'}>
+              <ShieldCheck size={16} />
+              <span>{t('ai.keyCustody')}</span>
+              <strong>{formatProviderCustodyLabel(providerCustody.managedBy, t)}</strong>
+              <small>{formatProviderCustodyDetail(providerCustody, t, language)}</small>
+            </div>
             <label className="field-block">
               {t('ai.providerName')}
               <input value={provider.name} onChange={(event) => setProvider({ ...provider, name: event.target.value })} />
@@ -731,19 +812,21 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
                 onChange={(event) => setProvider({ ...provider, temperature: Number(event.target.value) })}
               />
             </label>
-            <button type="button" className="tool-button wide primary" onClick={handleSaveProvider} disabled={providerSaving || !validation.valid}>
-              <ShieldCheck size={16} />
-              {providerSaving ? t('common.processing') : t('common.save')}
-            </button>
+            <div className="ai-dock-settings-actions">
+              <button type="button" className="tool-button wide primary" onClick={handleSaveProvider} disabled={providerSaving || !validation.valid}>
+                <ShieldCheck size={16} />
+                {providerSaving ? t('common.processing') : t('common.save')}
+              </button>
+              <button type="button" className="tool-button wide" onClick={handleTestConnection} disabled={testing || !validation.valid}>
+                <PlugZap size={16} />
+                {testing ? t('ai.testingStreaming') : t('ai.testStreaming')}
+              </button>
+              <button type="button" className="tool-button wide" onClick={() => refreshModels()} disabled={modelsLoading || !validation.valid}>
+                <RefreshCw size={16} />
+                {modelsLoading ? t('common.processing') : t('ai.refreshModels')}
+              </button>
+            </div>
             {providerSavedMessage && <div className="validation-box">{providerSavedMessage}</div>}
-            <button type="button" className="tool-button wide" onClick={handleTestConnection} disabled={testing || !validation.valid}>
-              <PlugZap size={16} />
-              {testing ? t('ai.testingStreaming') : t('ai.testStreaming')}
-            </button>
-            <button type="button" className="tool-button wide" onClick={() => refreshModels()} disabled={modelsLoading || !validation.valid}>
-              <RefreshCw size={16} />
-              {modelsLoading ? t('common.processing') : t('ai.refreshModels')}
-            </button>
             {connectionTest && (
               <div className="ping-card">
                 <span>{t('ai.ping')}</span>
@@ -1038,6 +1121,33 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
     }));
   }
 
+  function queueAssistantMessageChunk(sessionId: string, messageId: string, chunk: string, fallbackPrompt: string) {
+    const bufferKey = `${sessionId}:${messageId}`;
+    const buffered = streamChunkBufferRef.current.get(bufferKey);
+    if (buffered) {
+      buffered.content += chunk;
+    } else {
+      streamChunkBufferRef.current.set(bufferKey, { sessionId, messageId, content: chunk, fallbackPrompt });
+    }
+
+    if (streamFlushTimerRef.current === null) {
+      streamFlushTimerRef.current = window.setTimeout(flushAssistantMessageChunks, aiStreamFlushIntervalMs);
+    }
+  }
+
+  function flushAssistantMessageChunks() {
+    if (streamFlushTimerRef.current !== null) {
+      window.clearTimeout(streamFlushTimerRef.current);
+      streamFlushTimerRef.current = null;
+    }
+
+    const bufferedChunks = Array.from(streamChunkBufferRef.current.values());
+    streamChunkBufferRef.current.clear();
+    bufferedChunks.forEach((item) => {
+      appendAssistantMessage(item.sessionId, item.messageId, item.content, item.fallbackPrompt);
+    });
+  }
+
   function appendExecutionEvidenceMessage(sessionId: string, result: OperationTaskResponse, noOutputLabel: string) {
     const evidenceMessage = createAssistantMessage(
       buildExecutionEvidenceMessage(result, noOutputLabel),
@@ -1119,6 +1229,33 @@ function assistantMessageToAnalysis(message: AiChatMessage, prompt: string): AiA
     cached: message.meta?.cached,
     generatedAt: message.meta?.generatedAt,
   };
+}
+
+function formatProviderCustodyLabel(managedBy: AiProviderManagedBy, t: (key: string, vars?: Record<string, string | number>) => string) {
+  if (managedBy === 'database') {
+    return t('ai.keyCustodyDatabase');
+  }
+  if (managedBy === 'environment') {
+    return t('ai.keyCustodyEnvironment');
+  }
+  return t('ai.keyCustodyNone');
+}
+
+function formatProviderCustodyDetail(
+  custody: AiProviderCustodyState,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+  language: string,
+) {
+  if (custody.managedBy === 'database' && custody.updatedAt) {
+    return t('ai.keyCustodyUpdated', { time: formatDateTime(custody.updatedAt, language) });
+  }
+  if (custody.managedBy === 'database' || custody.hasStoredApiKey) {
+    return t('ai.keyCustodyEncrypted');
+  }
+  if (custody.managedBy === 'environment') {
+    return t('ai.keyCustodyEnvDetail');
+  }
+  return t('ai.keyCustodyNoneDetail');
 }
 
 function formatExecutionTargets(
