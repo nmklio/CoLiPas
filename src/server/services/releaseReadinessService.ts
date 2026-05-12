@@ -13,6 +13,7 @@ import { getDatabasePath, readAppSetting, writeAppSetting } from './database.js'
 import { listAuditEntries } from './auditService.js';
 import { resolveServerLifecycleStatus } from '../../shared/serverFilters.js';
 import { buildReleaseDeploymentEvidence } from './deploymentEvidenceService.js';
+import { getAiProviderStatus } from './aiSettingsService.js';
 
 const readinessHistorySettingId = 'release-readiness-history';
 const maxReadinessSnapshots = 12;
@@ -24,6 +25,7 @@ export function buildReleaseReadiness(config: RuntimeConfig): ReleaseReadinessRe
   const openEvents = operationEvents.filter((event) => event.status === 'open');
   const databaseName = getDatabasePath().split(/[\\/]/).pop() ?? 'unknown';
   const deploymentEvidence = buildReleaseDeploymentEvidence(config);
+  const aiProvider = getAiProviderStatus(config);
   const defaultSecretIssues = [
     config.security.adminPasswordDefault ? 'admin password' : '',
     config.security.sessionSecretDefault ? 'session secret' : '',
@@ -90,11 +92,13 @@ export function buildReleaseReadiness(config: RuntimeConfig): ReleaseReadinessRe
     {
       id: 'ai-runtime',
       label: 'AI provider key',
-      severity: config.ai.apiKey ? 'info' : 'warn',
-      passed: Boolean(config.ai.apiKey),
-      value: config.ai.apiKey ? config.ai.model : 'simulation mode',
-      evidence: config.ai.apiKey ? `Server-side AI model configured: ${config.ai.model}` : 'No server AI key configured; local rule analysis remains available.',
-      recommendedAction: config.ai.apiKey ? 'Continue using server-side key custody.' : 'Add AI_API_KEY on the server when real model answers are required.',
+      severity: aiProvider.configured ? 'info' : 'warn',
+      passed: aiProvider.configured,
+      value: aiProvider.configured ? aiProvider.model : 'simulation mode',
+      evidence: aiProvider.configured
+        ? `Server-side AI model configured through ${aiProvider.managedBy} custody: ${aiProvider.model}`
+        : 'No server AI key configured; local rule analysis remains available.',
+      recommendedAction: aiProvider.configured ? 'Continue using server-side key custody.' : 'Save an AI provider key in settings or set AI_API_KEY on the server when real model answers are required.',
       relatedModule: 'ai',
     },
     {

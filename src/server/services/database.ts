@@ -44,6 +44,11 @@ export function writeAppSetting(id: string, payload: unknown) {
   checkpointDatabaseIfNeeded();
 }
 
+export function deleteAppSetting(id: string) {
+  ensureDatabase().prepare('DELETE FROM app_settings WHERE id = ?').run(id);
+  checkpointDatabaseIfNeeded();
+}
+
 export function replaceServerRows(items: Array<{ id: string }>) {
   const db = ensureDatabase();
   const now = new Date().toISOString();

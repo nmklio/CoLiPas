@@ -4,6 +4,7 @@ import { AIProviderConfig, OperationEvent, ServerNode } from '../../types.js';
 import { RuntimeConfig } from '../config.js';
 import { HttpError } from '../httpErrors.js';
 import type { SshShellEvidenceSummary } from './sshAccessService.js';
+import { resolveAiProvider, type AiProviderInput } from './aiSettingsService.js';
 
 export interface AiAnalysisRequest {
   question: string;
@@ -62,8 +63,6 @@ export interface AiModelsResponse {
   source: 'upstream' | 'fallback';
   message: string;
 }
-
-type AiProviderInput = Partial<AIProviderConfig> | (Partial<AIProviderConfig> & { provider?: Partial<AIProviderConfig> }) | undefined;
 
 const fallbackModelOptions = ['gpt-5.5', 'gpt-5.4', 'gpt-4.1-mini', 'deepseek-chat', 'qwen-plus'];
 const aiResponseCacheTtlMs = 10 * 60 * 1000;
@@ -343,40 +342,6 @@ function uniqueModels(models: string[]) {
       seen.add(model);
       return true;
     });
-}
-
-function resolveAiProvider(input: AiProviderInput, config: RuntimeConfig): AIProviderConfig {
-  const providerInput = input && 'provider' in input && input.provider ? input.provider : input;
-  const inputApiKey = typeof providerInput?.apiKey === 'string' ? providerInput.apiKey.trim() : '';
-  const provider: AIProviderConfig = {
-    name: providerInput?.name?.trim() || 'OpenAI Compatible',
-    baseUrl: providerInput?.baseUrl?.trim() || config.ai.baseUrl,
-    model: providerInput?.model?.trim() || config.ai.model,
-    apiKey: inputApiKey && inputApiKey !== '__use_server_env__' ? inputApiKey : config.ai.apiKey,
-    temperature: typeof providerInput?.temperature === 'number' ? providerInput.temperature : 0.2,
-  };
-
-  try {
-    const url = new URL(provider.baseUrl);
-    if (!['http:', 'https:'].includes(url.protocol)) {
-      throw new Error('invalid protocol');
-    }
-    if (url.username || url.password || url.search || url.hash) {
-      throw new HttpError(400, 'AI Base URL must not include username, password, query parameters, or fragments', 'INVALID_AI_BASE_URL');
-    }
-    provider.baseUrl = url.toString().replace(/\/$/, '');
-  } catch (error) {
-    if (error instanceof HttpError) {
-      throw error;
-    }
-    throw new HttpError(400, 'AI Base URL is not a valid HTTP/HTTPS URL', 'INVALID_AI_BASE_URL');
-  }
-
-  if (!provider.model) {
-    throw new HttpError(400, 'AI model is required', 'INVALID_AI_MODEL');
-  }
-
-  return provider;
 }
 
 function publicProviderEndpoint(baseUrl: string) {

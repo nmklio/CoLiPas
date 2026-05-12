@@ -83,6 +83,8 @@ export interface ConfigSummaryResponse {
     baseUrl: string;
     model: string;
     configured: boolean;
+    hasStoredApiKey?: boolean;
+    managedBy?: 'database' | 'environment' | 'none';
   };
   security: {
     adminPasswordDefault: boolean;
@@ -90,6 +92,14 @@ export interface ConfigSummaryResponse {
     credentialEncryptionKeyConfigured: boolean;
     credentialEncryptionKeyDefault: boolean;
   };
+}
+
+export interface AiProviderSettingsResponse {
+  provider: AIProviderConfig;
+  configured: boolean;
+  hasStoredApiKey: boolean;
+  managedBy: 'database' | 'environment' | 'none';
+  updatedAt: string | null;
 }
 
 export interface SecurityRemediationResponse {
@@ -363,6 +373,29 @@ export async function fetchConfigSummary(fetcher: typeof fetch = fetch) {
   }
 
   return (await response.json()) as ConfigSummaryResponse;
+}
+
+export async function fetchAiProviderSettings(fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/ai/provider');
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as AiProviderSettingsResponse;
+}
+
+export async function saveAiProviderSettings(provider: AIProviderConfig, fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/ai/provider', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(provider),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as AiProviderSettingsResponse;
 }
 
 export async function requestAiAnalysis(

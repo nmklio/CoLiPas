@@ -28,9 +28,11 @@ import {
   AiAnalysisResponse,
   AiChatRequestMessage,
   createOperationTask,
+  fetchAiProviderSettings,
   fetchAiModels,
   fetchConfigSummary,
   preflightOperationTask,
+  saveAiProviderSettings,
   testAiConnection,
   AiConnectionTestResponse,
 } from '../../services/apiClient';
@@ -84,7 +86,6 @@ interface StoredAIConsoleState {
 }
 
 const aiProviderStorageKey = 'colipas.aiProvider';
-const aiProviderSessionKey = 'colipas.aiProviderSession';
 const aiStateStorageKey = 'colipas.aiConsoleState';
 const aiResponseCacheStorageKey = 'colipas.aiResponseCache';
 const aiResponseCacheTtlMs = 10 * 60 * 1000;
@@ -214,6 +215,8 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
   const [modelSource, setModelSource] = useState<'upstream' | 'fallback'>('fallback');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sessionsOpen, setSessionsOpen] = useState(false);
+  const [providerSaving, setProviderSaving] = useState(false);
+  const [providerSavedMessage, setProviderSavedMessage] = useState('');
   const [newChatReady, setNewChatReady] = useState(false);
   const [aiTaskRunning, setAiTaskRunning] = useState(false);
   const [aiTaskDecision, setAiTaskDecision] = useState<'allow' | 'cancel'>('allow');
@@ -255,7 +258,7 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
 
   useEffect(() => {
     persistStoredProvider(provider);
-  }, [provider]);
+  }, [provider.name, provider.baseUrl, provider.model, provider.temperature]);
 
   useEffect(() => {
     const validServerIds = new Set(servers.map((server) => server.id));
@@ -267,29 +270,39 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
   }, [servers]);
 
   useEffect(() => {
-    fetchConfigSummary()
-      .then((config) => {
-        setServerAiConfigured(config.ai.configured);
-        setProvider((current) => {
-          const nextBaseUrl = current.baseUrl === defaultAIProvider.baseUrl && config.ai.baseUrl
-            ? config.ai.baseUrl
-            : current.baseUrl;
-          const nextModel = current.model === defaultAIProvider.model && config.ai.model
-            ? config.ai.model
-            : current.model;
-
-          if (nextBaseUrl === current.baseUrl && nextModel === current.model) {
-            return current;
-          }
-
-          return {
-            ...current,
-            baseUrl: nextBaseUrl,
-            model: nextModel,
-          };
-        });
+    let cancelled = false;
+    Promise.all([fetchConfigSummary(), fetchAiProviderSettings()])
+      .then(([config, settings]) => {
+        if (cancelled) {
+          return;
+        }
+        setServerAiConfigured(settings.configured || config.ai.configured);
+        setProvider((current) => ({
+          ...current,
+          name: settings.provider.name || current.name,
+          baseUrl: settings.provider.baseUrl || config.ai.baseUrl || current.baseUrl,
+          model: settings.provider.model || config.ai.model || current.model,
+          apiKey: '',
+          temperature: settings.provider.temperature,
+        }));
+        setModelOptions((current) => uniqueModels([settings.provider.model, ...current, ...fallbackModelOptions]));
       })
-      .catch(() => undefined);
+      .catch(() => fetchConfigSummary()
+        .then((config) => {
+          if (cancelled) {
+            return;
+          }
+          setServerAiConfigured(config.ai.configured);
+          setProvider((current) => ({
+            ...current,
+            baseUrl: current.baseUrl === defaultAIProvider.baseUrl && config.ai.baseUrl ? config.ai.baseUrl : current.baseUrl,
+            model: current.model === defaultAIProvider.model && config.ai.model ? config.ai.model : current.model,
+          }));
+        })
+        .catch(() => undefined));
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -297,7 +310,7 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
       refreshModels().catch(() => undefined);
     }, 350);
     return () => window.clearTimeout(timer);
-  }, [provider.baseUrl, provider.apiKey]);
+  }, [provider.baseUrl]);
 
   useEffect(() => () => {
     abortControllerRef.current?.abort();
@@ -488,6 +501,31 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
       if (modelRequestSeqRef.current === requestSeq) {
         setModelsLoading(false);
       }
+    }
+  }
+
+  async function handleSaveProvider() {
+    setProviderSaving(true);
+    setProviderSavedMessage('');
+    setError('');
+    try {
+      const settings = await saveAiProviderSettings(provider);
+      setServerAiConfigured(settings.configured);
+      setProvider((current) => ({
+        ...current,
+        name: settings.provider.name,
+        baseUrl: settings.provider.baseUrl,
+        model: settings.provider.model,
+        apiKey: '',
+        temperature: settings.provider.temperature,
+      }));
+      setModelOptions((current) => uniqueModels([settings.provider.model, ...current, ...fallbackModelOptions]));
+      setProviderSavedMessage(t('ai.providerSaved'));
+      window.setTimeout(() => setProviderSavedMessage(''), 2600);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : t('account.saveFailed'));
+    } finally {
+      setProviderSaving(false);
     }
   }
 
@@ -693,6 +731,11 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
                 onChange={(event) => setProvider({ ...provider, temperature: Number(event.target.value) })}
               />
             </label>
+            <button type="button" className="tool-button wide primary" onClick={handleSaveProvider} disabled={providerSaving || !validation.valid}>
+              <ShieldCheck size={16} />
+              {providerSaving ? t('common.processing') : t('common.save')}
+            </button>
+            {providerSavedMessage && <div className="validation-box">{providerSavedMessage}</div>}
             <button type="button" className="tool-button wide" onClick={handleTestConnection} disabled={testing || !validation.valid}>
               <PlugZap size={16} />
               {testing ? t('ai.testingStreaming') : t('ai.testStreaming')}
@@ -1159,12 +1202,11 @@ function loadStoredProvider(): AIProviderConfig {
     }
 
     const storedProvider = JSON.parse(rawProvider) as Partial<AIProviderConfig>;
-    const sessionProvider = loadSessionProvider();
     return {
       name: typeof storedProvider.name === 'string' && storedProvider.name.trim() ? storedProvider.name : defaultAIProvider.name,
       baseUrl: typeof storedProvider.baseUrl === 'string' && storedProvider.baseUrl.trim() ? storedProvider.baseUrl : defaultAIProvider.baseUrl,
       model: typeof storedProvider.model === 'string' && storedProvider.model.trim() ? storedProvider.model : defaultAIProvider.model,
-      apiKey: sessionProvider.apiKey,
+      apiKey: defaultAIProvider.apiKey,
       temperature: typeof storedProvider.temperature === 'number' && Number.isFinite(storedProvider.temperature)
         ? storedProvider.temperature
         : defaultAIProvider.temperature,
@@ -1189,41 +1231,6 @@ function persistStoredProvider(provider: AIProviderConfig) {
   }
 
   window.localStorage.setItem(aiProviderStorageKey, JSON.stringify(toStoredProvider(provider)));
-  persistSessionProvider(provider);
-}
-
-function loadSessionProvider(): Pick<AIProviderConfig, 'apiKey'> {
-  if (typeof window === 'undefined') {
-    return { apiKey: defaultAIProvider.apiKey };
-  }
-
-  try {
-    const rawProvider = window.sessionStorage.getItem(aiProviderSessionKey);
-    if (!rawProvider) {
-      return { apiKey: defaultAIProvider.apiKey };
-    }
-
-    const storedProvider = JSON.parse(rawProvider) as Partial<AIProviderConfig>;
-    return {
-      apiKey: typeof storedProvider.apiKey === 'string' ? storedProvider.apiKey : defaultAIProvider.apiKey,
-    };
-  } catch {
-    return { apiKey: defaultAIProvider.apiKey };
-  }
-}
-
-function persistSessionProvider(provider: AIProviderConfig) {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  const apiKey = provider.apiKey.trim();
-  if (!apiKey) {
-    window.sessionStorage.removeItem(aiProviderSessionKey);
-    return;
-  }
-
-  window.sessionStorage.setItem(aiProviderSessionKey, JSON.stringify({ apiKey }));
 }
 
 function persistConsoleState(state: StoredAIConsoleState) {

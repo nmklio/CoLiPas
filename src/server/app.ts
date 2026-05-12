@@ -9,6 +9,7 @@ import { cloudAccounts, operationEvents, servers } from '../data/mockData.js';
 import { RuntimeConfig, loadConfig } from './config.js';
 import { isHttpError } from './httpErrors.js';
 import { analyzeOperations, listAiModels, streamAiAnalysis, testAiConnection } from './services/aiService.js';
+import { loadAiProviderSettings, saveAiProviderSettings } from './services/aiSettingsService.js';
 import { buildConfigSummary } from './services/configSummary.js';
 import { listAuditEntries, recordAudit, remediateSecurityRisk } from './services/auditService.js';
 import { buildAccountPayload, changeAdminPassword, getCurrentSession, getLoginThrottleStatus, login, logout, requireSession, updateConsoleProfile } from './services/authService.js';
@@ -230,6 +231,33 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
 
   app.get('/api/config', (_request, response) => {
     response.json(buildConfigSummary(config));
+  });
+
+  app.get('/api/ai/provider', (_request, response) => {
+    response.json(loadAiProviderSettings(config));
+  });
+
+  app.put('/api/ai/provider', (request, response, next) => {
+    try {
+      const result = saveAiProviderSettings(request.body, config);
+      recordAudit({
+        action: 'AI_PROVIDER_SAVE',
+        actor: 'operator',
+        target: result.provider.model,
+        status: 'success',
+        detail: result.hasStoredApiKey ? 'AI provider saved with encrypted database key custody' : 'AI provider saved without changing key custody',
+      });
+      response.json(result);
+    } catch (error) {
+      recordAudit({
+        action: 'AI_PROVIDER_SAVE',
+        actor: 'operator',
+        target: request.body?.model ?? 'unknown',
+        status: 'failed',
+        detail: error instanceof Error ? error.message : 'AI provider save failed',
+      });
+      next(error);
+    }
   });
 
   app.get('/api/cloud/accounts', (_request, response) => {

@@ -1106,8 +1106,9 @@ const fallbackTranslations: Record<Language, Record<string, string>> = {
 
 const cleanTranslations: Record<Language, Record<string, string>> = {
   zh: {
-    'ai.apiKeyEphemeral': '密钥只保留在当前页面内存，不写入本地缓存或仓库。',
-    'ai.useServerKey': '留空使用服务端环境密钥',
+    'ai.apiKeyEphemeral': '点击保存后密钥会加密写入服务端数据库，不写入浏览器本地缓存或代码仓库。',
+    'ai.providerSaved': 'AI 供应商配置已保存到服务端',
+    'ai.useServerKey': '留空使用已托管的服务端密钥',
     'ai.realtimeChat': '实时对话',
     'ai.defaultQuestion': '输入消息，按 Enter 发送，Shift + Enter 换行。',
     'ai.cachedResult': '缓存命中',
@@ -1138,8 +1139,9 @@ const cleanTranslations: Record<Language, Record<string, string>> = {
     'servers.loadMore': '再加载 {count} 台',
   },
   en: {
-    'ai.apiKeyEphemeral': 'The key is kept for this browser tab session so reloads keep it; it is not written to localStorage, the database, or the repo.',
-    'ai.useServerKey': 'Leave blank to use the server environment key',
+    'ai.apiKeyEphemeral': 'After saving, the key is encrypted in the server database; it is never written to browser localStorage or the repo.',
+    'ai.providerSaved': 'AI provider settings saved on the server',
+    'ai.useServerKey': 'Leave blank to keep using the managed server key',
     'ai.realtimeChat': 'Realtime chat',
     'ai.defaultQuestion': 'Type a message. Enter sends, Shift + Enter adds a line.',
     'ai.cachedResult': 'Cache hit',
@@ -1170,8 +1172,9 @@ const cleanTranslations: Record<Language, Record<string, string>> = {
     'servers.loadMore': 'Load {count} more',
   },
   ja: {
-    'ai.apiKeyEphemeral': 'キーはページのメモリ内だけに保持され、localStorage やリポジトリには保存されません。',
-    'ai.useServerKey': '空欄ならサーバー環境キーを使用',
+    'ai.apiKeyEphemeral': '保存後、キーはサーバーデータベースに暗号化保存され、localStorage やリポジトリには保存されません。',
+    'ai.providerSaved': 'AI プロバイダー設定をサーバーに保存しました',
+    'ai.useServerKey': '空欄の場合は管理済みのサーバーキーを使用',
     'ai.realtimeChat': 'リアルタイムチャット',
     'ai.defaultQuestion': 'メッセージを入力。Enter で送信、Shift + Enter で改行。',
     'ai.cachedResult': 'キャッシュ命中',

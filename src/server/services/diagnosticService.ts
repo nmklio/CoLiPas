@@ -6,6 +6,7 @@ import { getDatabasePath } from './database.js';
 import { buildReleaseReadiness } from './releaseReadinessService.js';
 import { listAuditEntries } from './auditService.js';
 import { listCloudAccounts, listOperationEvents, listServers } from './inventoryService.js';
+import { getAiProviderStatus } from './aiSettingsService.js';
 
 export function buildDiagnosticExport(config: RuntimeConfig): DiagnosticExportResponse {
   const generatedAt = new Date().toISOString();
@@ -15,6 +16,7 @@ export function buildDiagnosticExport(config: RuntimeConfig): DiagnosticExportRe
   const serverItems = inventory.items;
   const cloudAccounts = listCloudAccounts();
   const operationEvents = listOperationEvents();
+  const aiProvider = getAiProviderStatus(config);
 
   return {
     generatedAt,
@@ -32,9 +34,10 @@ export function buildDiagnosticExport(config: RuntimeConfig): DiagnosticExportRe
       customApiAllowedHosts: config.customApiAllowedHosts.length,
       customApiTimeoutMs: config.customApiTimeoutMs,
       ai: {
-        baseUrlHost: getHostLabel(config.ai.baseUrl),
-        model: config.ai.model,
-        configured: Boolean(config.ai.apiKey),
+        baseUrlHost: getHostLabel(aiProvider.baseUrl),
+        model: aiProvider.model,
+        configured: aiProvider.configured,
+        managedBy: aiProvider.managedBy,
       },
       security: config.security,
     },

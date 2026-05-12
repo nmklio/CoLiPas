@@ -928,6 +928,84 @@ try {
   }
   console.log('ok /api/ai/models loads upstream models');
 
+  const storedAiSecret = `stored-ai-key-${Date.now()}`;
+  const saveProviderResponse = await fetch(`${baseUrl}/api/ai/provider`, {
+    method: 'PUT',
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...streamingProvider,
+      apiKey: storedAiSecret,
+      model: 'stored-provider-model',
+    }),
+  });
+  if (!saveProviderResponse.ok) {
+    throw new Error(`/api/ai/provider save returned HTTP ${saveProviderResponse.status}`);
+  }
+  const saveProviderBody = await saveProviderResponse.json();
+  const saveProviderText = JSON.stringify(saveProviderBody);
+  if (
+    saveProviderBody.configured !== true
+    || saveProviderBody.hasStoredApiKey !== true
+    || saveProviderBody.managedBy !== 'database'
+    || saveProviderBody.provider?.apiKey !== ''
+    || saveProviderBody.provider?.model !== 'stored-provider-model'
+    || saveProviderText.includes(storedAiSecret)
+  ) {
+    throw new Error('/api/ai/provider save did not return safe database-backed provider status');
+  }
+
+  const providerSettingsResponse = await fetch(`${baseUrl}/api/ai/provider`, { headers: authHeaders });
+  if (!providerSettingsResponse.ok) {
+    throw new Error(`/api/ai/provider read returned HTTP ${providerSettingsResponse.status}`);
+  }
+  const providerSettingsBody = await providerSettingsResponse.json();
+  if (
+    providerSettingsBody.provider?.apiKey !== ''
+    || providerSettingsBody.managedBy !== 'database'
+    || JSON.stringify(providerSettingsBody).includes(storedAiSecret)
+  ) {
+    throw new Error('/api/ai/provider read leaked or lost stored AI key status');
+  }
+
+  const storedConfigResponse = await fetch(`${baseUrl}/api/config`, { headers: authHeaders });
+  const storedConfigBody = await storedConfigResponse.json();
+  if (storedConfigBody.ai?.configured !== true || storedConfigBody.ai?.managedBy !== 'database') {
+    throw new Error('/api/config did not report database-managed AI key custody');
+  }
+
+  const storedProviderTestResponse = await fetch(`${baseUrl}/api/ai/test`, {
+    method: 'POST',
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      provider: {
+        name: streamingProvider.name,
+        baseUrl: streamingProvider.baseUrl,
+        model: 'stored-provider-model',
+        apiKey: '',
+        temperature: 0,
+      },
+    }),
+  });
+  if (!storedProviderTestResponse.ok) {
+    throw new Error(`/api/ai/test stored provider returned HTTP ${storedProviderTestResponse.status}`);
+  }
+  const storedProviderRequest = mockAi.requests.find((request) => (
+    request.body?.model === 'stored-provider-model'
+    && request.headers.authorization === `Bearer ${storedAiSecret}`
+  ));
+  if (!storedProviderRequest) {
+    throw new Error('/api/ai/test did not use encrypted database AI key when request key was blank');
+  }
+  const clearStoredProviderResponse = await fetch(`${baseUrl}/api/ai/provider`, {
+    method: 'PUT',
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clearStoredKey: true }),
+  });
+  if (!clearStoredProviderResponse.ok) {
+    throw new Error(`/api/ai/provider clear returned HTTP ${clearStoredProviderResponse.status}`);
+  }
+  console.log('ok /api/ai/provider encrypts key in database and downstream AI calls reuse it without exposing it');
+
   if (runtimeConfig?.ai?.configured) {
     const inheritedModelsResponse = await fetch(`${baseUrl}/api/ai/models`, {
       method: 'POST',
@@ -2492,12 +2570,12 @@ function assertAiProviderSecretNotPersisted() {
     throw new Error('loadStoredProvider must ignore legacy apiKey values from localStorage');
   }
 
-  if (!aiConsoleSource.includes('aiProviderSessionKey') || !aiConsoleSource.includes('window.sessionStorage.setItem(aiProviderSessionKey')) {
-    throw new Error('AI API key should persist only in sessionStorage so page reloads do not require re-entry');
+  if (aiConsoleSource.includes('sessionStorage.setItem') || aiConsoleSource.includes('aiProviderSessionKey')) {
+    throw new Error('AI API key must not be cached in browser storage');
   }
 
-  if (aiConsoleSource.includes('window.localStorage.setItem(aiProviderSessionKey') || aiConsoleSource.includes('localStorage.setItem(aiProviderSessionKey')) {
-    throw new Error('AI API key session cache must not use localStorage');
+  if (!aiConsoleSource.includes('saveAiProviderSettings(provider)') || !aiConsoleSource.includes('fetchAiProviderSettings()')) {
+    throw new Error('AI provider settings must load from and save to the server database');
   }
 
   if (!aiConsoleSource.includes('modelRequestSeqRef') || !aiConsoleSource.includes('modelRequestSeqRef.current !== requestSeq')) {
@@ -2512,7 +2590,7 @@ function assertAiProviderSecretNotPersisted() {
     throw new Error('AI console must not persist full chat transcripts to localStorage');
   }
 
-  console.log('ok AI provider storage strips API key, reload-safe keys stay session-only, and AI chat transcripts stay session-only');
+  console.log('ok AI provider storage strips API key, persists keys server-side, and AI chat transcripts stay session-only');
 }
 
 function assertAccountUiGuards() {
@@ -2714,7 +2792,9 @@ function assertAccountUiGuards() {
 
 function assertAiStreamingCompatibility() {
   const aiServiceSource = fs.readFileSync(new URL('../src/server/services/aiService.ts', import.meta.url), 'utf8');
+  const aiSettingsSource = fs.readFileSync(new URL('../src/server/services/aiSettingsService.ts', import.meta.url), 'utf8');
   const aiConfigSource = fs.readFileSync(new URL('../src/modules/ai/aiConfig.ts', import.meta.url), 'utf8');
+  const aiBackendSource = `${aiServiceSource}\n${aiSettingsSource}`;
   const requiredFragments = [
     'choice?.delta?.content',
     'choice?.message?.content',
@@ -2737,9 +2817,9 @@ function assertAiStreamingCompatibility() {
   ];
   const missing = requiredFragments.filter((fragment) => {
     if (fragment.startsWith('AI Base URL')) {
-      return !aiServiceSource.includes('AI Base URL must not include username, password, query parameters, or fragments');
+      return !aiBackendSource.includes('AI Base URL must not include username, password, query parameters, or fragments');
     }
-    return !aiServiceSource.includes(fragment);
+    return !aiBackendSource.includes(fragment);
   });
   if (missing.length) {
     throw new Error(`AI stream parser compatibility is incomplete: ${missing.join(', ')}`);
@@ -2750,7 +2830,7 @@ function assertAiStreamingCompatibility() {
     'body.slice(0, 160)',
     'provider: aiProvider.baseUrl',
   ];
-  const regressions = forbiddenFragments.filter((fragment) => aiServiceSource.includes(fragment));
+  const regressions = forbiddenFragments.filter((fragment) => aiBackendSource.includes(fragment));
   if (regressions.length) {
     throw new Error(`AI provider handling may leak sensitive data: ${regressions.join(', ')}`);
   }

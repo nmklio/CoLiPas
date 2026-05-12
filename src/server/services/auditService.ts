@@ -11,6 +11,7 @@ export type AuditAction =
   | 'AUTH_PASSWORD_CHANGE'
   | 'PROFILE_UPDATE'
   | 'AI_ANALYZE'
+  | 'AI_PROVIDER_SAVE'
   | 'AI_TEST'
   | 'CUSTOM_API_TEST'
   | 'SERVER_CONNECT'

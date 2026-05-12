@@ -274,6 +274,7 @@ export interface DiagnosticExportResponse {
       baseUrlHost: string;
       model: string;
       configured: boolean;
+      managedBy?: 'database' | 'environment' | 'none';
     };
     security: {
       adminPasswordDefault: boolean;
