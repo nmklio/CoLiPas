@@ -741,6 +741,14 @@ function runSimulatedShellCommand(
     emitSshShellEvent(shell, { type: 'stdout', content: simulatedShellPrompt });
     return;
   }
+  if (command === 'colipas-burst-output') {
+    emitSshShellEvent(shell, { type: 'stdout', content: `${simulatedShellPrompt}${command}\r\n` });
+    for (let index = 1; index <= 1200; index += 1) {
+      emitSshShellEvent(shell, { type: 'stdout', content: `burst-output-${String(index).padStart(4, '0')} ${'x'.repeat(120)}\r\n` });
+    }
+    emitSshShellEvent(shell, { type: 'stdout', content: simulatedShellPrompt });
+    return;
+  }
   if (command === 'colipas-hang') {
     state.setInterrupted(false);
     emitSshShellEvent(shell, { type: 'stdout', content: `${simulatedShellPrompt}${command}\r\nhanging until interrupt\r\n` });

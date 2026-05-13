@@ -481,6 +481,23 @@ async function assertSshTerminalPanel(targetPage) {
       throw new Error(`SSH long output rendered too slowly: ${longOutputDurationMs}ms, max long task ${maxLongTaskMs}ms`);
     }
     console.log(`ok browser e2e SSH long output rendered in ${longOutputDurationMs}ms with max long task ${maxLongTaskMs}ms`);
+    await targetPage.evaluate(() => {
+      window.__colipasSshLongTasks = [];
+    });
+    const burstOutputStartedAt = Date.now();
+    await targetPage.keyboard.type('colipas-burst-output', { delay: 1 });
+    await targetPage.keyboard.press('Enter');
+    await targetPage.waitForFunction(() => {
+      const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
+      return terminalText.includes('burst-output-1200') && terminalText.includes('simulated$');
+    }, undefined, { timeout: 15000 });
+    const burstOutputDurationMs = Date.now() - burstOutputStartedAt;
+    const burstLongTaskDurations = await targetPage.evaluate(() => window.__colipasSshLongTasks ?? []);
+    const maxBurstLongTaskMs = burstLongTaskDurations.length > 0 ? Math.max(...burstLongTaskDurations) : 0;
+    if (burstOutputDurationMs > 12000 || maxBurstLongTaskMs > 300) {
+      throw new Error(`SSH burst output rendered too slowly: ${burstOutputDurationMs}ms, max long task ${maxBurstLongTaskMs}ms`);
+    }
+    console.log(`ok browser e2e SSH burst output rendered in ${burstOutputDurationMs}ms with max long task ${maxBurstLongTaskMs}ms`);
     await assertElementWithinViewport(targetPage, '.ssh-console', 'desktop SSH console');
     await targetPage.getByRole('button', { name: /disconnect/i }).click();
     await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });

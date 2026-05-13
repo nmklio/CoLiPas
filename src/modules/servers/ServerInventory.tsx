@@ -41,6 +41,7 @@ const customProvider = customProviderFilterValue;
 const customProviderOption = '__custom__';
 const actionMessageAutoDismissMs = 4500;
 const actionTraceMessageAutoDismissMs = 10000;
+const terminalWriteChunkSize = 32 * 1024;
 
 const actionCommands: Record<'powerOn' | 'shutdown' | 'reboot', string> = {
   powerOn: 'printf "server reachable via SSH\\n"; uptime',
@@ -1089,7 +1090,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
         (event) => handleTerminalStreamEvent(server.id, terminal, event),
         (error) => {
           if (terminalShellIdRef.current && sshConsoleOpenRef.current) {
-            flushTerminalWriteBuffer(terminal);
+            flushTerminalWriteBuffer(terminal, { drainAll: true });
             terminal.writeln(`\r\n${error.message}`);
             terminal.scrollToBottom();
           }
@@ -1165,7 +1166,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
             return;
           }
           if (terminalShellIdRef.current && sshConsoleOpenRef.current) {
-            flushTerminalWriteBuffer(terminal);
+            flushTerminalWriteBuffer(terminal, { drainAll: true });
             terminal.writeln(`\r\n${error.message}`);
             terminal.scrollToBottom();
           }
@@ -1203,7 +1204,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       (event) => handleTerminalStreamEvent(server.id, terminal, event),
       (error) => {
         if (terminalShellIdRef.current && sshConsoleOpenRef.current) {
-          flushTerminalWriteBuffer(terminal);
+          flushTerminalWriteBuffer(terminal, { drainAll: true });
           terminal.writeln(`\r\n${error.message}`);
           terminal.scrollToBottom();
         }
@@ -1222,7 +1223,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       return;
     }
     if (event.type === 'close') {
-      flushTerminalWriteBuffer(terminal);
+      flushTerminalWriteBuffer(terminal, { drainAll: true });
       terminal.writeln('\r\nConnection closed.');
       terminal.scrollToBottom();
       terminalShellIdRef.current = null;
@@ -1237,7 +1238,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       refreshShellStatus();
     }
     if (event.type === 'error' && sshConsoleOpenRef.current) {
-      flushTerminalWriteBuffer(terminal);
+      flushTerminalWriteBuffer(terminal, { drainAll: true });
       terminal.writeln(`\r\n${event.message ?? 'SSH shell stream failed'}`);
       terminal.scrollToBottom();
     }
@@ -1644,6 +1645,10 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
 
   function queueTerminalWrite(terminal: XTerm, content: string) {
     terminalWriteBufferRef.current += content;
+    scheduleTerminalWriteFlush(terminal);
+  }
+
+  function scheduleTerminalWriteFlush(terminal: XTerm) {
     if (terminalWriteRafRef.current !== null) {
       return;
     }
@@ -1654,7 +1659,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     });
   }
 
-  function flushTerminalWriteBuffer(terminal = xtermRef.current) {
+  function flushTerminalWriteBuffer(terminal = xtermRef.current, options: { drainAll?: boolean } = {}) {
     if (terminalWriteRafRef.current !== null) {
       window.cancelAnimationFrame(terminalWriteRafRef.current);
       terminalWriteRafRef.current = null;
@@ -1666,8 +1671,14 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       return;
     }
 
-    terminalWriteBufferRef.current = '';
-    terminal.write(content, () => terminal.scrollToBottom());
+    const chunk = !options.drainAll && content.length > terminalWriteChunkSize ? content.slice(0, terminalWriteChunkSize) : content;
+    terminalWriteBufferRef.current = content.slice(chunk.length);
+    terminal.write(chunk, () => {
+      terminal.scrollToBottom();
+      if (terminalWriteBufferRef.current) {
+        scheduleTerminalWriteFlush(terminal);
+      }
+    });
   }
 
   function clearTerminalWriteBuffer() {
