@@ -2793,6 +2793,7 @@ function assertAccountUiGuards() {
     'assertNoBadBoxes',
     'assertSensitiveTextAbsent',
     "path.resolve('output', 'public-pages-check')",
+    "waitUntil: 'domcontentloaded'",
     'static.cloudflareinsights.com',
     '/beacon.min.js',
     '/docs.html',

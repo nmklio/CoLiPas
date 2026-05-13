@@ -73,7 +73,7 @@ async function validatePage(pageSpec, viewport) {
   try {
     const targetUrl = new URL(pageSpec.path, baseUrl).toString();
     const response = await page.goto(targetUrl, {
-      waitUntil: 'networkidle',
+      waitUntil: 'domcontentloaded',
       timeout: 35000,
     });
     if (!response?.ok()) {
