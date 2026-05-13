@@ -710,9 +710,12 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
         setAiTaskMessage(preflight.issues[0]?.message ?? executionCopy.blocked);
         return;
       }
+      const confirmedPayload = preflight.requiresConfirmation
+        ? { ...payload, confirmed: true }
+        : payload;
 
       const result = await createOperationTask({
-        ...payload,
+        ...confirmedPayload,
         correlationId: preflight.correlationId,
       });
       setAiTaskResult(result);

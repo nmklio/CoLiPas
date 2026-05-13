@@ -2218,6 +2218,46 @@ if (
 }
 console.log('ok /api/operations/tasks/preflight builds redacted execution plan');
 
+const operationPreflightHighImpactCommandResponse = await fetch(`${baseUrl}/api/operations/tasks/preflight`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    type: 'sshCommand',
+    targetMode: 'selected',
+    serverIds: [connectedServer.id],
+    command: 'apt install -y unzip',
+    reason: 'preflight high-impact command should require confirmation',
+  }),
+});
+if (!operationPreflightHighImpactCommandResponse.ok) {
+  throw new Error(`/api/operations/tasks/preflight high-impact sshCommand returned HTTP ${operationPreflightHighImpactCommandResponse.status}`);
+}
+const operationPreflightHighImpactCommandBody = await operationPreflightHighImpactCommandResponse.json();
+if (
+  operationPreflightHighImpactCommandBody.ok !== true
+  || operationPreflightHighImpactCommandBody.requiresConfirmation !== true
+  || operationPreflightHighImpactCommandBody.plan?.commandPreview !== 'apt install -y unzip'
+  || !operationPreflightHighImpactCommandBody.plan?.impact?.includes('after operator confirmation')
+  || !operationPreflightHighImpactCommandBody.issues?.some((issue) => issue.code === 'OPERATIONS_CONFIRMATION_REQUIRED' && issue.severity === 'warn')
+) {
+  throw new Error('/api/operations/tasks/preflight did not warn before high-impact SSH command execution');
+}
+const operationHighImpactBlockedResponse = await fetch(`${baseUrl}/api/operations/tasks`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    type: 'sshCommand',
+    targetMode: 'selected',
+    serverIds: [connectedServer.id],
+    command: 'apt install -y unzip',
+    reason: 'pre-release high-impact command confirmation guard',
+  }),
+});
+if (operationHighImpactBlockedResponse.status !== 409) {
+  throw new Error(`/api/operations/tasks high-impact sshCommand should require confirmation, got HTTP ${operationHighImpactBlockedResponse.status}`);
+}
+console.log('ok /api/operations/tasks/preflight warns before high-impact SSH commands');
+
 const operationHealthResponse = await fetch(`${baseUrl}/api/operations/tasks`, {
   method: 'POST',
   headers: { ...authHeaders, 'Content-Type': 'application/json' },
@@ -4638,6 +4678,8 @@ function assertOperationsTargetSelectionGuards() {
     'selected servers do not exist',
     'export function preflightOperationTask(input: unknown)',
     'requiresConfirmation',
+    'requiredConfirmationReason(parsed)',
+    'high-impact SSH command',
     'correlationId',
     'buildOperationCorrelationId()',
     'const correlationId = parsed.correlationId || buildOperationCorrelationId()',

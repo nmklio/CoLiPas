@@ -111,16 +111,17 @@ export async function createOperationTask(input: unknown): Promise<OperationTask
     }
   }
 
-  if ((parsed.type === 'shutdown' || parsed.type === 'reboot') && !parsed.confirmed) {
+  const confirmationReason = requiredConfirmationReason(parsed);
+  if (confirmationReason && !parsed.confirmed) {
     recordAudit({
       action: 'OPERATIONS_TASK',
       actor: 'operator',
       target: parsed.targetMode === 'selected' ? parsed.serverIds.join(',') : parsed.targetMode,
       status: 'blocked',
-      detail: `Blocked ${parsed.type}: missing operator confirmation`,
+      detail: `Blocked ${parsed.type}: missing operator confirmation for ${confirmationReason}`,
       correlationId,
     });
-    throw new HttpError(409, `Operator confirmation is required before ${parsed.type}`, 'OPERATIONS_CONFIRMATION_REQUIRED');
+    throw new HttpError(409, `Operator confirmation is required before ${confirmationReason}`, 'OPERATIONS_CONFIRMATION_REQUIRED');
   }
 
   const outputs: OperationTaskTargetResult[] = [];
@@ -177,7 +178,8 @@ export function preflightOperationTask(input: unknown): OperationTaskPreflightRe
   const runnableTargets = parsed.type === 'assetSync'
     ? targets
     : targets.filter((server) => resolveServerLifecycleStatus(server) !== 'unconnected');
-  const requiresConfirmation = parsed.type === 'shutdown' || parsed.type === 'reboot';
+  const confirmationReason = requiredConfirmationReason(parsed);
+  const requiresConfirmation = Boolean(confirmationReason);
   const issues: OperationTaskPreflightResponse['issues'] = [];
 
   if (missingTargets.length > 0) {
@@ -213,7 +215,7 @@ export function preflightOperationTask(input: unknown): OperationTaskPreflightRe
     issues.push({
       code: 'OPERATIONS_CONFIRMATION_REQUIRED',
       severity: 'warn',
-      message: `Operator confirmation is required before ${parsed.type}`,
+      message: `Operator confirmation is required before ${confirmationReason}`,
       count: runnableTargets.length,
     });
   }
@@ -356,7 +358,9 @@ function buildPreflightImpact(
   }
 
   if (task.type === 'sshCommand') {
-    return `${summary.runnableTargets} server${summary.runnableTargets === 1 ? '' : 's'} will run the prepared SSH command`;
+    const confirmationReason = requiredConfirmationReason(task);
+    const confirmationSuffix = confirmationReason ? ' after operator confirmation' : '';
+    return `${summary.runnableTargets} server${summary.runnableTargets === 1 ? '' : 's'} will run the prepared SSH command${confirmationSuffix}`;
   }
 
   if (task.type === 'assetSync') {
@@ -393,6 +397,27 @@ function sanitizeCommandPreview(command: string) {
     .slice(0, 180);
 }
 
+function requiredConfirmationReason(task: Pick<ParsedOperationTask, 'type' | 'command'>) {
+  if (task.type === 'shutdown' || task.type === 'reboot') {
+    return task.type;
+  }
+
+  if (task.type !== 'sshCommand') {
+    return '';
+  }
+
+  const normalized = task.command.toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!normalized) {
+    return '';
+  }
+
+  if (/\b(rm\s+-rf|mkfs(?:\.\w+)?|dd\s+if=|wipefs|fdisk|parted|shutdown|reboot|halt|poweroff|init\s+0|systemctl\s+(?:restart|stop|disable)|service\s+\S+\s+(?:restart|stop)|docker\s+(?:rm|rmi|system\s+prune)|kubectl\s+delete|helm\s+uninstall|apt(?:-get)?\s+(?:install|remove|purge|upgrade|dist-upgrade)|yum\s+(?:install|remove|update)|dnf\s+(?:install|remove|upgrade)|apk\s+(?:add|del|upgrade)|pacman\s+-S|chown\s+-R|chmod\s+-R)\b/i.test(normalized)) {
+    return 'high-impact SSH command';
+  }
+
+  return '';
+}
+
 function buildTargetPreflightIssues(
   task: ParsedOperationTask,
   server: ServerNode,
@@ -412,7 +437,7 @@ function buildTargetPreflightIssues(
     targetIssues.push({
       code: 'OPERATIONS_CONFIRMATION_REQUIRED',
       severity: 'warn',
-      message: `Operator confirmation is required before ${task.type}`,
+      message: `Operator confirmation is required before ${requiredConfirmationReason(task) || task.type}`,
     });
   }
 

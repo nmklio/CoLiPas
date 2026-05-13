@@ -399,7 +399,7 @@ export function OperationsCenter({ events, servers, onTaskFinished, onAuditTrace
       return;
     }
 
-    const payload = buildTaskPayload(actionTaskIds.includes(taskType), preflightResult.correlationId);
+    const payload = buildTaskPayload(preflightResult.requiresConfirmation, preflightResult.correlationId);
     setRunning(true);
     setMessage('');
     const pendingTask = createPendingTask(taskType, targetMode, previewCount, language);
