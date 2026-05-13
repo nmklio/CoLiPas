@@ -112,6 +112,7 @@ const aiExecutionCopyByLanguage: Record<string, {
   reasonPlaceholder: string;
   submit: string;
   confirmationRequired?: string;
+  confirmationReasonLabel?: string;
   cancelHint: string;
   allowHint: string;
   decisionTitle: string;
@@ -235,7 +236,7 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
   });
   const [newChatReady, setNewChatReady] = useState(false);
   const [aiTaskRunning, setAiTaskRunning] = useState(false);
-  const [aiTaskDecision, setAiTaskDecision] = useState<'allow' | 'cancel'>('allow');
+  const [aiTaskDecision, setAiTaskDecision] = useState<'allow' | 'cancel'>('cancel');
   const [aiTaskReason, setAiTaskReason] = useState('');
   const [aiTaskMessage, setAiTaskMessage] = useState('');
   const [aiTaskResult, setAiTaskResult] = useState<OperationTaskResponse | null>(null);
@@ -955,7 +956,11 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
                   <span>{executionPlan.operation}</span>
                   <span>{executionCopy.executionMode}</span>
                   {executionPlan.requiresConfirmation && (
-                    <span className="risk"><AlertTriangle size={13} /> {executionCopy.confirmationRequired ?? 'Confirmation required'}</span>
+                    <span className="risk">
+                      <AlertTriangle size={13} />
+                      {executionCopy.confirmationRequired ?? 'Confirmation required'}
+                      {executionPlan.confirmationReason ? ` · ${executionCopy.confirmationReasonLabel ?? 'Reason'}: ${executionPlan.confirmationReason}` : ''}
+                    </span>
                   )}
                 </div>
                 <small><ShieldCheck size={13} /> {executionPlan.safetyNote}</small>
