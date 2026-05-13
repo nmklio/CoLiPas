@@ -693,6 +693,35 @@ try {
   ) {
     throw new Error('/api/ai/analyze direct SSH execution request did not produce a runnable ip addr execution card');
   }
+  const aiPackageInstallResponse = await fetch(`${baseUrl}/api/ai/analyze`, {
+    method: 'POST',
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      question: '执行apt install -y unzip',
+      provider: {
+        name: 'Smoke AI',
+        baseUrl: 'https://api.example.com/v1',
+        model: 'smoke-model',
+        apiKey: '',
+        temperature: 0.2,
+      },
+      serverId: aiExecutableServer.id,
+      forceRefresh: true,
+    }),
+  });
+  if (!aiPackageInstallResponse.ok) {
+    throw new Error(`/api/ai/analyze package install SSH execution request returned HTTP ${aiPackageInstallResponse.status}`);
+  }
+  const aiPackageInstallBody = await aiPackageInstallResponse.json();
+  if (
+    aiPackageInstallBody.simulated !== true
+    || !aiPackageInstallBody.answer?.includes('Local guarded execution plan')
+    || aiPackageInstallBody.executionPlan?.operation !== 'sshCommand'
+    || aiPackageInstallBody.executionPlan?.command !== 'apt install -y unzip'
+    || !aiPackageInstallBody.executionPlan?.safetyNote?.includes('operator-provided command')
+  ) {
+    throw new Error('/api/ai/analyze direct SSH execution request did not preserve an arbitrary operator command');
+  }
   const noEvidenceUpstream = await startMockStreamingAi();
   try {
     const aiNoEvidenceUpstreamResponse = await fetch(`${baseUrl}/api/ai/analyze`, {

@@ -722,12 +722,16 @@ function extractPriorExecutionEvidence(chatHistory: AiChatMessage[]) {
 }
 
 function questionNeedsLiveSshEvidence(question: string) {
-  return /ip\s+addr|ip\s+-brief|ip\s+route|route\s+-n|ifconfig|whoami|\bid\b|current\s+user|command\s+output|ssh\s+output|公网|内网|当前用户|当前\s*用户|命令输出|执行结果|输出|路由|网络|网卡|地址/i.test(question);
+  return Boolean(extractExplicitRequestedSshCommand(question))
+    || /ip\s+addr|ip\s+-brief|ip\s+route|route\s+-n|ifconfig|whoami|\bid\b|current\s+user|command\s+output|ssh\s+output|公网|内网|当前用户|当前\s*用户|命令输出|执行结果|输出|路由|网络|网卡|地址/i.test(question);
 }
 
 function questionRequestsDirectSshExecution(question: string) {
-  return Boolean(extractSafeRequestedSshCommand(question))
-    && /run|execute|exec|执行|运行|查看|检查|查一下|命令/i.test(question);
+  return Boolean(extractExplicitRequestedSshCommand(question))
+    || (
+      Boolean(extractSafeRequestedSshCommand(question))
+      && /run|execute|exec|执行|运行|查看|检查|查一下|命令/i.test(question)
+    );
 }
 
 function questionNeedsNetworkEvidence(question: string) {
@@ -805,8 +809,9 @@ function buildExecutionPlan(
   const normalizedQuestion = question.toLowerCase();
   const targetMode = selectedServer ? 'selected' : 'allConnected';
   const serverIds = selectedServer ? [selectedServer.id] : connectedTargets.map((server) => server.id);
-  const wantsShutdown = /shutdown|power\s*off|halt|关机|停机|关闭/i.test(question);
-  const wantsReboot = /restart|reboot|重启|重新启动/i.test(question);
+  const requestedCommand = extractSafeRequestedSshCommand(question);
+  const wantsShutdown = !requestedCommand && /shutdown|power\s*off|halt|关机|停机|关闭/i.test(question);
+  const wantsReboot = !requestedCommand && /restart|reboot|重启|重新启动/i.test(question);
   const wantsHealth = /health|diagnostic|diag|status|cpu|memory|disk|load|uptime|状态|诊断|健康|负载|内存|磁盘/i.test(normalizedQuestion);
 
   if (wantsShutdown || wantsReboot) {
@@ -823,28 +828,40 @@ function buildExecutionPlan(
     };
   }
 
-  const command = questionNeedsNetworkEvidence(question)
-    ? (extractSafeRequestedSshCommand(question) ?? 'hostname && whoami && ip -brief addr && ip route')
+  const command = requestedCommand ?? (questionNeedsNetworkEvidence(question)
+    ? 'hostname && whoami && ip -brief addr && ip route'
     : questionNeedsUserEvidence(question)
-      ? (extractSafeRequestedSshCommand(question) ?? 'whoami && id && hostname')
+      ? 'whoami && id && hostname'
       : wantsHealth
-        ? (extractSafeRequestedSshCommand(question) ?? 'hostname && uptime && df -h /')
-        : (extractSafeRequestedSshCommand(question) ?? 'uname -a && uptime && whoami');
+        ? 'hostname && uptime && df -h /'
+        : 'uname -a && uptime && whoami');
+  const operation = requestedCommand ? 'sshCommand' : wantsHealth ? 'healthCheck' : 'sshCommand';
 
   return {
-    title: `Run SSH check on ${selectedServer ? primaryServer.name : 'connected servers'}`,
-    summary: `AI prepared a safe SSH inspection for ${serverIds.length} SSH-connected server(s).`,
+    title: requestedCommand
+      ? `Run SSH command on ${selectedServer ? primaryServer.name : 'connected servers'}`
+      : `Run SSH check on ${selectedServer ? primaryServer.name : 'connected servers'}`,
+    summary: requestedCommand
+      ? `AI prepared an operator-requested SSH command for ${serverIds.length} SSH-connected server(s).`
+      : `AI prepared a safe SSH inspection for ${serverIds.length} SSH-connected server(s).`,
     targetMode,
     serverIds,
-    operation: wantsHealth ? 'healthCheck' : 'sshCommand',
+    operation,
     command,
     reason: `AI guided server inspection after operator question: ${question.slice(0, 120)}`,
     confirmed: false,
-    safetyNote: 'This command is submitted through operations preflight first, then executed by the existing SSH service.',
+    safetyNote: requestedCommand
+      ? 'This operator-provided command is submitted through operations preflight and audit logging before SSH execution.'
+      : 'This command is submitted through operations preflight first, then executed by the existing SSH service.',
   };
 }
 
 function extractSafeRequestedSshCommand(question: string) {
+  const explicitCommand = extractExplicitRequestedSshCommand(question);
+  if (explicitCommand) {
+    return explicitCommand;
+  }
+
   const normalized = question.toLowerCase().replace(/\s+/g, ' ').trim();
   const compact = normalized.replace(/\s+/g, '');
 
@@ -886,6 +903,92 @@ function extractSafeRequestedSshCommand(question: string) {
   }
 
   return undefined;
+}
+
+function extractExplicitRequestedSshCommand(question: string) {
+  const trimmed = question.trim();
+  if (!hasExplicitCommandIntent(trimmed)) {
+    return undefined;
+  }
+
+  const fenced = trimmed.match(/```(?:bash|sh|shell)?\s*([\s\S]*?)```/i);
+  if (fenced?.[1]) {
+    return normalizeRequestedSshCommand(fenced[1]);
+  }
+
+  const backticked = trimmed.match(/`([^`]+)`/);
+  if (backticked?.[1]) {
+    return normalizeRequestedSshCommand(backticked[1]);
+  }
+
+  const commandWords = '(?:command|cmd|shell|ssh|命令|指令)';
+  const chineseRunWords = '(?:执行|运行|跑|输入)';
+  const patterns = [
+    new RegExp(`(?:^|[\\s,;])(?:please\\s+)?(?:run|execute|exec)(?:\\s+(?:this|the))?(?:\\s+${commandWords})?\\s*(?:[:=]|：)?\\s+([\\s\\S]+)$`, 'i'),
+    new RegExp(`(?:^|[\\s,;])${commandWords}\\s*(?:[:=]|：)\\s*([\\s\\S]+)$`, 'i'),
+    new RegExp(`${chineseRunWords}(?:\\s*${commandWords})?\\s*(?:[:=]|：)?\\s*([\\s\\S]+)$`, 'i'),
+  ];
+
+  for (const pattern of patterns) {
+    const match = trimmed.match(pattern);
+    const command = match?.[1] ? normalizeRequestedSshCommand(match[1]) : undefined;
+    if (command) {
+      return command;
+    }
+  }
+
+  return undefined;
+}
+
+function hasExplicitCommandIntent(question: string) {
+  return /run|execute|exec|cmd|command|shell|ssh|执行|运行|命令|指令|跑|输入/i.test(question);
+}
+
+function normalizeRequestedSshCommand(candidate: string) {
+  const command = stripWrappingQuotes(candidate)
+    .replace(/[\s\u3000]+$/g, '')
+    .replace(/[。；]+$/g, '')
+    .trim()
+    .slice(0, 2000);
+
+  return isPlausibleShellCommand(command) ? command : undefined;
+}
+
+function stripWrappingQuotes(value: string) {
+  let result = value.trim();
+  const quotePairs: Array<[string, string]> = [
+    ['"', '"'],
+    ["'", "'"],
+    ['`', '`'],
+    ['“', '”'],
+    ['‘', '’'],
+  ];
+
+  let changed = true;
+  while (changed && result.length >= 2) {
+    changed = false;
+    for (const [open, close] of quotePairs) {
+      if (result.startsWith(open) && result.endsWith(close)) {
+        result = result.slice(open.length, -close.length).trim();
+        changed = true;
+      }
+    }
+  }
+
+  return result;
+}
+
+function isPlausibleShellCommand(command: string) {
+  if (!command || command.length > 2000) {
+    return false;
+  }
+
+  const firstToken = command.split(/\s+/)[0]?.toLowerCase().replace(/^[\s"'`]+|[\s"'`]+$/g, '') ?? '';
+  if (!firstToken || /^(?:a|an|the|safe|ssh|server|servers|health|diagnostic|check|inspection|current|what|which|how|please|can|could|should)$/i.test(firstToken)) {
+    return false;
+  }
+
+  return /^[A-Za-z0-9_./~$({[+-]/.test(command);
 }
 
 async function sendAnswerInChunks(answer: string, send: (chunk: string) => void, delayMs: number) {
