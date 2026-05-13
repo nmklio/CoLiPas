@@ -290,6 +290,10 @@ export function App() {
   }, [activeSection]);
 
   useEffect(() => {
+    if (filters.region === 'all' && !(filters.regionScope?.length)) {
+      return;
+    }
+
     const availableRegions = new Set(overview.servers.map((server) => server.region.trim().toLowerCase()).filter(Boolean));
     const scopedRegions = filters.regionScope ?? [];
     const validRegionScope = scopedRegions.filter((region) => availableRegions.has(region.trim().toLowerCase()));
@@ -310,7 +314,10 @@ export function App() {
     }
   }, [filters.region, filters.regionScope, overview.servers]);
 
-  const filteredServers = useMemo(() => filterServers(overview.servers, filters), [filters, overview.servers]);
+  const filteredServers = useMemo(
+    () => (activeSection === 'servers' ? filterServers(overview.servers, filters) : []),
+    [activeSection, filters, overview.servers],
+  );
   const overviewStats = useMemo(() => {
     let online = 0;
     let connected = 0;

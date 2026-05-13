@@ -54,6 +54,7 @@ interface CountryHover {
 
 const MAP_WIDTH = 1000;
 const MAP_HEIGHT = 520;
+const tooltipServerNameLimit = 6;
 
 const countries = feature(
   countriesAtlas as never,
@@ -669,25 +670,49 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, onReg
 }
 
 function buildRegionNodes(servers: ServerNode[]): RegionNode[] {
-  const groups = new Map<string, ServerNode[]>();
+  const groups = new Map<string, {
+    total: number;
+    running: number;
+    warning: number;
+    cpuTotal: number;
+    providers: Set<string>;
+    serverNames: string[];
+  }>();
   servers.forEach((server) => {
-    const list = groups.get(server.region) ?? [];
-    list.push(server);
-    groups.set(server.region, list);
+    let group = groups.get(server.region);
+    if (!group) {
+      group = {
+        total: 0,
+        running: 0,
+        warning: 0,
+        cpuTotal: 0,
+        providers: new Set<string>(),
+        serverNames: [],
+      };
+      groups.set(server.region, group);
+    }
+    group.total += 1;
+    group.running += server.status === 'running' ? 1 : 0;
+    group.warning += server.status === 'warning' ? 1 : 0;
+    group.cpuTotal += server.cpu;
+    group.providers.add(server.provider);
+    if (group.serverNames.length < tooltipServerNameLimit) {
+      group.serverNames.push(server.name);
+    }
   });
 
-  return Array.from(groups.entries()).map(([region, items], index) => {
+  return Array.from(groups.entries()).map(([region, group], index) => {
     const location = resolveRegionLocation(region, index);
     const position = projectRegion(location);
 
     return {
       region,
-      total: items.length,
-      running: items.filter((server) => server.status === 'running').length,
-      warning: items.filter((server) => server.status === 'warning').length,
-      avgCpu: Math.round(items.reduce((total, server) => total + server.cpu, 0) / items.length),
-      providers: Array.from(new Set(items.map((server) => server.provider))).slice(0, 3),
-      serverNames: items.map((server) => server.name),
+      total: group.total,
+      running: group.running,
+      warning: group.warning,
+      avgCpu: Math.round(group.cpuTotal / group.total),
+      providers: Array.from(group.providers).slice(0, 3),
+      serverNames: group.serverNames,
       lat: location.lat,
       lng: location.lng,
       countryIds: getRenderableCountryIds(location),
@@ -779,7 +804,7 @@ function buildCountryHover(country: Feature<Geometry, { name?: string }>, region
     regions,
     total,
     running,
-    serverNames: regions.flatMap((region) => region.serverNames),
+    serverNames: collectTooltipServerNames(regions),
     x,
     y,
   };
@@ -792,10 +817,23 @@ function buildRegionHover(region: RegionNode): CountryHover {
     regions: [region],
     total: region.total,
     running: region.running,
-    serverNames: region.serverNames,
+    serverNames: region.serverNames.slice(0, tooltipServerNameLimit),
     x: region.x,
     y: region.y,
   };
+}
+
+function collectTooltipServerNames(regions: RegionNode[]) {
+  const names: string[] = [];
+  for (const region of regions) {
+    for (const name of region.serverNames) {
+      names.push(name);
+      if (names.length >= tooltipServerNameLimit) {
+        return names;
+      }
+    }
+  }
+  return names;
 }
 
 function buildEmptyRegionNode(regionLabel: string, providerLabel: string): RegionNode {

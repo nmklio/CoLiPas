@@ -252,10 +252,10 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
   const executionCopy = aiExecutionCopyByLanguage[language] ?? aiExecutionCopyByLanguage.zh;
   const activeSession = sessions.find((session) => session.id === activeSessionId) ?? sessions[0];
   const selectedServers = useMemo(
-    () => (activeSession.selectedServerId === 'all' ? servers : servers.filter((server) => server.id === activeSession.selectedServerId)),
-    [activeSession.selectedServerId, servers],
+    () => (collapsed ? [] : activeSession.selectedServerId === 'all' ? servers : servers.filter((server) => server.id === activeSession.selectedServerId)),
+    [activeSession.selectedServerId, collapsed, servers],
   );
-  const prompt = useMemo(() => buildOpsPrompt(selectedServers, events), [selectedServers, events]);
+  const prompt = useMemo(() => (collapsed ? '' : buildOpsPrompt(selectedServers, events)), [collapsed, selectedServers, events]);
   const running = runningSessionId === activeSession.id;
   const externalAiAvailable = Boolean(provider.apiKey.trim() || serverAiConfigured);
   const showSessionList = sessionsOpen && (sessions.length > 1 || activeSession.messages.length > 0);
@@ -279,13 +279,17 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
   }, [provider.name, provider.baseUrl, provider.model, provider.temperature]);
 
   useEffect(() => {
+    if (collapsed) {
+      return;
+    }
+
     const validServerIds = new Set(servers.map((server) => server.id));
     setSessions((current) => current.map((session) => (
       session.selectedServerId !== 'all' && !validServerIds.has(session.selectedServerId)
         ? { ...session, selectedServerId: 'all', updatedAt: new Date().toISOString() }
         : session
     )));
-  }, [servers]);
+  }, [collapsed, servers]);
 
   useEffect(() => {
     let cancelled = false;

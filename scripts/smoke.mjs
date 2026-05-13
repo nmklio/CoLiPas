@@ -3058,6 +3058,9 @@ function assertAiResponseCachingGuards() {
     'message.status === \'cached\'',
     'cachedResult.answer',
     'meta: analysisToMessageMeta(result)',
+    'collapsed ? [] : activeSession.selectedServerId === \'all\'',
+    'collapsed ? \'\' : buildOpsPrompt(selectedServers, events)',
+    'if (collapsed) {\n      return;\n    }\n\n    const validServerIds = new Set(servers.map',
   ];
   const missingFrontend = frontendFragments.filter((fragment) => !aiConsoleSource.includes(fragment));
   if (missingFrontend.length) {
@@ -3386,6 +3389,8 @@ function assertSqlitePersistenceGuards() {
     'overviewRefreshInFlightRef.current = true',
     'overviewRefreshInFlightRef.current = false',
     'void refreshOverview()',
+    "activeSection === 'servers' ? filterServers(overview.servers, filters) : []",
+    "if (filters.region === 'all' && !(filters.regionScope?.length))",
   ];
   const missingFrontend = frontendRequired.filter((fragment) => !frontendSource.includes(fragment));
   if (missingFrontend.length) {
@@ -3513,6 +3518,10 @@ function assertOverviewMapInteractionGuards() {
     'moved: boolean',
     'suppressMapClickRef.current = drag.moved',
     'Math.hypot(deltaX, deltaY) > 5',
+    'const tooltipServerNameLimit = 6',
+    'serverNames: []',
+    'if (group.serverNames.length < tooltipServerNameLimit)',
+    'function collectTooltipServerNames(regions: RegionNode[])',
     'if (suppressMapClickRef.current)',
     'title: regionNames.length > 2',
     'const weightedTotal = Math.max(1, regions.reduce((sum, region) => sum + region.total, 0))',
@@ -3618,6 +3627,9 @@ function assertOverviewMapInteractionGuards() {
   }
   if (overviewSource.includes('--map-tooltip-scale') || overviewSource.includes("Record<'--map-tooltip-scale'")) {
     throw new Error('Overview map tooltip must not be counter-scaled inside the transformed map layer');
+  }
+  if (overviewSource.includes('serverNames: items.map((server) => server.name)') || overviewSource.includes('regions.flatMap((region) => region.serverNames)')) {
+    throw new Error('Overview map tooltip must not retain every server name for large inventories');
   }
 
   const tooltipPointerDownBlock = overviewSource.slice(
