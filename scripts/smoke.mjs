@@ -2793,6 +2793,8 @@ function assertAccountUiGuards() {
     'assertNoBadBoxes',
     'assertSensitiveTextAbsent',
     "path.resolve('output', 'public-pages-check')",
+    'static.cloudflareinsights.com',
+    '/beacon.min.js',
     '/docs.html',
     '/admin/',
     'https://github.com/nmklio/CoLiPas',

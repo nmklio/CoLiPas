@@ -280,7 +280,8 @@ function isLocalhost(value) {
 function isIgnorableResource(value) {
   try {
     const url = new URL(value);
-    return url.pathname === '/favicon.ico';
+    return url.pathname === '/favicon.ico'
+      || (url.hostname === 'static.cloudflareinsights.com' && url.pathname.includes('/beacon.min.js'));
   } catch {
     return false;
   }
