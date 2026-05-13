@@ -427,6 +427,9 @@ for (const [path, assert] of getChecks) {
   if (!response.ok) {
     throw new Error(`${path} returned HTTP ${response.status}`);
   }
+  if (path === '/api/health' && !response.headers.get('cache-control')?.includes('no-store')) {
+    throw new Error('/api/health must return Cache-Control: no-store so release evidence cannot be served stale');
+  }
 
   const body = await response.json();
   if (path === '/api/config') {

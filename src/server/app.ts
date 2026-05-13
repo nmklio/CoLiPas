@@ -72,6 +72,7 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
   );
 
   app.get('/api/health', (_request, response) => {
+    response.setHeader('Cache-Control', 'no-store');
     response.json({
       status: 'ok',
       nodeEnv: config.nodeEnv,
