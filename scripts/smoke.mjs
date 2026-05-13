@@ -2739,6 +2739,7 @@ function assertAccountUiGuards() {
   const verifyProductionSource = fs.readFileSync(new URL('../scripts/verify-production.mjs', import.meta.url), 'utf8');
   const releaseDeploySource = fs.readFileSync(new URL('../scripts/release-deploy.ps1', import.meta.url), 'utf8');
   const publicPagesCheckSource = fs.readFileSync(new URL('../scripts/public-pages-check.mjs', import.meta.url), 'utf8');
+  const ciWorkflowSource = fs.readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
   const dockerfileSource = fs.readFileSync(new URL('../Dockerfile', import.meta.url), 'utf8');
   const composeSource = fs.readFileSync(new URL('../docker-compose.yml', import.meta.url), 'utf8');
   const systemdSource = fs.readFileSync(new URL('../deploy/colipas.service', import.meta.url), 'utf8');
@@ -2805,6 +2806,18 @@ function assertAccountUiGuards() {
   const missingPublicPageGuard = publicPageGuardFragments.filter((fragment) => !publicPageGuardSource.includes(fragment));
   if (missingPublicPageGuard.length) {
     throw new Error(`Public landing/docs/admin browser validation is incomplete: ${missingPublicPageGuard.join(', ')}`);
+  }
+
+  const ciGuardFragments = [
+    'concurrency:',
+    'cancel-in-progress: true',
+    'timeout-minutes: 20',
+    'npx playwright install --with-deps chromium',
+    'npm test',
+  ];
+  const missingCiGuard = ciGuardFragments.filter((fragment) => !ciWorkflowSource.includes(fragment));
+  if (missingCiGuard.length) {
+    throw new Error(`CI workflow is missing timeout/cancellation guardrails: ${missingCiGuard.join(', ')}`);
   }
 
   const deploymentEvidenceGuardFragments = [
