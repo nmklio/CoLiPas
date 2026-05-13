@@ -331,7 +331,18 @@ currentSmokePassword = nextPassword;
 console.log('ok /api/account/password hashes password, rejects weak input, and revokes other sessions');
 
 const getChecks = [
-  ['/api/health', (body) => body.status === 'ok' && body.database?.driver === 'sqlite' && body.database?.name === 'colipas.sqlite' && !('path' in body.database)],
+  [
+    '/api/health',
+    (body) =>
+      body.status === 'ok'
+      && body.database?.driver === 'sqlite'
+      && body.database?.name === 'colipas.sqlite'
+      && !('path' in body.database)
+      && body.release?.gitCommit === 'abcdef123456'
+      && body.release?.targetName === 'verify-local'
+      && body.release?.deploymentMode === 'node'
+      && !JSON.stringify(body).includes('verify-production-release-token-12345'),
+  ],
   [
     '/api/config',
     (body) =>

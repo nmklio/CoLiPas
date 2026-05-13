@@ -1076,7 +1076,7 @@ systemctl status ssh --no-pager</pre>
         <p class="kicker">API 与自定义代理</p>
         <h2>业务 API 需要登录，自定义代理需要白名单</h2>
         <div class="table">
-          <div><code>GET /api/health</code><p>公开健康检查，只返回运行状态和 SQLite 驱动名称，不暴露路径。</p></div>
+          <div><code>GET /api/health</code><p>公开健康检查，返回运行状态、SQLite 驱动名称和短发布标识，不暴露路径或密钥。</p></div>
           <div><code>POST /api/auth/login</code><p>管理员登录，失败次数会限速并返回 Retry-After。</p></div>
           <div><code>GET /api/overview</code><p>登录后读取账号、服务器、事件和总览指标。</p></div>
           <div><code>POST /api/custom-apis/test</code><p>通过后端代理测试外部接口，阻止内网地址、敏感 Header 和重定向 SSRF。</p></div>

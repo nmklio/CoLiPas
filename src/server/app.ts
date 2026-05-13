@@ -79,6 +79,11 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
         driver: 'sqlite',
         name: path.basename(getDatabasePath()),
       },
+      release: {
+        targetName: config.release.targetName || 'local',
+        deploymentMode: config.release.deploymentMode || 'node',
+        gitCommit: config.release.gitCommit ? config.release.gitCommit.slice(0, 12) : '',
+      },
       uptime: Math.round(process.uptime()),
       time: new Date().toISOString(),
     });
