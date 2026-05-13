@@ -887,9 +887,54 @@ export function connectServerShellSocket(
   onReady: (event: ServerShellSocketReady) => void,
   onError: (error: Error) => void,
 ) {
+  const shellSocketInputFlushMs = 8;
+  const shellSocketInputChunkSize = 4000;
   const socket = new WebSocket(buildServerShellSocketUrl());
   let opened = false;
   let ready = false;
+  let pendingInput = '';
+  let inputFlushTimer: number | null = null;
+
+  const sendInputChunk = (input: string) => {
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: 'input', data: input }));
+    }
+  };
+
+  const flushInput = () => {
+    if (inputFlushTimer !== null) {
+      window.clearTimeout(inputFlushTimer);
+      inputFlushTimer = null;
+    }
+    const input = pendingInput;
+    pendingInput = '';
+    if (!input || socket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    for (let offset = 0; offset < input.length; offset += shellSocketInputChunkSize) {
+      sendInputChunk(input.slice(offset, offset + shellSocketInputChunkSize));
+    }
+  };
+
+  const queueInput = (input: string) => {
+    if (!input || socket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    pendingInput += input;
+    if (
+      input.includes('\r')
+      || input.includes('\n')
+      || input.includes('\u0003')
+      || pendingInput.length >= shellSocketInputChunkSize
+    ) {
+      flushInput();
+      return;
+    }
+
+    if (inputFlushTimer === null) {
+      inputFlushTimer = window.setTimeout(flushInput, shellSocketInputFlushMs);
+    }
+  };
 
   socket.addEventListener('open', () => {
     opened = true;
@@ -915,6 +960,11 @@ export function connectServerShellSocket(
   });
 
   socket.addEventListener('close', () => {
+    if (inputFlushTimer !== null) {
+      window.clearTimeout(inputFlushTimer);
+      inputFlushTimer = null;
+    }
+    pendingInput = '';
     if (!opened || !ready) {
       onError(new Error('SSH WebSocket connection closed before opening'));
     }
@@ -922,9 +972,7 @@ export function connectServerShellSocket(
 
   return {
     sendInput(input: string) {
-      if (socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type: 'input', data: input }));
-      }
+      queueInput(input);
     },
     resize(nextDimensions: { cols: number; rows: number }) {
       if (socket.readyState === WebSocket.OPEN) {
@@ -932,6 +980,7 @@ export function connectServerShellSocket(
       }
     },
     close() {
+      flushInput();
       if (socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'close' }));
       }

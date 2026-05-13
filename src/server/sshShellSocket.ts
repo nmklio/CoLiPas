@@ -17,6 +17,8 @@ type ClientMessage =
   | { type: 'resize'; cols?: unknown; rows?: unknown }
   | { type: 'close' };
 
+const shellSocketOutputFlushMs = 8;
+
 export function attachSshShellSocketServer(server: HttpServer, config: RuntimeConfig) {
   const socketServer = new WebSocketServer({
     noServer: true,
@@ -50,10 +52,46 @@ function bindSshShellSocket(webSocket: WebSocket) {
   let sessionId = '';
   let unsubscribe: (() => void) | null = null;
   let closing = false;
+  let pendingOutputEvent: SshShellStreamEvent | null = null;
+  let outputFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
   const send = (payload: unknown) => {
     if (webSocket.readyState === WebSocket.OPEN) {
       webSocket.send(JSON.stringify(payload));
+    }
+  };
+
+  const flushOutput = () => {
+    if (outputFlushTimer) {
+      clearTimeout(outputFlushTimer);
+      outputFlushTimer = null;
+    }
+    if (pendingOutputEvent) {
+      const event = pendingOutputEvent;
+      pendingOutputEvent = null;
+      send(event);
+    }
+  };
+
+  const sendShellEvent = (event: SshShellStreamEvent) => {
+    if (event.type !== 'stdout' && event.type !== 'stderr') {
+      flushOutput();
+      send(event);
+      return;
+    }
+
+    if (pendingOutputEvent?.type === event.type) {
+      pendingOutputEvent = {
+        ...event,
+        content: `${pendingOutputEvent.content ?? ''}${event.content ?? ''}`,
+      };
+    } else {
+      flushOutput();
+      pendingOutputEvent = event;
+    }
+
+    if (!outputFlushTimer) {
+      outputFlushTimer = setTimeout(flushOutput, shellSocketOutputFlushMs);
     }
   };
 
@@ -62,6 +100,7 @@ function bindSshShellSocket(webSocket: WebSocket) {
       return;
     }
     closing = true;
+    flushOutput();
     unsubscribe?.();
     unsubscribe = null;
     if (sessionId) {
@@ -98,7 +137,7 @@ function bindSshShellSocket(webSocket: WebSocket) {
           connectedAt: shell.connectedAt,
         });
         unsubscribe = subscribeServerShell({ sessionId, replay: 1 }, (event: SshShellStreamEvent) => {
-          send(event);
+          sendShellEvent(event);
           if (event.type === 'close') {
             cleanup();
             webSocket.close(1000, 'shell closed');
@@ -142,6 +181,13 @@ function bindSshShellSocket(webSocket: WebSocket) {
     }
   });
 
-  webSocket.on('close', cleanup);
+  webSocket.on('close', () => {
+    if (outputFlushTimer) {
+      clearTimeout(outputFlushTimer);
+      outputFlushTimer = null;
+    }
+    pendingOutputEvent = null;
+    cleanup();
+  });
   webSocket.on('error', cleanup);
 }

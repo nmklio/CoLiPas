@@ -4091,6 +4091,11 @@ function assertSshTerminalRealtimeGuards() {
     'export async function resizeServerShell',
     'export async function closeServerShell',
     'export async function fetchServerShellStatus',
+    'const shellSocketInputFlushMs = 8',
+    'const shellSocketInputChunkSize = 4000',
+    'input.includes(\'\\u0003\')',
+    'window.setTimeout(flushInput, shellSocketInputFlushMs)',
+    'flushInput();',
   ];
   const missingClient = requiredClientFragments.filter((fragment) => !apiClientSource.includes(fragment));
   if (missingClient.length) {
@@ -4106,6 +4111,11 @@ function assertSshTerminalRealtimeGuards() {
     "type: 'close'",
     'getCurrentSession(request as Parameters<typeof getCurrentSession>[0], config)',
     'closeServerShell({ sessionId })',
+    'const shellSocketOutputFlushMs = 8',
+    'function bindSshShellSocket',
+    'let pendingOutputEvent: SshShellStreamEvent | null = null',
+    'setTimeout(flushOutput, shellSocketOutputFlushMs)',
+    'sendShellEvent(event)',
   ];
   const missingSocket = socketRequired.filter((fragment) => !sshSocketSource.includes(fragment));
   if (missingSocket.length) {
