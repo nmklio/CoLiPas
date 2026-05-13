@@ -226,27 +226,24 @@ async function assertAccountSettingsAndAiChat(targetPage) {
 }
 
 async function createTemporaryAssetServer(targetPage, namePrefix = 'browser-e2e-asset') {
-  const response = await targetPage.request.post(`${baseUrl}/api/servers`, {
-    data: {
-      name: `${namePrefix}-${Date.now()}`,
-      provider: 'OpenStack Lab',
-      region: 'US - Los Angeles',
-      publicIp: `198.51.100.${Math.floor(Math.random() * 100) + 10}`,
-      privateIp: '10.66.0.10',
-      os: 'Ubuntu 24.04 LTS',
-      tags: ['browser-e2e', 'audit-trace'],
-      ssh: {
-        port: 22,
-        username: 'root',
-        authType: 'password',
-        verifyMode: 'assetOnly',
-      },
+  const payload = {
+    provider: 'OpenStack Lab',
+    region: 'US - Los Angeles',
+    publicIp: `198.51.100.${Math.floor(Math.random() * 100) + 10}`,
+    privateIp: '10.66.0.10',
+    os: 'Ubuntu 24.04 LTS',
+    tags: ['browser-e2e', 'audit-trace'],
+    ssh: {
+      port: 22,
+      username: 'root',
+      authType: 'password',
+      verifyMode: 'assetOnly',
     },
-  });
-
-  if (response.status() !== 201) {
-    throw new Error(`/api/servers browser e2e setup returned HTTP ${response.status()}: ${await response.text()}`);
-  }
+  };
+  const response = await postJsonWithTransientRetry(targetPage, `${baseUrl}/api/servers`, () => ({
+    ...payload,
+    name: `${namePrefix}-${Date.now()}`,
+  }), 'browser e2e asset server setup');
 
   const server = await response.json();
   if (!server.id || server.status !== 'unconnected') {
@@ -256,30 +253,71 @@ async function createTemporaryAssetServer(targetPage, namePrefix = 'browser-e2e-
   return server;
 }
 
-async function createTemporarySimulatedSshServer(targetPage, namePrefix = 'browser-e2e-ssh') {
-  const response = await targetPage.request.post(`${baseUrl}/api/servers`, {
-    data: {
-      name: `${namePrefix}-${Date.now()}`,
-      provider: 'OpenStack Lab',
-      region: 'US - Los Angeles',
-      publicIp: `203.0.113.${Math.floor(Math.random() * 100) + 10}`,
-      privateIp: '10.77.0.10',
-      os: 'Debian 12',
-      tags: ['browser-e2e', 'ssh-panel'],
-      ssh: {
-        host: 'simulated-ssh.local',
-        port: 22,
-        username: 'root',
-        authType: 'password',
-        password: 'test-browser-e2e-value',
-        verifyMode: 'simulate',
-      },
-    },
-  });
-
-  if (response.status() !== 201) {
-    throw new Error(`/api/servers simulated SSH setup returned HTTP ${response.status()}: ${await response.text()}`);
+async function postJsonWithTransientRetry(targetPage, url, buildData, label, maxAttempts = 3) {
+  let lastError;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      if (attempt > 1) {
+        await waitForApiHealth(targetPage);
+      }
+      const response = await targetPage.request.post(url, {
+        data: buildData(),
+        timeout: 15000,
+      });
+      if (response.status() === 201) {
+        return response;
+      }
+      throw new Error(`${label} returned HTTP ${response.status()}: ${await response.text()}`);
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      if (!isTransientApiRequestFailure(message) || attempt === maxAttempts) {
+        throw error;
+      }
+      console.log(`retry ${label} after transient request failure (${attempt}/${maxAttempts}): ${message}`);
+      await targetPage.waitForTimeout(300 * attempt);
+    }
   }
+
+  throw lastError instanceof Error ? lastError : new Error(`${label} failed`);
+}
+
+async function waitForApiHealth(targetPage) {
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    try {
+      const response = await targetPage.request.get(`${baseUrl}/api/health`, { timeout: 5000 });
+      if (response.ok()) {
+        return;
+      }
+    } catch {
+      // Retry; CI can briefly reset local sockets while Chromium is starting.
+    }
+    await targetPage.waitForTimeout(250 * attempt);
+  }
+}
+
+function isTransientApiRequestFailure(message) {
+  return /socket hang up|ECONNRESET|ECONNREFUSED|UND_ERR_SOCKET|Target page, context or browser has been closed/i.test(message);
+}
+
+async function createTemporarySimulatedSshServer(targetPage, namePrefix = 'browser-e2e-ssh') {
+  const response = await postJsonWithTransientRetry(targetPage, `${baseUrl}/api/servers`, () => ({
+    name: `${namePrefix}-${Date.now()}`,
+    provider: 'OpenStack Lab',
+    region: 'US - Los Angeles',
+    publicIp: `203.0.113.${Math.floor(Math.random() * 100) + 10}`,
+    privateIp: '10.77.0.10',
+    os: 'Debian 12',
+    tags: ['browser-e2e', 'ssh-panel'],
+    ssh: {
+      host: 'simulated-ssh.local',
+      port: 22,
+      username: 'root',
+      authType: 'password',
+      password: 'test-browser-e2e-value',
+      verifyMode: 'simulate',
+    },
+  }), 'browser e2e simulated SSH setup');
 
   const server = await response.json();
   if (!server.id || server.ssh?.connected !== true || server.status !== 'running') {
