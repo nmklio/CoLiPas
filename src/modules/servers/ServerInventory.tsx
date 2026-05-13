@@ -17,6 +17,7 @@ import {
   streamServerShell,
   writeServerShell,
   type ServerIdentityResponse,
+  type ServerShellSocketMetrics,
   type ServerShellStreamEvent,
   type ServerShellSocketReady,
   updateServer,
@@ -57,6 +58,12 @@ interface LoginProbe {
   user?: string;
   pwd?: string;
   date?: string;
+}
+
+interface TerminalNetworkStats {
+  bytesReceived: number;
+  throughputBytesPerSecond: number;
+  rttMs: number | null;
 }
 
 const initialForm: ConnectServerPayload = {
@@ -105,6 +112,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const [sshInterrupting, setSshInterrupting] = useState(false);
   const [terminalShellId, setTerminalShellId] = useState<string | null>(null);
   const [activeShellCount, setActiveShellCount] = useState(0);
+  const [terminalNetworkStats, setTerminalNetworkStats] = useState<TerminalNetworkStats | null>(null);
   const [loginProbe, setLoginProbe] = useState<LoginProbe | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [formDismissed, setFormDismissed] = useState(false);
@@ -146,6 +154,9 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const visibleServerRows = useMemo(() => servers.slice(0, visibleServerLimit), [servers, visibleServerLimit]);
   const hiddenServerCount = Math.max(servers.length - visibleServerRows.length, 0);
   const activeSshServer = useMemo(() => allServers.find((server) => server.id === sshPanelServerId) ?? null, [allServers, sshPanelServerId]);
+  const terminalNetworkLabel = terminalNetworkStats
+    ? `${formatTerminalRtt(terminalNetworkStats.rttMs)} / ${formatBytesPerSecond(terminalNetworkStats.throughputBytesPerSecond)}`
+    : '';
   const visibleSummary = useMemo(() => {
     let maxLoadServer: ServerNode | undefined;
     let maxLoad = -1;
@@ -770,6 +781,11 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     <span className="ssh-terminal-session-count" title={t('servers.activeShellSessions', { count: activeShellCount })}>
                       {t('servers.activeShellSessionsShort', { count: activeShellCount })}
                     </span>
+                    {terminalShellId && terminalNetworkLabel && (
+                      <span className="ssh-terminal-network" title={t('servers.terminalNetworkStats')}>
+                        {terminalNetworkLabel}
+                      </span>
+                    )}
                     <div className="ssh-terminal-state">
                       <span className={terminalShellId ? 'live' : sshRunning ? 'pending' : ''} aria-hidden="true" />
                       <small>{sshInterrupting ? t('servers.sshInterrupting') : terminalShellId ? t('servers.sshConnected') : sshRunning ? t('servers.runningSsh') : t('servers.sshConnect')}</small>
@@ -1005,6 +1021,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     sshConsoleOpenRef.current = true;
     setSshPanelServerId(server.id);
     setLoginProbe(null);
+    setTerminalNetworkStats(null);
     sshConsoleReplayHistoryRef.current = !terminalShellIdRef.current || terminalShellServerIdRef.current !== server.id;
     setSshConsoleOpen(true);
     refreshShellStatus();
@@ -1020,6 +1037,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     setSshConsoleOpen(false);
     setSshPanelServerId('');
     setLoginProbe(null);
+    setTerminalNetworkStats(null);
     setSshRunning(false);
     setSshInterrupting(false);
     if (serverName) {
@@ -1040,6 +1058,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       return;
     }
     setSshRunning(true);
+    setTerminalNetworkStats(null);
     closeActiveShellSession();
     terminalShellServerIdRef.current = server.id;
     terminal.reset();
@@ -1064,6 +1083,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     } catch (error) {
       closeActiveShellSession();
       refreshShellStatus();
+      setTerminalNetworkStats(null);
       setLoginProbe({
         host: server.ssh?.host || server.publicIp,
         user: server.ssh?.username || 'root',
@@ -1171,6 +1191,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
             terminal.scrollToBottom();
           }
         },
+        (metrics) => updateTerminalNetworkStats(metrics),
       );
       terminalShellSocketRef.current = socket;
       terminalShellTransportRef.current = 'websocket';
@@ -1212,6 +1233,11 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       { replayHistory: sshConsoleReplayHistoryRef.current },
     );
     terminalShellStreamRef.current = stream;
+    setTerminalNetworkStats({
+      bytesReceived: 0,
+      throughputBytesPerSecond: 0,
+      rttMs: null,
+    });
   }
 
   function handleTerminalStreamEvent(serverId: string, terminal: XTerm, event: ServerShellStreamEvent) {
@@ -1235,6 +1261,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       terminalShellStreamRef.current = null;
       terminalShellSocketRef.current = null;
       terminalShellTransportRef.current = null;
+      setTerminalNetworkStats(null);
       refreshShellStatus();
     }
     if (event.type === 'error' && sshConsoleOpenRef.current) {
@@ -1242,6 +1269,14 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       terminal.writeln(`\r\n${event.message ?? 'SSH shell stream failed'}`);
       terminal.scrollToBottom();
     }
+  }
+
+  function updateTerminalNetworkStats(metrics: ServerShellSocketMetrics) {
+    setTerminalNetworkStats({
+      bytesReceived: metrics.bytesReceived,
+      throughputBytesPerSecond: metrics.throughputBytesPerSecond,
+      rttMs: metrics.rttMs,
+    });
   }
 
   async function ensureXterm() {
@@ -1566,6 +1601,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     clearTerminalInputBuffer();
     if (syncState) {
       setTerminalShellId(null);
+      setTerminalNetworkStats(null);
     }
     terminalShellServerIdRef.current = null;
     terminalDataSubscriptionRef.current?.dispose();
@@ -1816,6 +1852,17 @@ function formatProviderName(provider: string, t: (key: string, vars?: Record<str
 
 function formatProviderFilterName(provider: string, t: (key: string, vars?: Record<string, string | number>) => string) {
   return provider.trim().toLowerCase() === customProvider.toLowerCase() ? t('servers.providerCustomFilter') : provider;
+}
+
+function formatTerminalRtt(rttMs: number | null) {
+  return rttMs === null ? 'RTT --' : `RTT ${rttMs}ms`;
+}
+
+function formatBytesPerSecond(bytesPerSecond: number) {
+  if (bytesPerSecond >= 1024 * 1024) {
+    return `${(bytesPerSecond / 1024 / 1024).toFixed(1)} MB/s`;
+  }
+  return `${Math.max(0, Math.round(bytesPerSecond / 1024))} KB/s`;
 }
 
 function actionLabel(action: 'powerOn' | 'shutdown' | 'reboot') {

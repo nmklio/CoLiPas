@@ -185,6 +185,18 @@ export interface ServerShellSocketReady extends ServerShellResponse {
   type: 'ready';
 }
 
+export interface ServerShellSocketPong {
+  type: 'pong';
+  sentAt?: number;
+  receivedAt?: number;
+}
+
+export interface ServerShellSocketMetrics {
+  bytesReceived: number;
+  throughputBytesPerSecond: number;
+  rttMs: number | null;
+}
+
 export interface ServerActionResponse extends ServerCommandResponse {
   id: string;
   action: 'powerOn' | 'shutdown' | 'reboot';
@@ -888,14 +900,23 @@ export function connectServerShellSocket(
   onEvent: (event: ServerShellStreamEvent) => void,
   onReady: (event: ServerShellSocketReady) => void,
   onError: (error: Error) => void,
+  onMetrics?: (metrics: ServerShellSocketMetrics) => void,
 ) {
   const shellSocketInputFlushMs = 8;
   const shellSocketInputChunkSize = 4000;
+  const shellSocketPingIntervalMs = 4000;
+  const shellSocketMetricsIntervalMs = 1000;
   const socket = new WebSocket(buildServerShellSocketUrl());
   let opened = false;
   let ready = false;
   let pendingInput = '';
   let inputFlushTimer: number | null = null;
+  let pingTimer: number | null = null;
+  let metricsTimer: number | null = null;
+  let bytesReceived = 0;
+  let lastMetricsBytes = 0;
+  let lastMetricsAt = performance.now();
+  let latestRttMs: number | null = null;
 
   const sendInputChunk = (input: string) => {
     if (socket.readyState === WebSocket.OPEN) {
@@ -938,6 +959,43 @@ export function connectServerShellSocket(
     }
   };
 
+  const emitMetrics = () => {
+    if (!onMetrics) {
+      return;
+    }
+    const now = performance.now();
+    const elapsedSeconds = Math.max((now - lastMetricsAt) / 1000, 0.001);
+    const throughputBytesPerSecond = Math.round((bytesReceived - lastMetricsBytes) / elapsedSeconds);
+    lastMetricsBytes = bytesReceived;
+    lastMetricsAt = now;
+    onMetrics({
+      bytesReceived,
+      throughputBytesPerSecond,
+      rttMs: latestRttMs,
+    });
+  };
+
+  const sendPing = () => {
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: 'ping', sentAt: performance.now() }));
+    }
+  };
+
+  const stopTimers = () => {
+    if (inputFlushTimer !== null) {
+      window.clearTimeout(inputFlushTimer);
+      inputFlushTimer = null;
+    }
+    if (pingTimer !== null) {
+      window.clearInterval(pingTimer);
+      pingTimer = null;
+    }
+    if (metricsTimer !== null) {
+      window.clearInterval(metricsTimer);
+      metricsTimer = null;
+    }
+  };
+
   socket.addEventListener('open', () => {
     opened = true;
     socket.send(JSON.stringify({ type: 'open', serverId, ...dimensions }));
@@ -945,11 +1003,26 @@ export function connectServerShellSocket(
 
   socket.addEventListener('message', (event) => {
     try {
-      const payload = JSON.parse(String(event.data)) as ServerShellStreamEvent | ServerShellSocketReady;
+      const payload = JSON.parse(String(event.data)) as ServerShellStreamEvent | ServerShellSocketReady | ServerShellSocketPong;
       if (payload.type === 'ready') {
         ready = true;
         onReady(payload);
+        sendPing();
+        pingTimer = window.setInterval(sendPing, shellSocketPingIntervalMs);
+        metricsTimer = window.setInterval(emitMetrics, shellSocketMetricsIntervalMs);
         return;
+      }
+      if (payload.type === 'pong') {
+        const sentAt = typeof payload.sentAt === 'number' ? payload.sentAt : null;
+        latestRttMs = sentAt === null ? latestRttMs : Math.max(0, Math.round(performance.now() - sentAt));
+        emitMetrics();
+        return;
+      }
+      if (typeof payload.content === 'string') {
+        bytesReceived += payload.content.length;
+        if (payload.content.length >= 1024) {
+          emitMetrics();
+        }
       }
       onEvent(payload);
     } catch (error) {
@@ -962,10 +1035,7 @@ export function connectServerShellSocket(
   });
 
   socket.addEventListener('close', () => {
-    if (inputFlushTimer !== null) {
-      window.clearTimeout(inputFlushTimer);
-      inputFlushTimer = null;
-    }
+    stopTimers();
     pendingInput = '';
     if (!opened || !ready) {
       onError(new Error('SSH WebSocket connection closed before opening'));
@@ -983,6 +1053,7 @@ export function connectServerShellSocket(
     },
     close() {
       flushInput();
+      stopTimers();
       if (socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'close' }));
       }

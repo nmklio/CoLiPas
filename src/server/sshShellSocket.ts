@@ -15,6 +15,7 @@ type ClientMessage =
   | { type: 'open'; serverId?: unknown; cols?: unknown; rows?: unknown }
   | { type: 'input'; data?: unknown }
   | { type: 'resize'; cols?: unknown; rows?: unknown }
+  | { type: 'ping'; sentAt?: unknown }
   | { type: 'close' };
 
 const shellSocketOutputFlushMs = 8;
@@ -162,6 +163,11 @@ function bindSshShellSocket(webSocket: WebSocket) {
 
       if (message.type === 'resize') {
         resizeServerShell({ sessionId, cols: message.cols, rows: message.rows });
+        return;
+      }
+
+      if (message.type === 'ping') {
+        send({ type: 'pong', sentAt: message.sentAt, receivedAt: Date.now() });
         return;
       }
 

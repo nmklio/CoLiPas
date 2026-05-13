@@ -357,6 +357,7 @@ async function assertSshTerminalPanel(targetPage) {
     await targetPage.locator('.ssh-console').waitFor({ timeout: 10000 });
     await targetPage.locator('.ssh-terminal-screen .xterm').waitFor({ timeout: 10000 });
     await targetPage.locator('.ssh-terminal-session-count').filter({ hasText: /sessions 1/i }).waitFor({ timeout: 10000 });
+    await targetPage.locator('.ssh-terminal-network').filter({ hasText: /RTT/i }).waitFor({ timeout: 10000 });
     await targetPage.locator('.ssh-terminal-screen').click();
     await targetPage.keyboard.type('whoami', { delay: 10 });
     await targetPage.keyboard.press('Enter');
@@ -496,6 +497,10 @@ async function assertSshTerminalPanel(targetPage) {
     const maxBurstLongTaskMs = burstLongTaskDurations.length > 0 ? Math.max(...burstLongTaskDurations) : 0;
     if (burstOutputDurationMs > 12000 || maxBurstLongTaskMs > 300) {
       throw new Error(`SSH burst output rendered too slowly: ${burstOutputDurationMs}ms, max long task ${maxBurstLongTaskMs}ms`);
+    }
+    const terminalNetworkText = await targetPage.locator('.ssh-terminal-network').innerText();
+    if (!/RTT\s+\d+ms\s+\/\s+(?:\d+\s+KB\/s|\d+(?:\.\d)?\s+MB\/s)/i.test(terminalNetworkText)) {
+      throw new Error(`SSH terminal network diagnostics did not render latency and throughput: ${terminalNetworkText}`);
     }
     console.log(`ok browser e2e SSH burst output rendered in ${burstOutputDurationMs}ms with max long task ${maxBurstLongTaskMs}ms`);
     await assertElementWithinViewport(targetPage, '.ssh-console', 'desktop SSH console');
