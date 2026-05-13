@@ -50,6 +50,8 @@ export interface AiExecutionPlan {
   command?: string;
   reason: string;
   confirmed?: boolean;
+  requiresConfirmation?: boolean;
+  confirmationReason?: string;
   safetyNote: string;
 }
 

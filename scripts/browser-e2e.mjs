@@ -208,6 +208,11 @@ async function assertAccountSettingsAndAiChat(targetPage) {
     await targetPage.locator('.ai-message.assistant.done .ai-message-content').filter({ hasText: /guarded execution plan|受控|执行卡/i }).last().waitFor({ timeout: 20000 });
     await targetPage.locator('.ai-execution-card').waitFor({ timeout: 10000 });
     await targetPage.locator('.ai-execution-command code').filter({ hasText: /^apt install -y unzip$/ }).waitFor({ timeout: 10000 });
+    await targetPage.locator('.ai-execution-tags .risk').filter({ hasText: /confirmation required/i }).waitFor({ timeout: 10000 });
+    const highRiskCancelClass = await targetPage.locator('.ai-execution-card .ai-execution-choice.danger').getAttribute('class');
+    if (!highRiskCancelClass?.includes('active')) {
+      throw new Error(`AI high-impact execution card should default to cancel, got classes: ${highRiskCancelClass ?? 'none'}`);
+    }
 
     await assertDesktopAiDockLayout(targetPage);
 

@@ -5658,6 +5658,9 @@ pre {
 }
 
 .ai-execution-tags span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   min-width: 0;
   max-width: 100%;
   border: 1px solid #d9e2ea;
@@ -5671,6 +5674,12 @@ pre {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ai-execution-tags span.risk {
+  border-color: #f5c56a;
+  background: #fff8e6;
+  color: #8a5a0a;
 }
 
 .ai-execution-choice-group {

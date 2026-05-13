@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { buildOpsPrompt } from '../../shared/aiPrompt.js';
+import { getSshCommandConfirmationReason } from '../../shared/sshCommandRisk.js';
 import { AIProviderConfig, OperationEvent, ServerNode } from '../../types.js';
 import { RuntimeConfig } from '../config.js';
 import { HttpError } from '../httpErrors.js';
@@ -45,6 +46,8 @@ export interface AiExecutionPlan {
   command?: string;
   reason: string;
   confirmed?: boolean;
+  requiresConfirmation?: boolean;
+  confirmationReason?: string;
   safetyNote: string;
 }
 
@@ -823,7 +826,9 @@ function buildExecutionPlan(
       serverIds,
       operation,
       reason: `AI suggested ${operation} after operator question: ${question.slice(0, 120)}`,
-      confirmed: true,
+      confirmed: false,
+      requiresConfirmation: true,
+      confirmationReason: operation,
       safetyNote: 'This is a high-impact lifecycle action and still runs through operations preflight and audit logging.',
     };
   }
@@ -836,6 +841,7 @@ function buildExecutionPlan(
         ? 'hostname && uptime && df -h /'
         : 'uname -a && uptime && whoami');
   const operation = requestedCommand ? 'sshCommand' : wantsHealth ? 'healthCheck' : 'sshCommand';
+  const confirmationReason = operation === 'sshCommand' ? getSshCommandConfirmationReason(command) : '';
 
   return {
     title: requestedCommand
@@ -850,6 +856,8 @@ function buildExecutionPlan(
     command,
     reason: `AI guided server inspection after operator question: ${question.slice(0, 120)}`,
     confirmed: false,
+    requiresConfirmation: Boolean(confirmationReason),
+    confirmationReason: confirmationReason || undefined,
     safetyNote: requestedCommand
       ? 'This operator-provided command is submitted through operations preflight and audit logging before SSH execution.'
       : 'This command is submitted through operations preflight first, then executed by the existing SSH service.',

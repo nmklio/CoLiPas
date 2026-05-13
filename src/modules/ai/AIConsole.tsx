@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   CircleStop,
   History,
+  AlertTriangle,
   MessageCircle,
   PlayCircle,
   PanelRightClose,
@@ -110,6 +111,7 @@ const aiExecutionCopyByLanguage: Record<string, {
   reason: string;
   reasonPlaceholder: string;
   submit: string;
+  confirmationRequired?: string;
   cancelHint: string;
   allowHint: string;
   decisionTitle: string;
@@ -262,7 +264,7 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
   const lastUserQuestion = useMemo(() => findLastUserQuestion(activeSession.messages), [activeSession.messages]);
   const executionPlan = activeSession.analysis?.executionPlan ?? null;
   const executionPlanKey = executionPlan
-    ? `${executionPlan.operation}|${executionPlan.targetMode}|${executionPlan.serverIds.join(',')}|${executionPlan.command ?? ''}|${executionPlan.title}`
+    ? `${executionPlan.operation}|${executionPlan.targetMode}|${executionPlan.serverIds.join(',')}|${executionPlan.command ?? ''}|${executionPlan.title}|${executionPlan.requiresConfirmation ? 'confirm' : 'safe'}|${executionPlan.confirmationReason ?? ''}`
     : '';
   const scopeLabel = activeSession.selectedServerId === 'all'
     ? t('ai.allServers')
@@ -396,7 +398,7 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
   }, [connectionTest, modelMessage]);
 
   useEffect(() => {
-    setAiTaskDecision('allow');
+    setAiTaskDecision(executionPlan?.requiresConfirmation ? 'cancel' : 'allow');
     setAiTaskReason('');
     setAiTaskMessage('');
     setAiTaskResult(null);
@@ -693,6 +695,12 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
       return;
     }
 
+    if (plan.requiresConfirmation && aiTaskDecision !== 'allow') {
+      setAiTaskResult(null);
+      setAiTaskMessage(executionCopy.cancelled);
+      return;
+    }
+
     setAiTaskRunning(true);
     setAiTaskMessage('');
     setAiTaskResult(null);
@@ -946,6 +954,9 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
                   <span><Terminal size={13} /> {formatExecutionTargets(executionPlan.serverIds, executionPlan.targetMode, servers, executionCopy)}</span>
                   <span>{executionPlan.operation}</span>
                   <span>{executionCopy.executionMode}</span>
+                  {executionPlan.requiresConfirmation && (
+                    <span className="risk"><AlertTriangle size={13} /> {executionCopy.confirmationRequired ?? 'Confirmation required'}</span>
+                  )}
                 </div>
                 <small><ShieldCheck size={13} /> {executionPlan.safetyNote}</small>
                 <div className="ai-execution-choice-group" aria-label={executionCopy.decisionTitle}>
@@ -1461,6 +1472,8 @@ function isValidAiExecutionPlan(value: unknown): value is NonNullable<AiAnalysis
     && (plan.operation === 'assetSync' || plan.operation === 'healthCheck' || plan.operation === 'sshCommand' || plan.operation === 'powerOn' || plan.operation === 'shutdown' || plan.operation === 'reboot')
     && (plan.command === undefined || typeof plan.command === 'string')
     && typeof plan.reason === 'string'
+    && (plan.requiresConfirmation === undefined || typeof plan.requiresConfirmation === 'boolean')
+    && (plan.confirmationReason === undefined || typeof plan.confirmationReason === 'string')
     && typeof plan.safetyNote === 'string';
 }
 

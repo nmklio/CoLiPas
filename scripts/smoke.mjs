@@ -718,9 +718,11 @@ try {
     || !aiPackageInstallBody.answer?.includes('Local guarded execution plan')
     || aiPackageInstallBody.executionPlan?.operation !== 'sshCommand'
     || aiPackageInstallBody.executionPlan?.command !== 'apt install -y unzip'
+    || aiPackageInstallBody.executionPlan?.requiresConfirmation !== true
+    || aiPackageInstallBody.executionPlan?.confirmationReason !== 'high-impact SSH command'
     || !aiPackageInstallBody.executionPlan?.safetyNote?.includes('operator-provided command')
   ) {
-    throw new Error('/api/ai/analyze direct SSH execution request did not preserve an arbitrary operator command');
+    throw new Error('/api/ai/analyze direct SSH execution request did not preserve an arbitrary operator command with confirmation risk');
   }
   const noEvidenceUpstream = await startMockStreamingAi();
   try {
@@ -3112,6 +3114,9 @@ function assertAiResponseCachingGuards() {
     'questionNeedsNetworkEvidence',
     'isLocalEvidenceBoundaryAnswer',
     'extractSafeRequestedSshCommand',
+    'getSshCommandConfirmationReason(command)',
+    'requiresConfirmation: Boolean(confirmationReason)',
+    'confirmationReason: confirmationReason || undefined',
     'root@host is only terminal context',
     'Execution evidence:',
   ];
@@ -3145,8 +3150,11 @@ function assertAiResponseCachingGuards() {
     'aiExecutionCopyByLanguage',
     'handleExecuteAiPlan',
     'aiTaskDecision',
+    "executionPlan?.requiresConfirmation ? 'cancel' : 'allow'",
     'aiTaskReason',
     'formatExecutionCommand(executionPlan)',
+    'className="risk"',
+    'Confirmation required',
     'ai-execution-choice-group',
     'preflightOperationTask(payload)',
     'createOperationTask({',
@@ -3172,6 +3180,8 @@ function assertAiResponseCachingGuards() {
     'messages: options.messages ?? []',
     'signal: options.signal',
     'executionPlan?: AiExecutionPlan',
+    'requiresConfirmation?: boolean',
+    'confirmationReason?: string',
   ];
   const missingApi = apiFragments.filter((fragment) => !apiClientSource.includes(fragment));
   if (missingApi.length) {
@@ -4619,6 +4629,7 @@ function assertSecurityAuditRelationsAreSpecific() {
 function assertOperationsTargetSelectionGuards() {
   const operationsSource = fs.readFileSync(new URL('../src/modules/operations/OperationsCenter.tsx', import.meta.url), 'utf8');
   const serviceSource = fs.readFileSync(new URL('../src/server/services/operationsService.ts', import.meta.url), 'utf8');
+  const sshCommandRiskSource = fs.readFileSync(new URL('../src/shared/sshCommandRisk.ts', import.meta.url), 'utf8');
   const inventorySource = fs.readFileSync(new URL('../src/server/services/inventoryService.ts', import.meta.url), 'utf8');
   const serverActionsSource = fs.readFileSync(new URL('../src/server/services/serverActions.ts', import.meta.url), 'utf8');
   const auditServiceSource = fs.readFileSync(new URL('../src/server/services/auditService.ts', import.meta.url), 'utf8');
@@ -4679,7 +4690,7 @@ function assertOperationsTargetSelectionGuards() {
     'export function preflightOperationTask(input: unknown)',
     'requiresConfirmation',
     'requiredConfirmationReason(parsed)',
-    'high-impact SSH command',
+    'getSshCommandConfirmationReason(task.command)',
     'correlationId',
     'buildOperationCorrelationId()',
     'const correlationId = parsed.correlationId || buildOperationCorrelationId()',
@@ -4699,6 +4710,16 @@ function assertOperationsTargetSelectionGuards() {
   const missingService = serviceRequired.filter((fragment) => !serviceSource.includes(fragment));
   if (missingService.length) {
     throw new Error(`Operations service selected target guard is incomplete: ${missingService.join(', ')}`);
+  }
+
+  const riskRequired = [
+    'highImpactSshCommandPattern',
+    'export function getSshCommandConfirmationReason(command: string)',
+    'high-impact SSH command',
+  ];
+  const missingRisk = riskRequired.filter((fragment) => !sshCommandRiskSource.includes(fragment));
+  if (missingRisk.length) {
+    throw new Error(`Shared SSH command risk guard is incomplete: ${missingRisk.join(', ')}`);
   }
 
   if (!auditServiceSource.includes("| 'OPERATIONS_PREFLIGHT'")) {
