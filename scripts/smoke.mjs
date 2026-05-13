@@ -751,6 +751,60 @@ try {
   ) {
     throw new Error('/api/ai/analyze did not parse run:command SSH input with confirmation risk');
   }
+  const aiRunOnServerResponse = await fetch(`${baseUrl}/api/ai/analyze`, {
+    method: 'POST',
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      question: 'please run on the server systemctl restart nginx',
+      provider: {
+        name: 'Smoke AI',
+        baseUrl: 'https://api.example.com/v1',
+        model: 'smoke-model',
+        apiKey: '',
+        temperature: 0.2,
+      },
+      serverId: aiExecutableServer.id,
+      forceRefresh: true,
+    }),
+  });
+  if (!aiRunOnServerResponse.ok) {
+    throw new Error(`/api/ai/analyze run-on-server SSH execution request returned HTTP ${aiRunOnServerResponse.status}`);
+  }
+  const aiRunOnServerBody = await aiRunOnServerResponse.json();
+  if (
+    aiRunOnServerBody.executionPlan?.operation !== 'sshCommand'
+    || aiRunOnServerBody.executionPlan?.command !== 'systemctl restart nginx'
+    || aiRunOnServerBody.executionPlan?.requiresConfirmation !== true
+  ) {
+    throw new Error('/api/ai/analyze did not parse run-on-server SSH input without treating target words as the command');
+  }
+  const aiChineseRunOnServerResponse = await fetch(`${baseUrl}/api/ai/analyze`, {
+    method: 'POST',
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      question: '帮我在服务器上执行 systemctl restart nginx',
+      provider: {
+        name: 'Smoke AI',
+        baseUrl: 'https://api.example.com/v1',
+        model: 'smoke-model',
+        apiKey: '',
+        temperature: 0.2,
+      },
+      serverId: aiExecutableServer.id,
+      forceRefresh: true,
+    }),
+  });
+  if (!aiChineseRunOnServerResponse.ok) {
+    throw new Error(`/api/ai/analyze Chinese run-on-server SSH execution request returned HTTP ${aiChineseRunOnServerResponse.status}`);
+  }
+  const aiChineseRunOnServerBody = await aiChineseRunOnServerResponse.json();
+  if (
+    aiChineseRunOnServerBody.executionPlan?.operation !== 'sshCommand'
+    || aiChineseRunOnServerBody.executionPlan?.command !== 'systemctl restart nginx'
+    || aiChineseRunOnServerBody.executionPlan?.requiresConfirmation !== true
+  ) {
+    throw new Error('/api/ai/analyze did not parse Chinese run-on-server SSH input without target-word leakage');
+  }
   const noEvidenceUpstream = await startMockStreamingAi();
   try {
     const aiNoEvidenceUpstreamResponse = await fetch(`${baseUrl}/api/ai/analyze`, {
