@@ -203,7 +203,7 @@ async function assertAccountSettingsAndAiChat(targetPage) {
 
     await targetPage.getByRole('button', { name: /new ai chat/i }).click();
     await targetPage.locator('#ai-server-select').selectOption(aiSshServer.id);
-    await targetPage.getByRole('textbox', { name: /question/i }).fill('执行apt install -y unzip');
+    await targetPage.getByRole('textbox', { name: /question/i }).fill('帮我执行一下 apt install -y unzip');
     await targetPage.getByRole('button', { name: /^send$/i }).click();
     await targetPage.locator('.ai-message.assistant.done .ai-message-content').filter({ hasText: /guarded execution plan|受控|执行卡/i }).last().waitFor({ timeout: 20000 });
     await targetPage.locator('.ai-execution-card').waitFor({ timeout: 10000 });

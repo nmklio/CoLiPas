@@ -697,7 +697,7 @@ try {
     method: 'POST',
     headers: { ...authHeaders, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      question: '执行apt install -y unzip',
+      question: '帮我执行一下 apt install -y unzip',
       provider: {
         name: 'Smoke AI',
         baseUrl: 'https://api.example.com/v1',
@@ -3117,6 +3117,8 @@ function assertAiResponseCachingGuards() {
     'getSshCommandConfirmationReason(command)',
     'requiresConfirmation: Boolean(confirmationReason)',
     'confirmationReason: confirmationReason || undefined',
+    'chinesePolitePrefix',
+    'chineseSoftener',
     'root@host is only terminal context',
     'Execution evidence:',
   ];

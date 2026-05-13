@@ -931,10 +931,12 @@ function extractExplicitRequestedSshCommand(question: string) {
 
   const commandWords = '(?:command|cmd|shell|ssh|命令|指令)';
   const chineseRunWords = '(?:执行|运行|跑|输入)';
+  const chinesePolitePrefix = '(?:请|帮我|麻烦|麻烦你|给我|替我|帮忙)?';
+  const chineseSoftener = '(?:一下|下|一下子)?';
   const patterns = [
     new RegExp(`(?:^|[\\s,;])(?:please\\s+)?(?:run|execute|exec)(?:\\s+(?:this|the))?(?:\\s+${commandWords})?\\s*(?:[:=]|：)?\\s+([\\s\\S]+)$`, 'i'),
     new RegExp(`(?:^|[\\s,;])${commandWords}\\s*(?:[:=]|：)\\s*([\\s\\S]+)$`, 'i'),
-    new RegExp(`${chineseRunWords}(?:\\s*${commandWords})?\\s*(?:[:=]|：)?\\s*([\\s\\S]+)$`, 'i'),
+    new RegExp(`(?:^|[\\s,，。；;])${chinesePolitePrefix}\\s*${chineseRunWords}${chineseSoftener}(?:\\s*${commandWords})?\\s*(?:[:=]|：)?\\s*([\\s\\S]+)$`, 'i'),
   ];
 
   for (const pattern of patterns) {
