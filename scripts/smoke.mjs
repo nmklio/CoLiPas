@@ -2851,6 +2851,8 @@ function assertAccountUiGuards() {
     'fetchReleaseVerification(endpoint, token, maxAttempts, retryDelayMs)',
     'docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" up -d --build --remove-orphans',
     "grep -Ev '^(RELEASE_TARGET_NAME|RELEASE_CHANNEL|RELEASE_DEPLOYMENT_MODE|RELEASE_PUBLIC_URL|RELEASE_GIT_COMMIT|RELEASE_ARTIFACT_ID|RELEASE_DEPLOYED_AT)=' .env",
+    "b.release?.gitCommit===e",
+    "e==='unknown'",
     'deploy/release-evidence-check.mjs',
     'verify_release_evidence',
     'security evidence UI marker is missing',
