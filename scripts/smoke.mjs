@@ -3338,6 +3338,23 @@ function assertSqlitePersistenceGuards() {
   if (!refreshServerMetricsBody || refreshServerMetricsBody.includes('persistInventory()') || refreshServerMetricsBody.includes('replaceServerRows')) {
     throw new Error('Overview metric refresh must not rewrite SQLite inventory rows');
   }
+  const overviewMetricGuardFragments = [
+    'serverMetricsCacheTtlMs',
+    'serverMetricsFailureBackoffMs',
+    'serverMetricsConcurrency',
+    'serverMetricsRefreshBudgetMs',
+    'metricsRefreshInFlight',
+    'shouldRefreshServerMetrics',
+    'runWithConcurrency(staleServers, serverMetricsConcurrency, refreshSingleServerMetrics)',
+    'await Promise.race([',
+  ];
+  const missingOverviewMetricGuardFragments = overviewMetricGuardFragments.filter((fragment) => !inventoryServiceSource.includes(fragment));
+  if (missingOverviewMetricGuardFragments.length) {
+    throw new Error(`Overview SSH metric refresh must be cached, bounded, and non-blocking: ${missingOverviewMetricGuardFragments.join(', ')}`);
+  }
+  if (/Promise\.all\(\s*servers\.map[\s\S]*collectSshMetrics/.test(inventoryServiceSource)) {
+    throw new Error('Overview metric refresh must not collect SSH metrics for every server with unbounded Promise.all');
+  }
 
   const sshMetricFragments = [
     'sleep 0.5',

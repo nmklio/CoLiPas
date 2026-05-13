@@ -44,6 +44,12 @@ const dataDir = process.env.COLIPAS_DATA_DIR || '.data';
 const inventoryPath = path.resolve(process.cwd(), dataDir, 'inventory.json');
 const credentialsPath = path.resolve(process.cwd(), dataDir, 'credentials.json');
 const persistedCredentials = new Map<string, StoredSshCredential>();
+const serverMetricsCacheTtlMs = readEnvInteger('COLIPAS_METRICS_CACHE_TTL_MS', 30_000, 5_000, 300_000);
+const serverMetricsFailureBackoffMs = readEnvInteger('COLIPAS_METRICS_FAILURE_BACKOFF_MS', 60_000, 5_000, 600_000);
+const serverMetricsConcurrency = readEnvInteger('COLIPAS_METRICS_CONCURRENCY', 4, 1, 8);
+const serverMetricsRefreshBudgetMs = readEnvInteger('COLIPAS_METRICS_REFRESH_BUDGET_MS', 160, 0, 2_000);
+const serverMetricSamples = new Map<string, { sampledAt: number; failedAt: number }>();
+let metricsRefreshInFlight: Promise<void> | null = null;
 const serverAuditCorrelationSchema = z.string().trim().regex(/^srv-trace-[a-f0-9-]{36}$/).optional();
 
 function normalizeFilter<T extends string>(value: unknown, allowed: readonly T[], fallback: T) {
@@ -126,6 +132,14 @@ function readFirstQueryValue(value: unknown) {
   return value;
 }
 
+function readEnvInteger(name: string, fallback: number, min: number, max: number) {
+  const parsed = Number(process.env[name]);
+  if (!Number.isInteger(parsed)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, parsed));
+}
+
 function parseInteger(value: unknown) {
   if (typeof value !== 'string') {
     return null;
@@ -168,24 +182,39 @@ const updateServerSchema = z.object({
 });
 
 export async function refreshServerMetrics() {
-  await Promise.all(servers.map(async (server) => {
-    if (hasConnectedCredential(server)) {
-      try {
-        const credential = persistedCredentials.get(server.id);
-        const ssh = server.ssh;
-        if (credential && ssh) {
-          const metrics = await collectSshMetrics(credential, ssh.verifyMode);
-          Object.assign(server, metrics);
-          server.status = normalizeServerRuntimeStatus(server);
-          return;
-        }
-      } catch {
-        // Fall through to local metric drift when live SSH metrics are temporarily unavailable.
-      }
+  const now = Date.now();
+  const staleServers: ServerNode[] = [];
+
+  for (const server of servers) {
+    if (!hasConnectedCredential(server)) {
+      serverMetricSamples.delete(server.id);
+      driftServerMetrics(server);
+      continue;
     }
 
-    driftServerMetrics(server);
-  }));
+    if (shouldRefreshServerMetrics(server, now)) {
+      driftServerMetrics(server);
+      staleServers.push(server);
+    }
+  }
+
+  if (staleServers.length === 0 || metricsRefreshInFlight) {
+    return;
+  }
+
+  metricsRefreshInFlight = refreshStaleServerMetrics(staleServers)
+    .finally(() => {
+      metricsRefreshInFlight = null;
+    });
+
+  if (serverMetricsRefreshBudgetMs <= 0) {
+    return;
+  }
+
+  await Promise.race([
+    metricsRefreshInFlight,
+    wait(serverMetricsRefreshBudgetMs),
+  ]);
 }
 
 export async function connectServer(input: unknown) {
@@ -617,6 +646,71 @@ function persistCredential(serverId: string) {
   } else {
     deleteCredentialRow(serverId);
   }
+}
+
+function shouldRefreshServerMetrics(server: ServerNode, now: number) {
+  const sample = serverMetricSamples.get(server.id);
+  if (!sample) {
+    return true;
+  }
+
+  if (sample.failedAt > 0 && now - sample.failedAt < serverMetricsFailureBackoffMs) {
+    return false;
+  }
+
+  return now - sample.sampledAt >= serverMetricsCacheTtlMs;
+}
+
+async function refreshStaleServerMetrics(staleServers: ServerNode[]) {
+  await runWithConcurrency(staleServers, serverMetricsConcurrency, refreshSingleServerMetrics);
+}
+
+async function refreshSingleServerMetrics(server: ServerNode) {
+  if (!hasConnectedCredential(server)) {
+    serverMetricSamples.delete(server.id);
+    driftServerMetrics(server);
+    return;
+  }
+
+  const credential = persistedCredentials.get(server.id);
+  const ssh = server.ssh;
+  if (!credential || !ssh) {
+    serverMetricSamples.delete(server.id);
+    driftServerMetrics(server);
+    return;
+  }
+
+  try {
+    const metrics = await collectSshMetrics(credential, ssh.verifyMode);
+    Object.assign(server, metrics);
+    server.status = normalizeServerRuntimeStatus(server);
+    serverMetricSamples.set(server.id, { sampledAt: Date.now(), failedAt: 0 });
+  } catch {
+    serverMetricSamples.set(server.id, {
+      sampledAt: Date.now(),
+      failedAt: Date.now(),
+    });
+    driftServerMetrics(server);
+  }
+}
+
+async function runWithConcurrency<T>(items: T[], limit: number, worker: (item: T) => Promise<void>) {
+  let cursor = 0;
+  const workerCount = Math.min(limit, items.length);
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      await worker(items[index]);
+    }
+  });
+  await Promise.all(workers);
+}
+
+function wait(timeoutMs: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, timeoutMs);
+  });
 }
 
 function driftServerMetrics(server: ServerNode) {
