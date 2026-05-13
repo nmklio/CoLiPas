@@ -2723,8 +2723,19 @@ if (
   || !diagnosticExportBody.readiness?.checks?.some((check) => check.id === 'runtime-secret-posture')
   || typeof diagnosticExportBody.config?.ai?.baseUrlHost !== 'string'
   || !Number.isInteger(diagnosticExportBody.inventory?.servers?.connectedSsh)
+  || !Number.isInteger(diagnosticExportBody.sshTerminal?.activeSessions)
+  || !Number.isInteger(diagnosticExportBody.sshTerminal?.websocket?.openedShells)
+  || !Number.isInteger(diagnosticExportBody.sshTerminal?.websocket?.outputBytes)
 ) {
   throw new Error('/api/audit/diagnostics/export returned incomplete diagnostic bundle');
+}
+if (
+  diagnosticExportBody.sshTerminal.websocket.openedShells < 1
+  || diagnosticExportBody.sshTerminal.websocket.outputBytes < 1
+  || !Array.isArray(diagnosticExportBody.sshTerminal.recentEvidence)
+  || !diagnosticExportBody.sshTerminal.recentEvidence.some((item) => item.transcriptLines > 0 && item.transcriptChars > 0)
+) {
+  throw new Error('/api/audit/diagnostics/export did not include SSH terminal observability evidence');
 }
 if (
   diagnosticPayload.includes(sensitiveAuditSecret)
@@ -2736,6 +2747,8 @@ if (
   || diagnosticPayload.includes('"publicIp"')
   || diagnosticPayload.includes('"privateIp"')
   || diagnosticPayload.includes('"detail"')
+  || diagnosticPayload.includes('"sessionId"')
+  || diagnosticPayload.includes('simulated$ whoami')
   || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(diagnosticPayload)
 ) {
   throw new Error('/api/audit/diagnostics/export leaked sensitive or asset-identifying material');

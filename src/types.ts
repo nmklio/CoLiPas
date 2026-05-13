@@ -315,6 +315,34 @@ export interface DiagnosticExportResponse {
     customProviders: number;
     openEvents: number;
   };
+  sshTerminal: {
+    activeSessions: number;
+    byMode: Record<SshVerifyMode, number>;
+    oldestConnectedAt: string | null;
+    newestConnectedAt: string | null;
+    websocket: {
+      totalConnections: number;
+      activeConnections: number;
+      openedShells: number;
+      closedShells: number;
+      inputEvents: number;
+      inputBytes: number;
+      outputEvents: number;
+      outputBytes: number;
+      pingCount: number;
+      pongCount: number;
+      errors: number;
+      lastActivityAt: string | null;
+    };
+    recentEvidence: Array<{
+      serverName: string;
+      mode: SshVerifyMode;
+      active: boolean;
+      updatedAt: string;
+      transcriptLines: number;
+      transcriptChars: number;
+    }>;
+  };
 }
 
 export interface ReleaseDeploymentEvidence {

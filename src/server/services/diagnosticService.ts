@@ -5,8 +5,9 @@ import type { RuntimeConfig } from '../config.js';
 import { getDatabasePath } from './database.js';
 import { buildReleaseReadiness } from './releaseReadinessService.js';
 import { listAuditEntries } from './auditService.js';
-import { listCloudAccounts, listOperationEvents, listServers } from './inventoryService.js';
+import { getServerShellEvidence, getServerShellStatus, listCloudAccounts, listOperationEvents, listServers } from './inventoryService.js';
 import { getAiProviderStatus } from './aiSettingsService.js';
+import { getSshShellSocketDiagnostics } from '../sshShellSocket.js';
 
 export function buildDiagnosticExport(config: RuntimeConfig): DiagnosticExportResponse {
   const generatedAt = new Date().toISOString();
@@ -17,6 +18,9 @@ export function buildDiagnosticExport(config: RuntimeConfig): DiagnosticExportRe
   const cloudAccounts = listCloudAccounts();
   const operationEvents = listOperationEvents();
   const aiProvider = getAiProviderStatus(config);
+  const shellStatus = getServerShellStatus();
+  const shellSocketDiagnostics = getSshShellSocketDiagnostics();
+  const shellEvidence = getServerShellEvidence();
 
   return {
     generatedAt,
@@ -80,7 +84,26 @@ export function buildDiagnosticExport(config: RuntimeConfig): DiagnosticExportRe
       customProviders: new Set(serverItems.map((server) => server.provider).filter((provider) => !isBaseCloudProvider(provider))).size,
       openEvents: operationEvents.filter((event) => event.status === 'open').length,
     },
+    sshTerminal: {
+      activeSessions: shellStatus.activeCount,
+      byMode: shellStatus.byMode,
+      oldestConnectedAt: shellStatus.oldestConnectedAt,
+      newestConnectedAt: shellStatus.newestConnectedAt,
+      websocket: shellSocketDiagnostics,
+      recentEvidence: shellEvidence.map((item) => ({
+        serverName: item.serverName,
+        mode: item.mode,
+        active: item.active,
+        updatedAt: item.updatedAt,
+        transcriptLines: countTranscriptLines(item.transcript),
+        transcriptChars: item.transcript.length,
+      })),
+    },
   };
+}
+
+function countTranscriptLines(value: string) {
+  return value.split('\n').filter((line) => line.trim()).length;
 }
 
 function countByStatus(entries: ReturnType<typeof listAuditEntries>) {

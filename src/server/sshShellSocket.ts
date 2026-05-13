@@ -20,6 +20,40 @@ type ClientMessage =
 
 const shellSocketOutputFlushMs = 8;
 
+export interface SshShellSocketDiagnostics {
+  totalConnections: number;
+  activeConnections: number;
+  openedShells: number;
+  closedShells: number;
+  inputEvents: number;
+  inputBytes: number;
+  outputEvents: number;
+  outputBytes: number;
+  pingCount: number;
+  pongCount: number;
+  errors: number;
+  lastActivityAt: string | null;
+}
+
+const shellSocketDiagnostics: SshShellSocketDiagnostics = {
+  totalConnections: 0,
+  activeConnections: 0,
+  openedShells: 0,
+  closedShells: 0,
+  inputEvents: 0,
+  inputBytes: 0,
+  outputEvents: 0,
+  outputBytes: 0,
+  pingCount: 0,
+  pongCount: 0,
+  errors: 0,
+  lastActivityAt: null,
+};
+
+export function getSshShellSocketDiagnostics(): SshShellSocketDiagnostics {
+  return { ...shellSocketDiagnostics };
+}
+
 export function attachSshShellSocketServer(server: HttpServer, config: RuntimeConfig) {
   const socketServer = new WebSocketServer({
     noServer: true,
@@ -53,8 +87,13 @@ function bindSshShellSocket(webSocket: WebSocket) {
   let sessionId = '';
   let unsubscribe: (() => void) | null = null;
   let closing = false;
+  let socketClosed = false;
   let pendingOutputEvent: SshShellStreamEvent | null = null;
   let outputFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+  shellSocketDiagnostics.totalConnections += 1;
+  shellSocketDiagnostics.activeConnections += 1;
+  touchDiagnostics();
 
   const send = (payload: unknown) => {
     if (webSocket.readyState === WebSocket.OPEN) {
@@ -75,6 +114,12 @@ function bindSshShellSocket(webSocket: WebSocket) {
   };
 
   const sendShellEvent = (event: SshShellStreamEvent) => {
+    if ((event.type === 'stdout' || event.type === 'stderr') && typeof event.content === 'string') {
+      shellSocketDiagnostics.outputEvents += 1;
+      shellSocketDiagnostics.outputBytes += Buffer.byteLength(event.content, 'utf8');
+      touchDiagnostics();
+    }
+
     if (event.type !== 'stdout' && event.type !== 'stderr') {
       flushOutput();
       send(event);
@@ -107,11 +152,23 @@ function bindSshShellSocket(webSocket: WebSocket) {
     if (sessionId) {
       closeServerShell({ sessionId });
       sessionId = '';
+      shellSocketDiagnostics.closedShells += 1;
+      touchDiagnostics();
     }
+  };
+
+  const markSocketClosed = () => {
+    if (socketClosed) {
+      return;
+    }
+    socketClosed = true;
+    shellSocketDiagnostics.activeConnections = Math.max(0, shellSocketDiagnostics.activeConnections - 1);
+    touchDiagnostics();
   };
 
   webSocket.on('message', async (raw) => {
     try {
+      touchDiagnostics();
       const message = JSON.parse(raw.toString('utf8')) as ClientMessage;
       if (message.type === 'open') {
         if (sessionId || closing) {
@@ -128,6 +185,8 @@ function bindSshShellSocket(webSocket: WebSocket) {
           return;
         }
         sessionId = shell.sessionId;
+        shellSocketDiagnostics.openedShells += 1;
+        touchDiagnostics();
         send({
           type: 'ready',
           serverId: shell.serverId,
@@ -157,7 +216,11 @@ function bindSshShellSocket(webSocket: WebSocket) {
       }
 
       if (message.type === 'input') {
-        writeServerShell({ sessionId, input: typeof message.data === 'string' ? message.data : '' });
+        const input = typeof message.data === 'string' ? message.data : '';
+        shellSocketDiagnostics.inputEvents += 1;
+        shellSocketDiagnostics.inputBytes += Buffer.byteLength(input, 'utf8');
+        touchDiagnostics();
+        writeServerShell({ sessionId, input });
         return;
       }
 
@@ -167,6 +230,9 @@ function bindSshShellSocket(webSocket: WebSocket) {
       }
 
       if (message.type === 'ping') {
+        shellSocketDiagnostics.pingCount += 1;
+        shellSocketDiagnostics.pongCount += 1;
+        touchDiagnostics();
         send({ type: 'pong', sentAt: message.sentAt, receivedAt: Date.now() });
         return;
       }
@@ -177,6 +243,8 @@ function bindSshShellSocket(webSocket: WebSocket) {
         webSocket.close(1000, 'closed');
       }
     } catch (error) {
+      shellSocketDiagnostics.errors += 1;
+      touchDiagnostics();
       if (sessionId) {
         cleanup();
       }
@@ -188,6 +256,7 @@ function bindSshShellSocket(webSocket: WebSocket) {
   });
 
   webSocket.on('close', () => {
+    markSocketClosed();
     if (outputFlushTimer) {
       clearTimeout(outputFlushTimer);
       outputFlushTimer = null;
@@ -195,5 +264,14 @@ function bindSshShellSocket(webSocket: WebSocket) {
     pendingOutputEvent = null;
     cleanup();
   });
-  webSocket.on('error', cleanup);
+  webSocket.on('error', () => {
+    markSocketClosed();
+    shellSocketDiagnostics.errors += 1;
+    touchDiagnostics();
+    cleanup();
+  });
+}
+
+function touchDiagnostics() {
+  shellSocketDiagnostics.lastActivityAt = new Date().toISOString();
 }
