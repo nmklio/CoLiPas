@@ -4001,6 +4001,14 @@ td span,
   gap: 8px;
 }
 
+.ops-server-choice-window {
+  margin-top: 2px;
+}
+
+.ops-server-choice-window span {
+  min-width: 0;
+}
+
 .ops-server-choice {
   min-width: 0;
   border: 1px solid #d6e4e7;

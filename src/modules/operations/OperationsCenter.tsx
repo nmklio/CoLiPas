@@ -6,6 +6,7 @@ import {
   ClipboardList,
   Clock3,
   PlayCircle,
+  Plus,
   Power,
   PowerOff,
   RotateCcw,
@@ -87,10 +88,14 @@ type Copy = {
   activeServers: string;
   serverLoad: string;
   viewTrace: string;
+  choiceWindow: string;
+  loadMoreTargets: string;
 };
 
 const taskIds: OperationTaskType[] = ['assetSync', 'healthCheck', 'sshCommand', 'powerOn', 'shutdown', 'reboot'];
 const actionTaskIds: OperationTaskType[] = ['powerOn', 'shutdown', 'reboot'];
+const opsServerChoiceBatchSize = 120;
+const opsServerChoiceBatchStep = 120;
 
 const copyByLanguage: Record<string, Copy> = {
   zh: {
@@ -136,6 +141,8 @@ const copyByLanguage: Record<string, Copy> = {
     activeServers: '可执行服务器',
     serverLoad: '服务器负载',
     viewTrace: '查看审计链',
+    choiceWindow: '已显示 {shown} / {total} 台候选服务器，继续加载不会影响已选择目标。',
+    loadMoreTargets: '再加载 {count} 台',
   },
   en: {
     running: 'Running',
@@ -180,6 +187,8 @@ const copyByLanguage: Record<string, Copy> = {
     activeServers: 'Runnable servers',
     serverLoad: 'Server load',
     viewTrace: 'View audit trace',
+    choiceWindow: 'Showing {shown} / {total} candidate servers. Loading more keeps selected targets.',
+    loadMoreTargets: 'Load {count} more',
   },
   ja: {
     running: '実行中',
@@ -224,6 +233,8 @@ const copyByLanguage: Record<string, Copy> = {
     activeServers: '実行可能サーバー',
     serverLoad: 'サーバー負荷',
     viewTrace: '監査 trace を表示',
+    choiceWindow: '候補サーバー {shown} / {total} 台を表示中。追加読み込みしても選択は維持されます。',
+    loadMoreTargets: '{count} 台を追加読み込み',
   },
 };
 
@@ -291,11 +302,15 @@ export function OperationsCenter({ events, servers, onTaskFinished, onAuditTrace
   const preflightCopy = preflightCopyByLanguage[language] ?? preflightCopyByLanguage.zh;
   const providerName = (provider: string) => formatProviderName(provider, t);
   const connectedServers = useMemo(() => servers.filter((server) => server.ssh?.connected), [servers]);
-  const warningServers = servers.filter((server) => server.status === 'warning' || server.cpu > 80 || server.disk > 85);
+  const warningServers = useMemo(
+    () => servers.filter((server) => server.status === 'warning' || server.cpu > 80 || server.disk > 85),
+    [servers],
+  );
   const [builderOpen, setBuilderOpen] = useState(false);
   const [taskType, setTaskType] = useState<OperationTaskType>('healthCheck');
   const [targetMode, setTargetMode] = useState<OperationTaskTargetMode>('allConnected');
   const [selectedServerIds, setSelectedServerIds] = useState<string[]>([]);
+  const [visibleServerChoiceLimit, setVisibleServerChoiceLimit] = useState(opsServerChoiceBatchSize);
   const [command, setCommand] = useState('hostname && uptime');
   const [reason, setReason] = useState('');
   const [running, setRunning] = useState(false);
@@ -320,7 +335,13 @@ export function OperationsCenter({ events, servers, onTaskFinished, onAuditTrace
     () => selectedServerIds.filter((id) => eligibleServerIds.has(id)),
     [eligibleServerIds, selectedServerIds],
   );
-  const previewCount = resolvePreviewCount(targetMode, eligibleServers, activeSelectedServerIds);
+  const activeSelectedServerIdSet = useMemo(() => new Set(activeSelectedServerIds), [activeSelectedServerIds]);
+  const visibleEligibleServers = useMemo(
+    () => eligibleServers.slice(0, visibleServerChoiceLimit),
+    [eligibleServers, visibleServerChoiceLimit],
+  );
+  const hiddenServerChoiceCount = Math.max(eligibleServers.length - visibleEligibleServers.length, 0);
+  const previewCount = resolvePreviewCount(targetMode, eligibleServers.length, activeSelectedServerIds.length);
 
   useEffect(() => {
     if (sshRequiredTask && targetMode === 'allServers') {
@@ -331,6 +352,10 @@ export function OperationsCenter({ events, servers, onTaskFinished, onAuditTrace
   useEffect(() => {
     setSelectedServerIds((current) => current.filter((id) => eligibleServerIds.has(id)));
   }, [eligibleServerIds]);
+
+  useEffect(() => {
+    setVisibleServerChoiceLimit(opsServerChoiceBatchSize);
+  }, [eligibleServers.length, targetMode, taskType]);
 
   useEffect(() => {
     if (targetMode !== 'selected' || activeSelectedServerIds.length > 0 || eligibleServers.length === 0) {
@@ -530,11 +555,11 @@ export function OperationsCenter({ events, servers, onTaskFinished, onAuditTrace
                     <span>{activeSelectedServerIds.length}/{eligibleServers.length}</span>
                   </div>
                   <div className="ops-server-choice-grid">
-                    {eligibleServers.map((server) => (
-                      <label key={server.id} className={activeSelectedServerIds.includes(server.id) ? 'ops-server-choice active' : 'ops-server-choice'}>
+                    {visibleEligibleServers.map((server) => (
+                      <label key={server.id} className={activeSelectedServerIdSet.has(server.id) ? 'ops-server-choice active' : 'ops-server-choice'}>
                         <input
                           type="checkbox"
-                          checked={activeSelectedServerIds.includes(server.id)}
+                          checked={activeSelectedServerIdSet.has(server.id)}
                           onChange={() => toggleServer(server.id)}
                         />
                         <span>
@@ -544,6 +569,29 @@ export function OperationsCenter({ events, servers, onTaskFinished, onAuditTrace
                       </label>
                     ))}
                   </div>
+                  {hiddenServerChoiceCount > 0 && (
+                    <div className="server-render-window ops-server-choice-window" aria-live="polite">
+                      <span>
+                        {interpolateCopy(copy.choiceWindow, {
+                          shown: visibleEligibleServers.length,
+                          total: eligibleServers.length,
+                        })}
+                      </span>
+                      <button
+                        type="button"
+                        className="tool-button"
+                        onClick={() => setVisibleServerChoiceLimit((current) => Math.min(
+                          eligibleServers.length,
+                          current + opsServerChoiceBatchStep,
+                        ))}
+                      >
+                        <Plus size={16} />
+                        {interpolateCopy(copy.loadMoreTargets, {
+                          count: Math.min(opsServerChoiceBatchStep, hiddenServerChoiceCount),
+                        })}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -783,12 +831,12 @@ function formatProviderName(provider: string, t: (key: string, vars?: Record<str
   return provider.trim().toLowerCase() === 'custom' ? t('servers.providerCustomDisplay') : provider;
 }
 
-function resolvePreviewCount(targetMode: OperationTaskTargetMode, eligibleServers: ServerNode[], selectedServerIds: string[]) {
+function resolvePreviewCount(targetMode: OperationTaskTargetMode, eligibleServerCount: number, selectedServerCount: number) {
   if (targetMode === 'selected') {
-    return selectedServerIds.filter((id) => eligibleServers.some((server) => server.id === id)).length;
+    return selectedServerCount;
   }
 
-  return eligibleServers.length;
+  return eligibleServerCount;
 }
 
 function createPendingTask(

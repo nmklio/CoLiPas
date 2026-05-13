@@ -4519,6 +4519,11 @@ function assertOperationsTargetSelectionGuards() {
     '<option value="allServers" disabled={sshRequiredTask}>',
     'activeSelectedServerIds',
     'eligibleServerIds',
+    'opsServerChoiceBatchSize',
+    'visibleEligibleServers',
+    'activeSelectedServerIdSet.has(server.id)',
+    'ops-server-choice-window',
+    'resolvePreviewCount(targetMode, eligibleServers.length, activeSelectedServerIds.length)',
     'serverIds: targetMode === \'selected\' ? activeSelectedServerIds : []',
     'setSelectedServerIds((current) => current.filter((id) => eligibleServerIds.has(id)))',
     'preflightOperationTask(preflightPayload)',
@@ -4544,6 +4549,12 @@ function assertOperationsTargetSelectionGuards() {
   const missingFrontend = frontendRequired.filter((fragment) => !operationsSource.includes(fragment));
   if (missingFrontend.length) {
     throw new Error(`Operations target selection guard is incomplete: ${missingFrontend.join(', ')}`);
+  }
+  if (operationsSource.includes('selectedServerIds.filter((id) => eligibleServers.some(')) {
+    throw new Error('Operations selected target preview regressed to nested scans');
+  }
+  if (operationsSource.includes('eligibleServers.map((server) => (')) {
+    throw new Error('Operations selected target picker must render visibleEligibleServers, not every eligible server');
   }
 
   const serviceRequired = [

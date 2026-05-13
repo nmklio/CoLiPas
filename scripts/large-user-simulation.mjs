@@ -291,6 +291,31 @@ async function runBrowserSimulation(targetBaseUrl) {
     }
     await assertNoHorizontalOverflow(page, 'desktop server inventory');
     await page.screenshot({ path: path.join(evidenceDir, 'desktop-servers-large.png'), fullPage: false });
+
+    await page.getByRole('button', { name: /^Operations$/i }).click();
+    await page.locator('.ops-layout').waitFor({ timeout: 10000 });
+    await page.getByRole('button', { name: /new task/i }).click();
+    await page.locator('.ops-builder').waitFor({ timeout: 5000 });
+    await page.locator('.ops-form-grid select').selectOption('selected');
+    await page.locator('.ops-server-choice').first().waitFor({ timeout: 10000 });
+    const visibleOperationTargets = await page.locator('.ops-server-choice').count();
+    assert(visibleOperationTargets >= 1, 'desktop operations target picker rendered candidates');
+    assert(visibleOperationTargets <= expectedServerRenderBatch, 'desktop operations target picker limited initial DOM choices');
+    if (serverCount > expectedServerRenderBatch) {
+      await page.locator('.ops-server-choice-window').waitFor({ timeout: 5000 });
+      await page.locator('.ops-server-choice-window').getByRole('button').click();
+      await page.waitForFunction(
+        ({ minChoices, maxChoices }) => {
+          const choices = document.querySelectorAll('.ops-server-choice').length;
+          return choices > minChoices && choices <= maxChoices;
+        },
+        { minChoices: visibleOperationTargets, maxChoices: expectedServerRenderBatch * 2 },
+        { timeout: 5000 },
+      );
+      assertions.push(`desktop operations picker rendered ${visibleOperationTargets} initial choices before loading more`);
+    }
+    await assertNoHorizontalOverflow(page, 'desktop operations target picker');
+    await page.screenshot({ path: path.join(evidenceDir, 'desktop-operations-large.png'), fullPage: false });
   });
 
   await withPage({ width: 390, height: 844, isMobile: true }, async (page) => {
