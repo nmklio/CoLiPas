@@ -724,6 +724,33 @@ try {
   ) {
     throw new Error('/api/ai/analyze direct SSH execution request did not preserve an arbitrary operator command with confirmation risk');
   }
+  const aiRunColonResponse = await fetch(`${baseUrl}/api/ai/analyze`, {
+    method: 'POST',
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      question: 'please run:apt install -y unzip',
+      provider: {
+        name: 'Smoke AI',
+        baseUrl: 'https://api.example.com/v1',
+        model: 'smoke-model',
+        apiKey: '',
+        temperature: 0.2,
+      },
+      serverId: aiExecutableServer.id,
+      forceRefresh: true,
+    }),
+  });
+  if (!aiRunColonResponse.ok) {
+    throw new Error(`/api/ai/analyze run-colon SSH execution request returned HTTP ${aiRunColonResponse.status}`);
+  }
+  const aiRunColonBody = await aiRunColonResponse.json();
+  if (
+    aiRunColonBody.executionPlan?.operation !== 'sshCommand'
+    || aiRunColonBody.executionPlan?.command !== 'apt install -y unzip'
+    || aiRunColonBody.executionPlan?.requiresConfirmation !== true
+  ) {
+    throw new Error('/api/ai/analyze did not parse run:command SSH input with confirmation risk');
+  }
   const noEvidenceUpstream = await startMockStreamingAi();
   try {
     const aiNoEvidenceUpstreamResponse = await fetch(`${baseUrl}/api/ai/analyze`, {
@@ -3117,6 +3144,7 @@ function assertAiResponseCachingGuards() {
     'getSshCommandConfirmationReason(command)',
     'requiresConfirmation: Boolean(confirmationReason)',
     'confirmationReason: confirmationReason || undefined',
+    '(?:(?:[:=]|：)\\\\s*|\\\\s+)',
     'chinesePolitePrefix',
     'chineseSoftener',
     'root@host is only terminal context',
