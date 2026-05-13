@@ -88,11 +88,11 @@ function inspectFrontendBundle(): ReleaseVerificationResponse['frontend'] {
   const distDir = path.resolve(process.cwd(), 'dist');
   const indexPath = path.join(distDir, 'index.html');
   const indexHtml = readText(indexPath);
-  const assetRefs = [...indexHtml.matchAll(/\/assets\/[^"']+\.js/g)]
+  const assetRefs = [...indexHtml.matchAll(/\/assets\/[^"']+\.(?:js|css)/g)]
     .map((match) => match[0])
     .filter((value, index, items) => items.indexOf(value) === index);
-  const scripts = assetRefs.map((asset) => inspectScriptAsset(distDir, asset));
-  const combinedContent = [indexHtml, ...scripts.map((script) => script.content)].join('\n');
+  const assets = assetRefs.map((asset) => inspectFrontendAsset(distDir, asset));
+  const combinedContent = [indexHtml, ...assets.map((asset) => asset.content)].join('\n');
   const featureMarkers = [
     'security-evidence-brief',
     'cloud-map',
@@ -103,12 +103,12 @@ function inspectFrontendBundle(): ReleaseVerificationResponse['frontend'] {
 
   return {
     indexHash: hashText(indexHtml),
-    scripts: scripts.map(({ content: _content, ...script }) => script),
+    scripts: assets.map(({ content: _content, ...asset }) => asset),
     featureMarkers: Object.fromEntries(featureMarkers.map((marker) => [marker, combinedContent.includes(marker)])),
   };
 }
 
-function inspectScriptAsset(distDir: string, assetRef: string) {
+function inspectFrontendAsset(distDir: string, assetRef: string) {
   const relativeAsset = assetRef.replace(/^\/+/, '');
   const assetPath = path.join(distDir, relativeAsset);
   const content = readText(assetPath);

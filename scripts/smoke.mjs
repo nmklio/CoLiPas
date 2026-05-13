@@ -4394,6 +4394,8 @@ function assertSecurityAuditRelationsAreSpecific() {
     "return crypto.timingSafeEqual(leftBuffer, rightBuffer)",
     "replace(/\\bsk-[A-Za-z0-9_-]{12,}\\b/g, '[redacted-api-key]')",
     "replace(/\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b/g, '[redacted-ip]')",
+    "/\\/assets\\/[^\"']+\\.(?:js|css)/g",
+    'inspectFrontendAsset(distDir, asset)',
     "featureMarkers: Object.fromEntries(featureMarkers.map((marker) => [marker, combinedContent.includes(marker)]))",
     'runtime-secret-posture',
     'deployment-evidence',
