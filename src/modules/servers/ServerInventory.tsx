@@ -42,7 +42,9 @@ const customProvider = customProviderFilterValue;
 const customProviderOption = '__custom__';
 const actionMessageAutoDismissMs = 4500;
 const actionTraceMessageAutoDismissMs = 10000;
-const terminalWriteChunkSize = 32 * 1024;
+const terminalWriteBaseChunkSize = 32 * 1024;
+const terminalWriteLargeChunkSize = 96 * 1024;
+const terminalWriteLargeBacklogThreshold = 64 * 1024;
 
 const actionCommands: Record<'powerOn' | 'shutdown' | 'reboot', string> = {
   powerOn: 'printf "server reachable via SSH\\n"; uptime',
@@ -1707,7 +1709,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       return;
     }
 
-    const chunk = !options.drainAll && content.length > terminalWriteChunkSize ? content.slice(0, terminalWriteChunkSize) : content;
+    const chunkSize = getTerminalWriteChunkSize(content.length);
+    const chunk = !options.drainAll && content.length > chunkSize ? content.slice(0, chunkSize) : content;
     terminalWriteBufferRef.current = content.slice(chunk.length);
     terminal.write(chunk, () => {
       terminal.scrollToBottom();
@@ -1715,6 +1718,10 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
         scheduleTerminalWriteFlush(terminal);
       }
     });
+  }
+
+  function getTerminalWriteChunkSize(backlogLength: number) {
+    return backlogLength >= terminalWriteLargeBacklogThreshold ? terminalWriteLargeChunkSize : terminalWriteBaseChunkSize;
   }
 
   function clearTerminalWriteBuffer() {

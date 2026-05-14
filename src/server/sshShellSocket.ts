@@ -19,6 +19,7 @@ type ClientMessage =
   | { type: 'close' };
 
 const shellSocketOutputFlushMs = 8;
+const shellSocketOutputFlushMaxChars = 96 * 1024;
 
 export interface SshShellSocketDiagnostics {
   totalConnections: number;
@@ -134,6 +135,11 @@ function bindSshShellSocket(webSocket: WebSocket) {
     } else {
       flushOutput();
       pendingOutputEvent = event;
+    }
+
+    if ((pendingOutputEvent.content?.length ?? 0) >= shellSocketOutputFlushMaxChars) {
+      flushOutput();
+      return;
     }
 
     if (!outputFlushTimer) {
