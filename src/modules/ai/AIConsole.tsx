@@ -265,7 +265,7 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
   const lastUserQuestion = useMemo(() => findLastUserQuestion(activeSession.messages), [activeSession.messages]);
   const executionPlan = activeSession.analysis?.executionPlan ?? null;
   const executionPlanKey = executionPlan
-    ? `${executionPlan.operation}|${executionPlan.targetMode}|${executionPlan.serverIds.join(',')}|${executionPlan.command ?? ''}|${executionPlan.title}|${executionPlan.requiresConfirmation ? 'confirm' : 'safe'}|${executionPlan.confirmationReason ?? ''}`
+    ? `${executionPlan.operation}|${executionPlan.targetMode}|${executionPlan.serverIds.length}|${executionPlan.serverIds[0] ?? ''}|${executionPlan.command ?? ''}|${executionPlan.title}|${executionPlan.requiresConfirmation ? 'confirm' : 'safe'}|${executionPlan.confirmationReason ?? ''}`
     : '';
   const scopeLabel = activeSession.selectedServerId === 'all'
     ? t('ai.allServers')

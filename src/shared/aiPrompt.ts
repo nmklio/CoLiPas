@@ -1,8 +1,24 @@
 import type { OperationEvent, ServerNode } from '../types.js';
 
+const promptServerSampleLimit = 24;
+const promptHighLoadLimit = 12;
+const promptOpenEventLimit = 12;
+const promptGroupLimit = 12;
+
+interface CountGroup {
+  key: string;
+  count: number;
+}
+
+interface ServerRiskEntry {
+  server: ServerNode;
+  load: number;
+}
+
 export function buildOpsPrompt(servers: ServerNode[], events: OperationEvent[]) {
-  const serverLines = servers.length
-    ? servers.map((server) => [
+  const summary = summarizeServersForPrompt(servers);
+  const serverLines = summary.sampleServers.length
+    ? summary.sampleServers.map((server) => [
       `- ${server.name}`,
       `provider=${server.provider}`,
       `region=${server.region || 'unknown'}`,
@@ -17,25 +33,139 @@ export function buildOpsPrompt(servers: ServerNode[], events: OperationEvent[]) 
     ].join(' | ')).join('\n')
     : 'No servers are currently registered.';
 
-  const hotServers = servers
-    .filter((server) => server.cpu > 75 || server.memory > 80 || server.disk > 85)
-    .sort((a, b) => Math.max(b.cpu, b.memory, b.disk) - Math.max(a.cpu, a.memory, a.disk))
-    .map((server) => `- ${server.name}: CPU ${server.cpu}%, memory ${server.memory}%, disk ${server.disk}%, status ${server.status}`)
+  const hotServers = summary.highLoadServers
+    .map(({ server, load }) => `- ${server.name}: load ${load}%, CPU ${server.cpu}%, memory ${server.memory}%, disk ${server.disk}%, status ${server.status}`)
     .join('\n');
 
-  const openEvents = events
-    .filter((event) => event.status === 'open')
+  const openEventItems = events.filter((event) => event.status === 'open');
+  const openEvents = openEventItems
+    .slice(0, promptOpenEventLimit)
     .map((event) => `- ${event.time} [${event.severity}] ${event.title} (${event.source})`)
     .join('\n');
+  const omittedOpenEvents = Math.max(0, openEventItems.length - promptOpenEventLimit);
 
   return [
     'Current CoLiPas operations context. Use this context only when it is relevant to the user question.',
     'Do not invent servers, credentials, commands that were executed, or cloud-provider data.',
+    'Large inventories are summarized to keep the UI, API request, and model prompt responsive.',
     '',
-    `Server inventory:\n${serverLines}`,
+    `Fleet summary: total=${summary.total}, sshConnected=${summary.sshConnected}, running=${summary.running}, stopped=${summary.stopped}, warning=${summary.warning}, unconnected=${summary.unconnected}, avgCpu=${summary.avgCpu}%, avgMemory=${summary.avgMemory}%, avgDisk=${summary.avgDisk}%.`,
+    `Providers: ${formatCountGroups(summary.providers)}`,
+    `Regions: ${formatCountGroups(summary.regions)}`,
+    '',
+    `Server inventory:\n${serverLines}${summary.omittedServers > 0 ? `\n- ... ${summary.omittedServers} additional server(s) omitted from prompt; use filtered inventory or selected scope for exact rows.` : ''}`,
     '',
     `High-load servers:\n${hotServers || '- None above the configured thresholds.'}`,
     '',
-    `Open operation/security events:\n${openEvents || '- None.'}`,
+    `Open operation/security events:\n${openEvents || '- None.'}${omittedOpenEvents > 0 ? `\n- ... ${omittedOpenEvents} additional open event(s) omitted from prompt.` : ''}`,
   ].join('\n');
+}
+
+function summarizeServersForPrompt(servers: ServerNode[]) {
+  let running = 0;
+  let stopped = 0;
+  let warning = 0;
+  let unconnected = 0;
+  let sshConnected = 0;
+  let cpuTotal = 0;
+  let memoryTotal = 0;
+  let diskTotal = 0;
+  const providerCounts = new Map<string, number>();
+  const regionCounts = new Map<string, number>();
+  const sampleServers: ServerNode[] = [];
+  const highLoadServers: ServerRiskEntry[] = [];
+
+  for (const server of servers) {
+    if (sampleServers.length < promptServerSampleLimit) {
+      sampleServers.push(server);
+    }
+
+    const isSshConnected = Boolean(server.ssh?.connected);
+    if (isSshConnected) {
+      sshConnected += 1;
+    }
+    if (server.status === 'running') {
+      running += 1;
+    } else if (server.status === 'stopped') {
+      stopped += 1;
+    } else if (server.status === 'warning') {
+      warning += 1;
+    } else if (server.status === 'unconnected') {
+      unconnected += 1;
+    }
+    if (!isSshConnected && server.status !== 'unconnected') {
+      unconnected += 1;
+    }
+
+    cpuTotal += server.cpu;
+    memoryTotal += server.memory;
+    diskTotal += server.disk;
+    incrementCount(providerCounts, server.provider || 'unknown');
+    incrementCount(regionCounts, server.region || 'unknown');
+
+    const load = Math.max(server.cpu, server.memory, server.disk);
+    if (load > 75 || server.status === 'warning' || server.status === 'stopped') {
+      insertTopServer(highLoadServers, { server, load }, promptHighLoadLimit);
+    }
+  }
+
+  return {
+    total: servers.length,
+    running,
+    stopped,
+    warning,
+    unconnected,
+    sshConnected,
+    avgCpu: average(cpuTotal, servers.length),
+    avgMemory: average(memoryTotal, servers.length),
+    avgDisk: average(diskTotal, servers.length),
+    providers: topCountGroups(providerCounts, promptGroupLimit),
+    regions: topCountGroups(regionCounts, promptGroupLimit),
+    sampleServers,
+    omittedServers: Math.max(0, servers.length - sampleServers.length),
+    highLoadServers,
+  };
+}
+
+function incrementCount(counts: Map<string, number>, key: string) {
+  counts.set(key, (counts.get(key) ?? 0) + 1);
+}
+
+function insertTopServer(items: ServerRiskEntry[], entry: ServerRiskEntry, limit: number) {
+  const insertAt = items.findIndex((item) => entry.load > item.load);
+  if (insertAt >= 0) {
+    items.splice(insertAt, 0, entry);
+  } else if (items.length < limit) {
+    items.push(entry);
+  }
+
+  if (items.length > limit) {
+    items.length = limit;
+  }
+}
+
+function topCountGroups(counts: Map<string, number>, limit: number): CountGroup[] {
+  const top: CountGroup[] = [];
+  for (const [key, count] of counts) {
+    const entry = { key, count };
+    const insertAt = top.findIndex((item) => count > item.count);
+    if (insertAt >= 0) {
+      top.splice(insertAt, 0, entry);
+    } else if (top.length < limit) {
+      top.push(entry);
+    }
+
+    if (top.length > limit) {
+      top.length = limit;
+    }
+  }
+  return top;
+}
+
+function formatCountGroups(groups: CountGroup[]) {
+  return groups.length ? groups.map((group) => `${group.key}=${group.count}`).join(', ') : 'none';
+}
+
+function average(total: number, count: number) {
+  return count > 0 ? Math.round(total / count) : 0;
 }

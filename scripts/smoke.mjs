@@ -3232,6 +3232,10 @@ function assertAiResponseCachingGuards() {
     'chineseSoftener',
     'root@host is only terminal context',
     'Execution evidence:',
+    'collectTopServerRisks(servers, eventRisk, aiRiskResultLimit)',
+    'summarizeOpenEventRisk(openEvents)',
+    'formatOpenEventsForLocalAnswer(openEvents)',
+    'const serverIds = selectedServer ? [selectedServer.id] : []',
   ];
   const missingBackend = backendFragments.filter((fragment) => !aiServiceSource.includes(fragment));
   if (missingBackend.length) {
@@ -3308,6 +3312,10 @@ function assertAiResponseCachingGuards() {
     'Current CoLiPas operations context',
     'Use this context only when it is relevant to the user question',
     'Do not invent servers',
+    'Large inventories are summarized',
+    'promptServerSampleLimit',
+    'insertTopServer(highLoadServers',
+    'topCountGroups(providerCounts',
     'Server inventory:',
     'High-load servers:',
     'Open operation/security events:',
@@ -3315,6 +3323,12 @@ function assertAiResponseCachingGuards() {
   const missingPrompt = promptFragments.filter((fragment) => !promptSource.includes(fragment));
   if (missingPrompt.length) {
     throw new Error(`AI prompt grounding is incomplete: ${missingPrompt.join(', ')}`);
+  }
+  if (promptSource.includes('servers.map((server) => [') || promptSource.includes('.sort((a, b) => Math.max(b.cpu')) {
+    throw new Error('AI prompt builder must summarize large inventories instead of rendering or sorting every server');
+  }
+  if (aiServiceSource.includes('connectedTargets.map((server) => server.id)')) {
+    throw new Error('AI execution plans must not serialize every connected server id for allConnected targets');
   }
 
   console.log('ok AI analysis caches repeated prompts and produces grounded dynamic local answers');

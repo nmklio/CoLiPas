@@ -70,6 +70,8 @@ export interface AiModelsResponse {
 const fallbackModelOptions = ['gpt-5.5', 'gpt-5.4', 'gpt-4.1-mini', 'deepseek-chat', 'qwen-plus'];
 const aiResponseCacheTtlMs = 10 * 60 * 1000;
 const aiResponseCacheMaxEntries = 80;
+const aiRiskResultLimit = 5;
+const aiOpenEventPromptLimit = 12;
 const aiResponseCache = new Map<string, AiAnalysisResponse & { cachedAt: number }>();
 
 export async function streamAiAnalysis(
@@ -613,15 +615,8 @@ function buildSimulatedAnswer(
   }
 
   const openEvents = events.filter((event) => event.status === 'open');
-  const risks = servers
-    .map((server) => ({
-      server,
-      score: riskScore(server, openEvents),
-      reasons: riskReasons(server, openEvents),
-    }))
-    .filter((item) => item.score > 0 || item.server.status !== 'running' || !item.server.ssh?.connected)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 5);
+  const eventRisk = summarizeOpenEventRisk(openEvents);
+  const risks = collectTopServerRisks(servers, eventRisk, aiRiskResultLimit);
 
   if (!servers.length) {
     return {
@@ -641,9 +636,10 @@ function buildSimulatedAnswer(
   const scopeText = selectedServer
     ? `${selectedServer.name} / ${selectedServer.publicIp || 'no public IP'}`
     : `${servers.length} servers`;
-  const connectedCount = servers.filter((server) => server.ssh?.connected).length;
-  const stoppedCount = servers.filter((server) => server.status === 'stopped').length;
-  const unconnectedCount = servers.filter((server) => server.status === 'unconnected' || !server.ssh?.connected).length;
+  const fleetSummary = summarizeAiFleet(servers);
+  const connectedCount = fleetSummary.connectedCount;
+  const stoppedCount = fleetSummary.stoppedCount;
+  const unconnectedCount = fleetSummary.unconnectedCount;
 
   const riskLines = risks.length
     ? risks.map((item, index) => {
@@ -676,7 +672,7 @@ function buildSimulatedAnswer(
       '',
       'Why:',
       '- The rule engine uses only the current inventory snapshot, SSH state, CPU/memory/disk thresholds, and open events.',
-      `- Open events: ${openEvents.length ? openEvents.map((event) => `${event.severity}:${event.title}`).join('; ') : 'none'}.`,
+      `- Open events: ${formatOpenEventsForLocalAnswer(openEvents)}.`,
       '',
       'Next actions:',
       ...actionLines.map((line, index) => `${index + 1}. ${line}`),
@@ -688,15 +684,14 @@ function buildSimulatedAnswer(
   };
 }
 
-function riskScore(server: ServerNode, events: OperationEvent[]) {
+function riskScore(server: ServerNode, eventRisk: number) {
   const loadScore = Math.max(server.cpu - 75, 0) + Math.max(server.memory - 80, 0) + Math.max(server.disk - 85, 0);
   const statusScore = server.status === 'running' ? 0 : server.status === 'stopped' ? 18 : 12;
   const sshScore = server.ssh?.connected ? 0 : 10;
-  const eventScore = events.reduce((score, event) => score + (event.severity === 'critical' ? 10 : event.severity === 'warning' ? 5 : 1), 0);
-  return loadScore + statusScore + sshScore + Math.min(eventScore, 20);
+  return loadScore + statusScore + sshScore + eventRisk;
 }
 
-function riskReasons(server: ServerNode, events: OperationEvent[]) {
+function riskReasons(server: ServerNode, hasCriticalOpenEvent: boolean) {
   const reasons: string[] = [];
   if (server.cpu > 75) {
     reasons.push(`CPU ${server.cpu}% exceeds 75%`);
@@ -712,10 +707,94 @@ function riskReasons(server: ServerNode, events: OperationEvent[]) {
   } else if (server.status === 'unconnected' || !server.ssh?.connected) {
     reasons.push('SSH is not verified');
   }
-  if (events.some((event) => event.severity === 'critical')) {
+  if (hasCriticalOpenEvent) {
     reasons.push('critical open event exists');
   }
   return reasons;
+}
+
+function collectTopServerRisks(servers: ServerNode[], eventRisk: { score: number; hasCritical: boolean }, limit: number) {
+  const risks: Array<{ server: ServerNode; score: number; reasons: string[] }> = [];
+
+  for (const server of servers) {
+    const score = riskScore(server, eventRisk.score);
+    if (score <= 0 && server.status === 'running' && server.ssh?.connected) {
+      continue;
+    }
+
+    const item = {
+      server,
+      score,
+      reasons: riskReasons(server, eventRisk.hasCritical),
+    };
+    const insertAt = risks.findIndex((risk) => item.score > risk.score);
+    if (insertAt >= 0) {
+      risks.splice(insertAt, 0, item);
+    } else if (risks.length < limit) {
+      risks.push(item);
+    }
+
+    if (risks.length > limit) {
+      risks.length = limit;
+    }
+  }
+
+  return risks;
+}
+
+function summarizeOpenEventRisk(events: OperationEvent[]) {
+  let rawScore = 0;
+  let hasCritical = false;
+  for (const event of events) {
+    if (event.severity === 'critical') {
+      rawScore += 10;
+      hasCritical = true;
+    } else if (event.severity === 'warning') {
+      rawScore += 5;
+    } else {
+      rawScore += 1;
+    }
+  }
+
+  return {
+    score: Math.min(rawScore, 20),
+    hasCritical,
+  };
+}
+
+function summarizeAiFleet(servers: ServerNode[]) {
+  let connectedCount = 0;
+  let stoppedCount = 0;
+  let unconnectedCount = 0;
+  for (const server of servers) {
+    if (server.ssh?.connected) {
+      connectedCount += 1;
+    }
+    if (server.status === 'stopped') {
+      stoppedCount += 1;
+    }
+    if (server.status === 'unconnected' || !server.ssh?.connected) {
+      unconnectedCount += 1;
+    }
+  }
+
+  return {
+    connectedCount,
+    stoppedCount,
+    unconnectedCount,
+  };
+}
+
+function formatOpenEventsForLocalAnswer(events: OperationEvent[]) {
+  if (!events.length) {
+    return 'none';
+  }
+
+  const listedEvents = events
+    .slice(0, aiOpenEventPromptLimit)
+    .map((event) => `${event.severity}:${event.title}`);
+  const omitted = events.length - listedEvents.length;
+  return omitted > 0 ? `${listedEvents.join('; ')}; +${omitted} more` : listedEvents.join('; ');
 }
 
 function extractPriorExecutionEvidence(chatHistory: AiChatMessage[]) {
@@ -811,7 +890,8 @@ function buildExecutionPlan(
   const primaryServer = connectedTargets[0];
   const normalizedQuestion = question.toLowerCase();
   const targetMode = selectedServer ? 'selected' : 'allConnected';
-  const serverIds = selectedServer ? [selectedServer.id] : connectedTargets.map((server) => server.id);
+  const targetCount = connectedTargets.length;
+  const serverIds = selectedServer ? [selectedServer.id] : [];
   const requestedCommand = extractSafeRequestedSshCommand(question);
   const wantsShutdown = !requestedCommand && /shutdown|power\s*off|halt|关机|停机|关闭/i.test(question);
   const wantsReboot = !requestedCommand && /restart|reboot|重启|重新启动/i.test(question);
@@ -821,7 +901,7 @@ function buildExecutionPlan(
     const operation = wantsShutdown ? 'shutdown' : 'reboot';
     return {
       title: `${operation === 'shutdown' ? 'Shutdown' : 'Reboot'} ${selectedServer ? primaryServer.name : 'connected servers'}`,
-      summary: `AI prepared a guarded ${operation} task for ${serverIds.length} SSH-connected server(s).`,
+      summary: `AI prepared a guarded ${operation} task for ${targetCount} SSH-connected server(s).`,
       targetMode,
       serverIds,
       operation,
@@ -848,8 +928,8 @@ function buildExecutionPlan(
       ? `Run SSH command on ${selectedServer ? primaryServer.name : 'connected servers'}`
       : `Run SSH check on ${selectedServer ? primaryServer.name : 'connected servers'}`,
     summary: requestedCommand
-      ? `AI prepared an operator-requested SSH command for ${serverIds.length} SSH-connected server(s).`
-      : `AI prepared a safe SSH inspection for ${serverIds.length} SSH-connected server(s).`,
+      ? `AI prepared an operator-requested SSH command for ${targetCount} SSH-connected server(s).`
+      : `AI prepared a safe SSH inspection for ${targetCount} SSH-connected server(s).`,
     targetMode,
     serverIds,
     operation,
