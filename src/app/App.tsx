@@ -319,6 +319,21 @@ export function App() {
     [activeSection, filters, overview.servers],
   );
   const overviewStats = useMemo(() => {
+    if (
+      Number.isInteger(overview.summary.onlineServers)
+      && Number.isInteger(overview.summary.openEvents)
+      && Number.isInteger(overview.summary.connectedSsh)
+      && Number.isInteger(overview.summary.avgCpu)
+    ) {
+      return {
+        onlineCount: overview.summary.onlineServers,
+        avgCpu: overview.summary.avgCpu ?? 0,
+        connectedCount: overview.summary.connectedSsh ?? 0,
+        openEventCount: overview.summary.openEvents,
+        busiestServer: overview.summary.busiestServer,
+      };
+    }
+
     let online = 0;
     let connected = 0;
     let cpuTotal = 0;
@@ -348,7 +363,7 @@ export function App() {
       openEventCount: overview.operationEvents.reduce((count, event) => count + (event.status === 'open' ? 1 : 0), 0),
       busiestServer: busiest,
     };
-  }, [overview.operationEvents, overview.servers]);
+  }, [overview.operationEvents, overview.servers, overview.summary]);
   const { onlineCount, avgCpu, connectedCount, openEventCount, busiestServer } = overviewStats;
   const timeLocale = getLocale(language);
   const sessionIdentity = session?.user?.username?.trim() ?? '';

@@ -20,6 +20,7 @@ import { createOperationTask, preflightOperationTask } from './services/operatio
 import { buildReleaseReadiness, buildReleaseReadinessReport, recordReleaseReadinessSnapshot } from './services/releaseReadinessService.js';
 import { buildReleaseVerification, isReleaseVerificationAuthorized, isReleaseVerificationEnabled } from './services/releaseVerificationService.js';
 import {
+  buildServerInventorySnapshot,
   closeServerShell,
   connectServer,
   deleteServer,
@@ -40,7 +41,6 @@ import {
   writeServerShell,
 } from './services/inventoryService.js';
 import { executeServerAction } from './services/serverActions.js';
-import { resolveServerLifecycleStatus } from '../shared/serverFilters.js';
 
 export function createApp(config: RuntimeConfig = loadConfig()) {
   const app = express();
@@ -220,17 +220,18 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
       return;
     }
 
+    const inventory = buildServerInventorySnapshot();
     response.json({
       cloudAccounts,
-      servers: servers.map((server) => ({
-        ...server,
-        status: resolveServerLifecycleStatus(server),
-      })),
+      servers: inventory.items,
       operationEvents,
       summary: {
-        totalServers: servers.length,
-        onlineServers: servers.filter((server) => resolveServerLifecycleStatus(server) === 'running').length,
-        openEvents: operationEvents.filter((event) => event.status === 'open').length,
+        totalServers: inventory.summary.total,
+        onlineServers: inventory.summary.running,
+        openEvents: inventory.summary.openEvents,
+        connectedSsh: inventory.summary.sshConnected,
+        avgCpu: inventory.summary.avgCpu,
+        busiestServer: inventory.summary.busiestServer,
       },
     });
   });

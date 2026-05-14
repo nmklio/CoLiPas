@@ -52,6 +52,28 @@ const serverMetricSamples = new Map<string, { sampledAt: number; failedAt: numbe
 let metricsRefreshInFlight: Promise<void> | null = null;
 const serverAuditCorrelationSchema = z.string().trim().regex(/^srv-trace-[a-f0-9-]{36}$/).optional();
 
+export interface ServerInventorySummary {
+  total: number;
+  running: number;
+  stopped: number;
+  unconnected: number;
+  warning: number;
+  provisioning: number;
+  sshConnected: number;
+  regions: number;
+  customProviders: number;
+  avgCpu: number;
+  openEvents: number;
+  busiestServer?: ServerNode;
+}
+
+export interface ServerInventorySnapshot {
+  items: ServerNode[];
+  providers: string[];
+  regions: string[];
+  summary: ServerInventorySummary;
+}
+
 function normalizeFilter<T extends string>(value: unknown, allowed: readonly T[], fallback: T) {
   if (typeof value !== 'string') {
     return fallback;
@@ -70,14 +92,15 @@ export function listOperationEvents() {
 }
 
 export function listServers(query: Record<string, unknown>) {
+  const snapshot = buildServerInventorySnapshot();
+
   const providers = [
     'all',
-    ...(servers.some((server) => isCustomCloudProvider(server.provider)) ? [customProviderFilterValue] : []),
-    ...Array.from(new Set(servers.map((server) => server.provider))),
+    ...(snapshot.summary.customProviders > 0 ? [customProviderFilterValue] : []),
+    ...snapshot.providers,
   ];
   const statuses: Array<Extract<ServerStatus, 'running' | 'stopped' | 'unconnected'> | 'all'> = ['all', 'running', 'stopped', 'unconnected'];
-  const normalizedServers = servers.map(normalizeServerForResponse);
-  const regions = ['all', ...Array.from(new Set(normalizedServers.map((server) => server.region)))];
+  const regions = ['all', ...snapshot.regions];
 
   const filters: ServerFilters = {
     query: typeof query.q === 'string' ? query.q : '',
@@ -86,7 +109,7 @@ export function listServers(query: Record<string, unknown>) {
     region: normalizeFilter(query.region, regions, 'all'),
   };
 
-  const filteredItems = filterServers(normalizedServers, filters);
+  const filteredItems = filterServers(snapshot.items, filters);
   const pagination = parseServerPagination(query, filteredItems.length);
   const items = pagination
     ? filteredItems.slice(pagination.offset, pagination.offset + pagination.pageSize)
@@ -103,6 +126,108 @@ export function listServers(query: Record<string, unknown>) {
       hasMore: pagination ? pagination.offset + items.length < filteredItems.length : false,
     },
   };
+}
+
+export function summarizeServerInventory(inputServers: ServerNode[] = servers): ServerInventorySummary {
+  return collectServerInventory(inputServers, false).summary;
+}
+
+export function buildServerInventorySnapshot(inputServers: ServerNode[] = servers): ServerInventorySnapshot {
+  const collected = collectServerInventory(inputServers, true);
+  return {
+    items: collected.items ?? [],
+    providers: collected.providers,
+    regions: collected.regions,
+    summary: collected.summary,
+  };
+}
+
+function collectServerInventory(inputServers: ServerNode[], includeItems: boolean) {
+  const regions = new Set<string>();
+  const providers = new Set<string>();
+  const customProviders = new Set<string>();
+  let running = 0;
+  let stopped = 0;
+  let unconnected = 0;
+  let warning = 0;
+  let provisioning = 0;
+  let sshConnected = 0;
+  let cpuTotal = 0;
+  let busiestServer: ServerNode | undefined;
+  let busiestLoad = -1;
+  const items = includeItems ? [] as ServerNode[] : undefined;
+
+  for (const server of inputServers) {
+    const normalized = normalizeServerForResponse(server);
+    if (items) {
+      items.push(normalized);
+    }
+
+    const normalizedStatus = normalized.status;
+    if (normalizedStatus === 'running') {
+      running += 1;
+    } else if (normalizedStatus === 'stopped') {
+      stopped += 1;
+    } else if (normalizedStatus === 'warning') {
+      warning += 1;
+    } else if (normalizedStatus === 'provisioning') {
+      provisioning += 1;
+    } else {
+      unconnected += 1;
+    }
+
+    if (normalized.ssh?.connected) {
+      sshConnected += 1;
+    }
+    if (normalized.region.trim()) {
+      regions.add(normalized.region);
+    }
+    providers.add(normalized.provider);
+    if (isCustomCloudProvider(normalized.provider)) {
+      customProviders.add(normalized.provider);
+    }
+
+    cpuTotal += normalized.cpu;
+    const load = Math.max(normalized.cpu, normalized.memory, normalized.disk);
+    if (load > busiestLoad) {
+      busiestLoad = load;
+      busiestServer = normalized;
+    }
+  }
+
+  const openEvents = countOpenOperationEvents();
+
+  const summary: ServerInventorySummary = {
+    total: inputServers.length,
+    running,
+    stopped,
+    unconnected,
+    warning,
+    provisioning,
+    sshConnected,
+    regions: regions.size,
+    customProviders: customProviders.size,
+    avgCpu: inputServers.length > 0 ? Math.round(cpuTotal / inputServers.length) : 0,
+    openEvents,
+    ...(busiestServer ? { busiestServer } : {}),
+  };
+
+  return {
+    items,
+    providers: Array.from(providers),
+    regions: Array.from(regions),
+    summary,
+  };
+}
+
+export function countOpenOperationEvents() {
+  let openEvents = 0;
+  for (const event of operationEvents) {
+    if (event.status === 'open') {
+      openEvents += 1;
+    }
+  }
+  return openEvents;
 }
 
 function parseServerPagination(query: Record<string, unknown>, total: number) {

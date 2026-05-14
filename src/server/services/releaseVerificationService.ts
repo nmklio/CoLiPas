@@ -5,7 +5,7 @@ import type { ReleaseVerificationResponse } from '../../types.js';
 import type { RuntimeConfig } from '../config.js';
 import { buildReleaseReadiness } from './releaseReadinessService.js';
 import { listAuditEntries } from './auditService.js';
-import { listCloudAccounts, listOperationEvents, listServers } from './inventoryService.js';
+import { listCloudAccounts, summarizeServerInventory } from './inventoryService.js';
 import { buildReleaseDeploymentEvidence } from './deploymentEvidenceService.js';
 
 export function isReleaseVerificationEnabled(config: RuntimeConfig) {
@@ -24,9 +24,8 @@ export function buildReleaseVerification(config: RuntimeConfig): ReleaseVerifica
   const generatedAt = new Date().toISOString();
   const readiness = buildReleaseReadiness(config);
   const auditEntries = listAuditEntries();
-  const servers = listServers({}).items;
   const cloudAccounts = listCloudAccounts();
-  const operationEvents = listOperationEvents();
+  const inventorySummary = summarizeServerInventory();
   const frontend = inspectFrontendBundle();
   const deployment = buildReleaseDeploymentEvidence(config);
   const auditByStatus = auditEntries.reduce(
@@ -60,11 +59,11 @@ export function buildReleaseVerification(config: RuntimeConfig): ReleaseVerifica
     },
     inventory: {
       servers: {
-        total: servers.length,
-        running: servers.filter((server) => server.status === 'running').length,
-        stopped: servers.filter((server) => server.status === 'stopped').length,
-        unconnected: servers.filter((server) => server.status === 'unconnected').length,
-        sshConnected: servers.filter((server) => server.ssh?.connected).length,
+        total: inventorySummary.total,
+        running: inventorySummary.running,
+        stopped: inventorySummary.stopped,
+        unconnected: inventorySummary.unconnected,
+        sshConnected: inventorySummary.sshConnected,
       },
       cloudAccounts: {
         total: cloudAccounts.length,
@@ -72,8 +71,8 @@ export function buildReleaseVerification(config: RuntimeConfig): ReleaseVerifica
         warning: cloudAccounts.filter((account) => account.status === 'warning').length,
         disconnected: cloudAccounts.filter((account) => account.status === 'disconnected').length,
       },
-      openEvents: operationEvents.filter((event) => event.status === 'open').length,
-      regions: new Set(servers.map((server) => server.region).filter(Boolean)).size,
+      openEvents: inventorySummary.openEvents,
+      regions: inventorySummary.regions,
     },
     security: {
       adminPasswordDefault: config.security.adminPasswordDefault,

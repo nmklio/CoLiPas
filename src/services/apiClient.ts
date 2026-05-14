@@ -27,6 +27,9 @@ export interface OverviewResponse {
     totalServers: number;
     onlineServers: number;
     openEvents: number;
+    connectedSsh?: number;
+    avgCpu?: number;
+    busiestServer?: ServerNode;
   };
 }
 

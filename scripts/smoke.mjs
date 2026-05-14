@@ -409,7 +409,9 @@ const getChecks = [
       Array.isArray(body.operationEvents) &&
       body.summary?.totalServers === body.servers.length &&
       body.summary?.onlineServers === body.servers.filter((server) => server.status === 'running').length &&
-      body.summary?.openEvents === body.operationEvents.filter((event) => event.status === 'open').length,
+      body.summary?.openEvents === body.operationEvents.filter((event) => event.status === 'open').length &&
+      body.summary?.connectedSsh === body.servers.filter((server) => server.ssh?.connected).length &&
+      Number.isInteger(body.summary?.avgCpu),
   ],
   [
     '/api/servers?status=running',
@@ -3544,6 +3546,8 @@ function assertSqlitePersistenceGuards() {
   const auditServiceSource = fs.readFileSync(new URL('../src/server/services/auditService.ts', import.meta.url), 'utf8');
   const appSource = fs.readFileSync(new URL('../src/server/app.ts', import.meta.url), 'utf8');
   const sshAccessSource = fs.readFileSync(new URL('../src/server/services/sshAccessService.ts', import.meta.url), 'utf8');
+  const diagnosticServiceSource = fs.readFileSync(new URL('../src/server/services/diagnosticService.ts', import.meta.url), 'utf8');
+  const releaseVerificationSource = fs.readFileSync(new URL('../src/server/services/releaseVerificationService.ts', import.meta.url), 'utf8');
   const combined = [databaseSource, inventoryServiceSource, auditServiceSource, appSource].join('\n');
   const requiredFragments = [
     "import { DatabaseSync } from 'node:sqlite'",
@@ -3611,6 +3615,28 @@ function assertSqlitePersistenceGuards() {
     throw new Error(`SSH live CPU metric guard is incomplete: ${missingSshMetricFragments.join(', ')}`);
   }
 
+  const inventorySummaryFragments = [
+    'export function summarizeServerInventory',
+    'export function buildServerInventorySnapshot',
+    'export function countOpenOperationEvents',
+    'const inventory = buildServerInventorySnapshot()',
+    'connectedSsh: inventory.summary.sshConnected',
+    'avgCpu: inventory.summary.avgCpu',
+    'busiestServer: inventory.summary.busiestServer',
+    'const inventorySummary = summarizeServerInventory()',
+  ];
+  const inventorySummarySource = `${inventoryServiceSource}\n${appSource}\n${diagnosticServiceSource}\n${releaseVerificationSource}`;
+  const missingInventorySummaryFragments = inventorySummaryFragments.filter((fragment) => !inventorySummarySource.includes(fragment));
+  if (missingInventorySummaryFragments.length) {
+    throw new Error(`Inventory summary fast path is incomplete: ${missingInventorySummaryFragments.join(', ')}`);
+  }
+  if (appSource.includes("servers.filter((server) => resolveServerLifecycleStatus(server) === 'running')")) {
+    throw new Error('/api/overview must use the shared inventory summary instead of rescanning server status');
+  }
+  if (diagnosticServiceSource.includes('listServers({})') || releaseVerificationSource.includes('listServers({})')) {
+    throw new Error('Diagnostic and release evidence paths must use summarized inventory metrics');
+  }
+
   const healthRouteBody = appSource.match(/app\.get\('\/api\/health'[\s\S]*?\n  \}\);/)?.[0] ?? '';
   if (healthRouteBody.includes('recordAudit') || healthRouteBody.includes('HEALTH_CHECK')) {
     throw new Error('Health endpoint must not write audit rows or churn the SQLite WAL');
@@ -3629,6 +3655,9 @@ function assertSqlitePersistenceGuards() {
     'overviewRefreshInFlightRef.current = true',
     'overviewRefreshInFlightRef.current = false',
     'void refreshOverview()',
+    'overview.summary.connectedSsh',
+    'overview.summary.avgCpu',
+    'overview.summary.busiestServer',
     "activeSection === 'servers' ? filterServers(overview.servers, filters) : []",
     "if (filters.region === 'all' && !(filters.regionScope?.length))",
   ];

@@ -1,11 +1,10 @@
 import path from 'node:path';
 import type { DiagnosticExportResponse } from '../../types.js';
-import { isBaseCloudProvider } from '../../shared/serverFilters.js';
 import type { RuntimeConfig } from '../config.js';
 import { getDatabasePath } from './database.js';
 import { buildReleaseReadiness } from './releaseReadinessService.js';
 import { listAuditEntries } from './auditService.js';
-import { getServerShellEvidence, getServerShellStatus, listCloudAccounts, listOperationEvents, listServers } from './inventoryService.js';
+import { getServerShellEvidence, getServerShellStatus, listCloudAccounts, summarizeServerInventory } from './inventoryService.js';
 import { getAiProviderStatus } from './aiSettingsService.js';
 import { getSshShellSocketDiagnostics } from '../sshShellSocket.js';
 
@@ -13,10 +12,8 @@ export function buildDiagnosticExport(config: RuntimeConfig): DiagnosticExportRe
   const generatedAt = new Date().toISOString();
   const readiness = buildReleaseReadiness(config);
   const auditEntries = listAuditEntries();
-  const inventory = listServers({});
-  const serverItems = inventory.items;
   const cloudAccounts = listCloudAccounts();
-  const operationEvents = listOperationEvents();
+  const inventorySummary = summarizeServerInventory();
   const aiProvider = getAiProviderStatus(config);
   const shellStatus = getServerShellStatus();
   const shellSocketDiagnostics = getSshShellSocketDiagnostics();
@@ -67,11 +64,11 @@ export function buildDiagnosticExport(config: RuntimeConfig): DiagnosticExportRe
     },
     inventory: {
       servers: {
-        total: serverItems.length,
-        running: serverItems.filter((server) => server.status === 'running').length,
-        stopped: serverItems.filter((server) => server.status === 'stopped').length,
-        unconnected: serverItems.filter((server) => server.status === 'unconnected').length,
-        connectedSsh: serverItems.filter((server) => server.ssh?.connected).length,
+        total: inventorySummary.total,
+        running: inventorySummary.running,
+        stopped: inventorySummary.stopped,
+        unconnected: inventorySummary.unconnected,
+        connectedSsh: inventorySummary.sshConnected,
       },
       cloudAccounts: {
         total: cloudAccounts.length,
@@ -80,9 +77,9 @@ export function buildDiagnosticExport(config: RuntimeConfig): DiagnosticExportRe
         disconnected: cloudAccounts.filter((account) => account.status === 'disconnected').length,
         providers: new Set(cloudAccounts.map((account) => account.provider)).size,
       },
-      regions: new Set(serverItems.map((server) => server.region).filter(Boolean)).size,
-      customProviders: new Set(serverItems.map((server) => server.provider).filter((provider) => !isBaseCloudProvider(provider))).size,
-      openEvents: operationEvents.filter((event) => event.status === 'open').length,
+      regions: inventorySummary.regions,
+      customProviders: inventorySummary.customProviders,
+      openEvents: inventorySummary.openEvents,
     },
     sshTerminal: {
       activeSessions: shellStatus.activeCount,
