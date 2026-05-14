@@ -3636,6 +3636,19 @@ function assertSqlitePersistenceGuards() {
   if (diagnosticServiceSource.includes('listServers({})') || releaseVerificationSource.includes('listServers({})')) {
     throw new Error('Diagnostic and release evidence paths must use summarized inventory metrics');
   }
+  const paginationFastPathFragments = [
+    'buildServerFilterMatcher(filters)',
+    'countMatchingServers(snapshot.items, matcher)',
+    'collectServerPage(snapshot.items, matcher, pagination)',
+    'function hasServerPagination(query: Record<string, unknown>)',
+  ];
+  const missingPaginationFastPathFragments = paginationFastPathFragments.filter((fragment) => !inventoryServiceSource.includes(fragment));
+  if (missingPaginationFastPathFragments.length) {
+    throw new Error(`Server inventory pagination fast path is incomplete: ${missingPaginationFastPathFragments.join(', ')}`);
+  }
+  if (inventoryServiceSource.includes('filteredItems.slice(pagination.offset')) {
+    throw new Error('Paginated server inventory must not allocate the full filtered result before slicing');
+  }
 
   const healthRouteBody = appSource.match(/app\.get\('\/api\/health'[\s\S]*?\n  \}\);/)?.[0] ?? '';
   if (healthRouteBody.includes('recordAudit') || healthRouteBody.includes('HEALTH_CHECK')) {

@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { cloudAccounts, operationEvents, servers } from '../../data/mockData.js';
-import { ServerFilters, customProviderFilterValue, filterServers, isCustomCloudProvider, resolveServerLifecycleStatus } from '../../shared/serverFilters.js';
+import { ServerFilters, buildServerFilterMatcher, customProviderFilterValue, filterServers, isCustomCloudProvider, resolveServerLifecycleStatus } from '../../shared/serverFilters.js';
 import { z } from 'zod';
 import type { CloudProvider, ServerNode, ServerStatus } from '../../types.js';
 import { HttpError } from '../httpErrors.js';
@@ -74,6 +74,12 @@ export interface ServerInventorySnapshot {
   summary: ServerInventorySummary;
 }
 
+interface ServerPagination {
+  page: number;
+  pageSize: number;
+  offset: number;
+}
+
 function normalizeFilter<T extends string>(value: unknown, allowed: readonly T[], fallback: T) {
   if (typeof value !== 'string') {
     return fallback;
@@ -109,23 +115,71 @@ export function listServers(query: Record<string, unknown>) {
     region: normalizeFilter(query.region, regions, 'all'),
   };
 
+  if (hasServerPagination(query)) {
+    const matcher = buildServerFilterMatcher(filters);
+    const total = countMatchingServers(snapshot.items, matcher);
+    const pagination = parseServerPagination(query, total) as ServerPagination;
+    const items = collectServerPage(snapshot.items, matcher, pagination);
+
+    return {
+      filters,
+      items,
+      meta: {
+        total,
+        returned: items.length,
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        hasMore: pagination.offset + items.length < total,
+      },
+    };
+  }
+
   const filteredItems = filterServers(snapshot.items, filters);
-  const pagination = parseServerPagination(query, filteredItems.length);
-  const items = pagination
-    ? filteredItems.slice(pagination.offset, pagination.offset + pagination.pageSize)
-    : filteredItems;
 
   return {
     filters,
-    items,
+    items: filteredItems,
     meta: {
       total: filteredItems.length,
-      returned: items.length,
-      page: pagination?.page ?? 1,
-      pageSize: pagination?.pageSize ?? filteredItems.length,
-      hasMore: pagination ? pagination.offset + items.length < filteredItems.length : false,
+      returned: filteredItems.length,
+      page: 1,
+      pageSize: filteredItems.length,
+      hasMore: false,
     },
   };
+}
+
+function countMatchingServers(items: ServerNode[], matcher: (server: ServerNode) => boolean) {
+  let total = 0;
+  for (const server of items) {
+    if (matcher(server)) {
+      total += 1;
+    }
+  }
+  return total;
+}
+
+function collectServerPage(items: ServerNode[], matcher: (server: ServerNode) => boolean, pagination: ServerPagination) {
+  const pageItems: ServerNode[] = [];
+  const end = pagination.offset + pagination.pageSize;
+  let matched = 0;
+
+  for (const server of items) {
+    if (!matcher(server)) {
+      continue;
+    }
+
+    if (matched >= pagination.offset && pageItems.length < pagination.pageSize) {
+      pageItems.push(server);
+    }
+    matched += 1;
+
+    if (matched >= end) {
+      break;
+    }
+  }
+
+  return pageItems;
 }
 
 export function summarizeServerInventory(inputServers: ServerNode[] = servers): ServerInventorySummary {
@@ -231,7 +285,7 @@ export function countOpenOperationEvents() {
 }
 
 function parseServerPagination(query: Record<string, unknown>, total: number) {
-  if (!hasPaginationValue(query.page) && !hasPaginationValue(query.pageSize) && !hasPaginationValue(query.limit) && !hasPaginationValue(query.offset)) {
+  if (!hasServerPagination(query)) {
     return null;
   }
 
@@ -243,6 +297,10 @@ function parseServerPagination(query: Record<string, unknown>, total: number) {
   const offset = explicitOffset === null ? (page - 1) * pageSize : Math.max(0, explicitOffset);
 
   return { page, pageSize, offset };
+}
+
+function hasServerPagination(query: Record<string, unknown>) {
+  return hasPaginationValue(query.page) || hasPaginationValue(query.pageSize) || hasPaginationValue(query.limit) || hasPaginationValue(query.offset);
 }
 
 function hasPaginationValue(value: unknown) {

@@ -21,11 +21,20 @@ export function isCustomCloudProvider(provider: string) {
 }
 
 export function filterServers(servers: ServerNode[], filters: ServerFilters) {
+  const matcher = buildServerFilterMatcher(filters);
+  return servers.filter(matcher);
+}
+
+export function matchesServerFilters(server: ServerNode, filters: ServerFilters) {
+  return buildServerFilterMatcher(filters)(server);
+}
+
+export function buildServerFilterMatcher(filters: ServerFilters) {
   const query = filters.query.trim().toLowerCase();
   const scopedRegions = new Set((filters.regionScope ?? []).map(normalizeFilterValue).filter(Boolean));
   const selectedRegion = normalizeFilterValue(filters.region);
 
-  return servers.filter((server) => {
+  return (server: ServerNode) => {
     const serverRegion = normalizeFilterValue(server.region);
     const matchesQuery =
       query.length === 0 ||
@@ -45,7 +54,7 @@ export function filterServers(servers: ServerNode[], filters: ServerFilters) {
       : filters.region === 'all' || serverRegion === selectedRegion;
 
     return matchesQuery && matchesProvider && matchesStatus && matchesRegion;
-  });
+  };
 }
 
 export function resolveServerLifecycleStatus(server: ServerNode): ServerLifecycleStatus {
