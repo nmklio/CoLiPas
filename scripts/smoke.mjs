@@ -4885,6 +4885,10 @@ function assertOperationsTargetSelectionGuards() {
     'buildPreflightAuditDetail(response)',
     'status: \'missing\'',
     'runnable: false',
+    'const operationOutputLimit = 200',
+    'outputs.length < operationOutputLimit',
+    'outputsTruncated: omittedOutputs > 0 || undefined',
+    'omittedOutputs: omittedOutputs > 0 ? omittedOutputs : undefined',
   ];
   const missingService = serviceRequired.filter((fragment) => !serviceSource.includes(fragment));
   if (missingService.length) {

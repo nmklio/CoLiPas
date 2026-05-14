@@ -149,8 +149,12 @@ async function runOperationsSimulation(targetBaseUrl, headers) {
     type: 'assetSync',
     targetMode: 'allServers',
   }, headers, 202);
-  assert(assetSync.body.summary.total >= serverCount, 'asset sync operation returned one result per simulated server');
+  assert(assetSync.body.summary.total >= serverCount, 'asset sync operation executed the full simulated server inventory');
   assert(assetSync.body.summary.failed === 0, 'asset sync operation completed without target failures');
+  assert(assetSync.body.outputs.length < assetSync.body.summary.total, 'asset sync operation capped returned target outputs');
+  assert(assetSync.body.outputs.length === assetSync.body.outputLimit, 'asset sync output cap advertised the returned sample size');
+  assert(assetSync.body.outputsTruncated === true, 'asset sync operation marked bulk outputs as truncated');
+  assert(assetSync.body.omittedOutputs === assetSync.body.summary.total - assetSync.body.outputs.length, 'asset sync operation reported omitted output count');
 
   const connectedIds = await findConnectedServerIds(targetBaseUrl, headers, 8);
   assert(connectedIds.length >= 4, 'simulation created SSH-connected targets for operations');

@@ -4371,6 +4371,18 @@ td span,
   gap: 10px;
 }
 
+.ops-output-truncated {
+  grid-column: 1 / -1;
+  border: 1px solid #c8dce1;
+  border-radius: 8px;
+  background: #f4faf9;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.5;
+  padding: 10px 12px;
+}
+
 .ops-output-card {
   min-width: 0;
   border: 1px solid #d9e5e8;

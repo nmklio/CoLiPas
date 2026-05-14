@@ -180,6 +180,9 @@ export interface OperationTaskResponse {
     skipped: number;
   };
   outputs: OperationTaskTargetResult[];
+  outputsTruncated?: boolean;
+  outputLimit?: number;
+  omittedOutputs?: number;
   message: string;
 }
 

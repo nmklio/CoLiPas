@@ -90,6 +90,7 @@ type Copy = {
   viewTrace: string;
   choiceWindow: string;
   loadMoreTargets: string;
+  truncatedOutputs?: string;
 };
 
 const taskIds: OperationTaskType[] = ['assetSync', 'healthCheck', 'sshCommand', 'powerOn', 'shutdown', 'reboot'];
@@ -773,6 +774,11 @@ export function OperationsCenter({ events, servers, onTaskFinished, onAuditTrace
           <div className="quiet-state">{copy.noResult}</div>
         ) : (
           <div className="ops-output-grid">
+            {activeTask.outputsTruncated && (
+              <div className="ops-output-truncated">
+                {formatTruncatedOutputs(activeTask, language, copy)}
+              </div>
+            )}
             {activeTask.outputs.length === 0 ? (
               <div className="quiet-state">{activeTask.message}</div>
             ) : (
@@ -903,6 +909,21 @@ function statusText(status: OperationTaskStatus, copy: Copy) {
 
 function targetSummary(task: OperationTaskResponse, copy: Copy) {
   return `${copy.target} ${task.summary.total}`;
+}
+
+function formatTruncatedOutputs(task: OperationTaskResponse, language: string, copy: Copy) {
+  const omitted = task.omittedOutputs ?? Math.max(task.summary.total - task.outputs.length, 0);
+  const template = copy.truncatedOutputs
+    ?? (language === 'zh'
+      ? '已显示前 {shown} 条结果，另有 {omitted} 条仅计入汇总与审计链，避免大批量任务卡顿。'
+      : language === 'ja'
+        ? '先頭 {shown} 件のみ表示しています。残り {omitted} 件は集計と監査 trace に反映されています。'
+        : 'Showing the first {shown} results. Another {omitted} are counted in the summary and audit trace to keep bulk tasks responsive.');
+
+  return interpolateCopy(template, {
+    shown: task.outputs.length,
+    omitted,
+  });
 }
 
 function formatTaskTime(value: string, language: string) {

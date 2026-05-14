@@ -17,6 +17,8 @@ import { executeServerAction } from './serverActions.js';
 import { resolveServerLifecycleStatus } from '../../shared/serverFilters.js';
 import { getSshCommandConfirmationReason } from '../../shared/sshCommandRisk.js';
 
+const operationOutputLimit = 200;
+
 const operationTaskSchema = z
   .object({
     type: z.enum(['assetSync', 'healthCheck', 'sshCommand', 'powerOn', 'shutdown', 'reboot']),
@@ -126,16 +128,28 @@ export async function createOperationTask(input: unknown): Promise<OperationTask
   }
 
   const outputs: OperationTaskTargetResult[] = [];
+  const summary: OperationTaskResponse['summary'] = {
+    total: targets.length,
+    success: 0,
+    failed: 0,
+    skipped: 0,
+  };
   for (const server of targets) {
-    outputs.push(await executeTarget(taskId, parsed, server));
+    const output = await executeTarget(taskId, parsed, server);
+    if (output.status === 'success') {
+      summary.success += 1;
+    } else if (output.status === 'failed') {
+      summary.failed += 1;
+    } else {
+      summary.skipped += 1;
+    }
+
+    if (outputs.length < operationOutputLimit) {
+      outputs.push(output);
+    }
   }
 
-  const summary = {
-    total: outputs.length,
-    success: outputs.filter((output) => output.status === 'success').length,
-    failed: outputs.filter((output) => output.status === 'failed').length,
-    skipped: outputs.filter((output) => output.status === 'skipped').length,
-  };
+  const omittedOutputs = Math.max(summary.total - outputs.length, 0);
   const status = resolveTaskStatus(summary);
   const finishedAt = new Date().toISOString();
   const message = buildTaskMessage(parsed.type, summary);
@@ -159,6 +173,9 @@ export async function createOperationTask(input: unknown): Promise<OperationTask
     finishedAt,
     summary,
     outputs,
+    outputsTruncated: omittedOutputs > 0 || undefined,
+    outputLimit: omittedOutputs > 0 ? operationOutputLimit : undefined,
+    omittedOutputs: omittedOutputs > 0 ? omittedOutputs : undefined,
     message,
   };
 }

@@ -1344,6 +1344,9 @@ function buildExecutionEvidenceMessage(result: OperationTaskResponse, noOutputLa
     `type=${result.type}`,
     `status=${result.status}`,
     `summary=${result.summary.success}/${result.summary.total} succeeded, ${result.summary.failed} failed, ${result.summary.skipped} skipped`,
+    result.outputsTruncated
+      ? `outputs=showing ${result.outputs.length}/${result.summary.total}; omitted=${result.omittedOutputs ?? Math.max(result.summary.total - result.outputs.length, 0)}`
+      : `outputs=${result.outputs.length}/${result.summary.total}`,
     `finishedAt=${result.finishedAt}`,
     '',
     ...outputLines,
