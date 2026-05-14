@@ -57,6 +57,13 @@ run_as_app() {
   fi
 }
 
+ensure_current_build() {
+  if [ ! -d node_modules ]; then
+    run_as_app npm ci
+  fi
+  run_as_app npm run build
+}
+
 patch_landing_page_ui() {
   if ! command -v node >/dev/null 2>&1; then
     echo "WARN: node is unavailable; skipping landing page UI patch" >&2
@@ -1424,6 +1431,7 @@ LOCAL_HEAD="$(run_as_app git rev-parse HEAD)"
 REMOTE_HEAD="$(run_as_app git rev-parse "origin/$BRANCH")"
 
 if [ "$LOCAL_HEAD" = "$REMOTE_HEAD" ]; then
+  ensure_current_build
   DEPLOYED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
   write_release_evidence_env "$DEPLOYED_AT" "$REMOTE_HEAD"
   if [ "$(id -u)" -eq 0 ]; then
@@ -1443,7 +1451,7 @@ fi
 
 run_as_app git reset --hard "$REMOTE_HEAD"
 run_as_app npm ci
-run_as_app npm run build
+ensure_current_build
 DEPLOYED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 write_release_evidence_env "$DEPLOYED_AT" "$REMOTE_HEAD"
 if [ "$(id -u)" -eq 0 ]; then

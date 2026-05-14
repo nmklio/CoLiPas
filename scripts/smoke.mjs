@@ -3027,6 +3027,7 @@ function assertAccountUiGuards() {
     'throw "Target $($Target.name) update failed with exit code $LASTEXITCODE."',
     'generate_release_verify_token',
     'write_release_evidence_env',
+    'ensure_current_build',
     'if [ "$LOCAL_HEAD" = "$REMOTE_HEAD" ]; then',
     'verify_release_evidence',
     "grep -Ev '^(RELEASE_VERIFY_TOKEN|RELEASE_TARGET_NAME|RELEASE_CHANNEL|RELEASE_DEPLOYMENT_MODE|RELEASE_PUBLIC_URL|RELEASE_GIT_COMMIT|RELEASE_ARTIFACT_ID|RELEASE_DEPLOYED_AT)='",
