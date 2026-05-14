@@ -2924,6 +2924,7 @@ function assertAccountUiGuards() {
   const systemdSource = fs.readFileSync(new URL('../deploy/colipas.service', import.meta.url), 'utf8');
   const dockerUpdateSource = fs.readFileSync(new URL('../deploy/docker-update.sh', import.meta.url), 'utf8');
   const evidenceCheckSource = fs.readFileSync(new URL('../deploy/release-evidence-check.mjs', import.meta.url), 'utf8');
+  const gitignoreSource = fs.readFileSync(new URL('../.gitignore', import.meta.url), 'utf8');
 
   if (loginSource.includes("useState('admin')") || loginSource.includes('value="admin"')) {
     throw new Error('Login page must not prefill the admin username');
@@ -2985,6 +2986,21 @@ function assertAccountUiGuards() {
   const missingPublicPageGuard = publicPageGuardFragments.filter((fragment) => !publicPageGuardSource.includes(fragment));
   if (missingPublicPageGuard.length) {
     throw new Error(`Public landing/docs/admin browser validation is incomplete: ${missingPublicPageGuard.join(', ')}`);
+  }
+
+  const localGreyDiagnosticGuardFragments = [
+    'configureNodeReports()',
+    'process.report.reportOnFatalError = true',
+    'process.report.reportOnUncaughtException = true',
+    'writeFailureDiagnostics(error)',
+    'keepVerifyDataOnFailure',
+    'Application server exited early during',
+    'serverLog.stderr',
+    'verify-production kept diagnostics',
+  ];
+  const missingLocalGreyDiagnosticGuard = localGreyDiagnosticGuardFragments.filter((fragment) => !verifyProductionSource.includes(fragment));
+  if (missingLocalGreyDiagnosticGuard.length || !gitignoreSource.includes('.tmp-verify-data/')) {
+    throw new Error(`Local grey test diagnostics are incomplete: ${missingLocalGreyDiagnosticGuard.join(', ') || '.tmp-verify-data/'}`);
   }
 
   const ciGuardFragments = [
