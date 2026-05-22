@@ -12,7 +12,7 @@ import type {
 } from '../../types.js';
 import { HttpError } from '../httpErrors.js';
 import { recordAudit } from './auditService.js';
-import { runServerCommand, runServerDiagnostic } from './inventoryService.js';
+import { getServerById, runServerCommand, runServerDiagnostic } from './inventoryService.js';
 import { executeServerAction } from './serverActions.js';
 import { resolveServerLifecycleStatus } from '../../shared/serverFilters.js';
 import { getSshCommandConfirmationReason } from '../../shared/sshCommandRisk.js';
@@ -482,7 +482,14 @@ function buildTargetPreflightIssues(
 function resolveTargets(task: ParsedOperationTask) {
   if (task.targetMode === 'selected') {
     const selected = new Set(task.serverIds);
-    return servers.filter((server) => selected.has(server.id));
+    const selectedServers: ServerNode[] = [];
+    for (const serverId of selected) {
+      const server = getServerById(serverId);
+      if (server) {
+        selectedServers.push(server);
+      }
+    }
+    return selectedServers;
   }
 
   if (task.targetMode === 'allServers') {

@@ -44,6 +44,9 @@ const dataDir = process.env.COLIPAS_DATA_DIR || '.data';
 const inventoryPath = path.resolve(process.cwd(), dataDir, 'inventory.json');
 const credentialsPath = path.resolve(process.cwd(), dataDir, 'credentials.json');
 const persistedCredentials = new Map<string, StoredSshCredential>();
+const serverById = new Map<string, ServerNode>();
+const serverByName = new Map<string, ServerNode>();
+const serverByPublicIp = new Map<string, ServerNode>();
 const serverMetricsCacheTtlMs = readEnvInteger('COLIPAS_METRICS_CACHE_TTL_MS', 30_000, 5_000, 300_000);
 const serverMetricsFailureBackoffMs = readEnvInteger('COLIPAS_METRICS_FAILURE_BACKOFF_MS', 60_000, 5_000, 600_000);
 const serverMetricsConcurrency = readEnvInteger('COLIPAS_METRICS_CONCURRENCY', 4, 1, 8);
@@ -284,6 +287,52 @@ export function countOpenOperationEvents() {
   return openEvents;
 }
 
+export function getServerById(serverId: string) {
+  return serverById.get(serverId);
+}
+
+function findExistingServerByIdentity(name: string, publicIp: string) {
+  const nameMatch = serverByName.get(name);
+  const ipMatch = serverByPublicIp.get(publicIp);
+
+  if (nameMatch && ipMatch && nameMatch !== ipMatch) {
+    return servers.indexOf(nameMatch) <= servers.indexOf(ipMatch) ? nameMatch : ipMatch;
+  }
+
+  return nameMatch ?? ipMatch;
+}
+
+function rebuildServerIndexes() {
+  serverById.clear();
+  serverByName.clear();
+  serverByPublicIp.clear();
+  for (const server of servers) {
+    indexServer(server);
+  }
+}
+
+function indexServer(server: ServerNode) {
+  serverById.set(server.id, server);
+  if (server.name) {
+    serverByName.set(server.name, server);
+  }
+  if (server.publicIp) {
+    serverByPublicIp.set(server.publicIp, server);
+  }
+}
+
+function unindexServer(server: ServerNode) {
+  if (serverById.get(server.id) === server) {
+    serverById.delete(server.id);
+  }
+  if (server.name && serverByName.get(server.name) === server) {
+    serverByName.delete(server.name);
+  }
+  if (server.publicIp && serverByPublicIp.get(server.publicIp) === server) {
+    serverByPublicIp.delete(server.publicIp);
+  }
+}
+
 function parseServerPagination(query: Record<string, unknown>, total: number) {
   if (!hasServerPagination(query)) {
     return null;
@@ -402,7 +451,7 @@ export async function refreshServerMetrics() {
 
 export async function connectServer(input: unknown) {
   const parsed = connectServerSchema.parse(input);
-  const existingServer = servers.find((server) => server.name === parsed.name || server.publicIp === parsed.publicIp);
+  const existingServer = findExistingServerByIdentity(parsed.name, parsed.publicIp);
   const now = new Date().toISOString();
   const ssh = parsed.ssh.verifyMode === 'assetOnly'
     ? undefined
@@ -416,37 +465,42 @@ export async function connectServer(input: unknown) {
   });
   const status = resolveServerStatus(ssh);
 
-  const server: ServerNode = existingServer
-    ? Object.assign(existingServer, {
-        name: parsed.name,
-        provider: parsed.provider,
-        region: identity.region,
-        status,
-        publicIp: parsed.publicIp,
-        privateIp: parsed.privateIp || '-',
-        os: identity.os,
-        tags: parsed.tags,
-        ssh,
-      })
-    : {
-        id: `manual-${crypto.randomUUID()}`,
-        name: parsed.name,
-        provider: parsed.provider,
-        region: identity.region,
-        status,
-        publicIp: parsed.publicIp,
-        privateIp: parsed.privateIp || '-',
-        os: identity.os,
-        cpu: 0,
-        memory: 0,
-        disk: 0,
-        tags: parsed.tags,
-        ...(ssh ? { ssh } : {}),
-      };
+  let server: ServerNode;
+  if (existingServer) {
+    unindexServer(existingServer);
+    server = Object.assign(existingServer, {
+      name: parsed.name,
+      provider: parsed.provider,
+      region: identity.region,
+      status,
+      publicIp: parsed.publicIp,
+      privateIp: parsed.privateIp || '-',
+      os: identity.os,
+      tags: parsed.tags,
+      ssh,
+    });
+  } else {
+    server = {
+      id: `manual-${crypto.randomUUID()}`,
+      name: parsed.name,
+      provider: parsed.provider,
+      region: identity.region,
+      status,
+      publicIp: parsed.publicIp,
+      privateIp: parsed.privateIp || '-',
+      os: identity.os,
+      cpu: 0,
+      memory: 0,
+      disk: 0,
+      tags: parsed.tags,
+      ...(ssh ? { ssh } : {}),
+    };
+  }
 
   if (!existingServer) {
     servers.push(server);
   }
+  indexServer(server);
 
   if (ssh) {
     persistedCredentials.set(server.id, buildStoredSshCredential(parsed.ssh, ssh.host));
@@ -475,7 +529,7 @@ export async function connectServer(input: unknown) {
 }
 
 export async function updateServer(serverId: string, input: unknown) {
-  const server = servers.find((item) => item.id === serverId);
+  const server = getServerById(serverId);
   if (!server) {
     throw new HttpError(404, 'Server not found', 'SERVER_NOT_FOUND');
   }
@@ -500,6 +554,7 @@ export async function updateServer(serverId: string, input: unknown) {
     sshHost: ssh?.host ?? server.ssh?.host,
   });
 
+  unindexServer(server);
   Object.assign(server, {
     name: parsed.name ?? server.name,
     provider: parsed.provider ?? server.provider,
@@ -511,6 +566,7 @@ export async function updateServer(serverId: string, input: unknown) {
     tags: parsed.tags ?? server.tags,
     ...(parsed.ssh ? { ssh } : {}),
   });
+  indexServer(server);
 
   if (parsed.ssh && parsed.ssh.verifyMode !== 'assetOnly') {
     if (ssh) {
@@ -539,12 +595,14 @@ export async function updateServer(serverId: string, input: unknown) {
 export { inspectServerIdentity };
 
 export function deleteServer(serverId: string) {
-  const index = servers.findIndex((server) => server.id === serverId);
+  const serverToDelete = getServerById(serverId);
+  const index = serverToDelete ? servers.indexOf(serverToDelete) : -1;
   if (index < 0) {
     throw new HttpError(404, 'Server not found', 'SERVER_NOT_FOUND');
   }
 
   const [server] = servers.splice(index, 1);
+  unindexServer(server);
   persistedCredentials.delete(server.id);
   deleteServerRow(server.id);
   deleteCredentialRow(server.id);
@@ -712,7 +770,7 @@ export function getServerShellEvidence(serverIds?: string[]) {
 }
 
 export function setServerRuntimeStatus(serverId: string, status: Extract<ServerStatus, 'running' | 'stopped' | 'warning'>) {
-  const server = servers.find((item) => item.id === serverId);
+  const server = getServerById(serverId);
   if (!server) {
     throw new HttpError(404, 'Server not found', 'SERVER_NOT_FOUND');
   }
@@ -728,7 +786,7 @@ export function setServerRuntimeStatus(serverId: string, status: Extract<ServerS
 }
 
 export function getConnectedServerCredential(serverId: string, auditAction: 'SERVER_SSH_DIAGNOSTIC' | 'SERVER_ACTION' | 'SERVER_SSH_COMMAND') {
-  const server = servers.find((item) => item.id === serverId);
+  const server = getServerById(serverId);
   if (!server) {
     throw new HttpError(404, 'Server not found', 'SERVER_NOT_FOUND');
   }
@@ -783,8 +841,10 @@ function loadPersistedInventory() {
     if (rows.length > 0) {
       servers.splice(0, servers.length, ...rows.map((row) => normalizePersistedServer(JSON.parse(row.payload) as ServerNode)));
     }
+    rebuildServerIndexes();
   } catch {
     // Ignore unreadable local runtime data and keep the in-memory adapter state.
+    rebuildServerIndexes();
   }
 }
 

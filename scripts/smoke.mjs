@@ -3649,6 +3649,24 @@ function assertSqlitePersistenceGuards() {
   if (inventoryServiceSource.includes('filteredItems.slice(pagination.offset')) {
     throw new Error('Paginated server inventory must not allocate the full filtered result before slicing');
   }
+  const serverIndexFragments = [
+    'const serverById = new Map<string, ServerNode>()',
+    'const serverByName = new Map<string, ServerNode>()',
+    'const serverByPublicIp = new Map<string, ServerNode>()',
+    'export function getServerById(serverId: string)',
+    'findExistingServerByIdentity(parsed.name, parsed.publicIp)',
+    'rebuildServerIndexes()',
+    'indexServer(server)',
+    'unindexServer(server)',
+    'const server = getServerById(serverId)',
+  ];
+  const missingServerIndexFragments = serverIndexFragments.filter((fragment) => !inventoryServiceSource.includes(fragment));
+  if (missingServerIndexFragments.length) {
+    throw new Error(`Server lookup index guard is incomplete: ${missingServerIndexFragments.join(', ')}`);
+  }
+  if (inventoryServiceSource.includes('servers.find((item) => item.id === serverId)')) {
+    throw new Error('Server id lookups must use the indexed getServerById path');
+  }
 
   const healthRouteBody = appSource.match(/app\.get\('\/api\/health'[\s\S]*?\n  \}\);/)?.[0] ?? '';
   if (healthRouteBody.includes('recordAudit') || healthRouteBody.includes('HEALTH_CHECK')) {
