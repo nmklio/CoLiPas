@@ -144,6 +144,12 @@ async function runOperationsSimulation(targetBaseUrl, headers) {
   }, headers, 200);
   assert(allPreflight.body.summary.totalTargets >= serverCount, 'asset sync preflight included the large inventory');
   assert(allPreflight.body.ok === true, 'asset sync preflight stayed runnable for inventory-only assets');
+  assert(allPreflight.body.targets.length <= 120, 'asset sync preflight capped returned target detail samples');
+  if (allPreflight.body.summary.totalTargets > allPreflight.body.targets.length) {
+    assert(allPreflight.body.targets.length === allPreflight.body.targetLimit, 'asset sync preflight advertised the returned target sample size');
+    assert(allPreflight.body.targetsTruncated === true, 'asset sync preflight marked bulk targets as truncated');
+    assert(allPreflight.body.omittedTargets === allPreflight.body.summary.totalTargets - allPreflight.body.targets.length, 'asset sync preflight reported omitted target count');
+  }
 
   const assetSync = await postJson(targetBaseUrl, '/api/operations/tasks', {
     type: 'assetSync',

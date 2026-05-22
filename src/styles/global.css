@@ -4243,6 +4243,17 @@ td span,
   font-weight: 700;
 }
 
+.ops-preflight-truncated {
+  border: 1px solid #c8dce1;
+  border-radius: 8px;
+  background: rgba(244, 250, 249, 0.9);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.45;
+  padding: 8px 9px;
+}
+
 .ops-workflow-list {
   padding-top: 2px;
 }

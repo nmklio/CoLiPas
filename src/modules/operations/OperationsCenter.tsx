@@ -648,6 +648,11 @@ export function OperationsCenter({ events, servers, onTaskFinished, onAuditTrace
                         )}
                       </div>
                     ))}
+                    {preflight.targetsTruncated && (
+                      <div className="ops-preflight-truncated">
+                        {formatPreflightTruncation(preflight, language)}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -924,6 +929,21 @@ function formatTruncatedOutputs(task: OperationTaskResponse, language: string, c
     shown: task.outputs.length,
     omitted,
   });
+}
+
+function formatPreflightTruncation(preflight: OperationTaskPreflightResponse, language: string) {
+  const omitted = preflight.omittedTargets ?? Math.max(preflight.summary.totalTargets - preflight.targets.length, 0);
+  const shown = Math.min(preflight.targets.length, 8);
+
+  if (language === 'zh') {
+    return `预检明细只展示前 ${shown} 台，另有 ${omitted} 台已计入上方汇总。`;
+  }
+
+  if (language === 'ja') {
+    return `事前確認の詳細は先頭 ${shown} 台のみ表示しています。残り ${omitted} 台は上の集計に反映されています。`;
+  }
+
+  return `Showing the first ${shown} preflight targets. Another ${omitted} are counted in the summary above.`;
 }
 
 function formatTaskTime(value: string, language: string) {

@@ -4846,6 +4846,9 @@ function assertOperationsTargetSelectionGuards() {
     'onAuditTraceOpen?.(activeTask.correlationId)',
     'shortTraceId(task.correlationId)',
     'inline-trace-button',
+    'preflight.targetsTruncated',
+    'formatPreflightTruncation(preflight, language)',
+    'ops-preflight-truncated',
   ];
   const missingFrontend = frontendRequired.filter((fragment) => !operationsSource.includes(fragment));
   if (missingFrontend.length) {
@@ -4875,7 +4878,8 @@ function assertOperationsTargetSelectionGuards() {
     'const correlationId = parsed.correlationId || buildOperationCorrelationId()',
     "z.string().trim().regex(/^ops-trace-[a-f0-9-]{36}$/).optional()",
     'sshConnected: Boolean(server.ssh?.connected)',
-    'runnable: parsed.type === \'assetSync\' || resolveServerLifecycleStatus(server) !== \'unconnected\'',
+    'const disconnected = requiresSsh && status === \'unconnected\'',
+    'const runnable = !disconnected',
     'buildTargetPreflightIssues(parsed, server, requiresConfirmation)',
     'buildPreflightPlan(parsed',
     'sanitizeCommandPreview(task.command)',
@@ -4885,6 +4889,10 @@ function assertOperationsTargetSelectionGuards() {
     'buildPreflightAuditDetail(response)',
     'status: \'missing\'',
     'runnable: false',
+    'const operationPreflightTargetLimit = 120',
+    'existingPreflightTargets.length < operationPreflightTargetLimit',
+    'targetsTruncated: omittedPreflightTargets > 0 || undefined',
+    'omittedTargets: omittedPreflightTargets > 0 ? omittedPreflightTargets : undefined',
     'const operationOutputLimit = 200',
     'outputs.length < operationOutputLimit',
     'outputsTruncated: omittedOutputs > 0 || undefined',

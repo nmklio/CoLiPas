@@ -18,6 +18,7 @@ import { resolveServerLifecycleStatus } from '../../shared/serverFilters.js';
 import { getSshCommandConfirmationReason } from '../../shared/sshCommandRisk.js';
 
 const operationOutputLimit = 200;
+const operationPreflightTargetLimit = 120;
 
 const operationTaskSchema = z
   .object({
@@ -185,19 +186,50 @@ export function preflightOperationTask(input: unknown): OperationTaskPreflightRe
   const correlationId = parsed.correlationId || buildOperationCorrelationId();
   const targets = resolveTargets(parsed);
   const selectedIds = new Set(parsed.serverIds);
-  const targetById = new Map(targets.map((server) => [server.id, server]));
-  const foundIds = new Set(targetById.keys());
+  const targetById = parsed.targetMode === 'selected'
+    ? new Map(targets.map((server) => [server.id, server]))
+    : new Map<string, ServerNode>();
+  const foundIds = parsed.targetMode === 'selected' ? new Set(targetById.keys()) : new Set<string>();
   const missingTargets = parsed.targetMode === 'selected'
     ? parsed.serverIds.filter((serverId) => !foundIds.has(serverId))
     : [];
-  const disconnectedTargets = parsed.type === 'assetSync'
-    ? []
-    : targets.filter((server) => resolveServerLifecycleStatus(server) === 'unconnected');
-  const runnableTargets = parsed.type === 'assetSync'
-    ? targets
-    : targets.filter((server) => resolveServerLifecycleStatus(server) !== 'unconnected');
   const confirmationReason = requiredConfirmationReason(parsed);
   const requiresConfirmation = Boolean(confirmationReason);
+  const requiresSsh = parsed.type !== 'assetSync';
+  let disconnectedTargetCount = 0;
+  let runnableTargetCount = 0;
+  const existingPreflightTargets: OperationTaskPreflightResponse['targets'] = [];
+
+  for (const server of targets) {
+    const status = resolveServerLifecycleStatus(server);
+    const disconnected = requiresSsh && status === 'unconnected';
+    const runnable = !disconnected;
+
+    if (disconnected) {
+      disconnectedTargetCount += 1;
+    }
+
+    if (runnable) {
+      runnableTargetCount += 1;
+    }
+
+    if (
+      existingPreflightTargets.length < operationPreflightTargetLimit
+      && (parsed.targetMode !== 'selected' || selectedIds.has(server.id))
+    ) {
+      existingPreflightTargets.push({
+        id: server.id,
+        name: server.name,
+        provider: server.provider,
+        region: server.region,
+        status,
+        sshConnected: Boolean(server.ssh?.connected),
+        runnable,
+        issues: buildTargetPreflightIssues(parsed, server, requiresConfirmation),
+      });
+    }
+  }
+
   const issues: OperationTaskPreflightResponse['issues'] = [];
 
   if (missingTargets.length > 0) {
@@ -209,7 +241,7 @@ export function preflightOperationTask(input: unknown): OperationTaskPreflightRe
     });
   }
 
-  if (parsed.type !== 'assetSync' && targets.length === 0) {
+  if (requiresSsh && targets.length === 0) {
     issues.push({
       code: 'OPERATIONS_NO_TARGETS',
       severity: 'block',
@@ -218,14 +250,14 @@ export function preflightOperationTask(input: unknown): OperationTaskPreflightRe
     });
   }
 
-  if (parsed.type !== 'assetSync' && disconnectedTargets.length > 0) {
+  if (requiresSsh && disconnectedTargetCount > 0) {
     issues.push({
       code: 'OPERATIONS_TARGETS_UNCONNECTED',
       severity: 'block',
       message: parsed.targetMode === 'selected'
         ? 'Selected servers must be SSH-connected for this operation'
         : 'All server targets must be SSH-connected for this operation',
-      count: disconnectedTargets.length,
+      count: disconnectedTargetCount,
     });
   }
 
@@ -234,21 +266,10 @@ export function preflightOperationTask(input: unknown): OperationTaskPreflightRe
       code: 'OPERATIONS_CONFIRMATION_REQUIRED',
       severity: 'warn',
       message: `Operator confirmation is required before ${confirmationReason}`,
-      count: runnableTargets.length,
+      count: runnableTargetCount,
     });
   }
 
-  const existingPreflightTargets: OperationTaskPreflightResponse['targets'] = targets.map((server) => ({
-    id: server.id,
-    name: server.name,
-    provider: server.provider,
-    region: server.region,
-    status: resolveServerLifecycleStatus(server),
-    sshConnected: Boolean(server.ssh?.connected),
-    runnable: parsed.type === 'assetSync' || resolveServerLifecycleStatus(server) !== 'unconnected',
-    issues: buildTargetPreflightIssues(parsed, server, requiresConfirmation),
-  }))
-    .filter((target) => parsed.targetMode !== 'selected' || selectedIds.has(target.id));
   const missingPreflightTargets: OperationTaskPreflightResponse['targets'] = missingTargets.map((serverId) => ({
     id: serverId,
     name: serverId,
@@ -267,6 +288,8 @@ export function preflightOperationTask(input: unknown): OperationTaskPreflightRe
     ...existingPreflightTargets,
     ...missingPreflightTargets,
   ];
+  const totalPreflightTargets = targets.length + missingTargets.length;
+  const omittedPreflightTargets = Math.max(totalPreflightTargets - preflightTargets.length, 0);
 
   const response: OperationTaskPreflightResponse = {
     ok: !issues.some((issue) => issue.severity === 'block'),
@@ -276,22 +299,25 @@ export function preflightOperationTask(input: unknown): OperationTaskPreflightRe
     requiresSsh: parsed.type !== 'assetSync',
     requiresConfirmation,
     plan: buildPreflightPlan(parsed, {
-      totalTargets: targets.length + missingTargets.length,
-      runnableTargets: runnableTargets.length,
+      totalTargets: totalPreflightTargets,
+      runnableTargets: runnableTargetCount,
       missingTargets: missingTargets.length,
-      disconnectedTargets: disconnectedTargets.length,
+      disconnectedTargets: disconnectedTargetCount,
       blocked: issues.filter((issue) => issue.severity === 'block').length,
       warnings: issues.filter((issue) => issue.severity === 'warn').length,
     }),
     summary: {
-      totalTargets: targets.length + missingTargets.length,
-      runnableTargets: runnableTargets.length,
+      totalTargets: totalPreflightTargets,
+      runnableTargets: runnableTargetCount,
       missingTargets: missingTargets.length,
-      disconnectedTargets: disconnectedTargets.length,
+      disconnectedTargets: disconnectedTargetCount,
       blocked: issues.filter((issue) => issue.severity === 'block').length,
     },
     issues,
     targets: preflightTargets,
+    targetsTruncated: omittedPreflightTargets > 0 || undefined,
+    targetLimit: omittedPreflightTargets > 0 ? operationPreflightTargetLimit : undefined,
+    omittedTargets: omittedPreflightTargets > 0 ? omittedPreflightTargets : undefined,
     generatedAt: new Date().toISOString(),
   };
 

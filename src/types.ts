@@ -151,6 +151,9 @@ export interface OperationTaskPreflightResponse {
   };
   issues: OperationTaskPreflightIssue[];
   targets: OperationTaskPreflightTarget[];
+  targetsTruncated?: boolean;
+  targetLimit?: number;
+  omittedTargets?: number;
   generatedAt: string;
 }
 
