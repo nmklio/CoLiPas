@@ -53,6 +53,8 @@ const serverMetricsConcurrency = readEnvInteger('COLIPAS_METRICS_CONCURRENCY', 4
 const serverMetricsRefreshBudgetMs = readEnvInteger('COLIPAS_METRICS_REFRESH_BUDGET_MS', 160, 0, 2_000);
 const serverMetricSamples = new Map<string, { sampledAt: number; failedAt: number }>();
 let metricsRefreshInFlight: Promise<void> | null = null;
+let serverInventoryRevision = 0;
+let cachedServerInventorySnapshot: { revision: number; snapshot: ServerInventorySnapshot } | null = null;
 const serverAuditCorrelationSchema = z.string().trim().regex(/^srv-trace-[a-f0-9-]{36}$/).optional();
 
 export interface ServerInventorySummary {
@@ -120,19 +122,25 @@ export function listServers(query: Record<string, unknown>) {
 
   if (hasServerPagination(query)) {
     const matcher = buildServerFilterMatcher(filters);
-    const total = countMatchingServers(snapshot.items, matcher);
-    const pagination = parseServerPagination(query, total) as ServerPagination;
-    const items = collectServerPage(snapshot.items, matcher, pagination);
+    let pagination = parseServerPagination(query, Number.MAX_SAFE_INTEGER) as ServerPagination;
+    let page = collectServerPageWithTotal(snapshot.items, matcher, pagination);
+    if (page.items.length === 0 && page.total > 0 && pagination.offset >= page.total) {
+      pagination = parseServerPagination(query, page.total) as ServerPagination;
+      page = {
+        total: page.total,
+        items: collectServerPage(snapshot.items, matcher, pagination),
+      };
+    }
 
     return {
       filters,
-      items,
+      items: page.items,
       meta: {
-        total,
-        returned: items.length,
+        total: page.total,
+        returned: page.items.length,
         page: pagination.page,
         pageSize: pagination.pageSize,
-        hasMore: pagination.offset + items.length < total,
+        hasMore: pagination.offset + page.items.length < page.total,
       },
     };
   }
@@ -152,14 +160,22 @@ export function listServers(query: Record<string, unknown>) {
   };
 }
 
-function countMatchingServers(items: ServerNode[], matcher: (server: ServerNode) => boolean) {
+function collectServerPageWithTotal(items: ServerNode[], matcher: (server: ServerNode) => boolean, pagination: ServerPagination) {
+  const pageItems: ServerNode[] = [];
   let total = 0;
+
   for (const server of items) {
-    if (matcher(server)) {
-      total += 1;
+    if (!matcher(server)) {
+      continue;
     }
+
+    if (total >= pagination.offset && pageItems.length < pagination.pageSize) {
+      pageItems.push(server);
+    }
+    total += 1;
   }
-  return total;
+
+  return { total, items: pageItems };
 }
 
 function collectServerPage(items: ServerNode[], matcher: (server: ServerNode) => boolean, pagination: ServerPagination) {
@@ -186,17 +202,40 @@ function collectServerPage(items: ServerNode[], matcher: (server: ServerNode) =>
 }
 
 export function summarizeServerInventory(inputServers: ServerNode[] = servers): ServerInventorySummary {
+  if (inputServers === servers) {
+    const snapshot = getCachedServerInventorySnapshot();
+    if (snapshot) {
+      return snapshot.summary;
+    }
+  }
+
   return collectServerInventory(inputServers, false).summary;
 }
 
 export function buildServerInventorySnapshot(inputServers: ServerNode[] = servers): ServerInventorySnapshot {
+  if (inputServers === servers) {
+    const snapshot = getCachedServerInventorySnapshot();
+    if (snapshot) {
+      return snapshot;
+    }
+  }
+
   const collected = collectServerInventory(inputServers, true);
-  return {
+  const snapshot = {
     items: collected.items ?? [],
     providers: collected.providers,
     regions: collected.regions,
     summary: collected.summary,
   };
+
+  if (inputServers === servers) {
+    cachedServerInventorySnapshot = {
+      revision: serverInventoryRevision,
+      snapshot,
+    };
+  }
+
+  return snapshot;
 }
 
 function collectServerInventory(inputServers: ServerNode[], includeItems: boolean) {
@@ -331,6 +370,20 @@ function unindexServer(server: ServerNode) {
   if (server.publicIp && serverByPublicIp.get(server.publicIp) === server) {
     serverByPublicIp.delete(server.publicIp);
   }
+}
+
+function markServerInventoryChanged() {
+  serverInventoryRevision += 1;
+  cachedServerInventorySnapshot = null;
+}
+
+function getCachedServerInventorySnapshot() {
+  if (cachedServerInventorySnapshot?.revision !== serverInventoryRevision) {
+    return null;
+  }
+
+  cachedServerInventorySnapshot.snapshot.summary.openEvents = countOpenOperationEvents();
+  return cachedServerInventorySnapshot.snapshot;
 }
 
 function parseServerPagination(query: Record<string, unknown>, total: number) {
@@ -505,6 +558,7 @@ export async function connectServer(input: unknown) {
   if (ssh) {
     persistedCredentials.set(server.id, buildStoredSshCredential(parsed.ssh, ssh.host));
   }
+  markServerInventoryChanged();
   persistServer(server);
 
   if (ssh) {
@@ -580,6 +634,7 @@ export async function updateServer(serverId: string, input: unknown) {
     deleteCredentialRow(server.id);
   }
 
+  markServerInventoryChanged();
   persistServer(server);
   recordAudit({
     action: 'SERVER_UPDATE',
@@ -604,6 +659,7 @@ export function deleteServer(serverId: string) {
   const [server] = servers.splice(index, 1);
   unindexServer(server);
   persistedCredentials.delete(server.id);
+  markServerInventoryChanged();
   deleteServerRow(server.id);
   deleteCredentialRow(server.id);
 
@@ -780,6 +836,7 @@ export function setServerRuntimeStatus(serverId: string, status: Extract<ServerS
   } else {
     server.status = status;
   }
+  markServerInventoryChanged();
   persistInventory();
 
   return server.status;
@@ -842,9 +899,11 @@ function loadPersistedInventory() {
       servers.splice(0, servers.length, ...rows.map((row) => normalizePersistedServer(JSON.parse(row.payload) as ServerNode)));
     }
     rebuildServerIndexes();
+    markServerInventoryChanged();
   } catch {
     // Ignore unreadable local runtime data and keep the in-memory adapter state.
     rebuildServerIndexes();
+    markServerInventoryChanged();
   }
 }
 
@@ -925,8 +984,10 @@ async function refreshSingleServerMetrics(server: ServerNode) {
 
   try {
     const metrics = await collectSshMetrics(credential, ssh.verifyMode);
-    Object.assign(server, metrics);
-    server.status = normalizeServerRuntimeStatus(server);
+    applyServerMetricState(server, metrics.cpu, metrics.memory, metrics.disk, normalizeServerRuntimeStatus({
+      ...server,
+      ...metrics,
+    }));
     serverMetricSamples.set(server.id, { sampledAt: Date.now(), failedAt: 0 });
   } catch {
     serverMetricSamples.set(server.id, {
@@ -958,17 +1019,30 @@ function wait(timeoutMs: number) {
 
 function driftServerMetrics(server: ServerNode) {
   if (!hasConnectedCredential(server)) {
-    server.cpu = 0;
-    server.memory = 0;
-    server.disk = 0;
-    server.status = 'unconnected';
+    applyServerMetricState(server, 0, 0, 0, 'unconnected');
     return;
   }
 
   const phase = Date.now() / 1000 + hashText(server.id);
-  server.cpu = driftMetric(server.cpu, Math.sin(phase / 19) * 8);
-  server.memory = driftMetric(server.memory, Math.cos(phase / 23) * 5);
-  server.disk = driftMetric(server.disk, Math.sin(phase / 37) * 2);
+  applyServerMetricState(
+    server,
+    driftMetric(server.cpu, Math.sin(phase / 19) * 8),
+    driftMetric(server.memory, Math.cos(phase / 23) * 5),
+    driftMetric(server.disk, Math.sin(phase / 37) * 2),
+    normalizeServerRuntimeStatus(server),
+  );
+}
+
+function applyServerMetricState(server: ServerNode, cpu: number, memory: number, disk: number, status: ServerStatus) {
+  if (server.cpu === cpu && server.memory === memory && server.disk === disk && server.status === status) {
+    return;
+  }
+
+  server.cpu = cpu;
+  server.memory = memory;
+  server.disk = disk;
+  server.status = status;
+  markServerInventoryChanged();
 }
 
 function driftMetric(current: number, delta: number) {

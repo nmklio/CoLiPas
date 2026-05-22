@@ -29,6 +29,7 @@ assertSshKeyAuthenticationGuards();
 assertMobileTopbarKeepsCoreActions();
 assertSecurityAuditRelationsAreSpecific();
 assertOperationsTargetSelectionGuards();
+assertInventorySnapshotCacheGuards();
 assertCustomApiProxySecurityGuards();
 assertSqlitePersistenceGuards();
 assertBuildChunkingGuards();
@@ -3638,8 +3639,8 @@ function assertSqlitePersistenceGuards() {
   }
   const paginationFastPathFragments = [
     'buildServerFilterMatcher(filters)',
-    'countMatchingServers(snapshot.items, matcher)',
-    'collectServerPage(snapshot.items, matcher, pagination)',
+    'collectServerPageWithTotal(snapshot.items, matcher, pagination)',
+    'page = {\n        total: page.total,\n        items: collectServerPage(snapshot.items, matcher, pagination),',
     'function hasServerPagination(query: Record<string, unknown>)',
   ];
   const missingPaginationFastPathFragments = paginationFastPathFragments.filter((fragment) => !inventoryServiceSource.includes(fragment));
@@ -4965,6 +4966,38 @@ function assertOperationsTargetSelectionGuards() {
   }
 
   console.log('ok operations target selection guards stale and unconnected targets');
+}
+
+function assertInventorySnapshotCacheGuards() {
+  const inventorySource = fs.readFileSync(new URL('../src/server/services/inventoryService.ts', import.meta.url), 'utf8');
+  const requiredFragments = [
+    'let serverInventoryRevision = 0',
+    'let cachedServerInventorySnapshot',
+    'function markServerInventoryChanged()',
+    'function getCachedServerInventorySnapshot()',
+    'cachedServerInventorySnapshot?.revision !== serverInventoryRevision',
+    'cachedServerInventorySnapshot.snapshot.summary.openEvents = countOpenOperationEvents()',
+    'if (inputServers === servers) {',
+    'markServerInventoryChanged();',
+    'applyServerMetricState(',
+    'function collectServerPageWithTotal(',
+    'let page = collectServerPageWithTotal(snapshot.items, matcher, pagination)',
+  ];
+  const missing = requiredFragments.filter((fragment) => !inventorySource.includes(fragment));
+  if (missing.length) {
+    throw new Error(`Inventory snapshot cache guard is incomplete: ${missing.join(', ')}`);
+  }
+
+  const cacheRegressionFragments = [
+    'export function summarizeServerInventory(inputServers: ServerNode[] = servers): ServerInventorySummary {\n  return collectServerInventory(inputServers, false).summary;',
+    'export function buildServerInventorySnapshot(inputServers: ServerNode[] = servers): ServerInventorySnapshot {\n  const collected = collectServerInventory(inputServers, true);',
+  ];
+  const regressions = cacheRegressionFragments.filter((fragment) => inventorySource.includes(fragment));
+  if (regressions.length) {
+    throw new Error('Inventory snapshot builders regressed to unconditional full recomputation');
+  }
+
+  console.log('ok inventory snapshot cache avoids repeated full recomputation');
 }
 
 function assertCustomApiProxySecurityGuards() {
