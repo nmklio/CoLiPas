@@ -123,6 +123,23 @@ curl -fsS http://127.0.0.1:8080/api/health
 
 `docker-compose.yml` は `/app/.data` にボリュームをマウントします。SQLite データ、監査ログ、暗号化済み SSH メタデータ、アカウント設定はコンテナ再作成後も保持されます。
 
+### 公開 Docker イメージ
+
+`master` に push されるたびに、GitHub Container Registry へ公開イメージを発行します。
+
+```bash
+docker pull ghcr.io/nmklio/colipas:latest
+docker volume create colipas-data
+docker run -d --name colipas --restart unless-stopped \
+  --env-file .env \
+  -p 8080:8080 \
+  -v colipas-data:/app/.data \
+  ghcr.io/nmklio/colipas:latest
+curl -fsS http://127.0.0.1:8080/api/health
+```
+
+利用できるタグは `latest`、`master`、`v1.0.0` のようなリリースタグ、`sha-ab12cd3` のような短いコミットタグです。
+
 ### 手動 Linux + systemd
 
 journald、systemd、ホスト統合を使いたい場合の方式です。

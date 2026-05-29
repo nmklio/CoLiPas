@@ -190,6 +190,23 @@ curl -fsS http://127.0.0.1:8080/api/health
 The included `docker-compose.yml` mounts a named volume at `/app/.data` so SQLite data, audit records, encrypted SSH metadata, and account settings survive container rebuilds.
 It also forwards `RELEASE_GIT_COMMIT`, `RELEASE_ARTIFACT_ID`, and `RELEASE_DEPLOYMENT_MODE` into the container so the security panel can show which sanitized build is running.
 
+### Published Docker Image
+
+Every `master` push publishes a public image to GitHub Container Registry:
+
+```bash
+docker pull ghcr.io/nmklio/colipas:latest
+docker volume create colipas-data
+docker run -d --name colipas --restart unless-stopped \
+  --env-file .env \
+  -p 8080:8080 \
+  -v colipas-data:/app/.data \
+  ghcr.io/nmklio/colipas:latest
+curl -fsS http://127.0.0.1:8080/api/health
+```
+
+Available tags include `latest`, `master`, release tags such as `v1.0.0`, and short commit tags like `sha-ab12cd3`.
+
 To update a Docker deployment:
 
 ```bash

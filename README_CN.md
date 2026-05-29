@@ -123,6 +123,23 @@ curl -fsS http://127.0.0.1:8080/api/health
 
 `docker-compose.yml` 会把运行数据挂载到 `/app/.data`，因此 SQLite 数据、审计记录、加密 SSH 元数据和账号设置会在容器重建后保留。
 
+### Docker 仓库镜像
+
+每次推送到 `master` 都会自动发布公开镜像到 GitHub Container Registry：
+
+```bash
+docker pull ghcr.io/nmklio/colipas:latest
+docker volume create colipas-data
+docker run -d --name colipas --restart unless-stopped \
+  --env-file .env \
+  -p 8080:8080 \
+  -v colipas-data:/app/.data \
+  ghcr.io/nmklio/colipas:latest
+curl -fsS http://127.0.0.1:8080/api/health
+```
+
+可用标签包括 `latest`、`master`、`v1.0.0` 这类发布标签，以及 `sha-ab12cd3` 这类短提交标签。
+
 ### 手动 Linux + systemd
 
 适合需要 journald、系统服务和主机级集成的部署方式。

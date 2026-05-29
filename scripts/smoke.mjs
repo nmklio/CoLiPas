@@ -35,6 +35,7 @@ assertSqlitePersistenceGuards();
 assertBuildChunkingGuards();
 assertRepositoryPreviewAssetGuards();
 assertInteractiveDeployDocsAndScriptGuards();
+assertContainerRegistryPublishGuards();
 await assertReleaseDeployTargetPlanGuards();
 
 const unauthenticatedOverviewResponse = await fetch(`${baseUrl}/api/overview`);
@@ -3783,6 +3784,46 @@ function assertInteractiveDeployDocsAndScriptGuards() {
   }
 
   console.log('ok interactive deploy installer and multilingual README flow are guarded');
+}
+
+function assertContainerRegistryPublishGuards() {
+  const workflowSource = fs.readFileSync(new URL('../.github/workflows/docker-publish.yml', import.meta.url), 'utf8');
+  const readmeSource = fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+  const cnReadmeSource = fs.readFileSync(new URL('../README_CN.md', import.meta.url), 'utf8');
+  const jpReadmeSource = fs.readFileSync(new URL('../README_JP.md', import.meta.url), 'utf8');
+  const requiredWorkflow = [
+    'name: docker-publish',
+    'packages: write',
+    'ghcr.io/${{ github.repository_owner }}/colipas',
+    'docker/login-action@v3',
+    'docker/metadata-action@v5',
+    'docker/build-push-action@v6',
+    'push: true',
+    'RELEASE_GIT_COMMIT=${{ github.sha }}',
+    'type=sha,prefix=sha-,format=short',
+  ];
+  const missingWorkflow = requiredWorkflow.filter((fragment) => !workflowSource.includes(fragment));
+  if (missingWorkflow.length) {
+    throw new Error(`Docker registry publish workflow is incomplete: ${missingWorkflow.join(', ')}`);
+  }
+
+  const docs = [
+    ['README.md', readmeSource, 'Published Docker Image'],
+    ['README_CN.md', cnReadmeSource, 'Docker 仓库镜像'],
+    ['README_JP.md', jpReadmeSource, '公開 Docker イメージ'],
+  ];
+  for (const [name, source, heading] of docs) {
+    if (
+      !source.includes(heading)
+      || !source.includes('docker pull ghcr.io/nmklio/colipas:latest')
+      || !source.includes('ghcr.io/nmklio/colipas:latest')
+      || !source.includes('sha-ab12cd3')
+    ) {
+      throw new Error(`${name} must document the published GHCR Docker image`);
+    }
+  }
+
+  console.log('ok GHCR Docker publish workflow and README image usage are guarded');
 }
 
 async function assertReleaseDeployTargetPlanGuards() {
