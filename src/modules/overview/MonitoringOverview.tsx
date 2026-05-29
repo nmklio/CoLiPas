@@ -179,7 +179,7 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, onReg
   const visibleCountryPopup = hoveredCountry ?? pinnedCountry;
   const visibleTooltipAnchor = visibleCountryPopup ? getTooltipViewportAnchor(visibleCountryPopup) : null;
   const tooltipIsPinned = Boolean(pinnedCountry && visibleCountryPopup && pinnedCountry.title === visibleCountryPopup.title);
-  const { openEvents, criticalEvents, warningServers, connectedServers, busiestServers } = overviewStats;
+  const { openEvents, criticalEvents, warningServers, connectedServers, providerCount, busiestServers } = overviewStats;
 
   useEffect(() => {
     const mapElement = mapRef.current;
@@ -504,7 +504,7 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, onReg
         <article className="monitor-card">
           <div className="panel-title">
             <span><MapPin size={17} /> {t('overview.coverage')}</span>
-            <small>{t('overview.providerCount', { count: new Set(servers.map((server) => server.provider)).size })}</small>
+            <small>{t('overview.providerCount', { count: providerCount })}</small>
           </div>
           <div className="coverage-grid">
             <div>
@@ -739,6 +739,7 @@ function buildOverviewStats(servers: ServerNode[], events: OperationEvent[]) {
   let criticalEvents = 0;
   let warningServers = 0;
   let connectedServers = 0;
+  const providers = new Set<string>();
   const busiestServers: Array<{ server: ServerNode; load: number }> = [];
 
   for (const event of events) {
@@ -752,6 +753,7 @@ function buildOverviewStats(servers: ServerNode[], events: OperationEvent[]) {
   }
 
   for (const server of servers) {
+    providers.add(server.provider);
     if (server.status === 'warning') {
       warningServers += 1;
     }
@@ -776,6 +778,7 @@ function buildOverviewStats(servers: ServerNode[], events: OperationEvent[]) {
     criticalEvents,
     warningServers,
     connectedServers,
+    providerCount: providers.size,
     busiestServers: busiestServers.map((item) => item.server),
   };
 }

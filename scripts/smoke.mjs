@@ -3981,6 +3981,8 @@ function assertOverviewMapInteractionGuards() {
     'Math.round(((50 - region.y) / 100) * height)',
     'hasPointerCapture',
     "closest('button, .map-tooltip, .map-country.active')",
+    'providerCount, busiestServers } = overviewStats',
+    'providerCount: providers.size',
     'onPointerLeave={handleMapPointerLeave}',
     'function handleMapPointerLeave',
     "mapView.scale > 1.01 ? 'is-zoomed'",
@@ -4054,6 +4056,9 @@ function assertOverviewMapInteractionGuards() {
   }
   if (overviewSource.includes('serverNames: items.map((server) => server.name)') || overviewSource.includes('regions.flatMap((region) => region.serverNames)')) {
     throw new Error('Overview map tooltip must not retain every server name for large inventories');
+  }
+  if (overviewSource.includes('new Set(servers.map((server) => server.provider)).size')) {
+    throw new Error('Overview provider count must reuse single-pass stats instead of rescanning during render');
   }
 
   const tooltipPointerDownBlock = overviewSource.slice(
