@@ -2984,6 +2984,8 @@ function assertAccountUiGuards() {
     || !serverUpdateSource.includes('COLIPAS_RESET_ADMIN_PASSWORD')
     || !serverUpdateSource.includes('SSH_ORIGINAL_COMMAND')
     || !serverUpdateSource.includes('reset_admin_password_if_requested')
+    || !serverUpdateSource.includes('install_deploy_sudo_env_keep')
+    || !serverUpdateSource.includes('colipas-deploy-env-keep')
     || !serverUpdateSource.includes('try_files /docs.html =404')
     || !serverUpdateSource.includes('CoLiPas cloud server management panel docs page ready')
     || !serverUpdateSource.includes('href="/colipas-icon.svg"')

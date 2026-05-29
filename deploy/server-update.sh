@@ -81,6 +81,24 @@ reset_admin_password_if_requested() {
   run_as_app env COLIPAS_RESET_PASSWORD="$COLIPAS_RESET_ADMIN_PASSWORD" npm run reset:admin
 }
 
+install_deploy_sudo_env_keep() {
+  if [ "$(id -u)" -ne 0 ] || ! command -v visudo >/dev/null 2>&1 || ! id colipas-deploy >/dev/null 2>&1; then
+    return 0
+  fi
+  local sudoers_file="/etc/sudoers.d/colipas-deploy-env-keep"
+  local sudoers_tmp
+  sudoers_tmp="$(mktemp)"
+  cat >"$sudoers_tmp" <<'SUDOERS'
+Defaults:colipas-deploy env_keep += "SSH_ORIGINAL_COMMAND COLIPAS_RESET_ADMIN_PASSWORD"
+SUDOERS
+  if visudo -cf "$sudoers_tmp" >/dev/null; then
+    install -m 0440 "$sudoers_tmp" "$sudoers_file"
+  else
+    echo "WARN: failed to validate $sudoers_file; one-time admin password reset over forced SSH may be unavailable" >&2
+  fi
+  rm -f "$sudoers_tmp"
+}
+
 patch_landing_page_ui() {
   if ! command -v node >/dev/null 2>&1; then
     echo "WARN: node is unavailable; skipping landing page UI patch" >&2
@@ -1511,6 +1529,7 @@ if [ "$LOCAL_HEAD" = "$REMOTE_HEAD" ]; then
   write_release_evidence_env "$DEPLOYED_AT" "$REMOTE_HEAD"
   if [ "$(id -u)" -eq 0 ]; then
     install_runtime_update_script
+    install_deploy_sudo_env_keep
     patch_landing_page_ui
     write_docs_page
     install_nginx_config
@@ -1532,6 +1551,7 @@ DEPLOYED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 write_release_evidence_env "$DEPLOYED_AT" "$REMOTE_HEAD"
 if [ "$(id -u)" -eq 0 ]; then
   install_runtime_update_script
+  install_deploy_sudo_env_keep
   install -m 0644 "$APP_DIR/deploy/colipas.service" /etc/systemd/system/colipas.service
   patch_landing_page_ui
   write_docs_page
