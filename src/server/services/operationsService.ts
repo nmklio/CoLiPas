@@ -19,6 +19,7 @@ import { getSshCommandConfirmationReason } from '../../shared/sshCommandRisk.js'
 
 const operationOutputLimit = 200;
 const operationPreflightTargetLimit = 120;
+const operationExecutionConcurrency = readBoundedIntegerEnv('COLIPAS_OPERATION_CONCURRENCY', 6, 1, 16);
 
 const operationTaskSchema = z
   .object({
@@ -128,15 +129,16 @@ export async function createOperationTask(input: unknown): Promise<OperationTask
     throw new HttpError(409, `Operator confirmation is required before ${confirmationReason}`, 'OPERATIONS_CONFIRMATION_REQUIRED');
   }
 
-  const outputs: OperationTaskTargetResult[] = [];
   const summary: OperationTaskResponse['summary'] = {
     total: targets.length,
     success: 0,
     failed: 0,
     skipped: 0,
   };
-  for (const server of targets) {
-    const output = await executeTarget(taskId, parsed, server);
+  const targetResults = await executeOperationTargets(taskId, parsed, targets);
+  const outputs: OperationTaskTargetResult[] = [];
+
+  for (const output of targetResults) {
     if (output.status === 'success') {
       summary.success += 1;
     } else if (output.status === 'failed') {
@@ -331,6 +333,26 @@ export function preflightOperationTask(input: unknown): OperationTaskPreflightRe
   });
 
   return response;
+}
+
+async function executeOperationTargets(taskId: string, task: ParsedOperationTask, targets: ServerNode[]) {
+  if (targets.length === 0) {
+    return [];
+  }
+
+  const results: OperationTaskTargetResult[] = new Array(targets.length);
+  let nextTargetIndex = 0;
+  const workerCount = Math.min(operationExecutionConcurrency, targets.length);
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (nextTargetIndex < targets.length) {
+      const index = nextTargetIndex;
+      nextTargetIndex += 1;
+      results[index] = await executeTarget(taskId, task, targets[index]);
+    }
+  });
+
+  await Promise.all(workers);
+  return results;
 }
 
 function buildOperationCorrelationId() {
@@ -600,4 +622,13 @@ function resolveTaskStatus(summary: OperationTaskResponse['summary']) {
 
 function buildTaskMessage(type: OperationTaskType, summary: OperationTaskResponse['summary']) {
   return `${type} finished: ${summary.success}/${summary.total} succeeded, ${summary.failed} failed, ${summary.skipped} skipped`;
+}
+
+function readBoundedIntegerEnv(name: string, fallback: number, min: number, max: number) {
+  const value = Number.parseInt(process.env[name] ?? '', 10);
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.min(max, Math.max(min, value));
 }

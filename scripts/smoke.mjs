@@ -4178,6 +4178,9 @@ function assertOverviewServerFilterLinkage() {
     'scopedRegions.has(serverRegion)',
     'serverRegion !== selectedRegion',
     'function normalizeFilterValue(value: string)',
+    'const serverSearchTextCache = new WeakMap',
+    'function getServerSearchText(server: ServerNode)',
+    '!getServerSearchText(server).includes(query)',
   ];
   const missingRegionScope = regionScopeFragments.filter((fragment) => !sharedFilterSource.includes(fragment));
   if (missingRegionScope.length) {
@@ -5038,6 +5041,10 @@ function assertOperationsTargetSelectionGuards() {
     'targetsTruncated: omittedPreflightTargets > 0 || undefined',
     'omittedTargets: omittedPreflightTargets > 0 ? omittedPreflightTargets : undefined',
     'const operationOutputLimit = 200',
+    'const operationExecutionConcurrency',
+    'executeOperationTargets(taskId, parsed, targets)',
+    'Math.min(operationExecutionConcurrency, targets.length)',
+    'results[index] = await executeTarget(taskId, task, targets[index])',
     'outputs.length < operationOutputLimit',
     'outputsTruncated: omittedOutputs > 0 || undefined',
     'omittedOutputs: omittedOutputs > 0 ? omittedOutputs : undefined',

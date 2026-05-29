@@ -13,6 +13,8 @@ export interface ServerFilters {
   regionScope?: string[];
 }
 
+const serverSearchTextCache = new WeakMap<ServerNode, { signature: string; searchText: string }>();
+
 export function isBaseCloudProvider(provider: string) {
   return baseCloudProviderKeys.has(normalizeFilterValue(provider));
 }
@@ -44,10 +46,7 @@ export function buildServerFilterMatcher(filters: ServerFilters) {
   return (server: ServerNode) => {
     if (
       query.length > 0 &&
-      ![server.name, server.id, server.region, server.publicIp, server.privateIp, server.os, ...server.tags]
-        .join(' ')
-        .toLowerCase()
-        .includes(query)
+      !getServerSearchText(server).includes(query)
     ) {
       return false;
     }
@@ -91,4 +90,24 @@ export function resolveServerLifecycleStatus(server: ServerNode): ServerLifecycl
 
 function normalizeFilterValue(value: string) {
   return value.trim().toLowerCase();
+}
+
+function getServerSearchText(server: ServerNode) {
+  const signature = [
+    server.name,
+    server.id,
+    server.region,
+    server.publicIp,
+    server.privateIp,
+    server.os,
+    server.tags.join('\u001f'),
+  ].join('\u001e');
+  const cached = serverSearchTextCache.get(server);
+  if (cached?.signature === signature) {
+    return cached.searchText;
+  }
+
+  const searchText = signature.replaceAll('\u001e', ' ').replaceAll('\u001f', ' ').toLowerCase();
+  serverSearchTextCache.set(server, { signature, searchText });
+  return searchText;
 }
