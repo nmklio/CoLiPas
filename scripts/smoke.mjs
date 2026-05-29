@@ -4561,11 +4561,16 @@ function assertSshTerminalRealtimeGuards() {
     'const shellSocketOutputFlushMs = 4',
     'const shellSocketOutputImmediateChars = 16',
     'const shellSocketOutputFlushMaxChars = 96 * 1024',
+    'const shellSocketDiagnosticsTouchIntervalMs = 250',
+    'let shellSocketDiagnosticsLastTouchAt = 0',
     'function bindSshShellSocket',
     'let pendingOutputEvent: SshShellStreamEvent | null = null',
     'pendingOutputEvent.content?.length',
     'pendingOutputEvent.content?.length ?? 0) <= shellSocketOutputImmediateChars',
     'setTimeout(flushOutput, shellSocketOutputFlushMs)',
+    'touchDiagnostics(true)',
+    'function touchDiagnostics(force = false)',
+    'new Date(now).toISOString()',
     'sendShellEvent(event)',
   ];
   const missingSocket = socketRequired.filter((fragment) => !sshSocketSource.includes(fragment));
@@ -4575,6 +4580,7 @@ function assertSshTerminalRealtimeGuards() {
 
   const redactionRequired = [
     'const redactionTriggerPattern',
+    '\\b(?:access_token',
     'if (!redactionTriggerPattern.test(value))',
     'return redactionRules.reduce',
   ];

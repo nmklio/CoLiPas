@@ -21,6 +21,7 @@ type ClientMessage =
 const shellSocketOutputFlushMs = 4;
 const shellSocketOutputImmediateChars = 16;
 const shellSocketOutputFlushMaxChars = 96 * 1024;
+const shellSocketDiagnosticsTouchIntervalMs = 250;
 
 export interface SshShellSocketDiagnostics {
   totalConnections: number;
@@ -51,6 +52,7 @@ const shellSocketDiagnostics: SshShellSocketDiagnostics = {
   errors: 0,
   lastActivityAt: null,
 };
+let shellSocketDiagnosticsLastTouchAt = 0;
 
 export function getSshShellSocketDiagnostics(): SshShellSocketDiagnostics {
   return { ...shellSocketDiagnostics };
@@ -97,7 +99,7 @@ function bindSshShellSocket(webSocket: WebSocket) {
 
   shellSocketDiagnostics.totalConnections += 1;
   shellSocketDiagnostics.activeConnections += 1;
-  touchDiagnostics();
+  touchDiagnostics(true);
 
   const send = (payload: unknown) => {
     if (webSocket.readyState === WebSocket.OPEN) {
@@ -167,7 +169,7 @@ function bindSshShellSocket(webSocket: WebSocket) {
       closeServerShell({ sessionId });
       sessionId = '';
       shellSocketDiagnostics.closedShells += 1;
-      touchDiagnostics();
+      touchDiagnostics(true);
     }
   };
 
@@ -177,7 +179,7 @@ function bindSshShellSocket(webSocket: WebSocket) {
     }
     socketClosed = true;
     shellSocketDiagnostics.activeConnections = Math.max(0, shellSocketDiagnostics.activeConnections - 1);
-    touchDiagnostics();
+    touchDiagnostics(true);
   };
 
   webSocket.on('message', async (raw) => {
@@ -200,7 +202,7 @@ function bindSshShellSocket(webSocket: WebSocket) {
         }
         sessionId = shell.sessionId;
         shellSocketDiagnostics.openedShells += 1;
-        touchDiagnostics();
+        touchDiagnostics(true);
         send({
           type: 'ready',
           serverId: shell.serverId,
@@ -258,7 +260,7 @@ function bindSshShellSocket(webSocket: WebSocket) {
       }
     } catch (error) {
       shellSocketDiagnostics.errors += 1;
-      touchDiagnostics();
+      touchDiagnostics(true);
       if (sessionId) {
         cleanup();
       }
@@ -281,13 +283,18 @@ function bindSshShellSocket(webSocket: WebSocket) {
   webSocket.on('error', () => {
     markSocketClosed();
     shellSocketDiagnostics.errors += 1;
-    touchDiagnostics();
+    touchDiagnostics(true);
     cleanup();
   });
 }
 
-function touchDiagnostics() {
-  shellSocketDiagnostics.lastActivityAt = new Date().toISOString();
+function touchDiagnostics(force = false) {
+  const now = Date.now();
+  if (!force && now - shellSocketDiagnosticsLastTouchAt < shellSocketDiagnosticsTouchIntervalMs) {
+    return;
+  }
+  shellSocketDiagnosticsLastTouchAt = now;
+  shellSocketDiagnostics.lastActivityAt = new Date(now).toISOString();
 }
 
 function tuneUpgradeSocket(socket: unknown) {

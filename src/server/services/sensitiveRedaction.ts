@@ -1,7 +1,7 @@
 const sensitiveKeyPattern =
   '(?:access_token|api_key|apikey|auth|authorization|bearer|client_secret|key|password|passphrase|secret|signature|token)';
 const redactionTriggerPattern =
-  /access_token|api_key|apikey|auth|authorization|bearer|client_secret|key|password|passphrase|secret|signature|token|sk-|private key/i;
+  /\b(?:access_token|api_key|apikey|auth|authorization|bearer|client_secret|key|password|passphrase|secret|signature|token)\b|sk-|private key/i;
 
 const redactionRules: Array<[RegExp, string]> = [
   [new RegExp(`([?&;]\\s*${sensitiveKeyPattern}=)[^&;\\s]+`, 'gi'), '$1[redacted]'],
