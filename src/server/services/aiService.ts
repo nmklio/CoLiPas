@@ -153,7 +153,7 @@ export async function streamAiAnalysis(
         {
           role: 'system',
           content: [
-            'You are CoLiPas AI, a real-time chat assistant embedded in a multi-cloud server management panel.',
+            'You are CoLiPas Cloud Server Management Panel AI, a real-time chat assistant embedded in a cloud server management panel.',
             'Answer the user question directly and naturally.',
             'Use the provided asset inventory, events, and SSH state only when the question is about operations, servers, cloud assets, troubleshooting, security, or orchestration.',
             'For casual, meta, or general questions, do not force an operations-risk template.',
@@ -559,7 +559,7 @@ function buildSimulatedAnswer(
     return {
       answer: directExecutionRequest
         ? [
-          'Local guarded execution plan. CoLiPas prepared a safe SSH command card for this request.',
+          'Local guarded execution plan. CoLiPas Cloud Server Management Panel prepared a safe SSH command card for this request.',
           `Question: ${question}`,
           executionPlan?.command ? `Command: ${executionPlan.command}` : 'Command: unavailable',
           '',
@@ -568,7 +568,7 @@ function buildSimulatedAnswer(
           '- I will not claim command output until the execution card returns evidence.',
         ].join('\n')
         : [
-          'Local evidence boundary. CoLiPas has not captured relevant SSH command output for this question yet.',
+          'Local evidence boundary. CoLiPas Cloud Server Management Panel has not captured relevant SSH command output for this question yet.',
           `Question: ${question}`,
           '',
           'What this means:',
@@ -590,7 +590,7 @@ function buildSimulatedAnswer(
     ];
     return {
       answer: [
-        'Local evidence analysis. CoLiPas found recent SSH/operations output in this conversation or active terminal context.',
+        'Local evidence analysis. CoLiPas Cloud Server Management Panel found recent SSH/operations output in this conversation or active terminal context.',
         `Question: ${question}`,
         '',
         'Available execution evidence:',
@@ -621,7 +621,7 @@ function buildSimulatedAnswer(
   if (!servers.length) {
     return {
       answer: [
-        'Local rule analysis. No API key is configured, so CoLiPas did not call an external model.',
+        'Local rule analysis. No API key is configured, so CoLiPas Cloud Server Management Panel did not call an external model.',
         `Question: ${question}`,
         '',
         'No server assets are available in the selected scope.',
@@ -663,7 +663,7 @@ function buildSimulatedAnswer(
 
   return {
     answer: [
-      'Local rule analysis. No API key is configured, so CoLiPas did not call an external model.',
+      'Local rule analysis. No API key is configured, so CoLiPas Cloud Server Management Panel did not call an external model.',
       `Question: ${question}`,
       `Scope: ${scopeText}. SSH connected ${connectedCount}/${servers.length}, unconnected ${unconnectedCount}, stopped ${stoppedCount}.`,
       '',

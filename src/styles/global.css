@@ -84,6 +84,7 @@ body {
 }
 
 .marketing-brand {
+  min-width: 0;
   gap: 8px;
   color: #0f172a;
   text-decoration: none;
@@ -110,8 +111,11 @@ body {
 }
 
 .marketing-brand strong {
-  font-size: 21px;
+  max-width: 260px;
+  font-size: 18px;
+  line-height: 1.16;
   letter-spacing: 0;
+  overflow-wrap: anywhere;
 }
 
 .marketing-nav nav {
@@ -751,6 +755,8 @@ body {
 
 .footer-brand strong {
   font-size: 22px;
+  line-height: 1.18;
+  overflow-wrap: anywhere;
 }
 
 .marketing-footer nav {
@@ -1218,9 +1224,18 @@ body {
   gap: 12px;
 }
 
+.login-brand > div {
+  min-width: 0;
+}
+
 .login-brand strong,
 .login-brand span {
   display: block;
+}
+
+.login-brand strong {
+  line-height: 1.18;
+  overflow-wrap: anywhere;
 }
 
 .login-brand span {
@@ -1472,6 +1487,10 @@ button:disabled {
   z-index: 1;
 }
 
+.brand > div {
+  min-width: 0;
+}
+
 .brand-mark {
   width: 38px;
   height: 38px;
@@ -1508,6 +1527,11 @@ button:disabled {
 .brand strong,
 .brand span {
   display: block;
+}
+
+.brand strong {
+  line-height: 1.18;
+  overflow-wrap: anywhere;
 }
 
 .brand span,
@@ -1897,6 +1921,13 @@ button:disabled {
 
 .account-settings-trigger {
   cursor: pointer;
+}
+
+.session-chip b {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .account-settings-trigger:hover {

@@ -37,7 +37,7 @@ const quickNav = [
 const installSteps = [
   {
     title: '获取项目',
-    body: '从 GitHub 克隆 CoLiPas，安装依赖，并准备生产环境变量。',
+    body: '从 GitHub 克隆 CoLiPas云服务器管理面板，安装依赖，并准备生产环境变量。',
     command: 'git clone https://github.com/nmklio/CoLiPas.git && cd CoLiPas && npm ci',
   },
   {
@@ -132,9 +132,9 @@ export function DocsPage({ onLogin }: DocsPageProps) {
   return (
     <main className="docs-page">
       <header className="marketing-nav docs-nav">
-        <a className="marketing-brand" href="/" aria-label="CoLiPas">
+        <a className="marketing-brand" href="/" aria-label="CoLiPas云服务器管理面板">
           <BrandIcon className="marketing-brand-mark" />
-          <strong>CoLiPas</strong>
+          <strong>CoLiPas云服务器管理面板</strong>
         </a>
         <nav aria-label="文档导航">
           <a href="/">产品</a>
@@ -209,7 +209,7 @@ export function DocsPage({ onLogin }: DocsPageProps) {
             <div className="docs-section-heading">
               <span><Layers3 size={18} /> 安装部署</span>
               <h2>从仓库到 8080 生产服务</h2>
-              <p>CoLiPas 是一个单体 Node 生产服务，构建后同时提供前端页面和后端 API。</p>
+              <p>CoLiPas云服务器管理面板是一个单体 Node 生产服务，构建后同时提供前端页面和后端 API。</p>
             </div>
             <div className="docs-step-grid">
               {installSteps.map((step, index) => (

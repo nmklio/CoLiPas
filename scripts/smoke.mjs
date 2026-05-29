@@ -156,7 +156,7 @@ if (!loginResponse.ok) {
   throw new Error(`/api/auth/login returned HTTP ${loginResponse.status}`);
 }
 const loginBody = await loginResponse.json();
-if (!loginBody.authenticated || loginBody.user?.username !== 'admin' || loginBody.profile?.displayName !== 'CoLiPas' || loginBody.profile?.avatarText !== 'CP') {
+if (!loginBody.authenticated || loginBody.user?.username !== 'admin' || loginBody.profile?.displayName !== 'CoLiPas云服务器管理面板' || loginBody.profile?.avatarText !== 'CP') {
   throw new Error('/api/auth/login returned unexpected payload');
 }
 if (JSON.stringify(loginBody).match(/sessionId|scrypt|salt|passwordChangedAt/)) {
@@ -178,7 +178,7 @@ if (!sessionResponse.ok) {
   throw new Error(`/api/auth/session returned HTTP ${sessionResponse.status}`);
 }
 const sessionBody = await sessionResponse.json();
-if (!sessionBody.authenticated || sessionBody.user?.username !== 'admin' || sessionBody.profile?.displayName !== 'CoLiPas') {
+if (!sessionBody.authenticated || sessionBody.user?.username !== 'admin' || sessionBody.profile?.displayName !== 'CoLiPas云服务器管理面板') {
   throw new Error('/api/auth/session returned unexpected payload');
 }
 if (JSON.stringify(sessionBody).match(/sessionId|scrypt|salt|passwordChangedAt/)) {
@@ -379,7 +379,7 @@ const getChecks = [
     (body) =>
       body.contentType === 'text/markdown' &&
       body.filename?.startsWith('colipas-readiness-') &&
-      body.markdown?.includes('# CoLiPas Release Readiness Report') &&
+      body.markdown?.includes('# CoLiPas云服务器管理面板 Release Readiness Report') &&
       body.markdown?.includes('## Checks') &&
       body.markdown?.includes('Runtime secret posture') &&
       !body.markdown.includes('admin123456'),
@@ -2981,7 +2981,7 @@ function assertAccountUiGuards() {
     || !serverUpdateSource.includes('href="/docs.html"')
     || !serverUpdateSource.includes('colipas landing balanced ui')
     || !serverUpdateSource.includes('try_files /docs.html =404')
-    || !serverUpdateSource.includes('CoLiPas docs page ready')
+    || !serverUpdateSource.includes('CoLiPas cloud server management panel docs page ready')
     || !serverUpdateSource.includes('href="/colipas-icon.svg"')
   ) {
     throw new Error('Deployment, docs, and login pages must expose public navigation without fake docs links');
@@ -3339,7 +3339,7 @@ function assertAiResponseCachingGuards() {
   }
 
   const promptFragments = [
-    'Current CoLiPas operations context',
+    'Current CoLiPas Cloud Server Management Panel operations context',
     'Use this context only when it is relevant to the user question',
     'Do not invent servers',
     'Large inventories are summarized',
@@ -3785,7 +3785,7 @@ function assertInteractiveDeployDocsAndScriptGuards() {
   const cnReadmeSource = fs.readFileSync(new URL('../README_CN.md', import.meta.url), 'utf8');
   const jpReadmeSource = fs.readFileSync(new URL('../README_JP.md', import.meta.url), 'utf8');
   const installerRequired = [
-    'CoLiPas interactive deployment',
+    'CoLiPas cloud server management panel interactive deployment',
     'COLIPAS_DRY_RUN',
     'COLIPAS_NON_INTERACTIVE',
     'COLIPAS_TTY',

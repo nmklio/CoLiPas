@@ -1,5 +1,5 @@
 [Unit]
-Description=CoLiPas multi-cloud server management panel
+Description=CoLiPas cloud server management panel
 After=network-online.target
 Wants=network-online.target
 

@@ -109,9 +109,9 @@ export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
   return (
     <main className="marketing-page">
       <header className="marketing-nav">
-        <a className="marketing-brand" href="#top" aria-label="CoLiPas">
+        <a className="marketing-brand" href="#top" aria-label="CoLiPas云服务器管理面板">
           <BrandIcon className="marketing-brand-mark" />
-          <strong>CoLiPas</strong>
+          <strong>CoLiPas云服务器管理面板</strong>
         </a>
         <nav aria-label="推广页导航">
           <a href="#product">产品</a>
@@ -146,13 +146,13 @@ export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
 
       <section id="top" className="marketing-hero">
         <div className="marketing-hero-copy">
-          <p className="marketing-badge"><span /> 多云服务器管理 · AI 运维 · SSH 实时终端</p>
+          <p className="marketing-badge"><span /> CoLiPas云服务器管理面板 · AI 运维 · SSH 实时终端</p>
           <h1>
-            多云服务器管理面板
+            CoLiPas云服务器管理面板
             <span>接入、监控、修复一体化</span>
           </h1>
           <p className="marketing-lead">
-            CoLiPas 面向自建服务器、海外节点、私有云和多云混合环境。它把资产接入、地域地图、SSH 终端、AI 分析、运维编排和安全审计放在同一个后台里，减少来回切换工具的成本。
+            CoLiPas云服务器管理面板面向自建服务器、海外节点、私有云和多云混合环境。它把资产接入、地域地图、SSH 终端、AI 分析、运维编排和安全审计放在同一个后台里，减少来回切换工具的成本。
           </p>
           <div className="marketing-hero-buttons">
             <button type="button" className="marketing-primary" onClick={scrollToLogin}>
@@ -180,7 +180,7 @@ export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
           </div>
         </div>
 
-        <div className="marketing-preview" aria-label="CoLiPas 控制台预览">
+        <div className="marketing-preview" aria-label="CoLiPas云服务器管理面板控制台预览">
           <div className="preview-window">
             <div className="preview-toolbar">
               <span />
@@ -188,7 +188,7 @@ export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
               <span />
               <small>colipas.local/admin/overview</small>
             </div>
-            <img src="/colipas-dashboard-preview.png" alt="CoLiPas 多云服务器管理面板预览" />
+            <img src="/colipas-dashboard-preview.png" alt="CoLiPas云服务器管理面板预览" />
           </div>
         </div>
       </section>
@@ -230,7 +230,7 @@ export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
           <p className="section-kicker">安全机制</p>
           <h2>从登录到命令执行，全链路留痕</h2>
           <p>
-            CoLiPas 默认保护管理后台和 API，远程动作要求明确目标和必要确认。AI 与自定义 API 都做输入边界校验，敏感内容不会进入前端持久化缓存。
+            CoLiPas云服务器管理面板默认保护管理后台和 API，远程动作要求明确目标和必要确认。AI 与自定义 API 都做输入边界校验，敏感内容不会进入前端持久化缓存。
           </p>
           <ul>
             <li><CheckCircle2 size={16} /> 会话登录与退出审计</li>
@@ -329,7 +329,7 @@ export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
       <section id="admin-login" className="marketing-login-band">
         <div className="login-intro">
           <p className="section-kicker">在线体验</p>
-          <h2>进入 CoLiPas 管理后台</h2>
+          <h2>进入 CoLiPas云服务器管理面板后台</h2>
           <p>使用本地管理员账号登录后，可以查看服务器总览、小地图、AI 助手、SSH、运维编排、自定义 API 和安全审计。</p>
           <div className="demo-account">
             <Server size={18} />
@@ -387,8 +387,8 @@ export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
 
       <footer className="marketing-footer">
         <div className="footer-brand">
-          <strong>CoLiPas</strong>
-          <span>多云服务器管理与 AI 运维后台</span>
+          <strong>CoLiPas云服务器管理面板</strong>
+          <span>云服务器管理与 AI 运维后台</span>
           <p>面向自建机房、海外云、私有云和多云混合环境，统一资产、SSH、AI、编排和审计。</p>
         </div>
         <nav aria-label="产品">
@@ -416,7 +416,7 @@ export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
           <a href="#features">AI 接入</a>
         </nav>
         <div className="footer-bottom">
-          <span>CoLiPas © 2026</span>
+          <span>CoLiPas云服务器管理面板 © 2026</span>
           <span>Production port 8080 · SQLite ready · Stream AI</span>
         </div>
       </footer>

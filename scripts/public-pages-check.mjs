@@ -107,7 +107,7 @@ function buildLandingCheck() {
     path: '/',
     assert: async (page) => {
       await expectTitle(page, /CoLiPas/);
-      await expectText(page.locator('h1').first(), /多云服务器管理|CoLiPas|multi-cloud/i, 'landing h1');
+      await expectText(page.locator('h1').first(), /CoLiPas云服务器管理面板|CoLiPas Cloud Server Management Panel|multi-cloud/i, 'landing h1');
       await expectLink(page, /GitHub/i, 'https://github.com/nmklio/CoLiPas');
       await expectLink(page, /文档|Docs/i, '/docs.html');
       await expectLink(page, /后台|登录|Admin|进入/i, '/admin/');
@@ -123,7 +123,7 @@ function buildDocsCheck() {
     path: '/docs.html',
     assert: async (page) => {
       await expectTitle(page, /CoLiPas/);
-      await expectText(page.locator('h1').first(), /下载、配置、运行|Linux|Docker|CoLiPas/i, 'docs h1');
+      await expectText(page.locator('h1').first(), /下载、配置、运行|Linux|Docker|CoLiPas云服务器管理面板/i, 'docs h1');
       await expectLocatorCountAtLeast(page.locator('h2'), 6, 'docs h2 sections');
       await expectLink(page, /GitHub/i, 'https://github.com/nmklio/CoLiPas');
       await expectLink(page, /进入后台|立即体验|Admin|后台/i, '/admin/');

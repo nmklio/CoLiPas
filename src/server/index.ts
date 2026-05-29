@@ -9,5 +9,5 @@ const server = http.createServer(app);
 attachSshShellSocketServer(server, config);
 
 server.listen(config.port, () => {
-  console.log(`CoLiPas API listening on port ${config.port}`);
+  console.log(`CoLiPas cloud server management panel API listening on port ${config.port}`);
 });

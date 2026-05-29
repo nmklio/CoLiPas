@@ -1175,7 +1175,7 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
     const evidenceMessage = createAssistantMessage(
       buildExecutionEvidenceMessage(result, noOutputLabel),
       {
-        provider: 'CoLiPas operations',
+        provider: 'CoLiPas云服务器管理面板 operations',
         model: 'execution-evidence',
         prompt: 'Guarded AI operation execution result',
         answer: '',
@@ -1625,7 +1625,7 @@ function formatMessageMeta(
   const model = message.meta?.model ?? fallbackModel;
   if (message.meta?.simulated) {
     if (message.meta.model === 'execution-evidence') {
-      return 'CoLiPas operations';
+      return 'CoLiPas云服务器管理面板 operations';
     }
     return `${model} / ${t('ai.localRuleResult')}`;
   }

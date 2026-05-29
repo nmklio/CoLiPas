@@ -707,7 +707,7 @@ function openSimulatedSshShell(server: { id: string; name: string }, mode: SshVe
 
   queueMicrotask(() => {
     emitSshShellEvent(shell, { type: 'start', connectedAt });
-    emitSshShellEvent(shell, { type: 'stdout', content: `CoLiPas simulated SSH shell\r\n${simulatedShellPrompt}` });
+    emitSshShellEvent(shell, { type: 'stdout', content: `CoLiPas云服务器管理面板 simulated SSH shell\r\n${simulatedShellPrompt}` });
   });
 
   return {

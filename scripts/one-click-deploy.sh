@@ -117,7 +117,7 @@ interactive_config() {
 
   cat >"$TTY_DEVICE" <<'BANNER'
 
-CoLiPas interactive deployment
+CoLiPas cloud server management panel interactive deployment
 This installer will clone or update the project, create a private .env if needed,
 install the selected runtime, start the service, and run a local health check.
 
@@ -211,17 +211,17 @@ install_node_if_needed() {
 sync_source() {
   mkdir -p "$(dirname "$APP_DIR")"
   if [ -d "$APP_DIR/.git" ]; then
-    say "Updating existing CoLiPas checkout in ${APP_DIR}."
+    say "Updating existing CoLiPas cloud server management panel checkout in ${APP_DIR}."
     git -C "$APP_DIR" fetch --prune origin "$BRANCH"
     git -C "$APP_DIR" checkout "$BRANCH"
     git -C "$APP_DIR" reset --hard "origin/$BRANCH"
   else
     if [ -e "$APP_DIR" ] && [ -n "$(find "$APP_DIR" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
       if [ "$ASSUME_YES" != "1" ]; then
-        if [ "$INTERACTIVE" = "1" ] && ask_yes_no "${APP_DIR} exists and is not a CoLiPas checkout. Replace it" "n"; then
+        if [ "$INTERACTIVE" = "1" ] && ask_yes_no "${APP_DIR} exists and is not a CoLiPas cloud server management panel checkout. Replace it" "n"; then
           :
         else
-          echo "${APP_DIR} exists and is not a CoLiPas git checkout." >&2
+          echo "${APP_DIR} exists and is not a CoLiPas cloud server management panel git checkout." >&2
           echo "Move it aside or rerun with COLIPAS_ASSUME_YES=1 to replace that directory." >&2
           exit 1
         fi
@@ -229,13 +229,13 @@ sync_source() {
       if [ "$ASSUME_YES" = "1" ] || [ "$INTERACTIVE" = "1" ]; then
         say "Replacing ${APP_DIR}."
       else
-        echo "${APP_DIR} exists and is not a CoLiPas git checkout." >&2
+        echo "${APP_DIR} exists and is not a CoLiPas cloud server management panel git checkout." >&2
         echo "Move it aside or rerun with COLIPAS_ASSUME_YES=1 to replace that directory." >&2
         exit 1
       fi
       rm -rf "$APP_DIR"
     fi
-    say "Cloning CoLiPas into ${APP_DIR}."
+    say "Cloning CoLiPas cloud server management panel into ${APP_DIR}."
     git clone --branch "$BRANCH" "$REPO_URL" "$APP_DIR"
   fi
   cd "$APP_DIR"
@@ -350,7 +350,7 @@ esac
 curl -fsS http://127.0.0.1:8080/api/health >/dev/null
 
 echo
-echo "CoLiPas deployed successfully."
+echo "CoLiPas cloud server management panel deployed successfully."
 echo "URL: ${PUBLIC_URL}"
 echo "Username: ${ADMIN_USERNAME}"
 if [ "$ENV_CREATED" = "1" ]; then

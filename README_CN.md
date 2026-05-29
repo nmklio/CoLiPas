@@ -1,8 +1,8 @@
 <div align="center">
 
-# CoLiPas
+# CoLiPas云服务器管理面板
 
-### 可私有化部署的多云服务器运维控制台
+### 可私有化部署的云服务器运维控制台
 
 </div>
 
@@ -12,7 +12,7 @@
 
 ## 项目介绍
 
-CoLiPas 是一个面向实际上线环境的云服务器运维面板。它把服务器资产、全球监控小地图、SSH 终端、AI 运维助手、运维编排、自定义 API 测试、安全审计和发布验证集中到一个受登录保护的控制台里。
+CoLiPas云服务器管理面板是一个面向实际上线环境的服务器运维后台。它把服务器资产、全球监控小地图、SSH 终端、AI 运维助手、运维编排、自定义 API 测试、安全审计和发布验证集中到一个受登录保护的控制台里。
 
 项目采用 React + TypeScript + Express + SQLite 架构，一个 Node.js 生产服务同时提供 `/api/*` 接口和构建后的前端页面。运行数据默认保存在 `.data` 目录中，SSH 凭据会使用 `CREDENTIAL_ENCRYPTION_KEY` 加密保存。
 
@@ -116,7 +116,7 @@ Docker 部署会保留 Compose 数据卷，因此 SQLite 数据、审计记录�
 
 ### 原生 Linux + systemd 一键部署
 
-当你希望 CoLiPas 作为主机 systemd 服务运行，而不是运行在 Docker 里时，使用这个模式。脚本会在 apt 系统上安装 Node.js 24、创建 `colipas` 服务用户、构建应用、安装 `deploy/colipas.service`、启动服务并检查健康状态。
+当你希望 CoLiPas云服务器管理面板作为主机 systemd 服务运行，而不是运行在 Docker 里时，使用这个模式。脚本会在 apt 系统上安装 Node.js 24、创建 `colipas` 服务用户、构建应用、安装 `deploy/colipas.service`、启动服务并检查健康状态。
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env \
@@ -139,7 +139,7 @@ curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-c
 
 ## 忘记管理员密码
 
-CoLiPas 不保存明文密码，只保存 `scrypt` 哈希。忘记密码时需要重置。
+CoLiPas云服务器管理面板不保存明文密码，只保存 `scrypt` 哈希。忘记密码时需要重置。
 
 Docker 一键部署 / Docker Compose：
 

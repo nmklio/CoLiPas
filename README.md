@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&height=220&color=0:0F172A,45:0F766E,100:2563EB&text=CoLiPas&fontColor=FFFFFF&fontSize=64&fontAlignY=38&desc=Private%20cloud%20operations%20with%20SSH,%20AI,%20automation,%20and%20audit&descAlignY=60&animation=fadeIn" alt="CoLiPas header" />
+<img src="https://capsule-render.vercel.app/api?type=waving&height=220&color=0:0F172A,45:0F766E,100:2563EB&text=CoLiPas%20Cloud%20Server%20Panel&fontColor=FFFFFF&fontSize=48&fontAlignY=38&desc=Private%20cloud%20server%20management%20with%20SSH,%20AI,%20automation,%20and%20audit&descAlignY=60&animation=fadeIn" alt="CoLiPas Cloud Server Management Panel header" />
 
 <p align="center">
   <a href="https://github.com/nmklio/CoLiPas/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/nmklio/CoLiPas/ci.yml?branch=master&label=ci&style=for-the-badge"></a>
@@ -10,10 +10,10 @@
   <img alt="React" src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=06131a&style=for-the-badge">
 </p>
 
-<h3>Self-hosted multi-cloud operations in one deployable Node.js service.</h3>
+<h3>Self-hosted cloud server management in one deployable Node.js service.</h3>
 
 <p>
-  <b>CoLiPas</b> combines server inventory, live SSH, AI-assisted operations,
+  <b>CoLiPas Cloud Server Management Panel</b> combines server inventory, live SSH, AI-assisted operations,
   workflow automation, custom API testing, and release security evidence in a private control panel.
 </p>
 
@@ -29,7 +29,7 @@
   <a href="#verification">Verification</a>
 </p>
 
-<img src=".github/assets/colipas-dashboard-preview.svg" alt="CoLiPas sanitized multi-region dashboard preview" width="980" />
+<img src=".github/assets/colipas-dashboard-preview.svg" alt="CoLiPas Cloud Server Management Panel sanitized dashboard preview" width="980" />
 
 <sub>The preview uses fictional providers and RFC 5737 documentation IP ranges only. It does not contain user servers, real IP addresses, SSH credentials, runtime databases, or private deployment data.</sub>
 
@@ -39,9 +39,9 @@
 
 [English](README.md) | [中文文档](README_CN.md) | [日本語ドキュメント](README_JP.md)
 
-## What CoLiPas Is
+## What CoLiPas Cloud Server Management Panel Is
 
-CoLiPas is a self-hosted operations console for teams that manage cloud servers, private nodes, and manually onboarded Linux machines. It is not a marketing landing page or a demo-only dashboard: it is built around the everyday loop of adding servers, verifying access, checking health, running guarded SSH tasks, asking AI for operational context, and keeping audit evidence.
+CoLiPas Cloud Server Management Panel is a self-hosted operations console for teams that manage cloud servers, private nodes, and manually onboarded Linux machines. It is not a marketing landing page or a demo-only dashboard: it is built around the everyday loop of adding servers, verifying access, checking health, running guarded SSH tasks, asking AI for operational context, and keeping audit evidence.
 
 The runtime is intentionally simple. One Node.js process serves the Express API and the production React frontend on `PORT=8080`. SQLite stores account settings, server inventory, audit trails, AI provider settings, encrypted SSH metadata, and release evidence. No external database is required for a single-node deployment.
 
@@ -120,7 +120,7 @@ Use one of the one-command Linux deploy modes below. Docker Compose is recommend
 
 ### Docker One-Command Deploy
 
-Run this on a Linux server. On supported distributions, the installer installs Docker and the Docker Compose plugin if they are missing, asks for install directory, public URL, admin username, and initial password, then starts CoLiPas and checks service health.
+Run this on a Linux server. On supported distributions, the installer installs Docker and the Docker Compose plugin if they are missing, asks for install directory, public URL, admin username, and initial password, then starts CoLiPas Cloud Server Management Panel and checks service health.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env \
@@ -158,7 +158,7 @@ The Docker deployment keeps runtime data in the Compose volume and preserves SQL
 
 ### Native Linux + systemd One-Command Deploy
 
-Use this mode when you want CoLiPas to run as a host systemd service instead of Docker. On apt-based systems, the installer installs Node.js 24 if it is missing, creates the `colipas` service user, builds the app, installs `deploy/colipas.service`, starts the service, and checks local health.
+Use this mode when you want CoLiPas Cloud Server Management Panel to run as a host systemd service instead of Docker. On apt-based systems, the installer installs Node.js 24 if it is missing, creates the `colipas` service user, builds the app, installs `deploy/colipas.service`, starts the service, and checks local health.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env \
@@ -194,7 +194,7 @@ Replace `server_name` and TLS certificate paths before using it on a new domain.
 
 ## Forgot the Admin Password
 
-CoLiPas stores administrator passwords as `scrypt` hashes. Forgotten passwords must be reset, not recovered.
+CoLiPas Cloud Server Management Panel stores administrator passwords as `scrypt` hashes. Forgotten passwords must be reset, not recovered.
 
 Docker one-command / Docker Compose deployment:
 

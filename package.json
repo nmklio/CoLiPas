@@ -1,6 +1,7 @@
 {
   "name": "colipas",
   "version": "0.1.0",
+  "description": "CoLiPas云服务器管理面板",
   "private": true,
   "type": "module",
   "scripts": {

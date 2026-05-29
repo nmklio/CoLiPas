@@ -29,7 +29,7 @@ export function LoginPage({ loading, error, onLogin }: LoginPageProps) {
               <BrandIcon />
             </div>
             <div>
-              <strong>CoLiPas</strong>
+              <strong>CoLiPas云服务器管理面板</strong>
               <span>{t('login.subtitle')}</span>
             </div>
           </div>

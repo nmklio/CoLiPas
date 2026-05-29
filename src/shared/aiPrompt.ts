@@ -45,7 +45,7 @@ export function buildOpsPrompt(servers: ServerNode[], events: OperationEvent[]) 
   const omittedOpenEvents = Math.max(0, openEventItems.length - promptOpenEventLimit);
 
   return [
-    'Current CoLiPas operations context. Use this context only when it is relevant to the user question.',
+    'Current CoLiPas Cloud Server Management Panel operations context. Use this context only when it is relevant to the user question.',
     'Do not invent servers, credentials, commands that were executed, or cloud-provider data.',
     'Large inventories are summarized to keep the UI, API request, and model prompt responsive.',
     '',

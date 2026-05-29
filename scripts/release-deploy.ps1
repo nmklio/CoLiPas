@@ -475,4 +475,4 @@ Run-Step "Production target browser validation" {
   }
 }
 
-Write-Host "CoLiPas release deploy completed."
+Write-Host "CoLiPas cloud server management panel release deploy completed."

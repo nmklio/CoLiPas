@@ -25,7 +25,7 @@ if ($Remove) {
 $releaseScript = Join-Path $root "scripts\release-deploy.ps1"
 $hook = @"
 #!/bin/sh
-echo "==> CoLiPas post-commit release hook"
+echo "==> CoLiPas cloud server management panel post-commit release hook"
 powershell -NoProfile -ExecutionPolicy Bypass -File "$releaseScript"
 "@
 

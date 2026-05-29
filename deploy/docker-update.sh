@@ -49,4 +49,4 @@ docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" up -d --build --remove-o
 docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" ps
 curl -fsS -H "Host: $SERVER_NAME" http://127.0.0.1/api/health >/dev/null
 docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" exec -T colipas node deploy/release-evidence-check.mjs
-echo "CoLiPas docker target updated to $(git rev-parse --short HEAD)"
+echo "CoLiPas cloud server management panel docker target updated to $(git rev-parse --short HEAD)"

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="980" viewBox="0 0 1600 980" role="img" aria-labelledby="title desc">
-  <title id="title">CoLiPas sanitized dashboard preview</title>
+  <title id="title">CoLiPas云服务器管理面板 sanitized dashboard preview</title>
   <desc id="desc">A fictional multi-cloud operations dashboard preview using documentation IP ranges only.</desc>
   <defs>
     <linearGradient id="page" x1="0" y1="0" x2="1" y2="1">
@@ -80,7 +80,7 @@
         <path d="M32.4 40.2h10.8" fill="none" stroke="#f8fafc" stroke-width="4" stroke-linecap="round" />
         <circle cx="45.4" cy="23.2" r="3.2" fill="#67e8f9" />
       </g>
-      <text x="54" y="25" class="ui" font-size="24" font-weight="900" fill="#f8fbff">CoLiPas</text>
+      <text x="54" y="25" class="ui" font-size="19" font-weight="900" fill="#f8fbff">CoLiPas云服务器管理面板</text>
     </g>
     <g transform="translate(330 76)">
       <rect width="116" height="38" rx="13" fill="#112b3d" />

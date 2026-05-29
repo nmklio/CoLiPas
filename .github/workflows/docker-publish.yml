@@ -54,8 +54,8 @@ jobs:
             type=ref,event=tag
             type=sha,prefix=sha-,format=short
           labels: |
-            org.opencontainers.image.title=CoLiPas
-            org.opencontainers.image.description=Self-hosted multi-cloud operations panel with SSH, AI, automation, and audit.
+            org.opencontainers.image.title=CoLiPas云服务器管理面板
+            org.opencontainers.image.description=Self-hosted cloud server management panel with SSH, AI, automation, and audit.
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
 
       - name: Build and publish image

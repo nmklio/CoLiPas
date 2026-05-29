@@ -195,7 +195,7 @@ export function buildReleaseReadinessReport(config: RuntimeConfig): ReleaseReadi
   const trend = readiness.history.trend;
   const latestSnapshots = readiness.history.snapshots.slice(0, 5);
   const markdown = [
-    '# CoLiPas Release Readiness Report',
+    '# CoLiPas云服务器管理面板 Release Readiness Report',
     '',
     `- Generated at: ${generatedAt}`,
     `- Score: ${readiness.score}`,

@@ -38,8 +38,8 @@ try {
     ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at
   `).run(accountSettingId, JSON.stringify(account), account.passwordChangedAt);
   db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
-  console.log(`ok reset CoLiPas admin password for ${username} in ${databasePath}`);
-  console.log('ok restart the CoLiPas service before signing in with the new password');
+  console.log(`ok reset CoLiPas cloud server management panel admin password for ${username} in ${databasePath}`);
+  console.log('ok restart the CoLiPas cloud server management panel service before signing in with the new password');
 } finally {
   db.close();
 }

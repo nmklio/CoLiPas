@@ -1,6 +1,6 @@
 <div align="center">
 
-# CoLiPas
+# CoLiPas クラウドサーバー管理パネル
 
 ### セルフホスト可能なマルチクラウドサーバー運用コンソール
 
@@ -12,7 +12,7 @@
 
 ## 概要
 
-CoLiPas は、実運用を想定したクラウドサーバー管理パネルです。サーバー台帳、グローバル監視マップ、SSH ターミナル、AI 運用アシスタント、ワークフロー自動化、カスタム API テスト、セキュリティ監査、リリース検証を、ログインで保護された 1 つのコンソールにまとめます。
+CoLiPas クラウドサーバー管理パネルは、実運用を想定したクラウドサーバー管理パネルです。サーバー台帳、グローバル監視マップ、SSH ターミナル、AI 運用アシスタント、ワークフロー自動化、カスタム API テスト、セキュリティ監査、リリース検証を、ログインで保護された 1 つのコンソールにまとめます。
 
 構成は React + TypeScript + Express + SQLite です。1 つの Node.js 本番サービスが `/api/*` とビルド済みフロントエンドを配信します。ランタイムデータは既定で `.data` に保存され、SSH 認証情報は `CREDENTIAL_ENCRYPTION_KEY` で暗号化されます。
 
@@ -116,7 +116,7 @@ Docker デプロイは Compose ボリュームを保持するため、SQLite デ
 
 ### ネイティブ Linux + systemd ワンコマンドデプロイ
 
-Docker ではなく、ホストの systemd サービスとして CoLiPas を動かしたい場合に使います。apt 系の Linux では Node.js 24 を必要に応じてインストールし、`colipas` サービスユーザーを作成し、アプリをビルドし、`deploy/colipas.service` をインストールして起動し、ヘルスチェックを実行します。
+Docker ではなく、ホストの systemd サービスとして CoLiPas クラウドサーバー管理パネルを動かしたい場合に使います。apt 系の Linux では Node.js 24 を必要に応じてインストールし、`colipas` サービスユーザーを作成し、アプリをビルドし、`deploy/colipas.service` をインストールして起動し、ヘルスチェックを実行します。
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env \
@@ -139,7 +139,7 @@ curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-c
 
 ## 管理者パスワードを忘れた場合
 
-CoLiPas は平文パスワードを保存せず、`scrypt` ハッシュだけを保存します。忘れた場合は復元ではなくリセットします。
+CoLiPas クラウドサーバー管理パネルは平文パスワードを保存せず、`scrypt` ハッシュだけを保存します。忘れた場合は復元ではなくリセットします。
 
 Docker ワンコマンドデプロイ / Docker Compose:
 

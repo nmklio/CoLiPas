@@ -127,7 +127,7 @@ const fallbackOverview: OverviewResponse = {
 };
 
 const fallbackProfile: AccountProfile = {
-  displayName: 'CoLiPas',
+  displayName: 'CoLiPas云服务器管理面板',
   avatarText: 'CP',
   avatarImage: '',
 };
@@ -368,7 +368,7 @@ export function App() {
   const { onlineCount, avgCpu, connectedCount, openEventCount, busiestServer } = overviewStats;
   const timeLocale = getLocale(language);
   const sessionIdentity = session?.user?.username?.trim() ?? '';
-  const accountDisplayLabel = profile.displayName || sessionIdentity || 'CoLiPas';
+  const accountDisplayLabel = profile.displayName || sessionIdentity || 'CoLiPas云服务器管理面板';
   const sessionTooltip = session?.expiresAt
     ? `${accountDisplayLabel} - ${t('login.expiresAt', { time: new Date(session.expiresAt).toLocaleString(timeLocale) })}`
     : accountDisplayLabel;
@@ -828,7 +828,7 @@ export function App() {
                       value={profileDraft.displayName}
                       maxLength={32}
                       onChange={(event) => setProfileDraft((current) => ({ ...current, displayName: event.target.value }))}
-                      placeholder="CoLiPas"
+                      placeholder="CoLiPas云服务器管理面板"
                     />
                   </label>
                   <label className="login-field">

@@ -121,7 +121,7 @@ if (!html.includes('https://github.com/nmklio/CoLiPas')) {
 }
 
 replaceOnce(/(<section class="hero wrap">[\s\S]*?)<h1>[\s\S]*?<\/h1>/, (_match, prefix) => (
-  `${prefix}<h1><span class="hero-title-main">多云服务器管理面板</span><span class="hero-title-accent">接入、监控、修复一体化</span></h1>`
+  `${prefix}<h1><span class="hero-title-main">CoLiPas云服务器管理面板</span><span class="hero-title-accent">接入、监控、修复一体化</span></h1>`
 ));
 
 replaceOnce(/(<section id="product" class="section wrap">[\s\S]*?<h2>)[\s\S]*?(<\/h2>)/, (_match, prefix, suffix) => (
@@ -485,11 +485,11 @@ if (changed) {
 }
 NODE
     patched=1
-    echo "CoLiPas landing page UI ready: $landing_file"
+    echo "CoLiPas cloud server management panel landing page UI ready: $landing_file"
   done
 
   if [ "$patched" -eq 0 ]; then
-    echo "WARN: CoLiPas landing page was not found; skipped landing UI patch" >&2
+    echo "WARN: CoLiPas cloud server management panel landing page was not found; skipped landing UI patch" >&2
   fi
 }
 
@@ -500,7 +500,7 @@ write_docs_page() {
 
   cat >"$LANDING_ROOT/colipas-icon.svg" <<'SVG'
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
-  <title id="title">CoLiPas icon</title>
+  <title id="title">CoLiPas云服务器管理面板 icon</title>
   <desc id="desc">A cloud operations terminal mark on a teal and blue rounded square.</desc>
   <defs>
     <linearGradient id="colipas-bg" x1="8" y1="4" x2="58" y2="62" gradientUnits="userSpaceOnUse">
@@ -528,7 +528,7 @@ SVG
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" type="image/svg+xml" href="/colipas-icon.svg">
-  <title>CoLiPas 使用文档</title>
+  <title>CoLiPas云服务器管理面板 使用文档</title>
   <style>
     :root {
       color-scheme: light;
@@ -941,7 +941,7 @@ SVG
 <body>
   <header class="nav">
     <div class="nav-inner">
-      <a class="brand" href="/" aria-label="CoLiPas">
+      <a class="brand" href="/" aria-label="CoLiPas云服务器管理面板">
         <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
           <defs>
             <linearGradient id="docs-colipas-bg" x1="8" y1="4" x2="58" y2="62" gradientUnits="userSpaceOnUse">
@@ -960,7 +960,7 @@ SVG
           <path d="M32.4 40.2h10.8" fill="none" stroke="#f8fafc" stroke-width="4" stroke-linecap="round"/>
           <circle cx="45.4" cy="23.2" r="3.2" fill="#67e8f9"/>
         </svg>
-        <strong>CoLiPas</strong>
+        <strong>CoLiPas云服务器管理面板</strong>
       </a>
       <nav class="nav-links" aria-label="文档导航">
         <a href="/">产品</a>
@@ -979,7 +979,7 @@ SVG
   <section class="hero wrap">
     <div>
       <p class="kicker">使用文档</p>
-      <h1>下载、配置、运行，完整落地 CoLiPas</h1>
+      <h1>下载、配置、运行，完整落地 CoLiPas云服务器管理面板</h1>
       <p class="lead">这份文档按上线顺序组织：先部署生产服务，再接入服务器，随后验证 SSH、AI、自定义 API、运维编排、数据库持久化和安全审计。所有公开内容只使用示例配置，不包含真实服务器、密码、API Key 或用户数据。</p>
       <div class="hero-actions">
         <a class="button primary" href="#install">开始部署</a>
@@ -1165,11 +1165,11 @@ curl -fsS http://127.0.0.1:8080/api/health</pre>
     </main>
   </div>
 
-  <footer class="wrap">CoLiPas docs · public-safe deployment guide · no runtime secrets embedded</footer>
+  <footer class="wrap">CoLiPas cloud server management panel docs · public-safe deployment guide · no runtime secrets embedded</footer>
 </body>
 </html>
 HTML
-  echo "CoLiPas docs page ready: $LANDING_ROOT/docs.html"
+  echo "CoLiPas cloud server management panel docs page ready: $LANDING_ROOT/docs.html"
 }
 
 install_runtime_update_script() {
@@ -1498,7 +1498,7 @@ if [ "$LOCAL_HEAD" = "$REMOTE_HEAD" ]; then
   systemctl restart "$SERVICE_NAME"
   systemctl is-active --quiet "$SERVICE_NAME"
   verify_release_evidence
-  echo "CoLiPas already up to date at $LOCAL_HEAD"
+  echo "CoLiPas cloud server management panel already up to date at $LOCAL_HEAD"
   exit 0
 fi
 
@@ -1520,4 +1520,4 @@ fi
 systemctl restart "$SERVICE_NAME"
 systemctl is-active --quiet "$SERVICE_NAME"
 verify_release_evidence
-echo "CoLiPas updated to $REMOTE_HEAD"
+echo "CoLiPas cloud server management panel updated to $REMOTE_HEAD"

@@ -68,8 +68,9 @@ interface LoginFailureRecord {
 
 const sessions = new Map<string, SessionRecord>();
 const loginFailures = new Map<string, LoginFailureRecord>();
+const legacyDefaultDisplayName = 'CoLiPas';
 const fallbackProfile: ConsoleProfile = {
-  displayName: 'CoLiPas',
+  displayName: 'CoLiPas云服务器管理面板',
   avatarText: 'CP',
   avatarImage: '',
 };
@@ -150,7 +151,14 @@ export function getCurrentSession(request: Request, config: RuntimeConfig) {
 }
 
 export function getConsoleProfile() {
-  return readJsonSetting<ConsoleProfile>(profileSettingId) ?? fallbackProfile;
+  const stored = readJsonSetting<ConsoleProfile>(profileSettingId);
+  if (!stored) {
+    return fallbackProfile;
+  }
+  if (stored.displayName === legacyDefaultDisplayName && stored.avatarText === fallbackProfile.avatarText && !stored.avatarImage) {
+    return fallbackProfile;
+  }
+  return stored;
 }
 
 export function updateConsoleProfile(input: unknown) {

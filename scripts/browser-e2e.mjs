@@ -520,7 +520,7 @@ async function assertSshTerminalPanel(targetPage) {
     await targetPage.locator('.ssh-console').waitFor({ timeout: 10000 });
     await targetPage.waitForFunction(() => {
       const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
-      return terminalText.includes('CoLiPas simulated SSH shell') && terminalText.includes('simulated$');
+      return terminalText.includes('CoLiPas云服务器管理面板 simulated SSH shell') && terminalText.includes('simulated$');
     }, undefined, { timeout: 10000 });
     const reopenedText = await targetPage.locator('.ssh-terminal-screen .xterm-rows').textContent();
     if (reopenedText?.includes('simulated$ pwd')) {
