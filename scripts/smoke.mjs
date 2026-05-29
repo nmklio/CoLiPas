@@ -3380,9 +3380,12 @@ function assertAiResponseCachingGuards() {
     'message.status === \'cached\'',
     'cachedResult.answer',
     'meta: analysisToMessageMeta(result)',
-    'collapsed ? [] : activeSession.selectedServerId === \'all\'',
+    'const serverById = useMemo(() => new Map(servers.map((server) => [server.id, server])), [servers])',
+    'const selectedServer = serverById.get(activeSession.selectedServerId)',
+    'return changed ? next : current',
     'collapsed ? \'\' : buildOpsPrompt(selectedServers, events)',
-    'if (collapsed) {\n      return;\n    }\n\n    const validServerIds = new Set(servers.map',
+    'if (session.selectedServerId === \'all\' || serverById.has(session.selectedServerId))',
+    'serverById.get(serverId)?.name ?? serverId',
   ];
   const missingFrontend = frontendFragments.filter((fragment) => !aiConsoleSource.includes(fragment));
   if (missingFrontend.length) {

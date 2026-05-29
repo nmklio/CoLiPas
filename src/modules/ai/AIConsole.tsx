@@ -254,9 +254,19 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
   const validation = useMemo(() => validateAIProviderConfig(provider, language), [language, provider]);
   const executionCopy = aiExecutionCopyByLanguage[language] ?? aiExecutionCopyByLanguage.zh;
   const activeSession = sessions.find((session) => session.id === activeSessionId) ?? sessions[0];
+  const serverById = useMemo(() => new Map(servers.map((server) => [server.id, server])), [servers]);
   const selectedServers = useMemo(
-    () => (collapsed ? [] : activeSession.selectedServerId === 'all' ? servers : servers.filter((server) => server.id === activeSession.selectedServerId)),
-    [activeSession.selectedServerId, collapsed, servers],
+    () => {
+      if (collapsed) {
+        return [];
+      }
+      if (activeSession.selectedServerId === 'all') {
+        return servers;
+      }
+      const selectedServer = serverById.get(activeSession.selectedServerId);
+      return selectedServer ? [selectedServer] : [];
+    },
+    [activeSession.selectedServerId, collapsed, serverById, servers],
   );
   const prompt = useMemo(() => (collapsed ? '' : buildOpsPrompt(selectedServers, events)), [collapsed, selectedServers, events]);
   const running = runningSessionId === activeSession.id;
@@ -286,13 +296,18 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
       return;
     }
 
-    const validServerIds = new Set(servers.map((server) => server.id));
-    setSessions((current) => current.map((session) => (
-      session.selectedServerId !== 'all' && !validServerIds.has(session.selectedServerId)
-        ? { ...session, selectedServerId: 'all', updatedAt: new Date().toISOString() }
-        : session
-    )));
-  }, [collapsed, servers]);
+    setSessions((current) => {
+      let changed = false;
+      const next = current.map((session) => {
+        if (session.selectedServerId === 'all' || serverById.has(session.selectedServerId)) {
+          return session;
+        }
+        changed = true;
+        return { ...session, selectedServerId: 'all', updatedAt: new Date().toISOString() };
+      });
+      return changed ? next : current;
+    });
+  }, [collapsed, serverById]);
 
   useEffect(() => {
     let cancelled = false;
@@ -952,7 +967,7 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
                   <code>{formatExecutionCommand(executionPlan)}</code>
                 </div>
                 <div className="ai-execution-tags" aria-label={executionCopy.target}>
-                  <span><Terminal size={13} /> {formatExecutionTargets(executionPlan.serverIds, executionPlan.targetMode, servers, executionCopy)}</span>
+                  <span><Terminal size={13} /> {formatExecutionTargets(executionPlan.serverIds, executionPlan.targetMode, servers, serverById, executionCopy)}</span>
                   <span>{executionPlan.operation}</span>
                   <span>{executionCopy.executionMode}</span>
                   {executionPlan.requiresConfirmation && (
@@ -1285,6 +1300,7 @@ function formatExecutionTargets(
   serverIds: string[],
   targetMode: string,
   servers: ServerNode[],
+  serverById: Map<string, ServerNode>,
   copy: (typeof aiExecutionCopyByLanguage)[string],
 ) {
   if (targetMode === 'allConnected') {
@@ -1295,7 +1311,7 @@ function formatExecutionTargets(
   }
 
   const serverNames = serverIds
-    .map((serverId) => servers.find((server) => server.id === serverId)?.name ?? serverId)
+    .map((serverId) => serverById.get(serverId)?.name ?? serverId)
     .slice(0, 3);
   return serverNames.length > 0 ? serverNames.join(', ') : copy.selectedServers;
 }
