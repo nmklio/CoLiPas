@@ -16,6 +16,7 @@ const sshShellIdleTimeoutMs = 20 * 60 * 1000;
 const sshShellHistoryLimit = 120;
 const sshShellEvidenceLimit = 80;
 const sshShellEvidenceRetentionMs = 30 * 60 * 1000;
+const sshShellEvidencePruneIntervalMs = 60 * 1000;
 const sshShellEvidenceMaxChars = 6000;
 const simulatedShellPrompt = 'simulated$ ';
 const privateKeyBlockPattern = /^-----BEGIN (?:OPENSSH PRIVATE KEY|RSA PRIVATE KEY|EC PRIVATE KEY|DSA PRIVATE KEY|PRIVATE KEY)-----[\s\S]+-----END (?:OPENSSH PRIVATE KEY|RSA PRIVATE KEY|EC PRIVATE KEY|DSA PRIVATE KEY|PRIVATE KEY)-----$/;
@@ -176,6 +177,7 @@ interface SshShellEvidenceRecord {
 }
 
 const recentSshShellEvidenceByServer = new Map<string, SshShellEvidenceRecord>();
+let lastSshShellEvidencePruneAt = 0;
 
 export interface SshVerificationResult {
   connected: boolean;
@@ -944,7 +946,9 @@ function emitSshShellEvent(session: ActiveSshShellSession, event: SshShellStream
     message: event.message ? redactSensitiveText(event.message) : event.message,
   };
   session.history.push(safeEvent);
-  session.history.splice(0, Math.max(0, session.history.length - sshShellHistoryLimit));
+  if (session.history.length > sshShellHistoryLimit) {
+    session.history.splice(0, session.history.length - sshShellHistoryLimit);
+  }
   recordSshShellEvidence(session, safeEvent);
   session.listeners.forEach((listener) => listener(safeEvent));
 }
@@ -955,7 +959,7 @@ function recordSshShellEvidence(session: ActiveSshShellSession, event: SshShellS
     return;
   }
 
-  pruneRecentSshShellEvidence();
+  maybePruneRecentSshShellEvidence();
   const existing = recentSshShellEvidenceByServer.get(session.serverId);
   const record: SshShellEvidenceRecord = existing ?? {
     serverId: session.serverId,
@@ -974,12 +978,23 @@ function recordSshShellEvidence(session: ActiveSshShellSession, event: SshShellS
     message: event.message,
     at: record.updatedAt,
   });
-  record.events.splice(0, Math.max(0, record.events.length - sshShellEvidenceLimit));
+  if (record.events.length > sshShellEvidenceLimit) {
+    record.events.splice(0, record.events.length - sshShellEvidenceLimit);
+  }
   recentSshShellEvidenceByServer.set(session.serverId, record);
 }
 
-function pruneRecentSshShellEvidence() {
-  const cutoff = Date.now() - sshShellEvidenceRetentionMs;
+function maybePruneRecentSshShellEvidence() {
+  const now = Date.now();
+  if (now - lastSshShellEvidencePruneAt < sshShellEvidencePruneIntervalMs) {
+    return;
+  }
+  lastSshShellEvidencePruneAt = now;
+  pruneRecentSshShellEvidence(now);
+}
+
+function pruneRecentSshShellEvidence(now = Date.now()) {
+  const cutoff = now - sshShellEvidenceRetentionMs;
   for (const [serverId, record] of recentSshShellEvidenceByServer) {
     if (new Date(record.updatedAt).getTime() < cutoff) {
       recentSshShellEvidenceByServer.delete(serverId);

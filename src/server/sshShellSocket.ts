@@ -19,6 +19,7 @@ type ClientMessage =
   | { type: 'close' };
 
 const shellSocketOutputFlushMs = 4;
+const shellSocketOutputImmediateChars = 16;
 const shellSocketOutputFlushMaxChars = 96 * 1024;
 
 export interface SshShellSocketDiagnostics {
@@ -140,6 +141,11 @@ function bindSshShellSocket(webSocket: WebSocket) {
     }
 
     if ((pendingOutputEvent.content?.length ?? 0) >= shellSocketOutputFlushMaxChars) {
+      flushOutput();
+      return;
+    }
+
+    if ((pendingOutputEvent.content?.length ?? 0) <= shellSocketOutputImmediateChars) {
       flushOutput();
       return;
     }

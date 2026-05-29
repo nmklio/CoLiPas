@@ -1,5 +1,7 @@
 const sensitiveKeyPattern =
   '(?:access_token|api_key|apikey|auth|authorization|bearer|client_secret|key|password|passphrase|secret|signature|token)';
+const redactionTriggerPattern =
+  /access_token|api_key|apikey|auth|authorization|bearer|client_secret|key|password|passphrase|secret|signature|token|sk-|private key/i;
 
 const redactionRules: Array<[RegExp, string]> = [
   [new RegExp(`([?&;]\\s*${sensitiveKeyPattern}=)[^&;\\s]+`, 'gi'), '$1[redacted]'],
@@ -12,5 +14,8 @@ const redactionRules: Array<[RegExp, string]> = [
 ];
 
 export function redactSensitiveText(value: string) {
+  if (!redactionTriggerPattern.test(value)) {
+    return value;
+  }
   return redactionRules.reduce((text, [pattern, replacement]) => text.replace(pattern, replacement), value);
 }

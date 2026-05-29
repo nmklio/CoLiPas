@@ -4381,6 +4381,7 @@ function assertSshTerminalRealtimeGuards() {
   const sshServiceSource = fs.readFileSync(new URL('../src/server/services/sshAccessService.ts', import.meta.url), 'utf8');
   const sshSocketSource = fs.readFileSync(new URL('../src/server/sshShellSocket.ts', import.meta.url), 'utf8');
   const apiClientSource = fs.readFileSync(new URL('../src/services/apiClient.ts', import.meta.url), 'utf8');
+  const redactionSource = fs.readFileSync(new URL('../src/server/services/sensitiveRedaction.ts', import.meta.url), 'utf8');
   const viteSource = fs.readFileSync(new URL('../vite.config.ts', import.meta.url), 'utf8');
 
   const requiredFrontendFragments = [
@@ -4500,6 +4501,11 @@ function assertSshTerminalRealtimeGuards() {
     'content: chunk.toString(\'utf8\')',
     'content: event.content',
     'sshShellIdleTimeoutMs',
+    'const sshShellEvidencePruneIntervalMs = 60 * 1000',
+    'let lastSshShellEvidencePruneAt = 0',
+    'function maybePruneRecentSshShellEvidence()',
+    'if (session.history.length > sshShellHistoryLimit)',
+    'if (record.events.length > sshShellEvidenceLimit)',
     'export function getSshShellSessionStats',
     'oldestConnectedAt',
     'newestConnectedAt',
@@ -4553,16 +4559,28 @@ function assertSshTerminalRealtimeGuards() {
     'tcpSocket.setKeepAlive?.(true, 10000)',
     'closeServerShell({ sessionId })',
     'const shellSocketOutputFlushMs = 4',
+    'const shellSocketOutputImmediateChars = 16',
     'const shellSocketOutputFlushMaxChars = 96 * 1024',
     'function bindSshShellSocket',
     'let pendingOutputEvent: SshShellStreamEvent | null = null',
     'pendingOutputEvent.content?.length',
+    'pendingOutputEvent.content?.length ?? 0) <= shellSocketOutputImmediateChars',
     'setTimeout(flushOutput, shellSocketOutputFlushMs)',
     'sendShellEvent(event)',
   ];
   const missingSocket = socketRequired.filter((fragment) => !sshSocketSource.includes(fragment));
   if (missingSocket.length) {
     throw new Error(`SSH shell websocket bridge guard is incomplete: ${missingSocket.join(', ')}`);
+  }
+
+  const redactionRequired = [
+    'const redactionTriggerPattern',
+    'if (!redactionTriggerPattern.test(value))',
+    'return redactionRules.reduce',
+  ];
+  const missingRedaction = redactionRequired.filter((fragment) => !redactionSource.includes(fragment));
+  if (missingRedaction.length) {
+    throw new Error(`SSH shell redaction fast path guard is incomplete: ${missingRedaction.join(', ')}`);
   }
 
   console.log('ok SSH terminal uses live PTY shell streaming and keeps input responsive');
