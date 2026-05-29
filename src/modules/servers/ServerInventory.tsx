@@ -23,7 +23,7 @@ import {
   updateServer,
 } from '../../services/apiClient';
 import { CloudProvider, ServerNode, ServerStatus, SshAuthType, SshVerifyMode } from '../../types';
-import { percentClass, statusLabel } from '../../utils/format';
+import { formatRegionName, percentClass, statusLabel } from '../../utils/format';
 import { ServerFilters } from './serverFilters';
 import { baseCloudProviders, customProviderFilterValue, resolveServerLifecycleStatus } from '../../shared/serverFilters';
 
@@ -98,6 +98,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const providerFilters = useMemo(() => buildProviderOptions(allServers.map((server) => server.provider)), [allServers]);
   const providerDisplayName = (provider: string) => formatProviderName(provider, t);
   const providerFilterName = (provider: string) => formatProviderFilterName(provider, t);
+  const regionDisplayName = (region: string) => formatRegionName(region, language);
   const [actionMessage, setActionMessage] = useState('');
   const [lastActionTraceId, setLastActionTraceId] = useState('');
   const [form, setForm] = useState<ConnectServerPayload>(initialForm);
@@ -411,7 +412,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
             <option value="all">{t('servers.allRegions')}</option>
             {regions.map((region) => (
               <option key={region} value={region}>
-                {region}
+                {regionDisplayName(region)}
               </option>
             ))}
           </select>
@@ -420,7 +421,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
           <div className="region-scope-chip">
             <Globe2 size={15} />
             <span>{t('servers.mapRegionScope', { count: scopedRegions.length })}</span>
-            <strong>{scopedRegions.slice(0, 3).join(' / ')}{scopedRegions.length > 3 ? ` +${scopedRegions.length - 3}` : ''}</strong>
+            <strong>{scopedRegions.slice(0, 3).map(regionDisplayName).join(' / ')}{scopedRegions.length > 3 ? ` +${scopedRegions.length - 3}` : ''}</strong>
             <button type="button" onClick={() => onFiltersChange({ ...filters, regionScope: undefined })}>
               {t('servers.clearRegionScope')}
             </button>
@@ -674,7 +675,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                 </div>
                 <div className="server-row-provider">
                   <strong>{providerDisplayName(server.provider)}</strong>
-                  <span>{server.region}</span>
+                  <span>{regionDisplayName(server.region)}</span>
                 </div>
                 <div className="server-row-metrics">
                   <ResourceMeter label="CPU" value={server.cpu} />
@@ -750,7 +751,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                 <div>
                   <span>{t('servers.tableProvider')}</span>
                   <strong>{providerDisplayName(activeSshServer.provider)}</strong>
-                  <small>{activeSshServer.region}</small>
+                  <small>{regionDisplayName(activeSshServer.region)}</small>
                 </div>
                 <div>
                   <span>{t('servers.tableNetwork')}</span>
@@ -959,7 +960,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       identityCacheRef.current.set(identityKey, result);
     }
     lastAppliedIdentityRef.current = { region: result.region, os: result.os };
-    setIdentityMessage(t('servers.identityDetected', { region: result.region, os: result.os }));
+    setIdentityMessage(t('servers.identityDetected', { region: regionDisplayName(result.region), os: result.os }));
     return {
       ...payload,
       region: payload.region.trim() || result.region,
@@ -978,7 +979,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       os: shouldUseDetectedIdentity(current.os, force) ? result.os : current.os,
     }));
     lastAppliedIdentityRef.current = { region: result.region, os: result.os };
-    setIdentityMessage(t('servers.identityDetected', { region: result.region, os: result.os }));
+    setIdentityMessage(t('servers.identityDetected', { region: regionDisplayName(result.region), os: result.os }));
   }
 
   function isCurrentIdentityTarget(publicIp: string, sshHost: string) {

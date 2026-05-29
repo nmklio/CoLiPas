@@ -918,11 +918,12 @@ export function App() {
 
 function AvatarMark({ profile, className = '' }: { profile: AccountProfile; className?: string }) {
   const label = profile.avatarText || 'CP';
-  const classes = ['brand-mark', className].filter(Boolean).join(' ');
+  const usesDefaultIcon = !profile.avatarImage && label.trim().toUpperCase() === 'CP';
+  const classes = ['brand-mark', usesDefaultIcon ? 'app-brand-mark' : '', className].filter(Boolean).join(' ');
 
   return (
     <div className={classes}>
-      {profile.avatarImage ? <img src={profile.avatarImage} alt="" aria-hidden="true" /> : label}
+      {profile.avatarImage ? <img src={profile.avatarImage} alt="" aria-hidden="true" /> : usesDefaultIcon ? <BrandIcon /> : label}
     </div>
   );
 }

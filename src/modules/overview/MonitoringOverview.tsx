@@ -6,7 +6,7 @@ import { feature } from 'topojson-client';
 import countriesAtlas from 'world-atlas/countries-110m.json';
 import { useI18n } from '../../i18n';
 import { OperationEvent, ServerNode } from '../../types';
-import { percentClass, statusLabel } from '../../utils/format';
+import { formatCountryName, formatRegionName, percentClass, statusLabel } from '../../utils/format';
 import type { Feature, FeatureCollection, Geometry } from 'geojson';
 
 interface MonitoringOverviewProps {
@@ -159,6 +159,8 @@ const fallbackLocation: RegionLocation = { lat: 18, lng: 0, countryId: '', match
 export function MonitoringOverview({ servers, events, onlineCount, avgCpu, onRegionServersOpen }: MonitoringOverviewProps) {
   const { language, t } = useI18n();
   const providerName = (provider: string) => formatProviderName(provider, t);
+  const regionName = (region: string) => formatRegionName(region, language);
+  const countryName = (country: string) => formatCountryName(country, language);
   const mapRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);
   const suppressMapClickRef = useRef(false);
@@ -310,7 +312,7 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, onReg
                     const path = mapPath(country as Feature<Geometry>) ?? '';
                     const matchedRegions = regionsByCountryId.get(id) ?? [];
                     const matchedRegion = matchedRegions[0];
-                    const countryHover = matchedRegion ? buildCountryHover(country, matchedRegions, id) : null;
+                    const countryHover = matchedRegion ? buildCountryHover(country, matchedRegions, id, regionName, countryName) : null;
                     const countryClass = [
                       activeCountryIds.has(id) ? 'map-country active' : 'map-country',
                       matchedRegions.some((region) => region.region === selectedRegion.region) ? 'selected' : '',
@@ -441,11 +443,11 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, onReg
                   key={region.region}
                   type="button"
                   className="region-row"
-                  aria-label={`${t('overview.focusRegion')}: ${region.region}`}
+                  aria-label={`${t('overview.focusRegion')}: ${regionName(region.region)}`}
                   onClick={() => focusRegion(region)}
                 >
                   <div>
-                    <strong>{region.region}</strong>
+                    <strong>{regionName(region.region)}</strong>
                     <span>{region.providers.map(providerName).join(' / ')}</span>
                   </div>
                   <div>
@@ -488,7 +490,7 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, onReg
                 <div key={server.id} className="server-load-row">
                   <div>
                     <strong>{server.name}</strong>
-                    <span>{[providerName(server.provider), server.region].join(' / ')}</span>
+                    <span>{[providerName(server.provider), regionName(server.region)].join(' / ')}</span>
                   </div>
                   <div className="load-meter">
                     <span className={percentClass(load)} style={{ width: `${load}%` }} />
@@ -616,7 +618,7 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, onReg
   function focusRegion(region: RegionNode) {
     const nextView = getFocusedMapView(region, Math.max(1.55, mapView.scale));
     setSelectedRegionName(region.region);
-    setPinnedCountry(buildRegionHover(region));
+    setPinnedCountry(buildRegionHover(region, regionName));
     setHoveredCountry(null);
     setMapView(clampMapPan(nextView));
   }
@@ -783,12 +785,18 @@ function buildOverviewStats(servers: ServerNode[], events: OperationEvent[]) {
   };
 }
 
-function buildCountryHover(country: Feature<Geometry, { name?: string }>, regions: RegionNode[], countryId: string): CountryHover {
+function buildCountryHover(
+  country: Feature<Geometry, { name?: string }>,
+  regions: RegionNode[],
+  countryId: string,
+  formatRegion: (region: string) => string,
+  formatCountry: (country: string) => string,
+): CountryHover {
   const total = regions.reduce((sum, region) => sum + region.total, 0);
   const running = regions.reduce((sum, region) => sum + region.running, 0);
   const center = mapPath.centroid(country);
   const fallbackRegion = regions[0];
-  const regionNames = regions.map((region) => region.region);
+  const regionNames = regions.map((region) => formatRegion(region.region));
   const weightedTotal = Math.max(1, regions.reduce((sum, region) => sum + region.total, 0));
   const regionAnchor = {
     x: regions.reduce((sum, region) => sum + region.x * region.total, 0) / weightedTotal,
@@ -802,7 +810,7 @@ function buildCountryHover(country: Feature<Geometry, { name?: string }>, region
   const y = clamp(Number.isFinite(regionAnchor.y) ? regionAnchor.y : countryAnchor.y, 6, 92);
 
   return {
-    countryName: country.properties?.name || fallbackRegion.region || countryId,
+    countryName: formatCountry(country.properties?.name || fallbackRegion.region || countryId),
     title: regionNames.length > 2 ? `${regionNames.slice(0, 2).join(' / ')} +${regionNames.length - 2}` : regionNames.join(' / '),
     regions,
     total,
@@ -813,10 +821,10 @@ function buildCountryHover(country: Feature<Geometry, { name?: string }>, region
   };
 }
 
-function buildRegionHover(region: RegionNode): CountryHover {
+function buildRegionHover(region: RegionNode, formatRegion: (region: string) => string): CountryHover {
   return {
     countryName: region.providers.join(' / '),
-    title: region.region,
+    title: formatRegion(region.region),
     regions: [region],
     total: region.total,
     running: region.running,

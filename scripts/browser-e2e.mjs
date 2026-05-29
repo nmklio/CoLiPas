@@ -136,9 +136,9 @@ async function assertAccountSettingsAndAiChat(targetPage) {
   await targetPage.locator('.account-settings-trigger').click();
   await targetPage.locator('.account-modal').waitFor({ timeout: 5000 });
   await targetPage.getByLabel(/display name/i).fill(profileName);
-  await targetPage.getByLabel(/avatar text/i).fill('QE');
-  await targetPage.getByRole('button', { name: /save avatar and name/i }).click();
-  await targetPage.getByText(/avatar and display name updated/i).waitFor({ timeout: 10000 });
+  await targetPage.getByLabel(/avatar text|fallback text/i).fill('QE');
+  await targetPage.getByRole('button', { name: /save avatar and name|save appearance/i }).click();
+  await targetPage.getByText(/avatar and display name updated|appearance settings updated/i).waitFor({ timeout: 10000 });
   await targetPage.locator('.account-modal .icon-button').first().click();
   await targetPage.locator('.account-modal').waitFor({ state: 'hidden', timeout: 5000 });
   await targetPage.locator('.account-settings-trigger').filter({ hasText: profileName }).waitFor({ timeout: 5000 });
@@ -654,7 +654,7 @@ async function assertMobileConsoleAndMap() {
       throw new Error('Mobile map pinned tooltip disappeared before users could interact with it');
     }
 
-    await mobilePage.getByRole('button', { name: /view region servers/i }).click();
+    await mobilePage.getByRole('button', { name: /view region servers|view regional assets/i }).click();
     await mobilePage.waitForURL(/#servers$/, { timeout: 10000 });
     await assertNoHorizontalOverflow(mobilePage, 'mobile map to servers linkage');
     await captureVisualEvidence(mobilePage, 'mobile-map-to-servers', ['.server-workspace-row']);

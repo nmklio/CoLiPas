@@ -29,7 +29,7 @@ import {
   OperationTaskType,
   ServerNode,
 } from '../../types';
-import { percentClass, statusLabel } from '../../utils/format';
+import { formatRegionName, percentClass, statusLabel } from '../../utils/format';
 
 interface OperationsCenterProps {
   events: OperationEvent[];
@@ -302,6 +302,7 @@ export function OperationsCenter({ events, servers, onTaskFinished, onAuditTrace
   const copy = copyByLanguage[language] ?? copyByLanguage.zh;
   const preflightCopy = preflightCopyByLanguage[language] ?? preflightCopyByLanguage.zh;
   const providerName = (provider: string) => formatProviderName(provider, t);
+  const regionName = (region: string) => formatRegionName(region, language);
   const operationServerGroups = useMemo(() => buildOperationServerGroups(servers), [servers]);
   const { connectedServers, warningServers } = operationServerGroups;
   const [builderOpen, setBuilderOpen] = useState(false);
@@ -562,7 +563,7 @@ export function OperationsCenter({ events, servers, onTaskFinished, onAuditTrace
                         />
                         <span>
                           <strong>{server.name}</strong>
-                          <small>{providerName(server.provider)} / {server.region}</small>
+                          <small>{providerName(server.provider)} / {regionName(server.region)}</small>
                         </span>
                       </label>
                     ))}
@@ -637,7 +638,7 @@ export function OperationsCenter({ events, servers, onTaskFinished, onAuditTrace
                       <div key={target.id} className={target.runnable ? 'ops-preflight-target runnable' : 'ops-preflight-target blocked'}>
                         <div>
                           <strong>{target.name}</strong>
-                          <small>{providerName(target.provider)} / {target.region} / {statusLabel(target.status, language)}</small>
+                          <small>{providerName(target.provider)} / {regionName(target.region)} / {statusLabel(target.status, language)}</small>
                         </div>
                         <em>{target.runnable ? preflightCopy.runnable : preflightCopy.blockedTarget}</em>
                         {target.issues.length > 0 && (
