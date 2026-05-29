@@ -30,6 +30,7 @@ assertMobileTopbarKeepsCoreActions();
 assertSecurityAuditRelationsAreSpecific();
 assertOperationsTargetSelectionGuards();
 assertInventorySnapshotCacheGuards();
+assertLocalizedFormatCacheGuards();
 assertCustomApiProxySecurityGuards();
 assertSqlitePersistenceGuards();
 assertBuildChunkingGuards();
@@ -5225,6 +5226,24 @@ function assertInventorySnapshotCacheGuards() {
   }
 
   console.log('ok inventory snapshot cache avoids repeated full recomputation');
+}
+
+function assertLocalizedFormatCacheGuards() {
+  const formatSource = fs.readFileSync(new URL('../src/utils/format.ts', import.meta.url), 'utf8');
+  const requiredFragments = [
+    'const localizedFormatCacheLimit = 2048',
+    'const countryNameCache = new Map<string, string>()',
+    'const regionNameCache = new Map<string, string>()',
+    'cacheLocalizedFormat(countryNameCache',
+    'cacheLocalizedFormat(regionNameCache',
+    'cache.delete(oldestKey)',
+  ];
+  const missing = requiredFragments.filter((fragment) => !formatSource.includes(fragment));
+  if (missing.length) {
+    throw new Error(`Localized format cache guard is incomplete: ${missing.join(', ')}`);
+  }
+
+  console.log('ok localized region and country labels use bounded caches');
 }
 
 function assertCustomApiProxySecurityGuards() {

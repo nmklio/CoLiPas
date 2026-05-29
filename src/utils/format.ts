@@ -153,6 +153,10 @@ const placeLabels: Record<Language, Record<string, string>> = {
   },
 };
 
+const localizedFormatCacheLimit = 2048;
+const countryNameCache = new Map<string, string>();
+const regionNameCache = new Map<string, string>();
+
 export function formatCurrency(value: number, language: Language = 'zh') {
   const locale = language === 'en' ? 'en-US' : language === 'ja' ? 'ja-JP' : 'zh-CN';
   const currency = language === 'en' ? 'USD' : language === 'ja' ? 'JPY' : 'CNY';
@@ -208,33 +212,37 @@ export function statusLabel(status: CloudAccountStatus | ServerStatus | 'open' |
 }
 
 export function formatCountryName(country: string, language: Language = 'zh') {
-  const normalized = normalizeLocationToken(country);
-  return countryNameLabels[language][normalized] ?? country;
+  return cacheLocalizedFormat(countryNameCache, language, country, () => {
+    const normalized = normalizeLocationToken(country);
+    return countryNameLabels[language][normalized] ?? country;
+  });
 }
 
 export function formatRegionName(region: string, language: Language = 'zh') {
-  const trimmed = region.trim();
-  if (!trimmed || ['unknown', 'unknown region'].includes(normalizeLocationToken(trimmed))) {
-    return unknownRegionLabels[language];
-  }
+  return cacheLocalizedFormat(regionNameCache, language, region, () => {
+    const trimmed = region.trim();
+    if (!trimmed || ['unknown', 'unknown region'].includes(normalizeLocationToken(trimmed))) {
+      return unknownRegionLabels[language];
+    }
 
-  const directLabel = placeLabels[language][normalizeLocationToken(trimmed)];
-  if (directLabel) {
-    return directLabel;
-  }
+    const directLabel = placeLabels[language][normalizeLocationToken(trimmed)];
+    if (directLabel) {
+      return directLabel;
+    }
 
-  const parts = trimmed
-    .split(/\s*\/\s*/)
-    .flatMap((part) => expandCountryRegionPart(part))
-    .map((part) => formatRegionPart(part, language))
-    .filter(Boolean);
+    const parts = trimmed
+      .split(/\s*\/\s*/)
+      .flatMap((part) => expandCountryRegionPart(part))
+      .map((part) => formatRegionPart(part, language))
+      .filter(Boolean);
 
-  const uniqueParts = parts.filter((part, index) => parts.indexOf(part) === index);
-  if (!uniqueParts.length) {
-    return trimmed;
-  }
+    const uniqueParts = parts.filter((part, index) => parts.indexOf(part) === index);
+    if (!uniqueParts.length) {
+      return trimmed;
+    }
 
-  return uniqueParts.join(language === 'en' ? ' / ' : ' · ');
+    return uniqueParts.join(language === 'en' ? ' / ' : ' · ');
+  });
 }
 
 export function percentClass(value: number) {
@@ -245,6 +253,24 @@ export function percentClass(value: number) {
     return 'warning';
   }
   return 'normal';
+}
+
+function cacheLocalizedFormat(cache: Map<string, string>, language: Language, input: string, formatter: () => string) {
+  const cacheKey = `${language}::${input}`;
+  const cachedValue = cache.get(cacheKey);
+  if (cachedValue !== undefined) {
+    return cachedValue;
+  }
+
+  const value = formatter();
+  if (cache.size >= localizedFormatCacheLimit) {
+    const oldestKey = cache.keys().next().value;
+    if (oldestKey !== undefined) {
+      cache.delete(oldestKey);
+    }
+  }
+  cache.set(cacheKey, value);
+  return value;
 }
 
 function expandCountryRegionPart(part: string) {
