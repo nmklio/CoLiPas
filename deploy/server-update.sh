@@ -49,6 +49,16 @@ if [ -z "${COLIPAS_SERVER_NAME:-}" ] && [ -n "${RELEASE_PUBLIC_URL:-}" ]; then
 fi
 PUBLIC_URL="${RELEASE_PUBLIC_URL:-https://$SERVER_NAME}"
 
+if [ -z "${COLIPAS_RESET_ADMIN_PASSWORD:-}" ] && [ -n "${SSH_ORIGINAL_COMMAND:-}" ]; then
+  extracted_reset_password="$(printf '%s' "$SSH_ORIGINAL_COMMAND" | sed -n "s/.*COLIPAS_RESET_ADMIN_PASSWORD='\([^']*\)'.*/\1/p")"
+  if [ -z "$extracted_reset_password" ]; then
+    extracted_reset_password="$(printf '%s' "$SSH_ORIGINAL_COMMAND" | sed -n 's/.*COLIPAS_RESET_ADMIN_PASSWORD=\([^[:space:]]*\).*/\1/p')"
+  fi
+  if [ -n "$extracted_reset_password" ]; then
+    COLIPAS_RESET_ADMIN_PASSWORD="$extracted_reset_password"
+  fi
+fi
+
 run_as_app() {
   if [ "$(id -u)" -eq 0 ]; then
     runuser -u "$APP_USER" -- "$@"
@@ -62,6 +72,13 @@ ensure_current_build() {
     run_as_app npm ci
   fi
   run_as_app npm run build
+}
+
+reset_admin_password_if_requested() {
+  if [ -z "${COLIPAS_RESET_ADMIN_PASSWORD:-}" ]; then
+    return 0
+  fi
+  run_as_app env COLIPAS_RESET_PASSWORD="$COLIPAS_RESET_ADMIN_PASSWORD" npm run reset:admin
 }
 
 patch_landing_page_ui() {
@@ -1500,6 +1517,7 @@ if [ "$LOCAL_HEAD" = "$REMOTE_HEAD" ]; then
     nginx -t
     systemctl reload nginx
   fi
+  reset_admin_password_if_requested
   systemctl restart "$SERVICE_NAME"
   systemctl is-active --quiet "$SERVICE_NAME"
   verify_release_evidence
@@ -1522,6 +1540,7 @@ if [ "$(id -u)" -eq 0 ]; then
   nginx -t
   systemctl reload nginx
 fi
+reset_admin_password_if_requested
 systemctl restart "$SERVICE_NAME"
 systemctl is-active --quiet "$SERVICE_NAME"
 verify_release_evidence
