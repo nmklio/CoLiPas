@@ -905,8 +905,8 @@ export function connectServerShellSocket(
   onError: (error: Error) => void,
   onMetrics?: (metrics: ServerShellSocketMetrics) => void,
 ) {
-  const shellSocketInputFlushMs = 8;
-  const shellSocketInputChunkSize = 4000;
+  const shellSocketInputFlushMs = 2;
+  const shellSocketInputChunkSize = 8000;
   const shellSocketPingIntervalMs = 4000;
   const shellSocketMetricsIntervalMs = 1000;
   const socket = new WebSocket(buildServerShellSocketUrl());

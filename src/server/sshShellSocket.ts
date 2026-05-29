@@ -18,7 +18,7 @@ type ClientMessage =
   | { type: 'ping'; sentAt?: unknown }
   | { type: 'close' };
 
-const shellSocketOutputFlushMs = 8;
+const shellSocketOutputFlushMs = 4;
 const shellSocketOutputFlushMaxChars = 96 * 1024;
 
 export interface SshShellSocketDiagnostics {
@@ -73,6 +73,8 @@ export function attachSshShellSocketServer(server: HttpServer, config: RuntimeCo
       socket.destroy();
       return;
     }
+
+    tuneUpgradeSocket(socket);
 
     socketServer.handleUpgrade(request, socket, head, (webSocket) => {
       socketServer.emit('connection', webSocket, request);
@@ -280,4 +282,13 @@ function bindSshShellSocket(webSocket: WebSocket) {
 
 function touchDiagnostics() {
   shellSocketDiagnostics.lastActivityAt = new Date().toISOString();
+}
+
+function tuneUpgradeSocket(socket: unknown) {
+  const tcpSocket = socket as {
+    setNoDelay?: (noDelay?: boolean) => void;
+    setKeepAlive?: (enable?: boolean, initialDelay?: number) => void;
+  };
+  tcpSocket.setNoDelay?.(true);
+  tcpSocket.setKeepAlive?.(true, 10000);
 }

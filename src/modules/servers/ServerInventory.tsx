@@ -45,6 +45,9 @@ const actionTraceMessageAutoDismissMs = 10000;
 const terminalWriteBaseChunkSize = 32 * 1024;
 const terminalWriteLargeChunkSize = 96 * 1024;
 const terminalWriteLargeBacklogThreshold = 64 * 1024;
+const terminalWriteImmediateThreshold = 256;
+const terminalCompatibleInputFlushMs = 4;
+const terminalRuntimePrefetchDelayMs = 250;
 
 const actionCommands: Record<'powerOn' | 'shutdown' | 'reboot', string> = {
   powerOn: 'printf "server reachable via SSH\\n"; uptime',
@@ -196,6 +199,17 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     disposeXterm();
   }, []);
   const formVisible = formOpen || Boolean(editingServerId) || (allServers.length === 0 && !formDismissed);
+
+  useEffect(() => {
+    if (visibleConnectedServers.length === 0 || terminalRuntimeRef.current) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      void loadTerminalRuntime();
+    }, terminalRuntimePrefetchDelayMs);
+    return () => window.clearTimeout(timer);
+  }, [visibleConnectedServers.length]);
 
   useEffect(() => {
     setVisibleServerLimit(serverRenderBatchSize);
@@ -1015,6 +1029,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     }
 
     terminalLifecycleSeqRef.current += 1;
+    void loadTerminalRuntime();
     if (terminalShellServerIdRef.current && terminalShellServerIdRef.current !== server.id) {
       closeActiveShellSession();
       disposeXterm();
@@ -1414,7 +1429,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     terminalInputTimerRef.current = window.setTimeout(() => {
       terminalInputTimerRef.current = null;
       flushTerminalInput(sessionId);
-    }, 12);
+    }, terminalCompatibleInputFlushMs);
   }
 
   function flushTerminalInput(sessionId = terminalShellIdRef.current): Promise<void> {
@@ -1691,6 +1706,10 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
 
   function queueTerminalWrite(terminal: XTerm, content: string) {
     terminalWriteBufferRef.current += content;
+    if (terminalWriteBufferRef.current.length <= terminalWriteImmediateThreshold) {
+      flushTerminalWriteBuffer(terminal);
+      return;
+    }
     scheduleTerminalWriteFlush(terminal);
   }
 
