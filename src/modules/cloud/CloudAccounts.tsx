@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Cloud, CloudOff, DollarSign, PlugZap, RefreshCw } from 'lucide-react';
 import { useI18n } from '../../i18n';
 import { CloudAccount, ServerNode } from '../../types';
@@ -10,6 +11,7 @@ interface CloudAccountsProps {
 
 export function CloudAccounts({ accounts, servers }: CloudAccountsProps) {
   const { language, t } = useI18n();
+  const serverCountsByProvider = useMemo(() => countServersByProvider(servers), [servers]);
 
   return (
     <section className="module-section" aria-labelledby="cloud-title">
@@ -33,7 +35,7 @@ export function CloudAccounts({ accounts, servers }: CloudAccountsProps) {
       ) : (
         <div className="cloud-grid">
           {accounts.map((account) => {
-            const serverCount = servers.filter((server) => server.provider === account.provider).length;
+            const serverCount = serverCountsByProvider.get(account.provider) ?? 0;
             const connected = account.status !== 'disconnected';
             return (
               <article className="cloud-card" key={account.id}>
@@ -63,4 +65,12 @@ export function CloudAccounts({ accounts, servers }: CloudAccountsProps) {
       )}
     </section>
   );
+}
+
+function countServersByProvider(servers: ServerNode[]) {
+  const counts = new Map<string, number>();
+  for (const server of servers) {
+    counts.set(server.provider, (counts.get(server.provider) ?? 0) + 1);
+  }
+  return counts;
 }

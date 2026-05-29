@@ -3478,6 +3478,18 @@ function assertCloudAccountsI18nCoverage() {
   if (missingKeys.length) {
     throw new Error(`Cloud accounts i18n keys are missing in one or more languages: ${missingKeys.join(', ')}`);
   }
+  const performanceFragments = [
+    'const serverCountsByProvider = useMemo(() => countServersByProvider(servers), [servers])',
+    'function countServersByProvider(servers: ServerNode[])',
+    'serverCountsByProvider.get(account.provider) ?? 0',
+  ];
+  const missingPerformance = performanceFragments.filter((fragment) => !cloudSource.includes(fragment));
+  if (missingPerformance.length) {
+    throw new Error(`Cloud accounts server count derivation must stay single-pass: ${missingPerformance.join(', ')}`);
+  }
+  if (cloudSource.includes('servers.filter((server) => server.provider === account.provider).length')) {
+    throw new Error('Cloud account cards must not rescan the full server list per account');
+  }
 
   console.log('ok cloud accounts visible labels use i18n keys');
 }
