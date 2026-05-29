@@ -2,6 +2,7 @@ import type { CloudProvider, ServerNode, ServerStatus } from '../types.js';
 
 export const baseCloudProviders = ['AWS', 'Azure', 'GCP', 'Aliyun', 'Tencent Cloud'] as const;
 export const customProviderFilterValue = 'Custom';
+const baseCloudProviderKeys = new Set(baseCloudProviders.map((provider) => normalizeFilterValue(provider)));
 export type ServerLifecycleStatus = Extract<ServerStatus, 'running' | 'stopped' | 'unconnected'>;
 
 export interface ServerFilters {
@@ -13,7 +14,7 @@ export interface ServerFilters {
 }
 
 export function isBaseCloudProvider(provider: string) {
-  return baseCloudProviders.some((baseProvider) => baseProvider.toLowerCase() === provider.trim().toLowerCase());
+  return baseCloudProviderKeys.has(normalizeFilterValue(provider));
 }
 
 export function isCustomCloudProvider(provider: string) {
@@ -33,27 +34,46 @@ export function buildServerFilterMatcher(filters: ServerFilters) {
   const query = filters.query.trim().toLowerCase();
   const scopedRegions = new Set((filters.regionScope ?? []).map(normalizeFilterValue).filter(Boolean));
   const selectedRegion = normalizeFilterValue(filters.region);
+  const providerFilter = filters.provider;
+  const hasProviderFilter = providerFilter !== 'all';
+  const wantsCustomProvider = providerFilter === customProviderFilterValue;
+  const hasStatusFilter = filters.status !== 'all';
+  const hasScopedRegionFilter = scopedRegions.size > 0;
+  const hasSelectedRegionFilter = !hasScopedRegionFilter && filters.region !== 'all';
 
   return (server: ServerNode) => {
-    const serverRegion = normalizeFilterValue(server.region);
-    const matchesQuery =
-      query.length === 0 ||
-      [server.name, server.id, server.region, server.publicIp, server.privateIp, server.os, ...server.tags]
+    if (
+      query.length > 0 &&
+      ![server.name, server.id, server.region, server.publicIp, server.privateIp, server.os, ...server.tags]
         .join(' ')
         .toLowerCase()
-        .includes(query);
-    const matchesProvider =
-      filters.provider === 'all' ||
-      (filters.provider === customProviderFilterValue
-        ? isCustomCloudProvider(server.provider)
-        : server.provider === filters.provider);
-    const lifecycleStatus = resolveServerLifecycleStatus(server);
-    const matchesStatus = filters.status === 'all' || lifecycleStatus === filters.status;
-    const matchesRegion = scopedRegions.size > 0
-      ? scopedRegions.has(serverRegion)
-      : filters.region === 'all' || serverRegion === selectedRegion;
+        .includes(query)
+    ) {
+      return false;
+    }
 
-    return matchesQuery && matchesProvider && matchesStatus && matchesRegion;
+    if (hasProviderFilter) {
+      if (wantsCustomProvider) {
+        if (!isCustomCloudProvider(server.provider)) {
+          return false;
+        }
+      } else if (server.provider !== providerFilter) {
+        return false;
+      }
+    }
+
+    if (hasStatusFilter && resolveServerLifecycleStatus(server) !== filters.status) {
+      return false;
+    }
+
+    if (hasScopedRegionFilter || hasSelectedRegionFilter) {
+      const serverRegion = normalizeFilterValue(server.region);
+      if (hasScopedRegionFilter ? !scopedRegions.has(serverRegion) : serverRegion !== selectedRegion) {
+        return false;
+      }
+    }
+
+    return true;
   };
 }
 

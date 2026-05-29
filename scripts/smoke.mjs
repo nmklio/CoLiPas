@@ -4149,10 +4149,12 @@ function assertOverviewServerFilterLinkage() {
     'regionScope?: string[]',
     'const scopedRegions = new Set((filters.regionScope ?? []).map(normalizeFilterValue).filter(Boolean))',
     'const selectedRegion = normalizeFilterValue(filters.region)',
+    'const hasScopedRegionFilter = scopedRegions.size > 0',
+    "const hasSelectedRegionFilter = !hasScopedRegionFilter && filters.region !== 'all'",
     'const serverRegion = normalizeFilterValue(server.region)',
-    'scopedRegions.size > 0',
+    'hasScopedRegionFilter || hasSelectedRegionFilter',
     'scopedRegions.has(serverRegion)',
-    'serverRegion === selectedRegion',
+    'serverRegion !== selectedRegion',
     'function normalizeFilterValue(value: string)',
   ];
   const missingRegionScope = regionScopeFragments.filter((fragment) => !sharedFilterSource.includes(fragment));

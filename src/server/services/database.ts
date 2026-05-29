@@ -7,8 +7,14 @@ const configuredDatabasePath = process.env.COLIPAS_DB_PATH?.trim();
 const databasePath = path.resolve(process.cwd(), configuredDatabasePath || path.join(dataDir, 'colipas.sqlite'));
 const walPath = `${databasePath}-wal`;
 const maxWalBytes = 1024 * 1024;
+const checkpointCheckWriteInterval = 32;
+const checkpointCheckTimeIntervalMs = 1000;
 
 let database: DatabaseSync | null = null;
+type PreparedStatement = ReturnType<DatabaseSync['prepare']>;
+const statementCache = new Map<string, PreparedStatement>();
+let writesSinceCheckpointCheck = 0;
+let lastCheckpointCheckAt = 0;
 
 export interface StoredJsonRow {
   id: string;
@@ -23,20 +29,18 @@ export function getDatabasePath() {
 }
 
 export function loadJsonRows(table: 'servers' | 'credentials' | 'audit_entries') {
-  const db = ensureDatabase();
   const orderBy = table === 'audit_entries' ? 'created_at DESC' : 'id ASC';
-  return db.prepare(`SELECT * FROM ${table} ORDER BY ${orderBy}`).all() as unknown as StoredJsonRow[];
+  return prepareStatement(`SELECT * FROM ${table} ORDER BY ${orderBy}`).all() as unknown as StoredJsonRow[];
 }
 
 export function readAppSetting(id: string) {
-  const row = ensureDatabase().prepare('SELECT * FROM app_settings WHERE id = ?').get(id) as StoredJsonRow | undefined;
+  const row = prepareStatement('SELECT * FROM app_settings WHERE id = ?').get(id) as StoredJsonRow | undefined;
   return row ?? null;
 }
 
 export function writeAppSetting(id: string, payload: unknown) {
-  const db = ensureDatabase();
   const now = new Date().toISOString();
-  db.prepare(`
+  prepareStatement(`
     INSERT INTO app_settings (id, payload, updated_at)
     VALUES (?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at
@@ -45,18 +49,18 @@ export function writeAppSetting(id: string, payload: unknown) {
 }
 
 export function deleteAppSetting(id: string) {
-  ensureDatabase().prepare('DELETE FROM app_settings WHERE id = ?').run(id);
+  prepareStatement('DELETE FROM app_settings WHERE id = ?').run(id);
   checkpointDatabaseIfNeeded();
 }
 
 export function replaceServerRows(items: Array<{ id: string }>) {
   const db = ensureDatabase();
   const now = new Date().toISOString();
-  const insert = db.prepare('INSERT INTO servers (id, payload, updated_at) VALUES (?, ?, ?)');
+  const insert = prepareStatement('INSERT INTO servers (id, payload, updated_at) VALUES (?, ?, ?)');
 
   db.exec('BEGIN IMMEDIATE');
   try {
-    db.prepare('DELETE FROM servers').run();
+    prepareStatement('DELETE FROM servers').run();
     for (const item of items) {
       insert.run(item.id, JSON.stringify(item), now);
     }
@@ -73,18 +77,18 @@ export function upsertServerRow(item: { id: string }) {
 }
 
 export function deleteServerRow(id: string) {
-  ensureDatabase().prepare('DELETE FROM servers WHERE id = ?').run(id);
+  prepareStatement('DELETE FROM servers WHERE id = ?').run(id);
   checkpointDatabaseIfNeeded();
 }
 
 export function replaceCredentialRows(items: Record<string, unknown>) {
   const db = ensureDatabase();
   const now = new Date().toISOString();
-  const insert = db.prepare('INSERT INTO credentials (id, payload, updated_at) VALUES (?, ?, ?)');
+  const insert = prepareStatement('INSERT INTO credentials (id, payload, updated_at) VALUES (?, ?, ?)');
 
   db.exec('BEGIN IMMEDIATE');
   try {
-    db.prepare('DELETE FROM credentials').run();
+    prepareStatement('DELETE FROM credentials').run();
     for (const [id, credential] of Object.entries(items)) {
       insert.run(id, JSON.stringify(credential), now);
     }
@@ -101,17 +105,17 @@ export function upsertCredentialRow(id: string, credential: unknown) {
 }
 
 export function deleteCredentialRow(id: string) {
-  ensureDatabase().prepare('DELETE FROM credentials WHERE id = ?').run(id);
+  prepareStatement('DELETE FROM credentials WHERE id = ?').run(id);
   checkpointDatabaseIfNeeded();
 }
 
 export function replaceAuditRows(items: Array<{ id: string; createdAt: string }>) {
   const db = ensureDatabase();
-  const insert = db.prepare('INSERT INTO audit_entries (id, payload, created_at) VALUES (?, ?, ?)');
+  const insert = prepareStatement('INSERT INTO audit_entries (id, payload, created_at) VALUES (?, ?, ?)');
 
   db.exec('BEGIN IMMEDIATE');
   try {
-    db.prepare('DELETE FROM audit_entries').run();
+    prepareStatement('DELETE FROM audit_entries').run();
     for (const item of items.slice(0, 200)) {
       insert.run(item.id, JSON.stringify(item), item.createdAt);
     }
@@ -124,12 +128,11 @@ export function replaceAuditRows(items: Array<{ id: string; createdAt: string }>
 }
 
 export function insertAuditRow(item: { id: string; createdAt: string }) {
-  const db = ensureDatabase();
-  db.prepare(`
+  prepareStatement(`
     INSERT OR REPLACE INTO audit_entries (id, payload, created_at)
     VALUES (?, ?, ?)
   `).run(item.id, JSON.stringify(item), item.createdAt);
-  db.prepare(`
+  prepareStatement(`
     DELETE FROM audit_entries
     WHERE id NOT IN (
       SELECT id FROM audit_entries
@@ -141,7 +144,7 @@ export function insertAuditRow(item: { id: string; createdAt: string }) {
 }
 
 export function isTableEmpty(table: 'servers' | 'credentials' | 'audit_entries') {
-  const row = ensureDatabase().prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number };
+  const row = prepareStatement(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number };
   return row.count === 0;
 }
 
@@ -150,6 +153,18 @@ export function checkpointDatabase() {
 }
 
 function checkpointDatabaseIfNeeded() {
+  writesSinceCheckpointCheck += 1;
+  const now = Date.now();
+  if (
+    writesSinceCheckpointCheck < checkpointCheckWriteInterval
+    && now - lastCheckpointCheckAt < checkpointCheckTimeIntervalMs
+  ) {
+    return;
+  }
+
+  writesSinceCheckpointCheck = 0;
+  lastCheckpointCheckAt = now;
+
   try {
     if (fs.existsSync(walPath) && fs.statSync(walPath).size > maxWalBytes) {
       checkpointDatabase();
@@ -160,14 +175,22 @@ function checkpointDatabaseIfNeeded() {
 }
 
 function upsertJsonRow(table: 'servers' | 'credentials', id: string, payload: unknown) {
-  const db = ensureDatabase();
   const now = new Date().toISOString();
-  db.prepare(`
+  prepareStatement(`
     INSERT INTO ${table} (id, payload, updated_at)
     VALUES (?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at
   `).run(id, JSON.stringify(payload), now);
   checkpointDatabaseIfNeeded();
+}
+
+function prepareStatement(sql: string) {
+  let statement = statementCache.get(sql);
+  if (!statement) {
+    statement = ensureDatabase().prepare(sql);
+    statementCache.set(sql, statement);
+  }
+  return statement;
 }
 
 function ensureDatabase() {

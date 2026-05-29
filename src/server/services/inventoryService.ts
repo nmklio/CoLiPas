@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { cloudAccounts, operationEvents, servers } from '../../data/mockData.js';
-import { ServerFilters, buildServerFilterMatcher, customProviderFilterValue, filterServers, isCustomCloudProvider, resolveServerLifecycleStatus } from '../../shared/serverFilters.js';
+import { ServerFilters, buildServerFilterMatcher, customProviderFilterValue, filterServers, isCustomCloudProvider } from '../../shared/serverFilters.js';
 import { z } from 'zod';
 import type { CloudProvider, ServerNode, ServerStatus } from '../../types.js';
 import { HttpError } from '../httpErrors.js';
@@ -1090,16 +1090,15 @@ function normalizeServerRuntimeStatus(server: ServerNode): ServerStatus {
 }
 
 function normalizeServerForResponse(server: ServerNode): ServerNode {
-  const normalizedStatus = resolveServerLifecycleStatus({
-    ...server,
-    status: normalizeServerRuntimeStatus(server),
-    ssh: hasConnectedCredential(server) ? server.ssh : undefined,
-  });
+  const hasCredential = hasConnectedCredential(server);
+  const normalizedStatus: Extract<ServerStatus, 'running' | 'stopped' | 'unconnected'> = hasCredential
+    ? (server.status === 'stopped' ? 'stopped' : 'running')
+    : 'unconnected';
 
   return {
     ...server,
     status: normalizedStatus,
-    ssh: hasConnectedCredential(server) ? server.ssh : undefined,
+    ssh: hasCredential ? server.ssh : undefined,
   };
 }
 
