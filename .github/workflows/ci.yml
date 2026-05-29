@@ -14,6 +14,8 @@ jobs:
   test-build:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: /usr/bin/google-chrome
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -21,5 +23,13 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      - name: Verify system Chrome
+        run: |
+          chrome_bin="$PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH"
+          if [ ! -x "$chrome_bin" ]; then
+            chrome_bin="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)"
+          fi
+          test -n "$chrome_bin"
+          echo "PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=$chrome_bin" >> "$GITHUB_ENV"
+          "$chrome_bin" --version
       - run: npm test

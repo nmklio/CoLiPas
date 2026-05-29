@@ -3012,7 +3012,8 @@ function assertAccountUiGuards() {
     'concurrency:',
     'cancel-in-progress: true',
     'timeout-minutes:',
-    'npx playwright install --with-deps chromium',
+    'PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH',
+    'command -v google-chrome',
     'npm test',
   ];
   const missingCiGuard = ciGuardFragments.filter((fragment) => !ciWorkflowSource.includes(fragment));
@@ -3124,8 +3125,8 @@ function assertAccountUiGuards() {
     throw new Error(`Account/AI UI CSS guards are incomplete: ${missingCss.join(', ')}`);
   }
 
-  if (!ciSource.includes('npx playwright install --with-deps chromium')) {
-    throw new Error('GitHub Actions must install Chromium before browser E2E smoke tests');
+  if (!ciSource.includes('PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH') || !ciSource.includes('Verify system Chrome')) {
+    throw new Error('GitHub Actions must configure a system Chrome path before browser E2E smoke tests');
   }
   if (!ciSource.includes('actions/checkout@v6') || !ciSource.includes('actions/setup-node@v6') || !ciSource.includes('node-version: 24')) {
     throw new Error('GitHub Actions must use Node 24-compatible v6 actions to avoid deprecated Node 20 runner warnings');
