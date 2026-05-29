@@ -3018,6 +3018,7 @@ function assertAccountUiGuards() {
     || !serverUpdateSource.includes('href="/docs.html"')
     || !serverUpdateSource.includes('colipas landing balanced ui')
     || !serverUpdateSource.includes('landingIcon(kind, className)')
+    || !serverUpdateSource.includes('<img class="brand-mark" src="/colipas-icon.svg"')
     || !serverUpdateSource.includes('icon feature-icon')
     || !serverUpdateSource.includes('position-icon')
     || !serverUpdateSource.includes('deploy-icon')

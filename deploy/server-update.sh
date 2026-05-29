@@ -177,6 +177,7 @@ function landingIcon(kind, className) {
 
 replaceAll(/\/\* colipas landing balanced ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\/style>)/g, '');
 replaceAll(/<a class="button github-button" href="https:\/\/github\.com\/nmklio\/CoLiPas"[^>]*>GitHub<\/a>/g, '');
+replaceAll(/<span class="brand-mark">CP<\/span>/g, '<img class="brand-mark" src="/colipas-icon.svg" alt="" aria-hidden="true">');
 
 if (!html.includes('href="/docs.html"')) {
   replaceOnce(/(<a href="#deploy">[\s\S]*?<\/a>)/, '$1\n      <a href="/docs.html">文档</a>');
@@ -270,51 +271,84 @@ if (!html.includes('@media (max-width: 640px) {\n  .nav-actions')) {
   }`);
 }
 
-replaceOnce('</style>', `/* colipas landing balanced ui v4 */
+replaceOnce('</style>', `/* colipas landing balanced ui v5 */
+.brand .brand-mark {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: block;
+  object-fit: contain;
+  background: transparent;
+  box-shadow: 0 14px 30px rgba(15, 118, 110, .16);
+}
+.position-card,
+.feature-card,
+.deploy-card {
+  position: relative;
+  overflow: hidden;
+}
+.position-card::before,
+.feature-card::before,
+.deploy-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: linear-gradient(90deg, rgba(37, 99, 235, .92), rgba(15, 118, 110, .78));
+  opacity: .78;
+}
 .feature-icon,
 .position-icon,
 .deploy-icon {
-  width: 44px;
-  height: 44px;
-  border: 1px solid #cfe0f5;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #f8fbff 0%, #eaf3ff 100%);
-  color: var(--blue);
+  width: 54px;
+  height: 54px;
+  border: 0;
+  border-radius: 15px;
+  background:
+    radial-gradient(circle at 28% 24%, rgba(255, 255, 255, .95), rgba(255, 255, 255, 0) 34%),
+    linear-gradient(135deg, #eaf3ff 0%, #d9e8ff 100%);
+  color: #1d4ed8;
   display: inline-grid;
   place-items: center;
-  box-shadow: 0 12px 26px rgba(37, 99, 235, .1);
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, .16), 0 14px 28px rgba(37, 99, 235, .13);
 }
 .position-icon,
 .deploy-icon {
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 .feature-icon svg,
 .position-icon svg,
 .deploy-icon svg {
-  width: 23px;
-  height: 23px;
+  width: 28px;
+  height: 28px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 2.05;
+  stroke-width: 2.35;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 .icon-terminal,
 .icon-code {
   color: #0f766e;
-  background: linear-gradient(135deg, #f6fffd 0%, #e7f7f4 100%);
-  border-color: #b8e0d9;
+  background:
+    radial-gradient(circle at 28% 24%, rgba(255, 255, 255, .95), rgba(255, 255, 255, 0) 34%),
+    linear-gradient(135deg, #e5f8f4 0%, #cfeee8 100%);
+  box-shadow: inset 0 0 0 1px rgba(15, 118, 110, .18), 0 14px 28px rgba(15, 118, 110, .12);
 }
 .icon-ai,
 .icon-flow {
   color: #7c3aed;
-  background: linear-gradient(135deg, #fbf8ff 0%, #f0e9ff 100%);
-  border-color: #ddd0ff;
+  background:
+    radial-gradient(circle at 28% 24%, rgba(255, 255, 255, .96), rgba(255, 255, 255, 0) 34%),
+    linear-gradient(135deg, #f2ebff 0%, #e4d8ff 100%);
+  box-shadow: inset 0 0 0 1px rgba(124, 58, 237, .18), 0 14px 28px rgba(124, 58, 237, .12);
 }
 .icon-shield {
   color: #166534;
-  background: linear-gradient(135deg, #fbfff8 0%, #eaf7e8 100%);
-  border-color: #bfdfbb;
+  background:
+    radial-gradient(circle at 28% 24%, rgba(255, 255, 255, .96), rgba(255, 255, 255, 0) 34%),
+    linear-gradient(135deg, #edf9e8 0%, #d8f0d0 100%);
+  box-shadow: inset 0 0 0 1px rgba(22, 101, 52, .17), 0 14px 28px rgba(22, 101, 52, .11);
 }
 @media (min-width: 981px) {
   .nav { height: 72px; }

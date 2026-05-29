@@ -117,6 +117,8 @@ function buildLandingCheck() {
       await expectLocatorCountAtLeast(page.locator('.feature-card .feature-icon svg'), 6, 'landing feature SVG icons');
       await expectLocatorCountAtLeast(page.locator('.position-card .position-icon svg'), 4, 'landing position SVG icons');
       await expectLocatorCountAtLeast(page.locator('.deploy-card .deploy-icon svg'), 3, 'landing deploy SVG icons');
+      await expectLocatorCountAtLeast(page.locator('.brand img.brand-mark[src="/colipas-icon.svg"]'), 1, 'landing brand icon image');
+      await expectLocatorCount(page.locator('.brand .brand-mark').filter({ hasText: /^CP$/ }), 0, 'landing legacy CP brand mark');
       await assertSensitiveTextAbsent(page, 'landing');
     },
   };
@@ -192,6 +194,13 @@ async function expectLocatorCountAtLeast(locator, minimum, label) {
   const count = await locator.count();
   if (count < minimum) {
     throw new Error(`${label} expected at least ${minimum}, got ${count}`);
+  }
+}
+
+async function expectLocatorCount(locator, expected, label) {
+  const count = await locator.count();
+  if (count !== expected) {
+    throw new Error(`${label} expected ${expected}, got ${count}`);
   }
 }
 
