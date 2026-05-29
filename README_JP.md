@@ -76,12 +76,14 @@ npm start            # 本番サービスを起動
 
 ## 本番デプロイ
 
-多くの利用者は Docker ワンコマンドデプロイだけで十分です。コードを push したり、Docker イメージを自分で公開したりする必要はありません。インストーラーはインストール先、公開 URL、管理者ユーザー名、デプロイ方式、初期パスワードを確認し、コード取得、非公開 `.env` の作成、サービス起動、ヘルスチェックまで実行します。
+本番デプロイは Docker Compose とネイティブ Linux + systemd の 2 つのワンコマンド方式に対応しています。多くの利用者には Docker を推奨します。ホストの systemd で直接サービス管理したい場合はネイティブ Linux を選んでください。デプロイ利用者はコードを push したり、Docker イメージを自分で公開したりする必要はありません。
 
 ### Docker ワンコマンドデプロイ（推奨）
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env COLIPAS_DEPLOY_MODE=docker bash
+curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env \
+  COLIPAS_DEPLOY_MODE=docker \
+  bash
 ```
 
 推奨値:
@@ -112,6 +114,29 @@ curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-c
 
 Docker デプロイは Compose ボリュームを保持するため、SQLite データ、監査ログ、暗号化済み SSH メタデータ、AI 設定、アカウント設定はコンテナ再作成後も残ります。
 
+### ネイティブ Linux + systemd ワンコマンドデプロイ
+
+Docker ではなく、ホストの systemd サービスとして CoLiPas を動かしたい場合に使います。apt 系の Linux では Node.js 24 を必要に応じてインストールし、`colipas` サービスユーザーを作成し、アプリをビルドし、`deploy/colipas.service` をインストールして起動し、ヘルスチェックを実行します。
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env \
+  COLIPAS_DEPLOY_MODE=native \
+  bash
+```
+
+無人ネイティブ Linux デプロイ:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env \
+  COLIPAS_PUBLIC_URL='https://colipas.example.com' \
+  COLIPAS_ADMIN_PASSWORD='ChangeThisStrongPassword123' \
+  COLIPAS_DEPLOY_MODE=native \
+  COLIPAS_ASSUME_YES=1 \
+  bash
+```
+
+ネイティブモードのランタイムデータは通常 `/opt/colipas/.data` に保存され、再デプロイ時も既存の `.env` シークレットを保持します。apt 系以外のサーバーでは先に Node.js 24 をインストールするか、Docker モードを使ってください。
+
 ## 管理者パスワードを忘れた場合
 
 CoLiPas は平文パスワードを保存せず、`scrypt` ハッシュだけを保存します。忘れた場合は復元ではなくリセットします。
@@ -122,6 +147,14 @@ Docker ワンコマンドデプロイ / Docker Compose:
 cd /opt/colipas
 docker compose exec -e COLIPAS_RESET_PASSWORD='NewStrongPassword123' colipas npm run reset:admin
 docker compose restart colipas
+```
+
+ネイティブ Linux + systemd:
+
+```bash
+cd /opt/colipas
+sudo -u colipas env COLIPAS_RESET_PASSWORD='NewStrongPassword123' npm run reset:admin
+sudo systemctl restart colipas
 ```
 
 このスクリプトは管理者アカウントだけを更新します。サーバー、SSH 認証情報、監査ログ、AI キャッシュ、カスタム API 設定、その他のランタイムデータは削除しません。

@@ -76,12 +76,14 @@ npm start            # 启动生产服务
 
 ## 生产部署
 
-大多数用户直接使用 Docker 一键部署即可，不需要推送代码，也不需要自己发布镜像。脚本会询问安装目录、访问域名、管理员账号、部署模式和初始密码，然后自动拉取代码、创建私有 `.env`、启动服务并检查健康状态。
+生产部署支持 Docker Compose 和原生 Linux + systemd 两种一键模式。大多数用户选 Docker；需要主机 systemd 直接托管服务时选原生 Linux。部署用户不需要推送代码，也不需要自己发布镜像。
 
 ### Docker 一键部署（推荐）
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env COLIPAS_DEPLOY_MODE=docker bash
+curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env \
+  COLIPAS_DEPLOY_MODE=docker \
+  bash
 ```
 
 推荐选择：
@@ -112,6 +114,29 @@ curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-c
 
 Docker 部署会保留 Compose 数据卷，因此 SQLite 数据、审计记录、加密 SSH 元数据、AI 配置和账号设置会在容器重建后保留。
 
+### 原生 Linux + systemd 一键部署
+
+当你希望 CoLiPas 作为主机 systemd 服务运行，而不是运行在 Docker 里时，使用这个模式。脚本会在 apt 系统上安装 Node.js 24、创建 `colipas` 服务用户、构建应用、安装 `deploy/colipas.service`、启动服务并检查健康状态。
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env \
+  COLIPAS_DEPLOY_MODE=native \
+  bash
+```
+
+无人值守原生 Linux 部署：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env \
+  COLIPAS_PUBLIC_URL='https://colipas.example.com' \
+  COLIPAS_ADMIN_PASSWORD='ChangeThisStrongPassword123' \
+  COLIPAS_DEPLOY_MODE=native \
+  COLIPAS_ASSUME_YES=1 \
+  bash
+```
+
+原生模式的运行数据通常保存在 `/opt/colipas/.data`，重复部署时会保留已有 `.env` 密钥。如果不是 apt 系统，请先安装 Node.js 24，或改用 Docker 模式。
+
 ## 忘记管理员密码
 
 CoLiPas 不保存明文密码，只保存 `scrypt` 哈希。忘记密码时需要重置。
@@ -122,6 +147,14 @@ Docker 一键部署 / Docker Compose：
 cd /opt/colipas
 docker compose exec -e COLIPAS_RESET_PASSWORD='NewStrongPassword123' colipas npm run reset:admin
 docker compose restart colipas
+```
+
+原生 Linux + systemd：
+
+```bash
+cd /opt/colipas
+sudo -u colipas env COLIPAS_RESET_PASSWORD='NewStrongPassword123' npm run reset:admin
+sudo systemctl restart colipas
 ```
 
 重置脚本只更新管理员账号，不会删除服务器、SSH 凭据、审计记录、AI 缓存、自定义 API 设置或其他运行数据。

@@ -116,14 +116,16 @@ Create `.env` from `.env.example`. Before exposing the service, replace at least
 
 ## Production Deploy
 
-For most users, use the Docker one-command deploy below. You do not need to build images, push code, or publish anything yourself.
+Use one of the one-command Linux deploy modes below. Docker Compose is recommended for most users; native Linux + systemd is available when you want the service managed directly by the host. You do not need to build images, push code, or publish anything yourself.
 
 ### Docker One-Command Deploy
 
 Run this on a Linux server. On supported distributions, the installer installs Docker and the Docker Compose plugin if they are missing, asks for install directory, public URL, admin username, and initial password, then starts CoLiPas and checks service health.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env COLIPAS_DEPLOY_MODE=docker bash
+curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env \
+  COLIPAS_DEPLOY_MODE=docker \
+  bash
 ```
 
 Recommended answers:
@@ -154,6 +156,29 @@ Useful options: `COLIPAS_APP_DIR`, `COLIPAS_BRANCH`, `COLIPAS_ADMIN_USERNAME`, `
 
 The Docker deployment keeps runtime data in the Compose volume and preserves SQLite data, audit records, encrypted SSH metadata, AI provider settings, and account settings across container rebuilds.
 
+### Native Linux + systemd One-Command Deploy
+
+Use this mode when you want CoLiPas to run as a host systemd service instead of Docker. On apt-based systems, the installer installs Node.js 24 if it is missing, creates the `colipas` service user, builds the app, installs `deploy/colipas.service`, starts the service, and checks local health.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env \
+  COLIPAS_DEPLOY_MODE=native \
+  bash
+```
+
+For unattended native Linux deploys:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env \
+  COLIPAS_PUBLIC_URL='https://colipas.example.com' \
+  COLIPAS_ADMIN_PASSWORD='ChangeThisStrongPassword123' \
+  COLIPAS_DEPLOY_MODE=native \
+  COLIPAS_ASSUME_YES=1 \
+  bash
+```
+
+Native mode stores runtime data under the install directory, usually `/opt/colipas/.data`, and keeps existing `.env` secrets when redeployed. If the server is not apt-based, install Node.js 24 first or use Docker mode.
+
 ### Reverse Proxy
 
 Use `deploy/nginx.conf` as a starting point. It disables buffering for AI and SSH streams and sets a `2m` upload limit for profile images.
@@ -177,6 +202,14 @@ Docker one-command / Docker Compose deployment:
 cd /opt/colipas
 docker compose exec -e COLIPAS_RESET_PASSWORD='NewStrongPassword123' colipas npm run reset:admin
 docker compose restart colipas
+```
+
+Native Linux + systemd deployment:
+
+```bash
+cd /opt/colipas
+sudo -u colipas env COLIPAS_RESET_PASSWORD='NewStrongPassword123' npm run reset:admin
+sudo systemctl restart colipas
 ```
 
 Optional flags are available for non-default accounts or database paths:

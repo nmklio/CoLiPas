@@ -3766,25 +3766,28 @@ function assertInteractiveDeployDocsAndScriptGuards() {
   }
 
   const docs = [
-    ['README.md', readmeSource, 'Docker One-Command Deploy', 'You do not need to build images, push code, or publish anything yourself.'],
-    ['README_CN.md', cnReadmeSource, 'Docker 一键部署', '不需要推送代码，也不需要自己发布镜像'],
-    ['README_JP.md', jpReadmeSource, 'Docker ワンコマンドデプロイ', 'Docker イメージを自分で公開したりする必要はありません'],
+    ['README.md', readmeSource, 'Docker One-Command Deploy', 'Native Linux + systemd One-Command Deploy', 'You do not need to build images, push code, or publish anything yourself.'],
+    ['README_CN.md', cnReadmeSource, 'Docker 一键部署', '原生 Linux + systemd 一键部署', '不需要推送代码，也不需要自己发布镜像'],
+    ['README_JP.md', jpReadmeSource, 'Docker ワンコマンドデプロイ', 'ネイティブ Linux + systemd ワンコマンドデプロイ', 'Docker イメージを自分で公開したりする必要はありません'],
   ];
-  for (const [name, source, phrase, noPublishMessage] of docs) {
+  for (const [name, source, dockerPhrase, nativePhrase, noPublishMessage] of docs) {
     if (
-      !source.includes(phrase)
-      || !source.includes('one-click-deploy.sh | sudo env COLIPAS_DEPLOY_MODE=docker bash')
+      !source.includes(dockerPhrase)
+      || !source.includes(nativePhrase)
+      || !source.includes('one-click-deploy.sh | sudo env \\')
       || !source.includes('COLIPAS_DEPLOY_MODE=docker')
+      || !source.includes('COLIPAS_DEPLOY_MODE=native')
+      || !source.includes('  bash')
       || !source.includes('COLIPAS_ASSUME_YES=1')
       || !source.includes(noPublishMessage)
       || source.includes('docker pull heiyue797/colipas:latest')
       || source.includes('docker pull ghcr.io/nmklio/colipas:latest')
     ) {
-      throw new Error(`${name} must keep Docker one-command deploy as the primary deploy path`);
+      throw new Error(`${name} must keep Docker and native Linux one-command deploy paths`);
     }
   }
 
-  console.log('ok Docker one-command deploy and multilingual README flow are guarded');
+  console.log('ok Docker and native Linux one-command deploy docs are guarded');
 }
 
 function assertContainerRegistryPublishGuards() {
@@ -3810,11 +3813,11 @@ function assertContainerRegistryPublishGuards() {
   }
 
   const docs = [
-    ['README.md', readmeSource, 'Docker One-Command Deploy', 'You do not need to build images, push code, or publish anything yourself.'],
-    ['README_CN.md', cnReadmeSource, 'Docker 一键部署', '不需要推送代码，也不需要自己发布镜像'],
-    ['README_JP.md', jpReadmeSource, 'Docker ワンコマンドデプロイ', 'Docker イメージを自分で公開したりする必要はありません'],
+    ['README.md', readmeSource, 'Docker One-Command Deploy', 'Native Linux + systemd One-Command Deploy', 'You do not need to build images, push code, or publish anything yourself.'],
+    ['README_CN.md', cnReadmeSource, 'Docker 一键部署', '原生 Linux + systemd 一键部署', '不需要推送代码，也不需要自己发布镜像'],
+    ['README_JP.md', jpReadmeSource, 'Docker ワンコマンドデプロイ', 'ネイティブ Linux + systemd ワンコマンドデプロイ', 'Docker イメージを自分で公開したりする必要はありません'],
   ];
-  for (const [name, source, heading, noPublishMessage] of docs) {
+  for (const [name, source, heading, nativeHeading, noPublishMessage] of docs) {
     const confusingPublishingPhrases = [
       'Every `master` push publishes',
       '每次推送到 `master`',
@@ -3822,8 +3825,10 @@ function assertContainerRegistryPublishGuards() {
     ];
     if (
       !source.includes(heading)
+      || !source.includes(nativeHeading)
       || !source.includes('one-click-deploy.sh')
       || !source.includes('COLIPAS_DEPLOY_MODE=docker')
+      || !source.includes('COLIPAS_DEPLOY_MODE=native')
       || !source.includes(noPublishMessage)
     ) {
       throw new Error(`${name} must document Docker one-command deploy without asking users to publish images`);
