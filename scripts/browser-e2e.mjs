@@ -348,10 +348,12 @@ async function assertSshTerminalPanel(targetPage) {
     await targetPage.locator('.ssh-console').waitFor({ timeout: 10000 });
     await targetPage.locator('.ssh-console-header .icon-button').click();
     await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });
-    await targetPage.waitForTimeout(600);
-    if (await targetPage.locator('.action-message').filter({ hasText: /live ssh terminal connected/i }).count()) {
-      throw new Error('SSH panel close raced with login and left a connected state message');
-    }
+    await targetPage.waitForFunction(() => {
+      const messageText = Array.from(document.querySelectorAll('.action-message'))
+        .map((element) => element.textContent ?? '')
+        .join('\n');
+      return !/live ssh terminal connected/i.test(messageText);
+    }, undefined, { timeout: 2500 });
 
     await targetPage.locator('.server-workspace-row').filter({ hasText: sshServer.name }).getByRole('button', { name: /^SSH$/i }).click();
     await targetPage.locator('.ssh-console').waitFor({ timeout: 10000 });

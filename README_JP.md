@@ -76,10 +76,12 @@ npm start            # 本番サービスを起動
 
 ## 本番デプロイ
 
-最も簡単な本番導入方法は、対話式 Linux インストーラーです。インストール先、公開 URL、管理者ユーザー名、デプロイ方式、初期パスワードを確認し、コード取得、非公開 `.env` の作成、サービス起動、ヘルスチェックまで実行します。
+多くの利用者は Docker ワンコマンドデプロイだけで十分です。コードを push したり、Docker イメージを自分で公開したりする必要はありません。インストーラーはインストール先、公開 URL、管理者ユーザー名、デプロイ方式、初期パスワードを確認し、コード取得、非公開 `.env` の作成、サービス起動、ヘルスチェックまで実行します。
+
+### Docker ワンコマンドデプロイ（推奨）
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env COLIPAS_DEPLOY_MODE=docker bash
 ```
 
 推奨値:
@@ -90,7 +92,7 @@ curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-c
 | Git branch | `master` |
 | Public URL or domain | HTTPS ドメイン、例 `https://colipas.example.com` |
 | Admin username | `admin` または運用アカウント名 |
-| Deployment mode | 通常は `Docker Compose`、ホストの systemd 管理が必要なら `Native systemd` |
+| Deployment mode | `Docker Compose` |
 | Initial admin password | 強いパスワードを入力、または空欄で自動生成 |
 
 インストーラーは秘密情報をサーバー上にだけ保存します。`/opt/colipas/.env` が既に存在する場合、現在の管理者パスワード、DB パス、SSH 暗号化キー、AI 設定、その他のランタイム設定を保持します。
@@ -108,87 +110,16 @@ curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-c
 
 主なオプション: `COLIPAS_APP_DIR`、`COLIPAS_BRANCH`、`COLIPAS_ADMIN_USERNAME`、`COLIPAS_DEPLOY_MODE=docker|native`、`COLIPAS_NON_INTERACTIVE=1`、`COLIPAS_ASSUME_YES=1`。
 
-### 手動 Docker Compose
-
-各コマンドを自分で管理したい場合だけ使います。
-
-```bash
-git clone https://github.com/nmklio/CoLiPas.git
-cd CoLiPas
-cp .env.example .env
-docker compose up -d --build
-docker compose ps
-curl -fsS http://127.0.0.1:8080/api/health
-```
-
-`docker-compose.yml` は `/app/.data` にボリュームをマウントします。SQLite データ、監査ログ、暗号化済み SSH メタデータ、アカウント設定はコンテナ再作成後も保持されます。
-
-### 公開 Docker イメージ
-
-`master` に push されるたびに、Docker Hub と GitHub Container Registry へ公開イメージを発行します。
-
-Docker Hub:
-
-```bash
-docker pull heiyue797/colipas:latest
-```
-
-GitHub Container Registry:
-
-```bash
-docker pull ghcr.io/nmklio/colipas:latest
-```
-
-Docker Hub イメージを起動する例:
-
-```bash
-cp .env.example .env
-# 起動前に .env を編集し、管理者パスワード、セッションキー、SSH 暗号化キーなどを置き換えてください。
-docker volume create colipas-data
-docker run -d --name colipas --restart unless-stopped \
-  --env-file .env \
-  -p 8080:8080 \
-  -v colipas-data:/app/.data \
-  heiyue797/colipas:latest
-curl -fsS http://127.0.0.1:8080/api/health
-```
-
-GHCR を使う場合は、イメージ名を `ghcr.io/nmklio/colipas:latest` に置き換えてください。利用できるタグは `latest`、`master`、`v1.0.0` のようなリリースタグ、`sha-ab12cd3` のような短いコミットタグです。
-
-### 手動 Linux + systemd
-
-journald、systemd、ホスト統合を使いたい場合の方式です。
-
-```bash
-sudo useradd --system --home /opt/colipas --shell /usr/sbin/nologin colipas
-sudo mkdir -p /opt/colipas
-sudo chown -R colipas:colipas /opt/colipas
-sudo -u colipas git clone https://github.com/nmklio/CoLiPas.git /opt/colipas
-cd /opt/colipas
-sudo -u colipas cp .env.example .env
-sudo -u colipas npm ci
-sudo -u colipas npm test
-sudo cp deploy/colipas.service /etc/systemd/system/colipas.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now colipas
-curl -fsS http://127.0.0.1:8080/api/health
-```
+Docker デプロイは Compose ボリュームを保持するため、SQLite データ、監査ログ、暗号化済み SSH メタデータ、AI 設定、アカウント設定はコンテナ再作成後も残ります。
 
 ## 管理者パスワードを忘れた場合
 
 CoLiPas は平文パスワードを保存せず、`scrypt` ハッシュだけを保存します。忘れた場合は復元ではなくリセットします。
 
-ネイティブ Linux:
+Docker ワンコマンドデプロイ / Docker Compose:
 
 ```bash
 cd /opt/colipas
-sudo -u colipas env COLIPAS_RESET_PASSWORD='NewStrongPassword123' npm run reset:admin
-sudo systemctl restart colipas
-```
-
-Docker Compose:
-
-```bash
 docker compose exec -e COLIPAS_RESET_PASSWORD='NewStrongPassword123' colipas npm run reset:admin
 docker compose restart colipas
 ```

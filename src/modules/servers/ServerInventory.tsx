@@ -1069,6 +1069,9 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
 
     try {
       await openTerminalTransport(server, terminal, lifecycleSeq);
+      if (!isCurrentTerminalLifecycle(server.id, lifecycleSeq)) {
+        return;
+      }
 
       const mergedProbe = {
         host: server.ssh?.host || server.publicIp,
@@ -1083,6 +1086,9 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       scheduleTerminalFit(true);
       window.setTimeout(() => terminal.focus(), 30);
     } catch (error) {
+      if (!isCurrentTerminalLifecycle(server.id, lifecycleSeq)) {
+        return;
+      }
       closeActiveShellSession();
       refreshShellStatus();
       setTerminalNetworkStats(null);
@@ -1095,7 +1101,9 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       terminal.writeln(error instanceof Error ? error.message : 'SSH login failed');
       showActionMessage(error instanceof Error ? error.message : 'SSH login failed');
     } finally {
-      setSshRunning(false);
+      if (terminalLifecycleSeqRef.current === lifecycleSeq) {
+        setSshRunning(false);
+      }
     }
   }
 

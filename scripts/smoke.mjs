@@ -3766,25 +3766,25 @@ function assertInteractiveDeployDocsAndScriptGuards() {
   }
 
   const docs = [
-    ['README.md', readmeSource, 'interactive Linux installer'],
-    ['README_CN.md', cnReadmeSource, '交互式 Linux 安装脚本'],
-    ['README_JP.md', jpReadmeSource, '対話式 Linux インストーラー'],
+    ['README.md', readmeSource, 'Docker One-Command Deploy', 'You do not need to build images, push code, or publish anything yourself.'],
+    ['README_CN.md', cnReadmeSource, 'Docker 一键部署', '不需要推送代码，也不需要自己发布镜像'],
+    ['README_JP.md', jpReadmeSource, 'Docker ワンコマンドデプロイ', 'Docker イメージを自分で公開したりする必要はありません'],
   ];
-  for (const [name, source, phrase] of docs) {
+  for (const [name, source, phrase, noPublishMessage] of docs) {
     if (
       !source.includes(phrase)
-      || !source.includes('scripts/one-click-deploy.sh | sudo bash')
+      || !source.includes('one-click-deploy.sh | sudo env COLIPAS_DEPLOY_MODE=docker bash')
       || !source.includes('COLIPAS_DEPLOY_MODE=docker')
       || !source.includes('COLIPAS_ASSUME_YES=1')
-      || !source.includes('Manual Docker Compose')
-        && !source.includes('手动 Docker Compose')
-        && !source.includes('手動 Docker Compose')
+      || !source.includes(noPublishMessage)
+      || source.includes('docker pull heiyue797/colipas:latest')
+      || source.includes('docker pull ghcr.io/nmklio/colipas:latest')
     ) {
-      throw new Error(`${name} must keep the interactive installer as the primary deploy path`);
+      throw new Error(`${name} must keep Docker one-command deploy as the primary deploy path`);
     }
   }
 
-  console.log('ok interactive deploy installer and multilingual README flow are guarded');
+  console.log('ok Docker one-command deploy and multilingual README flow are guarded');
 }
 
 function assertContainerRegistryPublishGuards() {
@@ -3810,24 +3810,31 @@ function assertContainerRegistryPublishGuards() {
   }
 
   const docs = [
-    ['README.md', readmeSource, 'Published Docker Image'],
-    ['README_CN.md', cnReadmeSource, 'Docker 仓库镜像'],
-    ['README_JP.md', jpReadmeSource, '公開 Docker イメージ'],
+    ['README.md', readmeSource, 'Docker One-Command Deploy', 'You do not need to build images, push code, or publish anything yourself.'],
+    ['README_CN.md', cnReadmeSource, 'Docker 一键部署', '不需要推送代码，也不需要自己发布镜像'],
+    ['README_JP.md', jpReadmeSource, 'Docker ワンコマンドデプロイ', 'Docker イメージを自分で公開したりする必要はありません'],
   ];
-  for (const [name, source, heading] of docs) {
+  for (const [name, source, heading, noPublishMessage] of docs) {
+    const confusingPublishingPhrases = [
+      'Every `master` push publishes',
+      '每次推送到 `master`',
+      '`master` に push されるたび',
+    ];
     if (
       !source.includes(heading)
-      || !source.includes('docker pull heiyue797/colipas:latest')
-      || !source.includes('heiyue797/colipas:latest')
-      || !source.includes('docker pull ghcr.io/nmklio/colipas:latest')
-      || !source.includes('ghcr.io/nmklio/colipas:latest')
-      || !source.includes('sha-ab12cd3')
+      || !source.includes('one-click-deploy.sh')
+      || !source.includes('COLIPAS_DEPLOY_MODE=docker')
+      || !source.includes(noPublishMessage)
     ) {
-      throw new Error(`${name} must document the published Docker Hub and GHCR images`);
+      throw new Error(`${name} must document Docker one-command deploy without asking users to publish images`);
+    }
+    const confusingPhrase = confusingPublishingPhrases.find((fragment) => source.includes(fragment));
+    if (confusingPhrase) {
+      throw new Error(`${name} must keep Docker deployment docs user-facing; confusing publisher phrase found: ${confusingPhrase}`);
     }
   }
 
-  console.log('ok GHCR and Docker Hub publish workflow and README image usage are guarded');
+  console.log('ok Docker one-command deploy and registry image usage are guarded');
 }
 
 async function assertReleaseDeployTargetPlanGuards() {

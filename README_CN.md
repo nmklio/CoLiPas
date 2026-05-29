@@ -76,10 +76,12 @@ npm start            # 启动生产服务
 
 ## 生产部署
 
-最简单的上线方式是交互式 Linux 安装脚本。它会询问安装目录、访问域名、管理员账号、部署模式和初始密码，然后自动拉取代码、创建私有 `.env`、启动服务并检查健康状态。
+大多数用户直接使用 Docker 一键部署即可，不需要推送代码，也不需要自己发布镜像。脚本会询问安装目录、访问域名、管理员账号、部署模式和初始密码，然后自动拉取代码、创建私有 `.env`、启动服务并检查健康状态。
+
+### Docker 一键部署（推荐）
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env COLIPAS_DEPLOY_MODE=docker bash
 ```
 
 推荐选择：
@@ -90,7 +92,7 @@ curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-c
 | Git branch | `master` |
 | Public URL or domain | 你的 HTTPS 域名，例如 `https://colipas.example.com` |
 | Admin username | `admin` 或你的管理员账号名 |
-| Deployment mode | 大多数用户选 `Docker Compose`；需要系统服务控制时选 `Native systemd` |
+| Deployment mode | `Docker Compose` |
 | Initial admin password | 输入强密码，或留空自动生成 |
 
 脚本只会把密钥写到服务器本地。如果 `/opt/colipas/.env` 已存在，它会保留当前管理员密码、数据库路径、SSH 加密密钥、AI 配置和其他运行配置。
@@ -108,87 +110,16 @@ curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-c
 
 常用参数包括：`COLIPAS_APP_DIR`、`COLIPAS_BRANCH`、`COLIPAS_ADMIN_USERNAME`、`COLIPAS_DEPLOY_MODE=docker|native`、`COLIPAS_NON_INTERACTIVE=1`、`COLIPAS_ASSUME_YES=1`。
 
-### 手动 Docker Compose
-
-只有在你想自己控制每一步命令时，才需要使用这个方式。
-
-```bash
-git clone https://github.com/nmklio/CoLiPas.git
-cd CoLiPas
-cp .env.example .env
-docker compose up -d --build
-docker compose ps
-curl -fsS http://127.0.0.1:8080/api/health
-```
-
-`docker-compose.yml` 会把运行数据挂载到 `/app/.data`，因此 SQLite 数据、审计记录、加密 SSH 元数据和账号设置会在容器重建后保留。
-
-### Docker 仓库镜像
-
-每次推送到 `master` 都会自动发布公开镜像到 Docker Hub 和 GitHub Container Registry。
-
-Docker Hub：
-
-```bash
-docker pull heiyue797/colipas:latest
-```
-
-GitHub Container Registry：
-
-```bash
-docker pull ghcr.io/nmklio/colipas:latest
-```
-
-运行 Docker Hub 镜像：
-
-```bash
-cp .env.example .env
-# 启动前先编辑 .env，替换管理员密码、会话密钥、SSH 加密密钥等默认值。
-docker volume create colipas-data
-docker run -d --name colipas --restart unless-stopped \
-  --env-file .env \
-  -p 8080:8080 \
-  -v colipas-data:/app/.data \
-  heiyue797/colipas:latest
-curl -fsS http://127.0.0.1:8080/api/health
-```
-
-如果要使用 GHCR，把镜像名换成 `ghcr.io/nmklio/colipas:latest` 即可。可用标签包括 `latest`、`master`、`v1.0.0` 这类发布标签，以及 `sha-ab12cd3` 这类短提交标签。
-
-### 手动 Linux + systemd
-
-适合需要 journald、系统服务和主机级集成的部署方式。
-
-```bash
-sudo useradd --system --home /opt/colipas --shell /usr/sbin/nologin colipas
-sudo mkdir -p /opt/colipas
-sudo chown -R colipas:colipas /opt/colipas
-sudo -u colipas git clone https://github.com/nmklio/CoLiPas.git /opt/colipas
-cd /opt/colipas
-sudo -u colipas cp .env.example .env
-sudo -u colipas npm ci
-sudo -u colipas npm test
-sudo cp deploy/colipas.service /etc/systemd/system/colipas.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now colipas
-curl -fsS http://127.0.0.1:8080/api/health
-```
+Docker 部署会保留 Compose 数据卷，因此 SQLite 数据、审计记录、加密 SSH 元数据、AI 配置和账号设置会在容器重建后保留。
 
 ## 忘记管理员密码
 
 CoLiPas 不保存明文密码，只保存 `scrypt` 哈希。忘记密码时需要重置。
 
-原生 Linux：
+Docker 一键部署 / Docker Compose：
 
 ```bash
 cd /opt/colipas
-sudo -u colipas env COLIPAS_RESET_PASSWORD='NewStrongPassword123' npm run reset:admin
-sudo systemctl restart colipas
-```
-
-Docker Compose：
-
-```bash
 docker compose exec -e COLIPAS_RESET_PASSWORD='NewStrongPassword123' colipas npm run reset:admin
 docker compose restart colipas
 ```

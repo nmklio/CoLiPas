@@ -22,7 +22,7 @@
   &nbsp;|&nbsp;
   <a href="#production-deploy">Production deploy</a>
   &nbsp;|&nbsp;
-  <a href="#published-docker-image">Docker image</a>
+  <a href="#docker-one-command-deploy">Docker deploy</a>
   &nbsp;|&nbsp;
   <a href="#security-model">Security</a>
   &nbsp;|&nbsp;
@@ -112,18 +112,18 @@ Create `.env` from `.env.example`. Before exposing the service, replace at least
 | `CUSTOM_API_TIMEOUT_MS` | Timeout for custom API proxy requests. |
 | `RELEASE_VERIFY_TOKEN` | Optional bearer token for `/api/release/verify`. |
 | `RELEASE_TARGET_NAME` / `RELEASE_CHANNEL` / `RELEASE_DEPLOYMENT_MODE` / `RELEASE_PUBLIC_URL` | Safe release labels used in readiness evidence. |
-| `RELEASE_GIT_COMMIT` / `RELEASE_ARTIFACT_ID` / `RELEASE_DEPLOYED_AT` | Optional build metadata populated by release automation. |
+| `RELEASE_GIT_COMMIT` / `RELEASE_ARTIFACT_ID` / `RELEASE_DEPLOYED_AT` | Optional deployment metadata shown in readiness evidence. |
 
 ## Production Deploy
 
-Choose one deployment path. The interactive installer is the recommended path for new servers; published images are the fastest path when you already manage Docker yourself.
+For most users, use the Docker one-command deploy below. You do not need to build images, push code, or publish anything yourself.
 
-### Interactive Linux Installer
+### Docker One-Command Deploy
 
-The interactive Linux installer asks for install directory, public URL, admin username, deployment mode, and initial password. It then clones or updates the repository, writes a private `.env` if needed, starts the service, and runs a health check.
+Run this on a Linux server. On supported distributions, the installer installs Docker and the Docker Compose plugin if they are missing, asks for install directory, public URL, admin username, and initial password, then starts CoLiPas and checks service health.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env COLIPAS_DEPLOY_MODE=docker bash
 ```
 
 Recommended answers:
@@ -134,7 +134,7 @@ Recommended answers:
 | Git branch | `master` |
 | Public URL or domain | Your HTTPS domain, for example `https://colipas.example.com` |
 | Admin username | `admin` or your operator account name |
-| Deployment mode | `Docker Compose` for most users; `Native systemd` only when you need host-level service control |
+| Deployment mode | `Docker Compose` |
 | Initial admin password | Paste a strong password, or leave blank to auto-generate one |
 
 Existing deployments are preserved. If `/opt/colipas/.env` already exists, the installer keeps the current admin password, database path, SSH encryption key, AI provider settings, and other runtime configuration.
@@ -152,88 +152,7 @@ curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-c
 
 Useful options: `COLIPAS_APP_DIR`, `COLIPAS_BRANCH`, `COLIPAS_ADMIN_USERNAME`, `COLIPAS_DEPLOY_MODE=docker|native`, `COLIPAS_NON_INTERACTIVE=1`, `COLIPAS_ASSUME_YES=1`, and `COLIPAS_DRY_RUN=1`.
 
-### Published Docker Image
-
-Every `master` push publishes public images to Docker Hub and GitHub Container Registry.
-
-Docker Hub:
-
-```bash
-docker pull heiyue797/colipas:latest
-```
-
-GitHub Container Registry:
-
-```bash
-docker pull ghcr.io/nmklio/colipas:latest
-```
-
-Run with Docker Hub:
-
-```bash
-cp .env.example .env
-# Edit .env before starting the container.
-docker volume create colipas-data
-docker run -d --name colipas --restart unless-stopped \
-  --env-file .env \
-  -p 8080:8080 \
-  -v colipas-data:/app/.data \
-  heiyue797/colipas:latest
-curl -fsS http://127.0.0.1:8080/api/health
-```
-
-Run with GHCR by replacing the image with `ghcr.io/nmklio/colipas:latest`.
-
-Available tags include `latest`, `master`, release tags such as `v1.0.0`, and short commit tags such as `sha-ab12cd3`.
-
-### Manual Docker Compose
-
-Use Manual Docker Compose when you want to control every command yourself.
-
-```bash
-git clone https://github.com/nmklio/CoLiPas.git
-cd CoLiPas
-cp .env.example .env
-# Edit .env before the first start.
-docker compose up -d --build
-docker compose ps
-curl -fsS http://127.0.0.1:8080/api/health
-```
-
-The included `docker-compose.yml` mounts a named volume at `/app/.data`, so SQLite data, audit records, encrypted SSH metadata, AI provider settings, and account settings survive container rebuilds.
-
-To update a Docker Compose deployment:
-
-```bash
-git pull --ff-only
-export RELEASE_GIT_COMMIT="$(git rev-parse HEAD)"
-export RELEASE_ARTIFACT_ID="docker-$(date -u +%Y%m%d%H%M%S)"
-docker compose up -d --build
-docker compose logs --tail=80 colipas
-```
-
-### Native Linux + systemd
-
-Use native Linux when you want direct host integration, journald logs, and a locked-down service user. Install Node.js 24 LTS or newer, Git, and Nginx first.
-
-```bash
-sudo useradd --system --home /opt/colipas --shell /usr/sbin/nologin colipas
-sudo mkdir -p /opt/colipas
-sudo chown -R colipas:colipas /opt/colipas
-sudo -u colipas git clone https://github.com/nmklio/CoLiPas.git /opt/colipas
-cd /opt/colipas
-sudo -u colipas cp .env.example .env
-# Edit /opt/colipas/.env before enabling the service.
-sudo -u colipas npm ci
-sudo -u colipas npm test
-sudo cp deploy/colipas.service /etc/systemd/system/colipas.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now colipas
-systemctl status colipas --no-pager
-curl -fsS http://127.0.0.1:8080/api/health
-```
-
-The systemd unit only grants write access to the runtime data directory. Keep `.env`, `.data`, SSH private keys, server IPs, and deployment credentials outside public web roots and outside Git.
+The Docker deployment keeps runtime data in the Compose volume and preserves SQLite data, audit records, encrypted SSH metadata, AI provider settings, and account settings across container rebuilds.
 
 ### Reverse Proxy
 
@@ -248,45 +167,14 @@ sudo systemctl reload nginx
 
 Replace `server_name` and TLS certificate paths before using it on a new domain.
 
-## Release Automation
-
-For repeat releases, install `deploy/server-update.sh` on each target server, then run the guarded local release flow:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\release-deploy.ps1
-```
-
-The release script runs `npm test`, checks tracked files for secrets, requires a clean tree, pushes GitHub, updates configured targets over SSH, and runs production browser validation. Keep multi-server release settings in an untracked `release-targets.local.json`; do not commit real IP addresses, passwords, private keys, API keys, runtime DBs, logs, screenshots, or user data.
-
-Preview the resolved release plan without running tests, pushing, or touching servers:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\release-deploy.ps1 -PlanOnly
-```
-
-To publish after local commits automatically, install the optional local hook:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\install-release-hook.ps1
-```
-
-The hook lives only under `.git/hooks/post-commit` and is not committed to the repository.
-
 ## Forgot the Admin Password
 
 CoLiPas stores administrator passwords as `scrypt` hashes. Forgotten passwords must be reset, not recovered.
 
-Native Linux:
+Docker one-command / Docker Compose deployment:
 
 ```bash
 cd /opt/colipas
-sudo -u colipas env COLIPAS_RESET_PASSWORD='NewStrongPassword123' npm run reset:admin
-sudo systemctl restart colipas
-```
-
-Docker Compose:
-
-```bash
 docker compose exec -e COLIPAS_RESET_PASSWORD='NewStrongPassword123' colipas npm run reset:admin
 docker compose restart colipas
 ```
