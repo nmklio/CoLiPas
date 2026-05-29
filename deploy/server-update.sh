@@ -99,6 +99,25 @@ SUDOERS
   rm -f "$sudoers_tmp"
 }
 
+install_deploy_forced_command_env_preserve() {
+  if [ "$(id -u)" -ne 0 ] || ! id colipas-deploy >/dev/null 2>&1; then
+    return 0
+  fi
+  local deploy_home
+  deploy_home="$(getent passwd colipas-deploy | cut -d: -f6)"
+  local authorized_keys="$deploy_home/.ssh/authorized_keys"
+  if [ -z "$deploy_home" ] || [ ! -f "$authorized_keys" ]; then
+    return 0
+  fi
+  local authorized_keys_tmp
+  authorized_keys_tmp="$(mktemp)"
+  sed 's#sudo /usr/local/sbin/colipas-update#sudo --preserve-env=SSH_ORIGINAL_COMMAND,COLIPAS_RESET_ADMIN_PASSWORD /usr/local/sbin/colipas-update#g' "$authorized_keys" > "$authorized_keys_tmp"
+  if ! cmp -s "$authorized_keys" "$authorized_keys_tmp"; then
+    install -m 0600 -o colipas-deploy -g "$(id -gn colipas-deploy)" "$authorized_keys_tmp" "$authorized_keys"
+  fi
+  rm -f "$authorized_keys_tmp"
+}
+
 patch_landing_page_ui() {
   if ! command -v node >/dev/null 2>&1; then
     echo "WARN: node is unavailable; skipping landing page UI patch" >&2
@@ -1530,6 +1549,7 @@ if [ "$LOCAL_HEAD" = "$REMOTE_HEAD" ]; then
   if [ "$(id -u)" -eq 0 ]; then
     install_runtime_update_script
     install_deploy_sudo_env_keep
+    install_deploy_forced_command_env_preserve
     patch_landing_page_ui
     write_docs_page
     install_nginx_config
@@ -1552,6 +1572,7 @@ write_release_evidence_env "$DEPLOYED_AT" "$REMOTE_HEAD"
 if [ "$(id -u)" -eq 0 ]; then
   install_runtime_update_script
   install_deploy_sudo_env_keep
+  install_deploy_forced_command_env_preserve
   install -m 0644 "$APP_DIR/deploy/colipas.service" /etc/systemd/system/colipas.service
   patch_landing_page_ui
   write_docs_page
