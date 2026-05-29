@@ -1336,6 +1336,12 @@ server {
     return 302 /docs.html;
   }
 
+  location = /colipas-icon.svg {
+    try_files /colipas-icon.svg =404;
+    expires 1h;
+    add_header Cache-Control "public, max-age=3600";
+  }
+
   location = /admin {
     return 302 /admin/;
   }
@@ -1409,6 +1415,12 @@ server {
 
   location = /docs {
     return 302 /docs.html;
+  }
+
+  location = /colipas-icon.svg {
+    try_files /colipas-icon.svg =404;
+    expires 1h;
+    add_header Cache-Control "public, max-age=3600";
   }
 
   location = /admin {
