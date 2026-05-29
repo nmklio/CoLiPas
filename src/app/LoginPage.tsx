@@ -1,6 +1,7 @@
 import { FormEvent, useState } from 'react';
 import { Bot, Eye, EyeOff, Github, Globe2, LockKeyhole, Server, ShieldCheck } from 'lucide-react';
 import { languageOptions, useI18n } from '../i18n';
+import { BrandIcon } from './BrandIcon';
 
 interface LoginPageProps {
   loading: boolean;
@@ -24,7 +25,9 @@ export function LoginPage({ loading, error, onLogin }: LoginPageProps) {
       <section className="login-panel" aria-labelledby="login-title">
         <div className="login-panel-header">
           <div className="login-brand">
-            <div className="brand-mark">CP</div>
+            <div className="brand-mark app-brand-mark">
+              <BrandIcon />
+            </div>
             <div>
               <strong>CoLiPas</strong>
               <span>{t('login.subtitle')}</span>

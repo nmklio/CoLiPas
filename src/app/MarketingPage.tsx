@@ -24,6 +24,7 @@ import {
   Workflow,
 } from 'lucide-react';
 import { languageOptions, useI18n } from '../i18n';
+import { BrandIcon } from './BrandIcon';
 
 interface MarketingPageProps {
   loading: boolean;
@@ -109,7 +110,7 @@ export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
     <main className="marketing-page">
       <header className="marketing-nav">
         <a className="marketing-brand" href="#top" aria-label="CoLiPas">
-          <span>CP</span>
+          <BrandIcon className="marketing-brand-mark" />
           <strong>CoLiPas</strong>
         </a>
         <nav aria-label="推广页导航">

@@ -2913,6 +2913,9 @@ function assertAccountUiGuards() {
   const loginSource = fs.readFileSync(new URL('../src/app/LoginPage.tsx', import.meta.url), 'utf8');
   const marketingSource = fs.readFileSync(new URL('../src/app/MarketingPage.tsx', import.meta.url), 'utf8');
   const appSource = fs.readFileSync(new URL('../src/app/App.tsx', import.meta.url), 'utf8');
+  const brandIconSource = fs.readFileSync(new URL('../src/app/BrandIcon.tsx', import.meta.url), 'utf8');
+  const indexSource = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const publicIconSource = fs.readFileSync(new URL('../public/colipas-icon.svg', import.meta.url), 'utf8');
   const ciSource = fs.readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
   const serverAppSource = fs.readFileSync(new URL('../src/server/app.ts', import.meta.url), 'utf8');
   const serverUpdateSource = fs.readFileSync(new URL('../deploy/server-update.sh', import.meta.url), 'utf8');
@@ -2947,6 +2950,24 @@ function assertAccountUiGuards() {
   if (!appSource.includes('<span>{accountDisplayLabel}</span>') || !appSource.includes('title={sessionTooltip}')) {
     throw new Error('Account settings entry must display the custom profile label instead of the raw login username');
   }
+
+  const brandIconFragments = [
+    '<link rel="icon" type="image/svg+xml" href="/colipas-icon.svg" />',
+    'export function BrandIcon',
+    'viewBox="0 0 64 64"',
+    'A cloud operations terminal mark',
+    'app-brand-mark',
+    'marketing-brand-mark',
+    '.brand-mark svg',
+    'cat >"$LANDING_ROOT/colipas-icon.svg"',
+    '<link rel="icon" type="image/svg+xml" href="/colipas-icon.svg">',
+    '<svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">',
+  ];
+  const brandIconSourceBundle = `${indexSource}\n${publicIconSource}\n${brandIconSource}\n${loginSource}\n${marketingSource}\n${appSource}\n${globalCss}\n${serverUpdateSource}`;
+  const missingBrandIcon = brandIconFragments.filter((fragment) => !brandIconSourceBundle.includes(fragment));
+  if (missingBrandIcon.length) {
+    throw new Error(`CoLiPas brand icon replacement is incomplete: ${missingBrandIcon.join(', ')}`);
+  }
   if (
     !loginSource.includes('href="https://github.com/nmklio/CoLiPas"')
     || !loginSource.includes('login-github-link')
@@ -2960,7 +2981,7 @@ function assertAccountUiGuards() {
     || !serverUpdateSource.includes('colipas landing balanced ui')
     || !serverUpdateSource.includes('try_files /docs.html =404')
     || !serverUpdateSource.includes('CoLiPas docs page ready')
-    || !serverUpdateSource.includes('rel="icon" href="data:image/svg+xml')
+    || !serverUpdateSource.includes('href="/colipas-icon.svg"')
   ) {
     throw new Error('Deployment, docs, and login pages must expose public navigation without fake docs links');
   }
@@ -3102,6 +3123,7 @@ function assertAccountUiGuards() {
 
   const cssFragments = [
     '.brand-mark img',
+    '.brand-mark svg',
     '.avatar-upload-row',
     'width: min(448px, calc(100vw - 288px))',
     'box-shadow: 0 26px 72px rgba(12, 30, 35, 0.18)',

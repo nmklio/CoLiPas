@@ -25,6 +25,7 @@ import { OperationsCenter } from '../modules/operations/OperationsCenter';
 import { MonitoringOverview } from '../modules/overview/MonitoringOverview';
 import { SecurityPanel } from '../modules/security/SecurityPanel';
 import { ServerInventory } from '../modules/servers/ServerInventory';
+import { BrandIcon } from './BrandIcon';
 import {
   cloudAccounts as fallbackCloudAccounts,
   operationEvents as fallbackOperationEvents,
@@ -534,7 +535,9 @@ export function App() {
   if (authLoading) {
     return (
       <div className="auth-loading">
-        <div className="brand-mark">CP</div>
+        <div className="brand-mark app-brand-mark">
+          <BrandIcon />
+        </div>
         <span>{t('login.checkingSession')}</span>
       </div>
     );

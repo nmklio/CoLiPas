@@ -498,13 +498,36 @@ write_docs_page() {
     return 0
   fi
 
+  cat >"$LANDING_ROOT/colipas-icon.svg" <<'SVG'
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">CoLiPas icon</title>
+  <desc id="desc">A cloud operations terminal mark on a teal and blue rounded square.</desc>
+  <defs>
+    <linearGradient id="colipas-bg" x1="8" y1="4" x2="58" y2="62" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="0.48" stop-color="#0f766e"/>
+      <stop offset="1" stop-color="#2563eb"/>
+    </linearGradient>
+    <linearGradient id="colipas-edge" x1="16" y1="13" x2="48" y2="49" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ecfeff"/>
+      <stop offset="1" stop-color="#bae6fd"/>
+    </linearGradient>
+  </defs>
+  <rect x="3" y="3" width="58" height="58" rx="16" fill="url(#colipas-bg)"/>
+  <path d="M18.6 41.5h27.2c5.3 0 9.5-3.8 9.5-8.7 0-4.4-3.4-8-7.8-8.6C45.8 17.8 40.2 13 33.5 13c-7.2 0-13.2 5.1-14.3 11.9C13.4 25.7 9 30.4 9 36c0 3.2 1.4 5.8 3.9 7.2" fill="none" stroke="url(#colipas-edge)" stroke-width="4.8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M22.2 31.8l5 4.2-5 4.2" fill="none" stroke="#5eead4" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M32.4 40.2h10.8" fill="none" stroke="#f8fafc" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="45.4" cy="23.2" r="3.2" fill="#67e8f9"/>
+</svg>
+SVG
+
   cat >"$LANDING_ROOT/docs.html" <<'HTML'
 <!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230f766e'/%3E%3Ctext x='32' y='39' font-size='24' text-anchor='middle' font-family='Arial' font-weight='700' fill='white'%3ECP%3C/text%3E%3C/svg%3E">
+  <link rel="icon" type="image/svg+xml" href="/colipas-icon.svg">
   <title>CoLiPas 使用文档</title>
   <style>
     :root {
@@ -567,14 +590,12 @@ write_docs_page() {
       text-decoration: none;
       font-weight: 950;
     }
-    .brand span {
+    .brand svg {
       width: 36px;
       height: 36px;
-      border-radius: 8px;
-      display: grid;
-      place-items: center;
-      color: #fff;
-      background: linear-gradient(135deg, var(--green), var(--blue));
+      display: block;
+      flex: 0 0 36px;
+      filter: drop-shadow(0 10px 18px rgba(15, 118, 110, .18));
     }
     .nav-links {
       justify-content: center;
@@ -920,7 +941,27 @@ write_docs_page() {
 <body>
   <header class="nav">
     <div class="nav-inner">
-      <a class="brand" href="/" aria-label="CoLiPas"><span>CP</span><strong>CoLiPas</strong></a>
+      <a class="brand" href="/" aria-label="CoLiPas">
+        <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+          <defs>
+            <linearGradient id="docs-colipas-bg" x1="8" y1="4" x2="58" y2="62" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="#0f172a"/>
+              <stop offset="0.48" stop-color="#0f766e"/>
+              <stop offset="1" stop-color="#2563eb"/>
+            </linearGradient>
+            <linearGradient id="docs-colipas-edge" x1="16" y1="13" x2="48" y2="49" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="#ecfeff"/>
+              <stop offset="1" stop-color="#bae6fd"/>
+            </linearGradient>
+          </defs>
+          <rect x="3" y="3" width="58" height="58" rx="16" fill="url(#docs-colipas-bg)"/>
+          <path d="M18.6 41.5h27.2c5.3 0 9.5-3.8 9.5-8.7 0-4.4-3.4-8-7.8-8.6C45.8 17.8 40.2 13 33.5 13c-7.2 0-13.2 5.1-14.3 11.9C13.4 25.7 9 30.4 9 36c0 3.2 1.4 5.8 3.9 7.2" fill="none" stroke="url(#docs-colipas-edge)" stroke-width="4.8" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M22.2 31.8l5 4.2-5 4.2" fill="none" stroke="#5eead4" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M32.4 40.2h10.8" fill="none" stroke="#f8fafc" stroke-width="4" stroke-linecap="round"/>
+          <circle cx="45.4" cy="23.2" r="3.2" fill="#67e8f9"/>
+        </svg>
+        <strong>CoLiPas</strong>
+      </a>
       <nav class="nav-links" aria-label="文档导航">
         <a href="/">产品</a>
         <a href="/#features">功能</a>

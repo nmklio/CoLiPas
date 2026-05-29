@@ -19,6 +19,7 @@ import {
   Workflow,
 } from 'lucide-react';
 import { languageOptions, useI18n } from '../i18n';
+import { BrandIcon } from './BrandIcon';
 
 interface DocsPageProps {
   onLogin: () => void;
@@ -132,7 +133,7 @@ export function DocsPage({ onLogin }: DocsPageProps) {
     <main className="docs-page">
       <header className="marketing-nav docs-nav">
         <a className="marketing-brand" href="/" aria-label="CoLiPas">
-          <span>CP</span>
+          <BrandIcon className="marketing-brand-mark" />
           <strong>CoLiPas</strong>
         </a>
         <nav aria-label="文档导航">
