@@ -1,3 +1,5 @@
+<a id="english"></a>
+
 <div align="center">
 
 <img src="https://capsule-render.vercel.app/api?type=waving&height=220&color=0:0F172A,45:0F766E,100:2563EB&text=CoLiPas&fontColor=FFFFFF&fontSize=64&fontAlignY=38&desc=Multi-cloud%20server%20operations%20panel%20with%20AI,%20SSH,%20automation,%20and%20audit&descAlignY=60&animation=fadeIn" alt="CoLiPas header" />
@@ -18,6 +20,12 @@
 </p>
 
 <p align="center">
+  <a href="#english"><img alt="English" src="https://img.shields.io/badge/English-README-0F766E?style=for-the-badge"></a>
+  <a href="#zh-cn"><img alt="中文" src="https://img.shields.io/badge/%E4%B8%AD%E6%96%87-%E9%A1%B9%E7%9B%AE%E4%BB%8B%E7%BB%8D-2563EB?style=for-the-badge"></a>
+  <a href="#ja-jp"><img alt="日本語" src="https://img.shields.io/badge/%E6%97%A5%E6%9C%AC%E8%AA%9E-%E7%B4%B9%E4%BB%8B-7C3AED?style=for-the-badge"></a>
+</p>
+
+<p align="center">
   <a href="#quick-start">Quick start</a>
   &nbsp;|&nbsp;
   <a href="#production-deploy">Production deploy</a>
@@ -25,6 +33,10 @@
   <a href="#security-model">Security model</a>
   &nbsp;|&nbsp;
   <a href="#project-layout">Project layout</a>
+  &nbsp;|&nbsp;
+  <a href="#zh-cn">中文介绍</a>
+  &nbsp;|&nbsp;
+  <a href="#ja-jp">日本語紹介</a>
 </p>
 
 <img src=".github/assets/colipas-dashboard-preview.svg" alt="CoLiPas sanitized multi-region dashboard preview" width="980" />
@@ -32,6 +44,44 @@
 <sub>The preview image uses fictional providers and RFC 5737 documentation IP ranges only. It does not contain user servers, real IP addresses, SSH credentials, or runtime data.</sub>
 
 </div>
+
+## Product Snapshot
+
+CoLiPas is a self-hosted cloud operations console for teams that need one private place to manage servers, SSH access, AI-assisted operations, custom API checks, and release security evidence. It is built as a single deployable Node.js service: Express serves the protected API and production React frontend, while SQLite stores account settings, server inventory, audit trails, AI provider settings, and encrypted SSH metadata.
+
+The project is designed for practical production use rather than a demo-only dashboard: it includes guarded SSH password/private-key access, an xterm-style browser terminal, operation preflight checks, AI streaming with cached context, SSRF-resistant custom API testing, security remediation workflows, Docker deployment, native Linux/systemd deployment, and reset tooling for forgotten admin passwords.
+
+<a id="zh-cn"></a>
+
+## 中文介绍
+
+<p>
+  <a href="#english"><img alt="English" src="https://img.shields.io/badge/English-README-0F766E?style=flat-square"></a>
+  <a href="#zh-cn"><img alt="中文" src="https://img.shields.io/badge/%E4%B8%AD%E6%96%87-%E5%BD%93%E5%89%8D-2563EB?style=flat-square"></a>
+  <a href="#ja-jp"><img alt="日本語" src="https://img.shields.io/badge/%E6%97%A5%E6%9C%AC%E8%AA%9E-%E5%88%87%E6%8D%A2-7C3AED?style=flat-square"></a>
+</p>
+
+CoLiPas 是一个可私有化部署的云服务器运维控制台，适合需要统一管理公有云、私有云、海外节点和手动接入 Linux 服务器的团队。它把服务器资产、全球小地图、SSH 终端、AI 运维助手、任务编排、自定义 API 测试、安全审计和发布验证集中到一个受登录保护的后台里。
+
+项目采用 React + TypeScript + Express + SQLite 架构，一个 Node.js 生产服务同时提供 `/api/*` 接口和前端页面。运行数据默认存储在 `.data` 目录，SSH 凭据会使用 `CREDENTIAL_ENCRYPTION_KEY` 加密保存；仓库中只保留脱敏示例、部署脚本和源码，不应提交真实服务器 IP、密码、API Key、私钥或用户数据。
+
+核心能力包括：服务器手动接入、库存模式、密码/密钥 SSH 验证、浏览器 xterm 交互终端、开关机/重启操作、运维任务预检、AI 流式对话与模型获取、自定义 API 安全代理、审计追踪、Docker 部署、Linux systemd 部署，以及忘记管理员密码后的快速重置脚本。
+
+<a id="ja-jp"></a>
+
+## 日本語紹介
+
+<p>
+  <a href="#english"><img alt="English" src="https://img.shields.io/badge/English-README-0F766E?style=flat-square"></a>
+  <a href="#zh-cn"><img alt="中文" src="https://img.shields.io/badge/%E4%B8%AD%E6%96%87-%E5%88%87%E6%8D%A2-2563EB?style=flat-square"></a>
+  <a href="#ja-jp"><img alt="日本語" src="https://img.shields.io/badge/%E6%97%A5%E6%9C%AC%E8%AA%9E-%E7%8F%BE%E5%9C%A8-7C3AED?style=flat-square"></a>
+</p>
+
+CoLiPas は、セルフホストできるクラウドサーバー運用コンソールです。パブリッククラウド、プライベートクラウド、海外ノード、手動登録した Linux サーバーを、ひとつの認証付き管理画面で扱えるように設計されています。サーバー台帳、グローバル監視マップ、SSH ターミナル、AI 運用アシスタント、ワークフロー自動化、カスタム API テスト、セキュリティ監査をまとめて利用できます。
+
+構成は React + TypeScript + Express + SQLite で、1 つの Node.js 本番サービスが `/api/*` とビルド済みフロントエンドを配信します。ランタイムデータは既定で `.data` に保存され、SSH 認証情報は `CREDENTIAL_ENCRYPTION_KEY` で暗号化されます。公開リポジトリにはサニタイズ済みのサンプルとデプロイ手順のみを置き、実サーバーの IP、パスワード、API Key、秘密鍵、ユーザーデータは含めない方針です。
+
+主な機能は、サーバー登録、インベントリ専用モード、パスワード/秘密鍵 SSH 検証、ブラウザー上の xterm 風インタラクティブ端末、電源操作、運用タスクの事前チェック、AI ストリーミングチャット、モデル取得、SSRF 対策付きカスタム API プロキシ、監査トレース、Docker デプロイ、Linux systemd デプロイ、管理者パスワードのリセットです。
 
 ## Why It Feels Different
 
