@@ -76,27 +76,41 @@ npm start            # 本番サービスを起動
 
 ## 本番デプロイ
 
-### Linux ワンクリック
-
-新しい Linux ホスト向けです。既定は Docker Compose で、秘密情報はサーバー上の `.env` にだけ保存されます。
+最も簡単な本番導入方法は、対話式 Linux インストーラーです。インストール先、公開 URL、管理者ユーザー名、デプロイ方式、初期パスワードを確認し、コード取得、非公開 `.env` の作成、サービス起動、ヘルスチェックまで実行します。
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo bash
 ```
 
-よく使うオプション:
+推奨値:
+
+| 項目 | 推奨値 |
+| --- | --- |
+| Install directory | `/opt/colipas` |
+| Git branch | `master` |
+| Public URL or domain | HTTPS ドメイン、例 `https://colipas.example.com` |
+| Admin username | `admin` または運用アカウント名 |
+| Deployment mode | 通常は `Docker Compose`、ホストの systemd 管理が必要なら `Native systemd` |
+| Initial admin password | 強いパスワードを入力、または空欄で自動生成 |
+
+インストーラーは秘密情報をサーバー上にだけ保存します。`/opt/colipas/.env` が既に存在する場合、現在の管理者パスワード、DB パス、SSH 暗号化キー、AI 設定、その他のランタイム設定を保持します。
+
+無人インストールでは環境変数で同じ値を渡せます。
 
 ```bash
-sudo env \
+curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env \
   COLIPAS_PUBLIC_URL='https://colipas.example.com' \
   COLIPAS_ADMIN_PASSWORD='ChangeThisStrongPassword123' \
   COLIPAS_DEPLOY_MODE=docker \
-  bash scripts/one-click-deploy.sh
+  COLIPAS_ASSUME_YES=1 \
+  bash
 ```
 
-systemd のネイティブ配置を使う場合は `COLIPAS_DEPLOY_MODE=native` を指定します。
+主なオプション: `COLIPAS_APP_DIR`、`COLIPAS_BRANCH`、`COLIPAS_ADMIN_USERNAME`、`COLIPAS_DEPLOY_MODE=docker|native`、`COLIPAS_NON_INTERACTIVE=1`、`COLIPAS_ASSUME_YES=1`。
 
-### Docker Compose
+### 手動 Docker Compose
+
+各コマンドを自分で管理したい場合だけ使います。
 
 ```bash
 git clone https://github.com/nmklio/CoLiPas.git
@@ -109,7 +123,7 @@ curl -fsS http://127.0.0.1:8080/api/health
 
 `docker-compose.yml` は `/app/.data` にボリュームをマウントします。SQLite データ、監査ログ、暗号化済み SSH メタデータ、アカウント設定はコンテナ再作成後も保持されます。
 
-### ネイティブ Linux + systemd
+### 手動 Linux + systemd
 
 journald、systemd、ホスト統合を使いたい場合の方式です。
 

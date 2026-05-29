@@ -9,14 +9,146 @@ PUBLIC_URL="${COLIPAS_PUBLIC_URL:-http://127.0.0.1:8080}"
 ADMIN_USERNAME="${COLIPAS_ADMIN_USERNAME:-admin}"
 ADMIN_PASSWORD="${COLIPAS_ADMIN_PASSWORD:-}"
 ASSUME_YES="${COLIPAS_ASSUME_YES:-0}"
+NON_INTERACTIVE="${COLIPAS_NON_INTERACTIVE:-0}"
+TTY_DEVICE="${COLIPAS_TTY:-/dev/tty}"
+ENV_CREATED=0
+DRY_RUN="${COLIPAS_DRY_RUN:-0}"
 
-if [ "$(id -u)" -ne 0 ]; then
-  echo "Run as root or with sudo so the script can install packages and write ${APP_DIR}." >&2
-  exit 1
+if [ "$NON_INTERACTIVE" = "1" ] || [ "$ASSUME_YES" = "1" ]; then
+  INTERACTIVE=0
+elif [ -r "$TTY_DEVICE" ] && [ -w "$TTY_DEVICE" ]; then
+  INTERACTIVE=1
+else
+  INTERACTIVE=0
 fi
 
 need_command() {
   command -v "$1" >/dev/null 2>&1
+}
+
+say() {
+  printf '%s\n' "$*"
+}
+
+restore_tty_echo() {
+  if [ "$INTERACTIVE" = "1" ]; then
+    stty echo <"$TTY_DEVICE" 2>/dev/null || true
+  fi
+}
+
+trap restore_tty_echo EXIT INT TERM
+
+ask_text() {
+  prompt="$1"
+  default_value="$2"
+  if [ "$INTERACTIVE" != "1" ]; then
+    printf '%s\n' "$default_value"
+    return
+  fi
+  printf '%s [%s]: ' "$prompt" "$default_value" >"$TTY_DEVICE"
+  IFS= read -r answer <"$TTY_DEVICE" || answer=""
+  if [ -n "$answer" ]; then
+    printf '%s\n' "$answer"
+  else
+    printf '%s\n' "$default_value"
+  fi
+}
+
+ask_secret() {
+  prompt="$1"
+  if [ "$INTERACTIVE" != "1" ]; then
+    printf '%s\n' "$ADMIN_PASSWORD"
+    return
+  fi
+  printf '%s: ' "$prompt" >"$TTY_DEVICE"
+  stty -echo <"$TTY_DEVICE" 2>/dev/null || true
+  IFS= read -r answer <"$TTY_DEVICE" || answer=""
+  stty echo <"$TTY_DEVICE" 2>/dev/null || true
+  printf '\n' >"$TTY_DEVICE"
+  printf '%s\n' "$answer"
+}
+
+ask_yes_no() {
+  prompt="$1"
+  default_value="$2"
+  if [ "$INTERACTIVE" != "1" ]; then
+    [ "$default_value" = "y" ]
+    return
+  fi
+  while true; do
+    if [ "$default_value" = "y" ]; then
+      suffix="Y/n"
+    else
+      suffix="y/N"
+    fi
+    printf '%s [%s]: ' "$prompt" "$suffix" >"$TTY_DEVICE"
+    IFS= read -r answer <"$TTY_DEVICE" || answer=""
+    answer="${answer:-$default_value}"
+    case "$answer" in
+      y|Y|yes|YES|Yes) return 0 ;;
+      n|N|no|NO|No) return 1 ;;
+      *) say "Please answer yes or no." >"$TTY_DEVICE" ;;
+    esac
+  done
+}
+
+choose_mode() {
+  default_value="$1"
+  if [ "$INTERACTIVE" != "1" ]; then
+    printf '%s\n' "$default_value"
+    return
+  fi
+  while true; do
+    printf 'Deployment mode: 1) Docker Compose  2) Native systemd [%s]: ' "$default_value" >"$TTY_DEVICE"
+    IFS= read -r answer <"$TTY_DEVICE" || answer=""
+    answer="${answer:-$default_value}"
+    case "$answer" in
+      1|docker|Docker|compose|Compose) printf 'docker\n'; return ;;
+      2|native|Native|systemd|Systemd) printf 'native\n'; return ;;
+      *) say "Choose docker or native." >"$TTY_DEVICE" ;;
+    esac
+  done
+}
+
+interactive_config() {
+  if [ "$INTERACTIVE" != "1" ]; then
+    return
+  fi
+
+  cat >"$TTY_DEVICE" <<'BANNER'
+
+CoLiPas interactive deployment
+This installer will clone or update the project, create a private .env if needed,
+install the selected runtime, start the service, and run a local health check.
+
+BANNER
+
+  APP_DIR="$(ask_text "Install directory" "$APP_DIR")"
+  BRANCH="$(ask_text "Git branch" "$BRANCH")"
+  PUBLIC_URL="$(ask_text "Public URL or domain" "$PUBLIC_URL")"
+  ADMIN_USERNAME="$(ask_text "Admin username" "$ADMIN_USERNAME")"
+  MODE="$(choose_mode "$MODE")"
+
+  if [ -z "$ADMIN_PASSWORD" ]; then
+    ADMIN_PASSWORD="$(ask_secret "Initial admin password, leave blank to generate one")"
+  fi
+
+  cat >"$TTY_DEVICE" <<SUMMARY
+
+Deployment summary
+  Mode:          ${MODE}
+  Install dir:   ${APP_DIR}
+  Branch:        ${BRANCH}
+  Public URL:    ${PUBLIC_URL}
+  Admin user:    ${ADMIN_USERNAME}
+  Admin pass:    $([ -n "$ADMIN_PASSWORD" ] && printf 'provided' || printf 'auto-generate')
+
+SUMMARY
+
+  if ! ask_yes_no "Start deployment now" "y"; then
+    say "Deployment cancelled." >"$TTY_DEVICE"
+    exit 0
+  fi
 }
 
 random_secret() {
@@ -79,18 +211,31 @@ install_node_if_needed() {
 sync_source() {
   mkdir -p "$(dirname "$APP_DIR")"
   if [ -d "$APP_DIR/.git" ]; then
+    say "Updating existing CoLiPas checkout in ${APP_DIR}."
     git -C "$APP_DIR" fetch --prune origin "$BRANCH"
     git -C "$APP_DIR" checkout "$BRANCH"
     git -C "$APP_DIR" reset --hard "origin/$BRANCH"
   else
     if [ -e "$APP_DIR" ] && [ -n "$(find "$APP_DIR" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
       if [ "$ASSUME_YES" != "1" ]; then
+        if [ "$INTERACTIVE" = "1" ] && ask_yes_no "${APP_DIR} exists and is not a CoLiPas checkout. Replace it" "n"; then
+          :
+        else
+          echo "${APP_DIR} exists and is not a CoLiPas git checkout." >&2
+          echo "Move it aside or rerun with COLIPAS_ASSUME_YES=1 to replace that directory." >&2
+          exit 1
+        fi
+      fi
+      if [ "$ASSUME_YES" = "1" ] || [ "$INTERACTIVE" = "1" ]; then
+        say "Replacing ${APP_DIR}."
+      else
         echo "${APP_DIR} exists and is not a CoLiPas git checkout." >&2
         echo "Move it aside or rerun with COLIPAS_ASSUME_YES=1 to replace that directory." >&2
         exit 1
       fi
       rm -rf "$APP_DIR"
     fi
+    say "Cloning CoLiPas into ${APP_DIR}."
     git clone --branch "$BRANCH" "$REPO_URL" "$APP_DIR"
   fi
   cd "$APP_DIR"
@@ -99,6 +244,7 @@ sync_source() {
 write_env_if_missing() {
   if [ -f .env ]; then
     chmod 0600 .env
+    say "Existing .env found; keeping current secrets and runtime settings."
     return
   fi
 
@@ -131,6 +277,8 @@ RELEASE_ARTIFACT_ID=
 RELEASE_DEPLOYED_AT=
 EOF
   chmod 0600 .env
+  ENV_CREATED=1
+  say "Created private .env with generated secrets."
 }
 
 deploy_docker() {
@@ -167,6 +315,21 @@ run_as_colipas() {
   fi
 }
 
+if [ "$DRY_RUN" != "1" ] && [ "$(id -u)" -ne 0 ]; then
+  echo "Run as root or with sudo so the script can install packages and write ${APP_DIR}." >&2
+  exit 1
+fi
+
+interactive_config
+
+if [ "$DRY_RUN" = "1" ]; then
+  say "Dry run complete. No packages installed, files changed, or services started."
+  say "Mode: ${MODE}"
+  say "Install dir: ${APP_DIR}"
+  say "Public URL: ${PUBLIC_URL}"
+  exit 0
+fi
+
 install_base_packages
 sync_source
 write_env_if_missing
@@ -190,9 +353,9 @@ echo
 echo "CoLiPas deployed successfully."
 echo "URL: ${PUBLIC_URL}"
 echo "Username: ${ADMIN_USERNAME}"
-if [ -n "$ADMIN_PASSWORD" ]; then
+if [ "$ENV_CREATED" = "1" ]; then
   echo "Initial password: ${ADMIN_PASSWORD}"
 else
-  echo "Initial password was generated and saved in ${APP_DIR}/.env."
+  echo "Existing ${APP_DIR}/.env was kept; use the current admin password for that deployment."
 fi
 echo "Change the admin password after first login."

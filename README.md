@@ -135,31 +135,43 @@ Create `.env` from `.env.example` and replace every default before exposing the 
 
 ## Production Deploy
 
-CoLiPas can be deployed either as a Docker service or as a native Linux systemd service. Both modes expose one production HTTP service on `8080`; put Nginx, Caddy, or your cloud load balancer in front for HTTPS.
+The simplest production path is the interactive Linux installer. It asks for the install directory, public URL, admin username, deployment mode, and initial password, then clones the repository, creates a private `.env`, starts CoLiPas, and runs a health check.
 
-### One-click Linux
-
-Use the one-click script on a fresh Linux host when you want a guarded default install without copying commands by hand. The default mode is Docker Compose; it writes secrets only to the server-side `.env`, keeps runtime data in the Docker volume, and never commits those values back to Git.
+Run this on a fresh Linux server:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo bash
 ```
 
-Common options:
+Recommended choices:
+
+| Prompt | Recommended value |
+| --- | --- |
+| Install directory | `/opt/colipas` |
+| Git branch | `master` |
+| Public URL or domain | Your HTTPS domain, for example `https://colipas.example.com` |
+| Admin username | `admin` or your operator account name |
+| Deployment mode | `Docker Compose` for most users; `Native systemd` when you need host-level service control |
+| Initial admin password | Paste a strong password, or leave blank to auto-generate one |
+
+The installer keeps runtime secrets on the server only. If `/opt/colipas/.env` already exists, it preserves the current admin password, database path, SSH encryption key, AI provider settings, and other runtime configuration.
+
+For unattended installs, pass the same answers with environment variables:
 
 ```bash
-sudo env \
+curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env \
   COLIPAS_PUBLIC_URL='https://colipas.example.com' \
   COLIPAS_ADMIN_PASSWORD='ChangeThisStrongPassword123' \
   COLIPAS_DEPLOY_MODE=docker \
-  bash scripts/one-click-deploy.sh
+  COLIPAS_ASSUME_YES=1 \
+  bash
 ```
 
-For native systemd instead of Docker, set `COLIPAS_DEPLOY_MODE=native`. If `COLIPAS_APP_DIR` already exists and is not a CoLiPas git checkout, the script stops before replacing it; set `COLIPAS_ASSUME_YES=1` only when that directory is safe to overwrite.
+Useful options: `COLIPAS_APP_DIR`, `COLIPAS_BRANCH`, `COLIPAS_ADMIN_USERNAME`, `COLIPAS_DEPLOY_MODE=docker|native`, `COLIPAS_NON_INTERACTIVE=1`, and `COLIPAS_ASSUME_YES=1`.
 
-### Docker Compose
+### Manual Docker Compose
 
-Use this path when you want the fastest reproducible deployment and do not need Node.js installed on the host.
+Use this path only when you prefer to manage every command yourself.
 
 ```bash
 git clone https://github.com/nmklio/CoLiPas.git
@@ -188,7 +200,7 @@ docker compose up -d --build
 docker compose logs --tail=80 colipas
 ```
 
-### Docker CLI
+### Manual Docker CLI
 
 Use plain Docker when you prefer to wire your own volume, network, or supervisor.
 
@@ -206,7 +218,7 @@ docker run -d --name colipas --restart unless-stopped \
 curl -fsS http://127.0.0.1:8080/api/health
 ```
 
-### Native Linux + systemd
+### Manual Native Linux + systemd
 
 Use this path when you want direct host integration, SSH tooling, journald logs, and a locked-down service user. Install Node.js 24 LTS or newer, Git, and Nginx first.
 

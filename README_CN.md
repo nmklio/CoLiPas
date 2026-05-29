@@ -76,27 +76,41 @@ npm start            # 启动生产服务
 
 ## 生产部署
 
-### 一键 Linux 部署
-
-适合新的 Linux 主机。默认使用 Docker Compose，密钥只写入服务器本地 `.env`。
+最简单的上线方式是交互式 Linux 安装脚本。它会询问安装目录、访问域名、管理员账号、部署模式和初始密码，然后自动拉取代码、创建私有 `.env`、启动服务并检查健康状态。
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo bash
 ```
 
-常见参数：
+推荐选择：
+
+| 提示项 | 推荐值 |
+| --- | --- |
+| Install directory | `/opt/colipas` |
+| Git branch | `master` |
+| Public URL or domain | 你的 HTTPS 域名，例如 `https://colipas.example.com` |
+| Admin username | `admin` 或你的管理员账号名 |
+| Deployment mode | 大多数用户选 `Docker Compose`；需要系统服务控制时选 `Native systemd` |
+| Initial admin password | 输入强密码，或留空自动生成 |
+
+脚本只会把密钥写到服务器本地。如果 `/opt/colipas/.env` 已存在，它会保留当前管理员密码、数据库路径、SSH 加密密钥、AI 配置和其他运行配置。
+
+无人值守部署可以用环境变量传入同样的答案：
 
 ```bash
-sudo env \
+curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env \
   COLIPAS_PUBLIC_URL='https://colipas.example.com' \
   COLIPAS_ADMIN_PASSWORD='ChangeThisStrongPassword123' \
   COLIPAS_DEPLOY_MODE=docker \
-  bash scripts/one-click-deploy.sh
+  COLIPAS_ASSUME_YES=1 \
+  bash
 ```
 
-如果要使用原生 systemd 部署，把 `COLIPAS_DEPLOY_MODE` 设置为 `native`。
+常用参数包括：`COLIPAS_APP_DIR`、`COLIPAS_BRANCH`、`COLIPAS_ADMIN_USERNAME`、`COLIPAS_DEPLOY_MODE=docker|native`、`COLIPAS_NON_INTERACTIVE=1`、`COLIPAS_ASSUME_YES=1`。
 
-### Docker Compose
+### 手动 Docker Compose
+
+只有在你想自己控制每一步命令时，才需要使用这个方式。
 
 ```bash
 git clone https://github.com/nmklio/CoLiPas.git
@@ -109,7 +123,7 @@ curl -fsS http://127.0.0.1:8080/api/health
 
 `docker-compose.yml` 会把运行数据挂载到 `/app/.data`，因此 SQLite 数据、审计记录、加密 SSH 元数据和账号设置会在容器重建后保留。
 
-### 原生 Linux + systemd
+### 手动 Linux + systemd
 
 适合需要 journald、系统服务和主机级集成的部署方式。
 

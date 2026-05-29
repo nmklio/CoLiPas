@@ -34,6 +34,7 @@ assertCustomApiProxySecurityGuards();
 assertSqlitePersistenceGuards();
 assertBuildChunkingGuards();
 assertRepositoryPreviewAssetGuards();
+assertInteractiveDeployDocsAndScriptGuards();
 await assertReleaseDeployTargetPlanGuards();
 
 const unauthenticatedOverviewResponse = await fetch(`${baseUrl}/api/overview`);
@@ -3739,6 +3740,49 @@ function assertRepositoryPreviewAssetGuards() {
   }
 
   console.log('ok repository preview asset stays outside deployed public assets');
+}
+
+function assertInteractiveDeployDocsAndScriptGuards() {
+  const installerSource = fs.readFileSync(new URL('../scripts/one-click-deploy.sh', import.meta.url), 'utf8');
+  const readmeSource = fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+  const cnReadmeSource = fs.readFileSync(new URL('../README_CN.md', import.meta.url), 'utf8');
+  const jpReadmeSource = fs.readFileSync(new URL('../README_JP.md', import.meta.url), 'utf8');
+  const installerRequired = [
+    'CoLiPas interactive deployment',
+    'COLIPAS_DRY_RUN',
+    'COLIPAS_NON_INTERACTIVE',
+    'COLIPAS_TTY',
+    'choose_mode',
+    'Existing .env found; keeping current secrets and runtime settings.',
+    'Dry run complete. No packages installed, files changed, or services started.',
+    'COLIPAS_ASSUME_YES=1',
+    'Initial admin password, leave blank to generate one',
+  ];
+  const missingInstaller = installerRequired.filter((fragment) => !installerSource.includes(fragment));
+  if (missingInstaller.length) {
+    throw new Error(`Interactive deploy script guard is incomplete: ${missingInstaller.join(', ')}`);
+  }
+
+  const docs = [
+    ['README.md', readmeSource, 'interactive Linux installer'],
+    ['README_CN.md', cnReadmeSource, '交互式 Linux 安装脚本'],
+    ['README_JP.md', jpReadmeSource, '対話式 Linux インストーラー'],
+  ];
+  for (const [name, source, phrase] of docs) {
+    if (
+      !source.includes(phrase)
+      || !source.includes('scripts/one-click-deploy.sh | sudo bash')
+      || !source.includes('COLIPAS_DEPLOY_MODE=docker')
+      || !source.includes('COLIPAS_ASSUME_YES=1')
+      || !source.includes('Manual Docker Compose')
+        && !source.includes('手动 Docker Compose')
+        && !source.includes('手動 Docker Compose')
+    ) {
+      throw new Error(`${name} must keep the interactive installer as the primary deploy path`);
+    }
+  }
+
+  console.log('ok interactive deploy installer and multilingual README flow are guarded');
 }
 
 async function assertReleaseDeployTargetPlanGuards() {
