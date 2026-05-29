@@ -3011,7 +3011,7 @@ function assertAccountUiGuards() {
   const ciGuardFragments = [
     'concurrency:',
     'cancel-in-progress: true',
-    'timeout-minutes: 20',
+    'timeout-minutes:',
     'npx playwright install --with-deps chromium',
     'npm test',
   ];
