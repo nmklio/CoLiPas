@@ -302,11 +302,8 @@ export function OperationsCenter({ events, servers, onTaskFinished, onAuditTrace
   const copy = copyByLanguage[language] ?? copyByLanguage.zh;
   const preflightCopy = preflightCopyByLanguage[language] ?? preflightCopyByLanguage.zh;
   const providerName = (provider: string) => formatProviderName(provider, t);
-  const connectedServers = useMemo(() => servers.filter((server) => server.ssh?.connected), [servers]);
-  const warningServers = useMemo(
-    () => servers.filter((server) => server.status === 'warning' || server.cpu > 80 || server.disk > 85),
-    [servers],
-  );
+  const operationServerGroups = useMemo(() => buildOperationServerGroups(servers), [servers]);
+  const { connectedServers, warningServers } = operationServerGroups;
   const [builderOpen, setBuilderOpen] = useState(false);
   const [taskType, setTaskType] = useState<OperationTaskType>('healthCheck');
   const [targetMode, setTargetMode] = useState<OperationTaskTargetMode>('allConnected');
@@ -840,6 +837,20 @@ function buildTaskMeta(language: string): Record<OperationTaskType, TaskMeta> {
 
 function formatProviderName(provider: string, t: (key: string, vars?: Record<string, string | number>) => string) {
   return provider.trim().toLowerCase() === 'custom' ? t('servers.providerCustomDisplay') : provider;
+}
+
+function buildOperationServerGroups(servers: ServerNode[]) {
+  const connectedServers: ServerNode[] = [];
+  const warningServers: ServerNode[] = [];
+  for (const server of servers) {
+    if (server.ssh?.connected) {
+      connectedServers.push(server);
+    }
+    if (server.status === 'warning' || server.cpu > 80 || server.disk > 85) {
+      warningServers.push(server);
+    }
+  }
+  return { connectedServers, warningServers };
 }
 
 function resolvePreviewCount(targetMode: OperationTaskTargetMode, eligibleServerCount: number, selectedServerCount: number) {

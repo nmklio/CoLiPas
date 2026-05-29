@@ -5020,6 +5020,9 @@ function assertOperationsTargetSelectionGuards() {
   const apiClientSource = fs.readFileSync(new URL('../src/services/apiClient.ts', import.meta.url), 'utf8');
   const frontendRequired = [
     'const sshRequiredTask = taskType !== \'assetSync\'',
+    'const operationServerGroups = useMemo(() => buildOperationServerGroups(servers), [servers])',
+    'const { connectedServers, warningServers } = operationServerGroups',
+    'function buildOperationServerGroups(servers: ServerNode[])',
     'if (sshRequiredTask && targetMode === \'allServers\')',
     '<option value="allServers" disabled={sshRequiredTask}>',
     'activeSelectedServerIds',
@@ -5063,6 +5066,12 @@ function assertOperationsTargetSelectionGuards() {
   }
   if (operationsSource.includes('eligibleServers.map((server) => (')) {
     throw new Error('Operations selected target picker must render visibleEligibleServers, not every eligible server');
+  }
+  if (
+    operationsSource.includes('const connectedServers = useMemo(() => servers.filter((server) => server.ssh?.connected), [servers]);')
+    || operationsSource.includes("servers.filter((server) => server.status === 'warning' || server.cpu > 80 || server.disk > 85)")
+  ) {
+    throw new Error('Operations panel must derive connected and warning server groups in one pass');
   }
 
   const serviceRequired = [
