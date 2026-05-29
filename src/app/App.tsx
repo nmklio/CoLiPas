@@ -623,16 +623,23 @@ export function App() {
             </div>
           </div>
           <div className="topbar-actions">
-            <label className="language-switcher" aria-label={t('language.label')}>
+            <div className="language-switcher topbar-language-switcher" role="group" aria-label={t('language.label')}>
               <span className="language-switcher-label">{t('language.label')}</span>
-              <select value={language} onChange={(event) => setLanguage(event.target.value as typeof language)}>
+              <div className="language-switcher-options">
                 {languageOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
+                  <button
+                    key={option.id}
+                    type="button"
+                    className={language === option.id ? 'language-switcher-option active' : 'language-switcher-option'}
+                    aria-pressed={language === option.id}
+                    title={option.label}
+                    onClick={() => setLanguage(option.id)}
+                  >
+                    {option.shortLabel}
+                  </button>
                 ))}
-              </select>
-            </label>
+              </div>
+            </div>
             <button
               type="button"
               className="icon-button topbar-refresh"

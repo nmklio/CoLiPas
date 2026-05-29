@@ -4665,6 +4665,7 @@ function assertSshKeyAuthenticationGuards() {
 
 function assertMobileTopbarKeepsCoreActions() {
   const globalCss = fs.readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
+  const appSource = fs.readFileSync(new URL('../src/app/App.tsx', import.meta.url), 'utf8');
   const mobileSection = globalCss.slice(globalCss.indexOf('@media (max-width: 820px)'));
   if (/\.topbar-actions\s*\{[^}]*display:\s*none/i.test(mobileSection)) {
     throw new Error('Mobile topbar must keep language, refresh, session, and logout actions visible');
@@ -4674,6 +4675,9 @@ function assertMobileTopbarKeepsCoreActions() {
     '.topbar-actions {',
     'overflow-x: auto',
     '.language-switcher',
+    '.topbar-language-switcher',
+    '.language-switcher-options',
+    '.language-switcher-option',
     '.session-chip',
     '.topbar-refresh',
     '.topbar-logout',
@@ -4697,6 +4701,17 @@ function assertMobileTopbarKeepsCoreActions() {
   const missing = requiredFragments.filter((fragment) => !mobileSection.includes(fragment));
   if (missing.length) {
     throw new Error(`Mobile topbar core actions are incomplete: ${missing.join(', ')}`);
+  }
+
+  const appRequiredFragments = [
+    'role="group"',
+    'aria-pressed={language === option.id}',
+    'onClick={() => setLanguage(option.id)}',
+    '{option.shortLabel}',
+  ];
+  const missingAppFragments = appRequiredFragments.filter((fragment) => !appSource.includes(fragment));
+  if (missingAppFragments.length) {
+    throw new Error(`Topbar language switcher behavior is incomplete: ${missingAppFragments.join(', ')}`);
   }
 
   console.log('ok mobile topbar keeps language and session actions');

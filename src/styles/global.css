@@ -1757,9 +1757,55 @@ button:disabled {
   font-weight: 800;
 }
 
+.topbar-language-switcher {
+  max-width: none;
+  padding: 3px 4px 3px 8px;
+  gap: 7px;
+}
+
 .language-switcher-label {
   flex: 0 0 auto;
   white-space: nowrap;
+}
+
+.language-switcher-options {
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(30px, auto);
+  gap: 2px;
+  border-radius: 6px;
+  padding: 2px;
+  background: #eef6f5;
+}
+
+.language-switcher-option {
+  min-width: 30px;
+  min-height: 24px;
+  border: 0;
+  border-radius: 5px;
+  padding: 0 7px;
+  background: transparent;
+  color: #587078;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.language-switcher-option.active {
+  background: #ffffff;
+  color: var(--brand-strong);
+  box-shadow: 0 1px 4px rgba(15, 48, 53, 0.12);
+}
+
+.language-switcher-option:hover,
+.language-switcher-option:focus-visible {
+  color: var(--brand-strong);
+  outline: none;
+}
+
+.language-switcher-option:focus-visible {
+  box-shadow: var(--focus-ring);
 }
 
 .language-switcher select {
@@ -7756,9 +7802,23 @@ pre {
     max-width: 108px;
   }
 
+  .topbar-language-switcher {
+    min-width: 146px;
+    max-width: none;
+  }
+
   .language-switcher select {
     min-width: 40px;
     max-width: 56px;
+  }
+
+  .language-switcher-options {
+    grid-auto-columns: minmax(28px, auto);
+  }
+
+  .language-switcher-option {
+    min-width: 28px;
+    padding: 0 6px;
   }
 
   .session-chip {
