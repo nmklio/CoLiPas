@@ -114,6 +114,9 @@ function buildLandingCheck() {
       await expectLink(page, /文档|Docs/i, '/docs.html');
       await expectLink(page, /后台|登录|Admin|进入/i, '/admin/');
       await expectLocatorCountAtLeast(page.locator('section, article, .feature-card, .position-card, .deploy-card'), 6, 'landing content sections');
+      await expectLocatorCountAtLeast(page.locator('.feature-card .feature-icon svg'), 6, 'landing feature SVG icons');
+      await expectLocatorCountAtLeast(page.locator('.position-card .position-icon svg'), 4, 'landing position SVG icons');
+      await expectLocatorCountAtLeast(page.locator('.deploy-card .deploy-icon svg'), 3, 'landing deploy SVG icons');
       await assertSensitiveTextAbsent(page, 'landing');
     },
   };

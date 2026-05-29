@@ -161,6 +161,20 @@ function replaceAll(pattern, replacement) {
   }
 }
 
+function landingIcon(kind, className) {
+  const paths = {
+    cloud: '<path d="M7.6 17.5h8.8a3.7 3.7 0 0 0 .3-7.3A5.7 5.7 0 0 0 5.5 13.2 3.6 3.6 0 0 0 7.6 17.5Z"/><path d="M9.2 13.6h5.6"/>',
+    map: '<path d="M12 21s6-5.1 6-10.2A6 6 0 0 0 6 10.8C6 15.9 12 21 12 21Z"/><circle cx="12" cy="10.8" r="2.2"/>',
+    terminal: '<rect x="4" y="5" width="16" height="14" rx="2.4"/><path d="m8 10 2.6 2.2L8 14.4"/><path d="M13 15h4"/>',
+    ai: '<path d="M8.3 9.2a3.2 3.2 0 0 1 6.1-1.3 3.5 3.5 0 0 1 1.2 6.8 3.1 3.1 0 0 1-5.5 2.2 3.2 3.2 0 0 1-1.8-7.7Z"/><path d="M12 7.4v10.2M9.4 12h5.2M15.2 9.4h2.1M6.7 14.6h2.1"/>',
+    flow: '<circle cx="6.5" cy="7" r="2.2"/><circle cx="17.5" cy="7" r="2.2"/><circle cx="12" cy="17" r="2.2"/><path d="M8.6 7h6.8M7.8 9l3.1 5.7M16.2 9l-3.1 5.7"/>',
+    shield: '<path d="M12 3.8 18.4 6v5.4c0 4-2.6 7.2-6.4 8.8-3.8-1.6-6.4-4.8-6.4-8.8V6L12 3.8Z"/><path d="m9.3 12.1 1.9 1.9 3.8-4.2"/>',
+    code: '<path d="m9 8-4 4 4 4M15 8l4 4-4 4"/><path d="m13.2 6.8-2.4 10.4"/>',
+    database: '<ellipse cx="12" cy="6.4" rx="6.8" ry="2.8"/><path d="M5.2 6.4v7.2c0 1.6 3 2.8 6.8 2.8s6.8-1.2 6.8-2.8V6.4"/><path d="M5.2 10c0 1.6 3 2.8 6.8 2.8s6.8-1.2 6.8-2.8"/>',
+  };
+  return `<span class="${className} icon-${kind}" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false">${paths[kind]}</svg></span>`;
+}
+
 replaceAll(/\/\* colipas landing balanced ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\/style>)/g, '');
 replaceAll(/<a class="button github-button" href="https:\/\/github\.com\/nmklio\/CoLiPas"[^>]*>GitHub<\/a>/g, '');
 
@@ -201,6 +215,22 @@ replaceOnce(/(<section id="features" class="section wrap">[\s\S]*?<p class="sect
   `${prefix}保留资产、终端、AI、编排和审计入口，介绍页只展示能力边界，真实操作统一进入受保护后台。${suffix}`
 ));
 
+replaceAll(/<article class="position-card"><small>01<\/small><strong>资产接入<\/strong>/g, `<article class="position-card">${landingIcon('cloud', 'position-icon')}<strong>资产接入</strong>`);
+replaceAll(/<article class="position-card"><small>02<\/small><strong>实时运维<\/strong>/g, `<article class="position-card">${landingIcon('terminal', 'position-icon')}<strong>实时运维</strong>`);
+replaceAll(/<article class="position-card"><small>03<\/small><strong>AI 分析<\/strong>/g, `<article class="position-card">${landingIcon('ai', 'position-icon')}<strong>AI 分析</strong>`);
+replaceAll(/<article class="position-card"><small>04<\/small><strong>审计闭环<\/strong>/g, `<article class="position-card">${landingIcon('shield', 'position-icon')}<strong>审计闭环</strong>`);
+
+replaceAll(/<span class="icon">01<\/span>/g, landingIcon('cloud', 'icon feature-icon'));
+replaceAll(/<span class="icon">02<\/span>/g, landingIcon('map', 'icon feature-icon'));
+replaceAll(/<span class="icon">03<\/span>/g, landingIcon('terminal', 'icon feature-icon'));
+replaceAll(/<span class="icon">04<\/span>/g, landingIcon('ai', 'icon feature-icon'));
+replaceAll(/<span class="icon">05<\/span>/g, landingIcon('flow', 'icon feature-icon'));
+replaceAll(/<span class="icon">06<\/span>/g, landingIcon('shield', 'icon feature-icon'));
+
+replaceAll(/<article class="deploy-card"><h3>Linux systemd<\/h3>/g, `<article class="deploy-card">${landingIcon('terminal', 'deploy-icon')}<h3>Linux systemd</h3>`);
+replaceAll(/<article class="deploy-card"><h3>Node 20\+<\/h3>/g, `<article class="deploy-card">${landingIcon('code', 'deploy-icon')}<h3>Node 20+</h3>`);
+replaceAll(/<article class="deploy-card"><h3>Docker Compose<\/h3>/g, `<article class="deploy-card">${landingIcon('database', 'deploy-icon')}<h3>Docker Compose</h3>`);
+
 if (!html.includes('.nav-actions {')) {
   replaceOnce('.nav-action {', `.nav-actions {
   justify-self: end;
@@ -240,7 +270,52 @@ if (!html.includes('@media (max-width: 640px) {\n  .nav-actions')) {
   }`);
 }
 
-replaceOnce('</style>', `/* colipas landing balanced ui v3 */
+replaceOnce('</style>', `/* colipas landing balanced ui v4 */
+.feature-icon,
+.position-icon,
+.deploy-icon {
+  width: 44px;
+  height: 44px;
+  border: 1px solid #cfe0f5;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f8fbff 0%, #eaf3ff 100%);
+  color: var(--blue);
+  display: inline-grid;
+  place-items: center;
+  box-shadow: 0 12px 26px rgba(37, 99, 235, .1);
+}
+.position-icon,
+.deploy-icon {
+  margin-bottom: 12px;
+}
+.feature-icon svg,
+.position-icon svg,
+.deploy-icon svg {
+  width: 23px;
+  height: 23px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.05;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.icon-terminal,
+.icon-code {
+  color: #0f766e;
+  background: linear-gradient(135deg, #f6fffd 0%, #e7f7f4 100%);
+  border-color: #b8e0d9;
+}
+.icon-ai,
+.icon-flow {
+  color: #7c3aed;
+  background: linear-gradient(135deg, #fbf8ff 0%, #f0e9ff 100%);
+  border-color: #ddd0ff;
+}
+.icon-shield {
+  color: #166534;
+  background: linear-gradient(135deg, #fbfff8 0%, #eaf7e8 100%);
+  border-color: #bfdfbb;
+}
 @media (min-width: 981px) {
   .nav { height: 72px; }
   .nav-inner,

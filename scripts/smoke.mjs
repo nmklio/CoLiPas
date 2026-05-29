@@ -2980,6 +2980,10 @@ function assertAccountUiGuards() {
     || !serverUpdateSource.includes('https://github.com/nmklio/CoLiPas')
     || !serverUpdateSource.includes('href="/docs.html"')
     || !serverUpdateSource.includes('colipas landing balanced ui')
+    || !serverUpdateSource.includes('landingIcon(kind, className)')
+    || !serverUpdateSource.includes('icon feature-icon')
+    || !serverUpdateSource.includes('position-icon')
+    || !serverUpdateSource.includes('deploy-icon')
     || !serverUpdateSource.includes('云服务器管理与 AI 运维后台')
     || !serverUpdateSource.includes('COLIPAS_RESET_ADMIN_PASSWORD')
     || !serverUpdateSource.includes('SSH_ORIGINAL_COMMAND')
@@ -3010,6 +3014,9 @@ function assertAccountUiGuards() {
     'assertSensitiveTextAbsent',
     'expectTextAbsent',
     'landing legacy footer product description',
+    'landing feature SVG icons',
+    'landing position SVG icons',
+    'landing deploy SVG icons',
     '云服务器管理与 AI 运维后台',
     "path.resolve('output', 'public-pages-check')",
     "waitUntil: 'domcontentloaded'",
