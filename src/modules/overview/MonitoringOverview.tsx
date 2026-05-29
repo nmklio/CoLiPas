@@ -52,6 +52,13 @@ interface CountryHover {
   y: number;
 }
 
+interface MapCountryShape {
+  id: string;
+  path: string;
+  name: string;
+  centroid: [number, number];
+}
+
 const MAP_WIDTH = 1000;
 const MAP_HEIGHT = 520;
 const tooltipServerNameLimit = 6;
@@ -66,7 +73,18 @@ const projection = geoEquirectangular().fitExtent(
   { type: 'Sphere' },
 );
 const mapPath = geoPath(projection);
-const mapCountryIds = new Set(countries.features.map((country) => normalizeCountryId(country.id)));
+const mapCountryShapes: MapCountryShape[] = countries.features.map((country) => {
+  const typedCountry = country as Feature<Geometry, { name?: string }>;
+  const centroid = mapPath.centroid(typedCountry);
+
+  return {
+    id: normalizeCountryId(country.id),
+    path: mapPath(typedCountry) ?? '',
+    name: typedCountry.properties?.name ?? '',
+    centroid: [centroid[0], centroid[1]],
+  };
+});
+const mapCountryIds = new Set(mapCountryShapes.map((country) => country.id));
 
 const countryCodeLocations: Record<string, RegionLocation> = {
   AU: { lat: -33.8688, lng: 151.2093, countryId: '036', matched: true },
@@ -307,9 +325,8 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, onReg
                 </defs>
                 <rect className="map-ocean" width={MAP_WIDTH} height={MAP_HEIGHT} rx="10" />
                 <g className="map-countries">
-                  {countries.features.map((country) => {
-                    const id = normalizeCountryId(country.id);
-                    const path = mapPath(country as Feature<Geometry>) ?? '';
+                  {mapCountryShapes.map((country) => {
+                    const id = country.id;
                     const matchedRegions = regionsByCountryId.get(id) ?? [];
                     const matchedRegion = matchedRegions[0];
                     const countryHover = matchedRegion ? buildCountryHover(country, matchedRegions, id, regionName, countryName) : null;
@@ -320,8 +337,8 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, onReg
 
                     return (
                       <path
-                        key={id || country.properties?.name}
-                        d={path}
+                        key={id || country.name}
+                        d={country.path}
                         className={countryClass}
                         role={matchedRegion ? 'button' : undefined}
                         tabIndex={matchedRegion ? 0 : undefined}
@@ -786,7 +803,7 @@ function buildOverviewStats(servers: ServerNode[], events: OperationEvent[]) {
 }
 
 function buildCountryHover(
-  country: Feature<Geometry, { name?: string }>,
+  country: MapCountryShape,
   regions: RegionNode[],
   countryId: string,
   formatRegion: (region: string) => string,
@@ -794,7 +811,6 @@ function buildCountryHover(
 ): CountryHover {
   const total = regions.reduce((sum, region) => sum + region.total, 0);
   const running = regions.reduce((sum, region) => sum + region.running, 0);
-  const center = mapPath.centroid(country);
   const fallbackRegion = regions[0];
   const regionNames = regions.map((region) => formatRegion(region.region));
   const weightedTotal = Math.max(1, regions.reduce((sum, region) => sum + region.total, 0));
@@ -803,14 +819,14 @@ function buildCountryHover(
     y: regions.reduce((sum, region) => sum + region.y * region.total, 0) / weightedTotal,
   };
   const countryAnchor = {
-    x: Number.isFinite(center[0]) ? (center[0] / MAP_WIDTH) * 100 : fallbackRegion.x,
-    y: Number.isFinite(center[1]) ? (center[1] / MAP_HEIGHT) * 100 : fallbackRegion.y,
+    x: Number.isFinite(country.centroid[0]) ? (country.centroid[0] / MAP_WIDTH) * 100 : fallbackRegion.x,
+    y: Number.isFinite(country.centroid[1]) ? (country.centroid[1] / MAP_HEIGHT) * 100 : fallbackRegion.y,
   };
   const x = clamp(Number.isFinite(regionAnchor.x) ? regionAnchor.x : countryAnchor.x, 4, 96);
   const y = clamp(Number.isFinite(regionAnchor.y) ? regionAnchor.y : countryAnchor.y, 6, 92);
 
   return {
-    countryName: formatCountry(country.properties?.name || fallbackRegion.region || countryId),
+    countryName: formatCountry(country.name || fallbackRegion.region || countryId),
     title: regionNames.length > 2 ? `${regionNames.slice(0, 2).join(' / ')} +${regionNames.length - 2}` : regionNames.join(' / '),
     regions,
     total,

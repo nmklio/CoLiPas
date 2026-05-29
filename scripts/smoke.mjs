@@ -4082,6 +4082,12 @@ function assertOverviewMapInteractionGuards() {
     "const fallbackLocation: RegionLocation = { lat: 18, lng: 0, countryId: '', matched: false }",
     'countryIds: getRenderableCountryIds(location)',
     '?? fallbackLocation',
+    'const mapCountryShapes: MapCountryShape[] = countries.features.map',
+    "path: mapPath(typedCountry) ?? ''",
+    'centroid: [centroid[0], centroid[1]]',
+    '{mapCountryShapes.map((country) =>',
+    'd={country.path}',
+    'country.centroid[0]',
     'const normalizedRegions = buildRegionSearchVariants(region)',
     'function buildRegionSearchVariants(region: string): string[]',
     'const shortRegionExpansions',
@@ -4142,6 +4148,12 @@ function assertOverviewMapInteractionGuards() {
   }
   if (overviewSource.includes('new Set(servers.map((server) => server.provider)).size')) {
     throw new Error('Overview provider count must reuse single-pass stats instead of rescanning during render');
+  }
+  if (overviewSource.includes('{countries.features.map((country) =>') || overviewSource.includes('const path = mapPath(country as Feature<Geometry>)')) {
+    throw new Error('Overview map must precompute country SVG paths instead of recalculating them during React render');
+  }
+  if (overviewSource.includes('const center = mapPath.centroid(country);')) {
+    throw new Error('Overview map must reuse precomputed country centroids for hover anchors');
   }
 
   const tooltipPointerDownBlock = overviewSource.slice(
@@ -4494,6 +4506,7 @@ function assertSshTerminalRealtimeGuards() {
     'const terminalWriteImmediateThreshold = 256',
     'const terminalCompatibleInputFlushMs = 4',
     'const terminalRuntimePrefetchDelayMs = 250',
+    'const terminalNetworkUiRefreshMs = 900',
     'void loadTerminalRuntime()',
     'getTerminalWriteChunkSize(content.length)',
     'window.requestAnimationFrame',
@@ -4504,6 +4517,14 @@ function assertSshTerminalRealtimeGuards() {
     'terminalInputChainRef.current',
     'terminalInputInFlightRef',
     'terminalInputFlushAgainRef',
+    'terminalNetworkRenderedRef',
+    'shouldRenderTerminalNetworkStats(renderedStats, nextStats, now',
+    'function shouldRenderTerminalNetworkStats(',
+    'terminalNetworkDisplayKey(renderedStats) === terminalNetworkDisplayKey(nextStats)',
+    'function clearTerminalNetworkStats()',
+    'const allServersById = useMemo(() => buildServerById(allServers), [allServers])',
+    'allServersById.get(sshPanelServerId)',
+    'function buildServerById(servers: ServerNode[])',
     "terminalShellSocketRef.current.sendInput(data)",
     'function interruptTerminalCommand()',
     "sendTerminalInput(sessionId, '\\u0003')",
@@ -4545,6 +4566,12 @@ function assertSshTerminalRealtimeGuards() {
   }
   if (inventorySource.includes('ssh-terminal-input-line') || inventorySource.includes('normalizeInteractiveCommand')) {
     throw new Error('SSH terminal must not use a command-submit input or rewrite interactive command text');
+  }
+  if (inventorySource.includes('function updateTerminalNetworkStats(metrics: ServerShellSocketMetrics) {\n    setTerminalNetworkStats({')) {
+    throw new Error('SSH terminal network telemetry must be throttled before touching React state');
+  }
+  if (inventorySource.includes('allServers.find((server) => server.id === sshPanelServerId)')) {
+    throw new Error('SSH terminal active server lookup must use an indexed Map for large inventories');
   }
   const requiredToolLabels = [
     'servers.terminalTools',

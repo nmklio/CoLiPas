@@ -48,6 +48,7 @@ const terminalWriteLargeBacklogThreshold = 64 * 1024;
 const terminalWriteImmediateThreshold = 256;
 const terminalCompatibleInputFlushMs = 4;
 const terminalRuntimePrefetchDelayMs = 250;
+const terminalNetworkUiRefreshMs = 900;
 
 const actionCommands: Record<'powerOn' | 'shutdown' | 'reboot', string> = {
   powerOn: 'printf "server reachable via SSH\\n"; uptime',
@@ -143,6 +144,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const terminalInputChainRef = useRef<Promise<void>>(Promise.resolve());
   const terminalInputInFlightRef = useRef(false);
   const terminalInputFlushAgainRef = useRef(false);
+  const terminalNetworkRenderedRef = useRef<TerminalNetworkStats | null>(null);
+  const terminalNetworkRenderedAtRef = useRef(0);
   const terminalCssInjectedRef = useRef(false);
   const actionMessageTimerRef = useRef<number | null>(null);
   const sshConsoleOpenRef = useRef(false);
@@ -157,7 +160,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const visibleConnectedServerCount = useMemo(() => countConnectedServers(servers), [servers]);
   const visibleServerRows = useMemo(() => servers.slice(0, visibleServerLimit), [servers, visibleServerLimit]);
   const hiddenServerCount = Math.max(servers.length - visibleServerRows.length, 0);
-  const activeSshServer = useMemo(() => allServers.find((server) => server.id === sshPanelServerId) ?? null, [allServers, sshPanelServerId]);
+  const allServersById = useMemo(() => buildServerById(allServers), [allServers]);
+  const activeSshServer = useMemo(() => allServersById.get(sshPanelServerId) ?? null, [allServersById, sshPanelServerId]);
   const terminalNetworkLabel = terminalNetworkStats
     ? `${formatTerminalRtt(terminalNetworkStats.rttMs)} / ${formatBytesPerSecond(terminalNetworkStats.throughputBytesPerSecond)}`
     : '';
@@ -1037,7 +1041,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     sshConsoleOpenRef.current = true;
     setSshPanelServerId(server.id);
     setLoginProbe(null);
-    setTerminalNetworkStats(null);
+    clearTerminalNetworkStats();
     sshConsoleReplayHistoryRef.current = !terminalShellIdRef.current || terminalShellServerIdRef.current !== server.id;
     setSshConsoleOpen(true);
     refreshShellStatus();
@@ -1053,7 +1057,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     setSshConsoleOpen(false);
     setSshPanelServerId('');
     setLoginProbe(null);
-    setTerminalNetworkStats(null);
+    clearTerminalNetworkStats();
     setSshRunning(false);
     setSshInterrupting(false);
     if (serverName) {
@@ -1074,7 +1078,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       return;
     }
     setSshRunning(true);
-    setTerminalNetworkStats(null);
+    clearTerminalNetworkStats();
     closeActiveShellSession();
     terminalShellServerIdRef.current = server.id;
     terminal.reset();
@@ -1105,7 +1109,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       }
       closeActiveShellSession();
       refreshShellStatus();
-      setTerminalNetworkStats(null);
+      clearTerminalNetworkStats();
       setLoginProbe({
         host: server.ssh?.host || server.publicIp,
         user: server.ssh?.username || 'root',
@@ -1257,7 +1261,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       { replayHistory: sshConsoleReplayHistoryRef.current },
     );
     terminalShellStreamRef.current = stream;
-    setTerminalNetworkStats({
+    renderTerminalNetworkStats({
       bytesReceived: 0,
       throughputBytesPerSecond: 0,
       rttMs: null,
@@ -1285,7 +1289,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       terminalShellStreamRef.current = null;
       terminalShellSocketRef.current = null;
       terminalShellTransportRef.current = null;
-      setTerminalNetworkStats(null);
+      clearTerminalNetworkStats();
       refreshShellStatus();
     }
     if (event.type === 'error' && sshConsoleOpenRef.current) {
@@ -1296,11 +1300,29 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   }
 
   function updateTerminalNetworkStats(metrics: ServerShellSocketMetrics) {
-    setTerminalNetworkStats({
+    const nextStats = {
       bytesReceived: metrics.bytesReceived,
       throughputBytesPerSecond: metrics.throughputBytesPerSecond,
       rttMs: metrics.rttMs,
-    });
+    };
+    const now = performance.now();
+    const renderedStats = terminalNetworkRenderedRef.current;
+    if (!shouldRenderTerminalNetworkStats(renderedStats, nextStats, now, terminalNetworkRenderedAtRef.current)) {
+      return;
+    }
+    renderTerminalNetworkStats(nextStats, now);
+  }
+
+  function renderTerminalNetworkStats(stats: TerminalNetworkStats, renderedAt = performance.now()) {
+    terminalNetworkRenderedRef.current = stats;
+    terminalNetworkRenderedAtRef.current = renderedAt;
+    setTerminalNetworkStats(stats);
+  }
+
+  function clearTerminalNetworkStats() {
+    terminalNetworkRenderedRef.current = null;
+    terminalNetworkRenderedAtRef.current = 0;
+    setTerminalNetworkStats(null);
   }
 
   async function ensureXterm() {
@@ -1625,7 +1647,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     clearTerminalInputBuffer();
     if (syncState) {
       setTerminalShellId(null);
-      setTerminalNetworkStats(null);
+      clearTerminalNetworkStats();
     }
     terminalShellServerIdRef.current = null;
     terminalDataSubscriptionRef.current?.dispose();
@@ -1862,6 +1884,14 @@ function countConnectedServers(servers: ServerNode[]) {
   return count;
 }
 
+function buildServerById(servers: ServerNode[]) {
+  const serverById = new Map<string, ServerNode>();
+  for (const server of servers) {
+    serverById.set(server.id, server);
+  }
+  return serverById;
+}
+
 function buildProviderOptions(dynamicProviders: string[]) {
   const normalized = new Map<string, string>();
   [...baseProviders, customProvider].forEach((provider) => {
@@ -1998,6 +2028,27 @@ function serverStatusText(server: ServerNode, language: Language) {
 
 function maxServerLoad(server: ServerNode) {
   return Math.max(server.cpu, server.memory, server.disk);
+}
+
+function shouldRenderTerminalNetworkStats(
+  renderedStats: TerminalNetworkStats | null,
+  nextStats: TerminalNetworkStats,
+  now: number,
+  renderedAt: number,
+) {
+  if (!renderedStats) {
+    return true;
+  }
+
+  if (terminalNetworkDisplayKey(renderedStats) === terminalNetworkDisplayKey(nextStats)) {
+    return false;
+  }
+
+  return now - renderedAt >= terminalNetworkUiRefreshMs;
+}
+
+function terminalNetworkDisplayKey(stats: TerminalNetworkStats) {
+  return `${formatTerminalRtt(stats.rttMs)}|${formatBytesPerSecond(stats.throughputBytesPerSecond)}`;
 }
 
 function ActionButton({ label, icon, disabled, onClick }: { label: string; icon: ReactNode; disabled?: boolean; onClick: () => void }) {
