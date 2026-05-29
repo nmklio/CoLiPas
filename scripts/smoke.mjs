@@ -4197,9 +4197,9 @@ function assertOverviewServerFilterLinkage() {
   }
 
   const inventoryFragments = [
-    'const scopedRegions = (filters.regionScope ?? [])',
-    'items.findIndex((item) => item.trim().toLowerCase() === region.trim().toLowerCase())',
-    'const visibleConnectedServers = useMemo(() => servers.filter((server) => server.ssh?.connected), [servers])',
+    'const regions = useMemo(() => buildSortedRegions(allServers), [allServers])',
+    'const scopedRegions = useMemo(() => normalizeScopedRegions(filters.regionScope), [filters.regionScope])',
+    'const visibleConnectedServerCount = useMemo(() => countConnectedServers(servers), [servers])',
     'const visibleSummary = useMemo(() => {',
     'const providers = new Set<string>()',
     'const serverRegions = new Set<string>()',
@@ -4211,6 +4211,9 @@ function assertOverviewServerFilterLinkage() {
     'servers.clearRegionScope',
     'scopedRegions.length > 0',
     'regionScope: undefined',
+    'function buildSortedRegions(servers: ServerNode[])',
+    'function normalizeScopedRegions(regions: string[] | undefined)',
+    'function countConnectedServers(servers: ServerNode[])',
   ];
   const missingInventory = inventoryFragments.filter((fragment) => !inventorySource.includes(fragment));
   if (missingInventory.length) {

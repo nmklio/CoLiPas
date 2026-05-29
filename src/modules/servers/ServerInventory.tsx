@@ -93,10 +93,8 @@ const initialForm: ConnectServerPayload = {
 
 export function ServerInventory({ allServers, servers, filters, onFiltersChange, onServerConnected, onAuditTraceOpen }: ServerInventoryProps) {
   const { language, t } = useI18n();
-  const regions = useMemo(() => Array.from(new Set(allServers.map((server) => server.region))).sort(), [allServers]);
-  const scopedRegions = (filters.regionScope ?? []).filter(
-    (region, index, items) => region.trim() && items.findIndex((item) => item.trim().toLowerCase() === region.trim().toLowerCase()) === index,
-  );
+  const regions = useMemo(() => buildSortedRegions(allServers), [allServers]);
+  const scopedRegions = useMemo(() => normalizeScopedRegions(filters.regionScope), [filters.regionScope]);
   const providerFilters = useMemo(() => buildProviderOptions(allServers.map((server) => server.provider)), [allServers]);
   const providerDisplayName = (provider: string) => formatProviderName(provider, t);
   const providerFilterName = (provider: string) => formatProviderFilterName(provider, t);
@@ -155,7 +153,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const identityInFlightRef = useRef<{ key: string; promise: Promise<ServerIdentityResponse> } | null>(null);
   const identityCacheRef = useRef<Map<string, ServerIdentityResponse>>(new Map());
   const lastAppliedIdentityRef = useRef<{ region: string; os: string } | null>(null);
-  const visibleConnectedServers = useMemo(() => servers.filter((server) => server.ssh?.connected), [servers]);
+  const visibleConnectedServerCount = useMemo(() => countConnectedServers(servers), [servers]);
   const visibleServerRows = useMemo(() => servers.slice(0, visibleServerLimit), [servers, visibleServerLimit]);
   const hiddenServerCount = Math.max(servers.length - visibleServerRows.length, 0);
   const activeSshServer = useMemo(() => allServers.find((server) => server.id === sshPanelServerId) ?? null, [allServers, sshPanelServerId]);
@@ -201,7 +199,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const formVisible = formOpen || Boolean(editingServerId) || (allServers.length === 0 && !formDismissed);
 
   useEffect(() => {
-    if (visibleConnectedServers.length === 0 || terminalRuntimeRef.current) {
+    if (visibleConnectedServerCount === 0 || terminalRuntimeRef.current) {
       return undefined;
     }
 
@@ -209,7 +207,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       void loadTerminalRuntime();
     }, terminalRuntimePrefetchDelayMs);
     return () => window.clearTimeout(timer);
-  }, [visibleConnectedServers.length]);
+  }, [visibleConnectedServerCount]);
 
   useEffect(() => {
     setVisibleServerLimit(serverRenderBatchSize);
@@ -368,7 +366,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
         </article>
         <article>
           <span><ShieldCheck size={16} /> SSH</span>
-          <strong>{visibleConnectedServers.length}</strong>
+          <strong>{visibleConnectedServerCount}</strong>
           <small>{t('servers.summarySshReady')}</small>
         </article>
         <article>
@@ -639,7 +637,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
             <div className="server-workspace-head">
               <div>
                 <strong>{t('servers.tableServer')}</strong>
-                <span>{visibleConnectedServers.length > 0 ? t('servers.connectableCount', { count: visibleConnectedServers.length }) : t('servers.noConnectable')}</span>
+                <span>{visibleConnectedServerCount > 0 ? t('servers.connectableCount', { count: visibleConnectedServerCount }) : t('servers.noConnectable')}</span>
               </div>
               <div>{t('servers.tableProvider')}</div>
               <div>{t('servers.tableResource')}</div>
@@ -1823,6 +1821,44 @@ function isIdentityTargetFormField(key: keyof ConnectServerPayload) {
 
 function isIdentityTargetSshField(key: keyof ConnectServerPayload['ssh']) {
   return key === 'host' || key === 'port' || key === 'username' || key === 'authType' || key === 'verifyMode';
+}
+
+function buildSortedRegions(servers: ServerNode[]) {
+  const regions = new Set<string>();
+  for (const server of servers) {
+    if (server.region) {
+      regions.add(server.region);
+    }
+  }
+  return Array.from(regions).sort();
+}
+
+function normalizeScopedRegions(regions: string[] | undefined) {
+  if (!regions?.length) {
+    return [];
+  }
+  const normalized = new Map<string, string>();
+  for (const region of regions) {
+    const trimmed = region.trim();
+    if (!trimmed) {
+      continue;
+    }
+    const key = trimmed.toLowerCase();
+    if (!normalized.has(key)) {
+      normalized.set(key, trimmed);
+    }
+  }
+  return Array.from(normalized.values());
+}
+
+function countConnectedServers(servers: ServerNode[]) {
+  let count = 0;
+  for (const server of servers) {
+    if (server.ssh?.connected) {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 function buildProviderOptions(dynamicProviders: string[]) {
