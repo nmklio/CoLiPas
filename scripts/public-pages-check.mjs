@@ -108,6 +108,8 @@ function buildLandingCheck() {
     assert: async (page) => {
       await expectTitle(page, /CoLiPas/);
       await expectText(page.locator('h1').first(), /CoLiPas云服务器管理面板|CoLiPas Cloud Server Management Panel|multi-cloud/i, 'landing h1');
+      await expectText(page.locator('body'), /云服务器管理与 AI 运维后台|cloud server management/i, 'landing footer product description');
+      await expectTextAbsent(page, /多云服务器管理与 AI 运维后台/, 'landing legacy footer product description');
       await expectLink(page, /GitHub/i, 'https://github.com/nmklio/CoLiPas');
       await expectLink(page, /文档|Docs/i, '/docs.html');
       await expectLink(page, /后台|登录|Admin|进入/i, '/admin/');
@@ -164,6 +166,13 @@ async function expectText(locator, pattern, label) {
   const text = (await locator.innerText({ timeout: 5000 })).trim();
   if (!pattern.test(text)) {
     throw new Error(`${label} text "${text.slice(0, 160)}" did not match ${pattern}`);
+  }
+}
+
+async function expectTextAbsent(page, pattern, label) {
+  const text = await page.locator('body').innerText({ timeout: 10000 });
+  if (pattern.test(text)) {
+    throw new Error(`${label} still rendered`);
   }
 }
 

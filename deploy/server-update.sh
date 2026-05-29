@@ -124,6 +124,11 @@ replaceOnce(/(<section class="hero wrap">[\s\S]*?)<h1>[\s\S]*?<\/h1>/, (_match, 
   `${prefix}<h1><span class="hero-title-main">CoLiPas云服务器管理面板</span><span class="hero-title-accent">接入、监控、修复一体化</span></h1>`
 ));
 
+replaceAll(/<div><strong>CoLiPas<\/strong><span>多云服务器管理与 AI 运维后台<\/span><\/div>/g, (
+  '<div><strong>CoLiPas云服务器管理面板</strong><span>云服务器管理与 AI 运维后台</span></div>'
+));
+replaceAll(/<span>多云服务器管理与 AI 运维后台<\/span>/g, '<span>云服务器管理与 AI 运维后台</span>');
+
 replaceOnce(/(<section id="product" class="section wrap">[\s\S]*?<h2>)[\s\S]*?(<\/h2>)/, (_match, prefix, suffix) => (
   `${prefix}先接入，再验证，再修复，最后审计${suffix}`
 ));

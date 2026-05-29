@@ -2980,6 +2980,7 @@ function assertAccountUiGuards() {
     || !serverUpdateSource.includes('https://github.com/nmklio/CoLiPas')
     || !serverUpdateSource.includes('href="/docs.html"')
     || !serverUpdateSource.includes('colipas landing balanced ui')
+    || !serverUpdateSource.includes('云服务器管理与 AI 运维后台')
     || !serverUpdateSource.includes('try_files /docs.html =404')
     || !serverUpdateSource.includes('CoLiPas cloud server management panel docs page ready')
     || !serverUpdateSource.includes('href="/colipas-icon.svg"')
@@ -3000,6 +3001,9 @@ function assertAccountUiGuards() {
     'assertNoHorizontalOverflow',
     'assertNoBadBoxes',
     'assertSensitiveTextAbsent',
+    'expectTextAbsent',
+    'landing legacy footer product description',
+    '云服务器管理与 AI 运维后台',
     "path.resolve('output', 'public-pages-check')",
     "waitUntil: 'domcontentloaded'",
     'static.cloudflareinsights.com',
