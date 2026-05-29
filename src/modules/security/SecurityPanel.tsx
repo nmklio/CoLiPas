@@ -129,7 +129,6 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
   const copy = securityCopyByLanguage[language] ?? securityCopyByLanguage.zh;
   const diagnosticCopy = diagnosticCopyByLanguage[language] ?? diagnosticCopyByLanguage.zh;
   const locale = getLocale(language);
-  const openEvents = events.filter((event) => event.status === 'open');
   const [config, setConfig] = useState<ConfigSummary | null>(null);
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -148,6 +147,7 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
   const [exportingReadinessReport, setExportingReadinessReport] = useState(false);
   const [exportingDiagnostic, setExportingDiagnostic] = useState(false);
 
+  const openEvents = useMemo(() => events.filter((event) => event.status === 'open'), [events]);
   const filteredAudits = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return auditEntries.filter((entry) => {
@@ -171,18 +171,18 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
     [auditEntries, copy, locale, selectedAudit],
   );
   const activeAuditIssues = useMemo(() => getActiveAuditIssues(auditEntries), [auditEntries]);
+  const auditStatusSummary = useMemo(() => summarizeAuditStatus(auditEntries), [auditEntries]);
   const checks = useMemo(() => buildSecurityChecks(config, auditEntries, openEvents, copy), [auditEntries, config, openEvents, copy]);
   const riskActions = useMemo(() => buildSecurityRiskActions(checks, auditEntries, openEvents, copy), [auditEntries, checks, openEvents, copy]);
   const relationItems = useMemo(() => buildSecurityRelationItems(config, auditEntries, copy), [auditEntries, config, copy]);
+  const relationGroups = useMemo(() => groupSecurityRelationItems(relationItems), [relationItems]);
   const selectedRelation = relationFilter ? relationItems.find((item) => item.key === relationFilter) ?? null : null;
-  const runtimeItems = relationItems.filter((item) => item.key === 'runtime' || item.key === 'cors' || item.key === 'timeout');
-  const secretItems = relationItems.filter((item) => item.key === 'ai' || item.key === 'api' || item.key === 'ssh' || item.key === 'secrets');
+  const { runtimeItems, secretItems } = relationGroups;
   const failedCount = activeAuditIssues.failed;
   const blockedCount = activeAuditIssues.blocked;
-  const riskyCount = checks.filter((check) => check.state !== 'pass').length + activeAuditIssues.total + openEvents.length;
-  const successRate = auditEntries.length > 0
-    ? Math.round((auditEntries.filter((entry) => entry.status === 'success').length / auditEntries.length) * 100)
-    : 100;
+  const riskyCheckCount = useMemo(() => checks.reduce((count, check) => count + (check.state !== 'pass' ? 1 : 0), 0), [checks]);
+  const riskyCount = riskyCheckCount + activeAuditIssues.total + openEvents.length;
+  const successRate = auditStatusSummary.successRate;
   const evidenceBrief = useMemo(
     () => buildReleaseEvidenceBrief({
       readiness,
@@ -995,11 +995,46 @@ function buildSecurityRiskActions(
 
 function getActiveAuditIssues(auditEntries: AuditEntry[]) {
   const items = getActiveAuditEntries(auditEntries);
+  let blocked = 0;
+  let failed = 0;
+  for (const entry of items) {
+    if (entry.status === 'blocked') {
+      blocked += 1;
+    } else if (entry.status === 'failed') {
+      failed += 1;
+    }
+  }
   return {
-    blocked: items.filter((entry) => entry.status === 'blocked').length,
-    failed: items.filter((entry) => entry.status === 'failed').length,
+    blocked,
+    failed,
     total: items.length,
   };
+}
+
+function summarizeAuditStatus(auditEntries: AuditEntry[]) {
+  let successful = 0;
+  for (const entry of auditEntries) {
+    if (entry.status === 'success') {
+      successful += 1;
+    }
+  }
+  return {
+    successRate: auditEntries.length > 0 ? Math.round((successful / auditEntries.length) * 100) : 100,
+  };
+}
+
+function groupSecurityRelationItems(items: SecurityRelationItem[]) {
+  const runtimeItems: SecurityRelationItem[] = [];
+  const secretItems: SecurityRelationItem[] = [];
+  for (const item of items) {
+    if (item.key === 'runtime' || item.key === 'cors' || item.key === 'timeout') {
+      runtimeItems.push(item);
+    }
+    if (item.key === 'ai' || item.key === 'api' || item.key === 'ssh' || item.key === 'secrets') {
+      secretItems.push(item);
+    }
+  }
+  return { runtimeItems, secretItems };
 }
 
 function getActiveAuditEntries(auditEntries: AuditEntry[]) {

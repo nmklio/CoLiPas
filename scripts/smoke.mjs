@@ -4704,6 +4704,10 @@ function assertSecurityAuditRelationsAreSpecific() {
     'if (!configResponse.ok || !auditResponse.ok)',
     'Array.isArray(auditBody.items)',
     'setLoadError(copy.loadFailed)',
+    "const openEvents = useMemo(() => events.filter((event) => event.status === 'open'), [events])",
+    'const auditStatusSummary = useMemo(() => summarizeAuditStatus(auditEntries), [auditEntries])',
+    'const relationGroups = useMemo(() => groupSecurityRelationItems(relationItems), [relationItems])',
+    'const riskyCheckCount = useMemo(() => checks.reduce',
     'buildSecurityRiskActions(checks, auditEntries, openEvents, copy)',
     'remediateSecurityRisk({',
     "document.getElementById('security-remediation')",
@@ -4750,6 +4754,8 @@ function assertSecurityAuditRelationsAreSpecific() {
     'copy.evidenceDeploymentDetail(evidenceBrief.deployment.channel, evidenceBrief.deployment.deploymentMode, evidenceBrief.deployment.publicHost)',
     'copy.evidenceBriefCopied',
     'copy.evidenceAuditDetail(activeAuditIssues.blocked, activeAuditIssues.failed, successRate, auditTotal)',
+    'function summarizeAuditStatus(auditEntries: AuditEntry[])',
+    'function groupSecurityRelationItems(items: SecurityRelationItem[])',
     'security-trace-filter-actions',
     'buildOperationAuditTrace(selectedAudit, auditEntries, copy, locale)',
     'function buildOperationAuditTrace(',
@@ -4793,6 +4799,17 @@ function assertSecurityAuditRelationsAreSpecific() {
   const missing = requiredFragments.filter((fragment) => !securitySource.includes(fragment));
   if (missing.length) {
     throw new Error(`Security audit relation/load guards are incomplete: ${missing.join(', ')}`);
+  }
+
+  const forbiddenPerformanceFragments = [
+    "const openEvents = events.filter((event) => event.status === 'open');",
+    "auditEntries.filter((entry) => entry.status === 'success').length",
+    "const runtimeItems = relationItems.filter((item) => item.key === 'runtime'",
+    "const secretItems = relationItems.filter((item) => item.key === 'ai'",
+  ];
+  const performanceRegressions = forbiddenPerformanceFragments.filter((fragment) => securitySource.includes(fragment));
+  if (performanceRegressions.length) {
+    throw new Error(`Security audit panel must keep expensive derivations memoized: ${performanceRegressions.join(', ')}`);
   }
 
   const forbiddenHardcodedFragments = [
