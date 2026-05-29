@@ -3800,9 +3800,9 @@ function assertInteractiveDeployDocsAndScriptGuards() {
   }
 
   const docs = [
-    ['README.md', readmeSource, 'Docker One-Command Deploy', 'Native Linux + systemd One-Command Deploy', 'You do not need to build images, push code, or publish anything yourself.'],
-    ['README_CN.md', cnReadmeSource, 'Docker 一键部署', '原生 Linux + systemd 一键部署', '不需要推送代码，也不需要自己发布镜像'],
-    ['README_JP.md', jpReadmeSource, 'Docker ワンコマンドデプロイ', 'ネイティブ Linux + systemd ワンコマンドデプロイ', 'Docker イメージを自分で公開したりする必要はありません'],
+    ['README.md', readmeSource, 'Docker One-Command Deploy', 'Native Linux + systemd One-Command Deploy', 'Deployment users only run the installer or Compose workflow'],
+    ['README_CN.md', cnReadmeSource, 'Docker 一键部署', '原生 Linux + systemd 一键部署', '部署用户只需要运行下面的一键脚本'],
+    ['README_JP.md', jpReadmeSource, 'Docker ワンコマンドデプロイ', 'ネイティブ Linux + systemd ワンコマンドデプロイ', '下のワンコマンドスクリプトを実行するだけ'],
   ];
   for (const [name, source, dockerPhrase, nativePhrase, noPublishMessage] of docs) {
     if (
@@ -3847,9 +3847,9 @@ function assertContainerRegistryPublishGuards() {
   }
 
   const docs = [
-    ['README.md', readmeSource, 'Docker One-Command Deploy', 'Native Linux + systemd One-Command Deploy', 'You do not need to build images, push code, or publish anything yourself.'],
-    ['README_CN.md', cnReadmeSource, 'Docker 一键部署', '原生 Linux + systemd 一键部署', '不需要推送代码，也不需要自己发布镜像'],
-    ['README_JP.md', jpReadmeSource, 'Docker ワンコマンドデプロイ', 'ネイティブ Linux + systemd ワンコマンドデプロイ', 'Docker イメージを自分で公開したりする必要はありません'],
+    ['README.md', readmeSource, 'Docker One-Command Deploy', 'Native Linux + systemd One-Command Deploy', 'Deployment users only run the installer or Compose workflow'],
+    ['README_CN.md', cnReadmeSource, 'Docker 一键部署', '原生 Linux + systemd 一键部署', '部署用户只需要运行下面的一键脚本'],
+    ['README_JP.md', jpReadmeSource, 'Docker ワンコマンドデプロイ', 'ネイティブ Linux + systemd ワンコマンドデプロイ', '下のワンコマンドスクリプトを実行するだけ'],
   ];
   for (const [name, source, heading, nativeHeading, noPublishMessage] of docs) {
     const confusingPublishingPhrases = [

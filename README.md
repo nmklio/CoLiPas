@@ -116,7 +116,7 @@ Create `.env` from `.env.example`. Before exposing the service, replace at least
 
 ## Production Deploy
 
-Use one of the one-command Linux deploy modes below. Docker Compose is recommended for most users; native Linux + systemd is available when you want the service managed directly by the host. You do not need to build images, push code, or publish anything yourself.
+Use one of the one-command Linux deploy modes below. Docker Compose is recommended for most users; native Linux + systemd is available when you want the service managed directly by the host. Deployment users only run the installer or Compose workflow; they do not need to push code, build Docker images, or publish images.
 
 ### Docker One-Command Deploy
 

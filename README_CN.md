@@ -76,7 +76,7 @@ npm start            # 启动生产服务
 
 ## 生产部署
 
-生产部署支持 Docker Compose 和原生 Linux + systemd 两种一键模式。大多数用户选 Docker；需要主机 systemd 直接托管服务时选原生 Linux。部署用户不需要推送代码，也不需要自己发布镜像。
+生产部署支持 Docker Compose 和原生 Linux + systemd 两种一键模式。大多数用户选 Docker；需要主机 systemd 直接托管服务时选原生 Linux。部署用户只需要运行下面的一键脚本；脚本会拉取项目并启动服务，不要求你推送代码、构建 Docker 镜像或发布镜像。
 
 ### Docker 一键部署（推荐）
 
