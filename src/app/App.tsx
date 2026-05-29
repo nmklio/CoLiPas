@@ -127,7 +127,7 @@ const fallbackOverview: OverviewResponse = {
 };
 
 const fallbackProfile: AccountProfile = {
-  displayName: 'CoLiPas云服务器管理面板',
+  displayName: 'CoLiPas',
   avatarText: 'CP',
   avatarImage: '',
 };
@@ -368,7 +368,7 @@ export function App() {
   const { onlineCount, avgCpu, connectedCount, openEventCount, busiestServer } = overviewStats;
   const timeLocale = getLocale(language);
   const sessionIdentity = session?.user?.username?.trim() ?? '';
-  const accountDisplayLabel = profile.displayName || sessionIdentity || 'CoLiPas云服务器管理面板';
+  const accountDisplayLabel = profile.displayName || sessionIdentity || 'CoLiPas';
   const sessionTooltip = session?.expiresAt
     ? `${accountDisplayLabel} - ${t('login.expiresAt', { time: new Date(session.expiresAt).toLocaleString(timeLocale) })}`
     : accountDisplayLabel;
@@ -465,8 +465,14 @@ export function App() {
     setSettingsError('');
     setSettingsSuccess('');
     try {
-      const result = await updateAccountProfile(profileDraft);
+      const nextProfile = {
+        displayName: profileDraft.displayName.trim() || 'CoLiPas',
+        avatarText: 'CP',
+        avatarImage: profileDraft.avatarImage || '',
+      };
+      const result = await updateAccountProfile(nextProfile);
       setProfile(result.profile);
+      setProfileDraft(result.profile);
       setSession((current) => current ? { ...current, profile: result.profile } : current);
       setSettingsSuccess(t('account.profileSaved'));
     } catch (error) {
@@ -828,16 +834,7 @@ export function App() {
                       value={profileDraft.displayName}
                       maxLength={32}
                       onChange={(event) => setProfileDraft((current) => ({ ...current, displayName: event.target.value }))}
-                      placeholder="CoLiPas云服务器管理面板"
-                    />
-                  </label>
-                  <label className="login-field">
-                    <span>{t('account.avatarText')}</span>
-                    <input
-                      value={profileDraft.avatarText}
-                      maxLength={4}
-                      onChange={(event) => setProfileDraft((current) => ({ ...current, avatarText: event.target.value.toUpperCase() }))}
-                      placeholder="CP"
+                      placeholder="CoLiPas"
                     />
                   </label>
                   <div className="avatar-upload-row">
@@ -924,13 +921,12 @@ export function App() {
 }
 
 function AvatarMark({ profile, className = '' }: { profile: AccountProfile; className?: string }) {
-  const label = profile.avatarText || 'CP';
-  const usesDefaultIcon = !profile.avatarImage && label.trim().toUpperCase() === 'CP';
+  const usesDefaultIcon = !profile.avatarImage;
   const classes = ['brand-mark', usesDefaultIcon ? 'app-brand-mark' : '', className].filter(Boolean).join(' ');
 
   return (
     <div className={classes}>
-      {profile.avatarImage ? <img src={profile.avatarImage} alt="" aria-hidden="true" /> : usesDefaultIcon ? <BrandIcon /> : label}
+      {profile.avatarImage ? <img src={profile.avatarImage} alt="" aria-hidden="true" /> : <BrandIcon />}
     </div>
   );
 }

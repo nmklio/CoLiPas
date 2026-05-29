@@ -156,7 +156,7 @@ if (!loginResponse.ok) {
   throw new Error(`/api/auth/login returned HTTP ${loginResponse.status}`);
 }
 const loginBody = await loginResponse.json();
-if (!loginBody.authenticated || loginBody.user?.username !== 'admin' || loginBody.profile?.displayName !== 'CoLiPas云服务器管理面板' || loginBody.profile?.avatarText !== 'CP') {
+if (!loginBody.authenticated || loginBody.user?.username !== 'admin' || loginBody.profile?.displayName !== 'CoLiPas' || loginBody.profile?.avatarText !== 'CP') {
   throw new Error('/api/auth/login returned unexpected payload');
 }
 if (JSON.stringify(loginBody).match(/sessionId|scrypt|salt|passwordChangedAt/)) {
@@ -178,7 +178,7 @@ if (!sessionResponse.ok) {
   throw new Error(`/api/auth/session returned HTTP ${sessionResponse.status}`);
 }
 const sessionBody = await sessionResponse.json();
-if (!sessionBody.authenticated || sessionBody.user?.username !== 'admin' || sessionBody.profile?.displayName !== 'CoLiPas云服务器管理面板') {
+if (!sessionBody.authenticated || sessionBody.user?.username !== 'admin' || sessionBody.profile?.displayName !== 'CoLiPas') {
   throw new Error('/api/auth/session returned unexpected payload');
 }
 if (JSON.stringify(sessionBody).match(/sessionId|scrypt|salt|passwordChangedAt/)) {
@@ -191,13 +191,50 @@ if (!accountResponse.ok) {
   throw new Error(`/api/account returned HTTP ${accountResponse.status}`);
 }
 const accountBody = await accountResponse.json();
-if (accountBody.session?.user?.username !== 'admin' || accountBody.profile?.avatarText !== 'CP') {
+if (accountBody.session?.user?.username !== 'admin' || accountBody.profile?.displayName !== 'CoLiPas' || accountBody.profile?.avatarText !== 'CP') {
   throw new Error('/api/account returned unexpected profile payload');
 }
 if (JSON.stringify(accountBody).match(/sessionId|scrypt|salt|passwordChangedAt/)) {
   throw new Error('/api/account leaked internal account material');
 }
 console.log('ok /api/account');
+
+const defaultProfileUpdateResponse = await fetch(`${baseUrl}/api/account/profile`, {
+  method: 'PATCH',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    displayName: 'CoLiPas',
+    avatarImage: '',
+  }),
+});
+if (!defaultProfileUpdateResponse.ok) {
+  throw new Error(`/api/account/profile default display name returned HTTP ${defaultProfileUpdateResponse.status}`);
+}
+const defaultProfileLogoutResponse = await fetch(`${baseUrl}/api/auth/logout`, { method: 'POST', headers: authHeaders });
+if (!defaultProfileLogoutResponse.ok) {
+  throw new Error(`/api/auth/logout after default profile save returned HTTP ${defaultProfileLogoutResponse.status}`);
+}
+const defaultProfileReloginResponse = await fetch(`${baseUrl}/api/auth/login`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    username: smokeUsername,
+    password: currentSmokePassword,
+  }),
+});
+if (!defaultProfileReloginResponse.ok) {
+  throw new Error(`/api/auth/login after default profile save returned HTTP ${defaultProfileReloginResponse.status}`);
+}
+const defaultProfileReloginBody = await defaultProfileReloginResponse.json();
+if (defaultProfileReloginBody.profile?.displayName !== 'CoLiPas' || defaultProfileReloginBody.profile?.avatarText !== 'CP') {
+  throw new Error('/api/account/profile default display name did not persist across logout/login');
+}
+const defaultProfileReloginCookie = defaultProfileReloginResponse.headers.get('set-cookie')?.split(';')[0];
+if (!defaultProfileReloginCookie) {
+  throw new Error('/api/auth/login after default profile save did not set a session cookie');
+}
+authHeaders.Cookie = defaultProfileReloginCookie;
+console.log('ok /api/account/profile preserves CoLiPas default across logout/login without fallback text');
 
 const profileUpdateResponse = await fetch(`${baseUrl}/api/account/profile`, {
   method: 'PATCH',
@@ -3113,6 +3150,15 @@ function assertAccountUiGuards() {
   const missingAvatar = avatarFragments.filter((fragment) => !appSource.includes(fragment));
   if (missingAvatar.length) {
     throw new Error(`Account avatar upload UI is incomplete: ${missingAvatar.join(', ')}`);
+  }
+  if (
+    appSource.includes("t('account.avatarText')")
+    || appSource.includes('profileDraft.avatarText')
+    || appSource.includes('placeholder="CP"')
+    || i18nSource.includes("'account.avatarText': '备用文字'")
+    || i18nSource.includes("'account.avatarText': 'Fallback text'")
+  ) {
+    throw new Error('Account appearance UI must not expose fallback avatar text controls');
   }
 
   const backendFragments = [

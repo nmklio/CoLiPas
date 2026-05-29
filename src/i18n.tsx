@@ -125,7 +125,6 @@ const zh = {
   'account.profileTitle': '头像与名称',
   'account.profileDesc': '默认使用产品名称，也可上传图片或自定义侧边栏名称。',
   'account.displayName': '显示名称',
-  'account.avatarText': '头像文字',
   'account.avatarImage': '上传头像图片',
   'account.removeAvatarImage': '移除图片',
   'account.avatarImageReady': '头像图片已载入，保存后生效',
@@ -466,7 +465,6 @@ const en: typeof zh = {
   'account.profileTitle': 'Avatar and name',
   'account.profileDesc': 'Uses the product name by default; you can upload an avatar or customize the sidebar name.',
   'account.displayName': 'Display name',
-  'account.avatarText': 'Avatar text',
   'account.avatarImage': 'Upload avatar image',
   'account.removeAvatarImage': 'Remove image',
   'account.avatarImageReady': 'Avatar image loaded. Save to apply it.',
@@ -801,7 +799,6 @@ const ja: typeof zh = {
   'account.profileTitle': 'アバターと名前',
   'account.profileDesc': '既定では製品名を使用します。画像のアップロードやサイドバー名のカスタマイズもできます。',
   'account.displayName': '表示名',
-  'account.avatarText': 'アバター文字',
   'account.avatarImage': 'アバター画像をアップロード',
   'account.removeAvatarImage': '画像を削除',
   'account.avatarImageReady': 'アバター画像を読み込みました。保存すると反映されます',
@@ -1107,7 +1104,6 @@ const fallbackTranslations: Record<Language, Record<string, string>> = {
 const cleanTranslations: Record<Language, Record<string, string>> = {
   zh: {
     'account.profileDesc': '默认使用产品图标，也可上传图片或自定义侧边栏名称。',
-    'account.avatarText': '备用文字',
     'account.saveProfile': '保存外观',
     'account.profileSaved': '外观设置已更新',
     'app.currentFocus': '运维焦点',
@@ -1163,7 +1159,6 @@ const cleanTranslations: Record<Language, Record<string, string>> = {
   },
   en: {
     'account.profileDesc': 'Uses the product icon by default. You can upload an image or rename the sidebar brand.',
-    'account.avatarText': 'Fallback text',
     'account.saveProfile': 'Save appearance',
     'account.profileSaved': 'Appearance settings updated',
     'app.currentFocus': 'Ops focus',
@@ -1219,7 +1214,6 @@ const cleanTranslations: Record<Language, Record<string, string>> = {
   },
   ja: {
     'account.profileDesc': '既定では製品アイコンを使用します。画像アップロードやサイドバー名の変更もできます。',
-    'account.avatarText': '代替文字',
     'account.saveProfile': '外観を保存',
     'account.profileSaved': '外観設定を更新しました',
     'app.currentFocus': '運用フォーカス',

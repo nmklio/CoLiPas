@@ -7,6 +7,9 @@ import { readAppSetting, writeAppSetting } from './database.js';
 
 const avatarMaxBytes = 2 * 1024 * 1024;
 const avatarMaxDataUrlLength = Math.ceil(avatarMaxBytes * 4 / 3) + 64;
+const defaultAvatarText = 'CP';
+const defaultDisplayName = 'CoLiPas';
+const legacyDefaultDisplayName = 'CoLiPas云服务器管理面板';
 
 const loginSchema = z.object({
   username: z.string().trim().min(1).max(80),
@@ -15,7 +18,7 @@ const loginSchema = z.object({
 
 const profileSchema = z.object({
   displayName: z.string().trim().min(1).max(32),
-  avatarText: z.string().trim().min(1).max(4).regex(/^[\p{L}\p{N}]+$/u, '头像只能包含字母或数字'),
+  avatarText: z.string().trim().min(1).max(4).regex(/^[\p{L}\p{N}]+$/u, '头像只能包含字母或数字').optional().default(defaultAvatarText),
   avatarImage: z.string().trim().max(avatarMaxDataUrlLength).optional().default('').refine(
     (value) => value === '' || isSafeAvatarDataUrl(value),
     '头像图片仅支持 2MB 内的 PNG、JPEG、WebP 或 GIF',
@@ -68,10 +71,9 @@ interface LoginFailureRecord {
 
 const sessions = new Map<string, SessionRecord>();
 const loginFailures = new Map<string, LoginFailureRecord>();
-const legacyDefaultDisplayName = 'CoLiPas';
 const fallbackProfile: ConsoleProfile = {
-  displayName: 'CoLiPas云服务器管理面板',
-  avatarText: 'CP',
+  displayName: defaultDisplayName,
+  avatarText: defaultAvatarText,
   avatarImage: '',
 };
 
@@ -155,10 +157,14 @@ export function getConsoleProfile() {
   if (!stored) {
     return fallbackProfile;
   }
-  if (stored.displayName === legacyDefaultDisplayName && stored.avatarText === fallbackProfile.avatarText && !stored.avatarImage) {
+  if (isDefaultLikeProfile(stored)) {
     return fallbackProfile;
   }
-  return stored;
+  return {
+    displayName: stored.displayName || fallbackProfile.displayName,
+    avatarText: (stored.avatarText || fallbackProfile.avatarText).toUpperCase(),
+    avatarImage: stored.avatarImage || '',
+  };
 }
 
 export function updateConsoleProfile(input: unknown) {
@@ -170,6 +176,16 @@ export function updateConsoleProfile(input: unknown) {
   };
   writeAppSetting(profileSettingId, profile);
   return profile;
+}
+
+function isDefaultLikeProfile(profile: Partial<ConsoleProfile>) {
+  const displayName = profile.displayName?.trim();
+  const avatarText = profile.avatarText?.trim().toUpperCase() || fallbackProfile.avatarText;
+  return (
+    !profile.avatarImage
+    && avatarText === fallbackProfile.avatarText
+    && (displayName === defaultDisplayName || displayName === legacyDefaultDisplayName)
+  );
 }
 
 export function changeAdminPassword(input: unknown, request: Request, config: RuntimeConfig) {

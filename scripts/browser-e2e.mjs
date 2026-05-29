@@ -135,8 +135,10 @@ async function assertAccountSettingsAndAiChat(targetPage) {
   let aiSshServerId = '';
   await targetPage.locator('.account-settings-trigger').click();
   await targetPage.locator('.account-modal').waitFor({ timeout: 5000 });
+  if (await targetPage.getByLabel(/avatar text|fallback text|备用文字|代替文字/i).count()) {
+    throw new Error('Account appearance modal must not expose fallback avatar text');
+  }
   await targetPage.getByLabel(/display name/i).fill(profileName);
-  await targetPage.getByLabel(/avatar text|fallback text/i).fill('QE');
   await targetPage.getByRole('button', { name: /save avatar and name|save appearance/i }).click();
   await targetPage.getByText(/avatar and display name updated|appearance settings updated/i).waitFor({ timeout: 10000 });
   await targetPage.locator('.account-modal .icon-button').first().click();
