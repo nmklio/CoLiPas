@@ -125,20 +125,35 @@ curl -fsS http://127.0.0.1:8080/api/health
 
 ### 公開 Docker イメージ
 
-`master` に push されるたびに、GitHub Container Registry へ公開イメージを発行します。
+`master` に push されるたびに、Docker Hub と GitHub Container Registry へ公開イメージを発行します。
+
+Docker Hub:
+
+```bash
+docker pull heiyue797/colipas:latest
+```
+
+GitHub Container Registry:
 
 ```bash
 docker pull ghcr.io/nmklio/colipas:latest
+```
+
+Docker Hub イメージを起動する例:
+
+```bash
+cp .env.example .env
+# 起動前に .env を編集し、管理者パスワード、セッションキー、SSH 暗号化キーなどを置き換えてください。
 docker volume create colipas-data
 docker run -d --name colipas --restart unless-stopped \
   --env-file .env \
   -p 8080:8080 \
   -v colipas-data:/app/.data \
-  ghcr.io/nmklio/colipas:latest
+  heiyue797/colipas:latest
 curl -fsS http://127.0.0.1:8080/api/health
 ```
 
-利用できるタグは `latest`、`master`、`v1.0.0` のようなリリースタグ、`sha-ab12cd3` のような短いコミットタグです。
+GHCR を使う場合は、イメージ名を `ghcr.io/nmklio/colipas:latest` に置き換えてください。利用できるタグは `latest`、`master`、`v1.0.0` のようなリリースタグ、`sha-ab12cd3` のような短いコミットタグです。
 
 ### 手動 Linux + systemd
 

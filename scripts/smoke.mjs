@@ -3796,6 +3796,7 @@ function assertContainerRegistryPublishGuards() {
     'name: docker-publish',
     'packages: write',
     'ghcr.io/${{ github.repository_owner }}/colipas',
+    'docker.io/heiyue797/colipas',
     'docker/login-action@v3',
     'docker/metadata-action@v5',
     'docker/build-push-action@v6',
@@ -3816,15 +3817,17 @@ function assertContainerRegistryPublishGuards() {
   for (const [name, source, heading] of docs) {
     if (
       !source.includes(heading)
+      || !source.includes('docker pull heiyue797/colipas:latest')
+      || !source.includes('heiyue797/colipas:latest')
       || !source.includes('docker pull ghcr.io/nmklio/colipas:latest')
       || !source.includes('ghcr.io/nmklio/colipas:latest')
       || !source.includes('sha-ab12cd3')
     ) {
-      throw new Error(`${name} must document the published GHCR Docker image`);
+      throw new Error(`${name} must document the published Docker Hub and GHCR images`);
     }
   }
 
-  console.log('ok GHCR Docker publish workflow and README image usage are guarded');
+  console.log('ok GHCR and Docker Hub publish workflow and README image usage are guarded');
 }
 
 async function assertReleaseDeployTargetPlanGuards() {

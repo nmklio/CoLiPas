@@ -1,20 +1,20 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&height=220&color=0:0F172A,45:0F766E,100:2563EB&text=CoLiPas&fontColor=FFFFFF&fontSize=64&fontAlignY=38&desc=Multi-cloud%20server%20operations%20panel%20with%20AI,%20SSH,%20automation,%20and%20audit&descAlignY=60&animation=fadeIn" alt="CoLiPas header" />
+<img src="https://capsule-render.vercel.app/api?type=waving&height=220&color=0:0F172A,45:0F766E,100:2563EB&text=CoLiPas&fontColor=FFFFFF&fontSize=64&fontAlignY=38&desc=Private%20cloud%20operations%20with%20SSH,%20AI,%20automation,%20and%20audit&descAlignY=60&animation=fadeIn" alt="CoLiPas header" />
 
 <p align="center">
   <a href="https://github.com/nmklio/CoLiPas/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/nmklio/CoLiPas/ci.yml?branch=master&label=ci&style=for-the-badge"></a>
+  <a href="https://hub.docker.com/r/heiyue797/colipas"><img alt="Docker Hub" src="https://img.shields.io/badge/Docker%20Hub-heiyue797%2Fcolipas-2496ED?logo=docker&logoColor=white&style=for-the-badge"></a>
+  <a href="https://github.com/nmklio/CoLiPas/pkgs/container/colipas"><img alt="GHCR" src="https://img.shields.io/badge/GHCR-nmklio%2Fcolipas-181717?logo=github&logoColor=white&style=for-the-badge"></a>
   <img alt="Node.js" src="https://img.shields.io/badge/Node.js-24-339933?logo=node.js&logoColor=white&style=for-the-badge">
   <img alt="React" src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=06131a&style=for-the-badge">
-  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white&style=for-the-badge">
-  <img alt="SQLite" src="https://img.shields.io/badge/SQLite-node:sqlite-003B57?logo=sqlite&logoColor=white&style=for-the-badge">
 </p>
 
-<h3>Production-grade multi-cloud operations in one deployable Node service.</h3>
+<h3>Self-hosted multi-cloud operations in one deployable Node.js service.</h3>
 
 <p>
-  <b>CoLiPas</b> brings server inventory, global monitoring, SSH access, AI operations, workflow automation,
-  custom API testing, and security audit into one private control panel.
+  <b>CoLiPas</b> combines server inventory, live SSH, AI-assisted operations,
+  workflow automation, custom API testing, and release security evidence in a private control panel.
 </p>
 
 <p align="center">
@@ -22,128 +22,111 @@
   &nbsp;|&nbsp;
   <a href="#production-deploy">Production deploy</a>
   &nbsp;|&nbsp;
-  <a href="#security-model">Security model</a>
+  <a href="#published-docker-image">Docker image</a>
   &nbsp;|&nbsp;
-  <a href="#project-layout">Project layout</a>
+  <a href="#security-model">Security</a>
+  &nbsp;|&nbsp;
+  <a href="#verification">Verification</a>
 </p>
 
 <img src=".github/assets/colipas-dashboard-preview.svg" alt="CoLiPas sanitized multi-region dashboard preview" width="980" />
 
-<sub>The preview image uses fictional providers and RFC 5737 documentation IP ranges only. It does not contain user servers, real IP addresses, SSH credentials, or runtime data.</sub>
+<sub>The preview uses fictional providers and RFC 5737 documentation IP ranges only. It does not contain user servers, real IP addresses, SSH credentials, runtime databases, or private deployment data.</sub>
 
 </div>
 
 ## Languages
 
-[中文文档](README_CN.md) | [English Docs](README.md) | [日本語ドキュメント](README_JP.md)
+[English](README.md) | [中文文档](README_CN.md) | [日本語ドキュメント](README_JP.md)
 
-## Product Snapshot
+## What CoLiPas Is
 
-CoLiPas is a self-hosted cloud operations console for teams that need one private place to manage servers, SSH access, AI-assisted operations, custom API checks, and release security evidence. It is built as a single deployable Node.js service: Express serves the protected API and production React frontend, while SQLite stores account settings, server inventory, audit trails, AI provider settings, and encrypted SSH metadata.
+CoLiPas is a self-hosted operations console for teams that manage cloud servers, private nodes, and manually onboarded Linux machines. It is not a marketing landing page or a demo-only dashboard: it is built around the everyday loop of adding servers, verifying access, checking health, running guarded SSH tasks, asking AI for operational context, and keeping audit evidence.
 
-The project is designed for practical production use rather than a demo-only dashboard: it includes guarded SSH password/private-key access, an xterm-style browser terminal, operation preflight checks, AI streaming with cached context, SSRF-resistant custom API testing, security remediation workflows, Docker deployment, native Linux/systemd deployment, and reset tooling for forgotten admin passwords.
+The runtime is intentionally simple. One Node.js process serves the Express API and the production React frontend on `PORT=8080`. SQLite stores account settings, server inventory, audit trails, AI provider settings, encrypted SSH metadata, and release evidence. No external database is required for a single-node deployment.
 
-## Why It Feels Different
+## Operator Flow
 
-| Release-ready area | CoLiPas approach |
+1. Create a private `.env` from `.env.example` and replace every default secret.
+2. Sign in to the protected console.
+3. Add servers as inventory-only assets, simulated SSH assets, or real SSH-connected machines.
+4. Use the overview map, server table, live browser terminal, operations center, AI assistant, custom API lab, and security audit as one linked workflow.
+5. Run `npm test` or the release script before shipping changes so build, API, browser, performance, concurrency, reset-password, and secret-scan checks run together.
+
+## Core Modules
+
+| Area | Included capability |
 | --- | --- |
-| Clean public distribution | Repository assets use sanitized demo data only; runtime `.data`, `.env`, screenshots, and local databases are ignored. |
-| Real operations workflow | Server onboarding, map filtering, SSH shell, AI chat, orchestration, custom API testing, and audit remediation are linked. |
-| Safer defaults | Protected APIs require login, sensitive AI/API/SSH data is redacted, and test fixtures use documentation IP ranges. |
-
-## What CoLiPas Does
-
-CoLiPas is designed for teams that manage a mix of public cloud, private cloud, overseas nodes, and manually onboarded Linux servers. The frontend is a React operations console; the backend is an Express API that serves the app, protects operator sessions, stores state in SQLite, and performs guarded integrations.
-
-| Area | What is included |
-| --- | --- |
-| Multi-cloud inventory | Cloud account overview, custom provider names, server lifecycle status, region and OS detection, resource refresh, and dashboard map grouping. |
-| Server access | Manual onboarding, inventory-only mode, simulated SSH mode, real password/private-key SSH verification, live shell streaming, diagnostics, and guarded power actions. |
-| AI operations | OpenAI-compatible base URL support, model discovery, streaming chat, multi-turn context, cache reuse, force refresh, and connectivity testing. |
-| Workflow automation | Targeted operation tasks for asset sync, health checks, patching, backup verification, and SSH-connected server workflows. |
-| Custom API lab | Allowlisted backend proxy for testing provider APIs without exposing browser-side secrets or private network targets. |
-| Security audit | Auth events, blocked API calls, SSH actions, remediation flows, risk relation cards, and audit trail persistence. |
-| Operator experience | Login page, editable profile/avatar, password change, and responsive authenticated dashboard with Chinese / English / Japanese UI language switching. |
-
-## Highlights
-
-- One production service on `PORT=8080` for both `/api/*` and the built frontend.
-- SQLite persistence through Node's built-in `node:sqlite`; no external database server is required for a single-node deployment.
-- SSH secrets are encrypted at rest with `CREDENTIAL_ENCRYPTION_KEY`.
-- AI keys stay server-side or in one-time request payloads; they are not committed and are guarded by smoke checks.
-- The custom API proxy blocks private IP ranges, unsafe headers, redirects to sensitive networks, and secret leakage in audit targets.
-- The operator UI supports Chinese, English, and Japanese. Switch the interface language from the account/settings area; this changes the console labels and navigation text only.
-- `npm test` builds the app, starts a temporary production server, runs API and source-level smoke checks, then cleans up test data.
+| Inventory and map | Cloud account overview, custom provider names, server lifecycle status, region and OS detection, resource refresh, and map grouping. |
+| Server access | Manual onboarding, inventory-only mode, simulated SSH, password/private-key SSH verification, diagnostics, and guarded power actions. |
+| Live SSH terminal | xterm-style browser terminal, WebSocket streaming, copy/clear tools, `Ctrl+C`, large-output guards, and backend shell cleanup when the panel closes. |
+| AI operations | OpenAI-compatible base URL support, model discovery, streaming chat, multi-turn context, cached answers, force refresh, and server-side key storage. |
+| Workflow automation | Asset sync, health checks, SSH commands, reboot/shutdown flows, target preflight, and high-impact command confirmation. |
+| Custom API lab | Allowlisted backend proxy for provider API testing without exposing browser-side secrets or private network targets. |
+| Security audit | Auth events, blocked calls, SSH actions, remediation flows, relation cards, diagnostics export, and release readiness evidence. |
+| Operator account | Login, session protection, profile/avatar update, password change, and Chinese / English / Japanese UI language switching. |
 
 ## Quick Start
 
-<table>
-  <tr>
-    <td width="28%"><b>1. Clone</b><br><sub>Get the public sanitized source.</sub></td>
-    <td><code>git clone https://github.com/nmklio/CoLiPas.git && cd CoLiPas</code></td>
-  </tr>
-  <tr>
-    <td><b>2. Configure</b><br><sub>Keep secrets in your private env file.</sub></td>
-    <td><code>npm install && cp .env.example .env</code></td>
-  </tr>
-  <tr>
-    <td><b>3. Verify</b><br><sub>Build and run the production smoke suite.</sub></td>
-    <td><code>npm test</code></td>
-  </tr>
-  <tr>
-    <td><b>4. Run</b><br><sub>One production service, one port.</sub></td>
-    <td><code>npm start</code></td>
-  </tr>
-</table>
+Use this path for local evaluation or development.
+
+```bash
+git clone https://github.com/nmklio/CoLiPas.git
+cd CoLiPas
+npm ci
+cp .env.example .env
+npm test
+npm start
+```
 
 Open `http://127.0.0.1:8080/` after the production server starts.
 
-For local development, the available scripts are:
+Common scripts:
 
 ```bash
-npm run dev          # Vite frontend dev server
+npm run dev          # Vite frontend dev server for local development
 npm run dev:server   # Express API watcher
 npm run build        # client + server build
-npm run smoke        # smoke checks against an existing server
+npm run smoke        # source and API smoke checks against an existing server
 npm run perf         # browser timing check against an existing server
-npm test             # production build + temporary smoke environment
-npm start            # production server
+npm test             # production build + temporary verification environment
+npm start            # production server from build/server/index.js
 ```
 
 ## Runtime Configuration
 
-Create `.env` from `.env.example` and replace every default before exposing the panel.
+Create `.env` from `.env.example`. Before exposing the service, replace at least the administrator password, session secret, credential encryption key, CORS origin, and custom API allowlist.
 
 | Variable | Purpose |
 | --- | --- |
-| `PORT` | Production HTTP port. Use `8080` for the bundled deployment examples. |
+| `PORT` | Production HTTP port. The bundled examples use `8080`. |
 | `CORS_ORIGIN` | Allowed browser origin when the API is accessed cross-origin. |
-| `CUSTOM_API_ALLOWED_HOSTS` | Comma-separated host allowlist for the custom API proxy. |
-| `AI_API_KEY` | Optional default OpenAI-compatible API key. Leave empty to use request-level provider settings or simulated output. |
-| `AI_BASE_URL` | OpenAI-compatible API base URL, for example `https://api.openai.com/v1`. |
-| `AI_MODEL` | Default model used when no provider override is supplied. |
-| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Initial administrator credentials. Change the password in production. |
-| `SESSION_SECRET` | Long random secret used for session cookies. |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Initial administrator credentials. Change them for production. |
+| `SESSION_SECRET` | Long random secret for HTTP-only session cookies. |
+| `SESSION_TTL_HOURS` | Session lifetime in hours. |
 | `COLIPAS_DATA_DIR` | Runtime data directory. Defaults to `.data`. |
 | `COLIPAS_DB_PATH` | Optional SQLite database path. Defaults to `COLIPAS_DATA_DIR/colipas.sqlite`. |
 | `CREDENTIAL_ENCRYPTION_KEY` | Long random key used to encrypt stored SSH credentials. |
-| `RELEASE_VERIFY_TOKEN` | Optional bearer token for `/api/release/verify`; set a long random value only for guarded release checks. |
-| `RELEASE_TARGET_NAME` / `RELEASE_CHANNEL` | Safe labels shown in release readiness and verification evidence, such as `production-systemd` and `production`. |
-| `RELEASE_DEPLOYMENT_MODE` | Deployment mode label, for example `systemd`, `docker`, or `node`. |
-| `RELEASE_PUBLIC_URL` | Public URL used only to derive a sanitized hostname for release evidence; literal IP addresses are redacted. |
-| `RELEASE_GIT_COMMIT` / `RELEASE_ARTIFACT_ID` / `RELEASE_DEPLOYED_AT` | Optional build metadata populated by the release pipeline for audit-friendly deployment evidence. |
+| `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` | Optional default OpenAI-compatible provider settings. Keys can also be saved through the protected UI. |
+| `CUSTOM_API_ALLOWED_HOSTS` | Comma-separated host allowlist for the custom API proxy. |
+| `CUSTOM_API_TIMEOUT_MS` | Timeout for custom API proxy requests. |
+| `RELEASE_VERIFY_TOKEN` | Optional bearer token for `/api/release/verify`. |
+| `RELEASE_TARGET_NAME` / `RELEASE_CHANNEL` / `RELEASE_DEPLOYMENT_MODE` / `RELEASE_PUBLIC_URL` | Safe release labels used in readiness evidence. |
+| `RELEASE_GIT_COMMIT` / `RELEASE_ARTIFACT_ID` / `RELEASE_DEPLOYED_AT` | Optional build metadata populated by release automation. |
 
 ## Production Deploy
 
-The simplest production path is the interactive Linux installer. It asks for the install directory, public URL, admin username, deployment mode, and initial password, then clones the repository, creates a private `.env`, starts CoLiPas, and runs a health check.
+Choose one deployment path. The interactive installer is the recommended path for new servers; published images are the fastest path when you already manage Docker yourself.
 
-Run this on a fresh Linux server:
+### Interactive Linux Installer
+
+The interactive Linux installer asks for install directory, public URL, admin username, deployment mode, and initial password. It then clones or updates the repository, writes a private `.env` if needed, starts the service, and runs a health check.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo bash
 ```
 
-Recommended choices:
+Recommended answers:
 
 | Prompt | Recommended value |
 | --- | --- |
@@ -151,12 +134,12 @@ Recommended choices:
 | Git branch | `master` |
 | Public URL or domain | Your HTTPS domain, for example `https://colipas.example.com` |
 | Admin username | `admin` or your operator account name |
-| Deployment mode | `Docker Compose` for most users; `Native systemd` when you need host-level service control |
+| Deployment mode | `Docker Compose` for most users; `Native systemd` only when you need host-level service control |
 | Initial admin password | Paste a strong password, or leave blank to auto-generate one |
 
-The installer keeps runtime secrets on the server only. If `/opt/colipas/.env` already exists, it preserves the current admin password, database path, SSH encryption key, AI provider settings, and other runtime configuration.
+Existing deployments are preserved. If `/opt/colipas/.env` already exists, the installer keeps the current admin password, database path, SSH encryption key, AI provider settings, and other runtime configuration.
 
-For unattended installs, pass the same answers with environment variables:
+For unattended installs:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env \
@@ -167,47 +150,59 @@ curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-c
   bash
 ```
 
-Useful options: `COLIPAS_APP_DIR`, `COLIPAS_BRANCH`, `COLIPAS_ADMIN_USERNAME`, `COLIPAS_DEPLOY_MODE=docker|native`, `COLIPAS_NON_INTERACTIVE=1`, and `COLIPAS_ASSUME_YES=1`.
-
-### Manual Docker Compose
-
-Use this path only when you prefer to manage every command yourself.
-
-```bash
-git clone https://github.com/nmklio/CoLiPas.git
-cd CoLiPas
-cp .env.example .env
-```
-
-Edit `.env` before the first start. At minimum, replace `ADMIN_PASSWORD`, `SESSION_SECRET`, `CREDENTIAL_ENCRYPTION_KEY`, `CORS_ORIGIN`, and the optional AI provider settings.
-
-```bash
-docker compose up -d --build
-docker compose ps
-curl -fsS http://127.0.0.1:8080/api/health
-```
-
-The included `docker-compose.yml` mounts a named volume at `/app/.data` so SQLite data, audit records, encrypted SSH metadata, and account settings survive container rebuilds.
-It also forwards `RELEASE_GIT_COMMIT`, `RELEASE_ARTIFACT_ID`, and `RELEASE_DEPLOYMENT_MODE` into the container so the security panel can show which sanitized build is running.
+Useful options: `COLIPAS_APP_DIR`, `COLIPAS_BRANCH`, `COLIPAS_ADMIN_USERNAME`, `COLIPAS_DEPLOY_MODE=docker|native`, `COLIPAS_NON_INTERACTIVE=1`, `COLIPAS_ASSUME_YES=1`, and `COLIPAS_DRY_RUN=1`.
 
 ### Published Docker Image
 
-Every `master` push publishes a public image to GitHub Container Registry:
+Every `master` push publishes public images to Docker Hub and GitHub Container Registry.
+
+Docker Hub:
+
+```bash
+docker pull heiyue797/colipas:latest
+```
+
+GitHub Container Registry:
 
 ```bash
 docker pull ghcr.io/nmklio/colipas:latest
+```
+
+Run with Docker Hub:
+
+```bash
+cp .env.example .env
+# Edit .env before starting the container.
 docker volume create colipas-data
 docker run -d --name colipas --restart unless-stopped \
   --env-file .env \
   -p 8080:8080 \
   -v colipas-data:/app/.data \
-  ghcr.io/nmklio/colipas:latest
+  heiyue797/colipas:latest
 curl -fsS http://127.0.0.1:8080/api/health
 ```
 
-Available tags include `latest`, `master`, release tags such as `v1.0.0`, and short commit tags like `sha-ab12cd3`.
+Run with GHCR by replacing the image with `ghcr.io/nmklio/colipas:latest`.
 
-To update a Docker deployment:
+Available tags include `latest`, `master`, release tags such as `v1.0.0`, and short commit tags such as `sha-ab12cd3`.
+
+### Manual Docker Compose
+
+Use Manual Docker Compose when you want to control every command yourself.
+
+```bash
+git clone https://github.com/nmklio/CoLiPas.git
+cd CoLiPas
+cp .env.example .env
+# Edit .env before the first start.
+docker compose up -d --build
+docker compose ps
+curl -fsS http://127.0.0.1:8080/api/health
+```
+
+The included `docker-compose.yml` mounts a named volume at `/app/.data`, so SQLite data, audit records, encrypted SSH metadata, AI provider settings, and account settings survive container rebuilds.
+
+To update a Docker Compose deployment:
 
 ```bash
 git pull --ff-only
@@ -217,27 +212,9 @@ docker compose up -d --build
 docker compose logs --tail=80 colipas
 ```
 
-### Manual Docker CLI
+### Native Linux + systemd
 
-Use plain Docker when you prefer to wire your own volume, network, or supervisor.
-
-```bash
-git clone https://github.com/nmklio/CoLiPas.git
-cd CoLiPas
-cp .env.example .env
-docker build -t colipas:latest .
-docker volume create colipas-data
-docker run -d --name colipas --restart unless-stopped \
-  --env-file .env \
-  -p 8080:8080 \
-  -v colipas-data:/app/.data \
-  colipas:latest
-curl -fsS http://127.0.0.1:8080/api/health
-```
-
-### Manual Native Linux + systemd
-
-Use this path when you want direct host integration, SSH tooling, journald logs, and a locked-down service user. Install Node.js 24 LTS or newer, Git, and Nginx first.
+Use native Linux when you want direct host integration, journald logs, and a locked-down service user. Install Node.js 24 LTS or newer, Git, and Nginx first.
 
 ```bash
 sudo useradd --system --home /opt/colipas --shell /usr/sbin/nologin colipas
@@ -246,6 +223,7 @@ sudo chown -R colipas:colipas /opt/colipas
 sudo -u colipas git clone https://github.com/nmklio/CoLiPas.git /opt/colipas
 cd /opt/colipas
 sudo -u colipas cp .env.example .env
+# Edit /opt/colipas/.env before enabling the service.
 sudo -u colipas npm ci
 sudo -u colipas npm test
 sudo cp deploy/colipas.service /etc/systemd/system/colipas.service
@@ -255,11 +233,11 @@ systemctl status colipas --no-pager
 curl -fsS http://127.0.0.1:8080/api/health
 ```
 
-The systemd unit creates `/opt/colipas/.data` with private permissions and only grants the service write access to that runtime data directory. Keep `.env`, `.data`, SSH private keys, server IPs, and deployment credentials outside public web roots and outside Git.
+The systemd unit only grants write access to the runtime data directory. Keep `.env`, `.data`, SSH private keys, server IPs, and deployment credentials outside public web roots and outside Git.
 
 ### Reverse Proxy
 
-Use `deploy/nginx.conf` as a reverse-proxy starting point. It is tuned for long-running AI and SSH streams with buffering disabled and a `2m` upload limit for profile images. Replace `server_name` and TLS certificate paths before using it on a new domain.
+Use `deploy/nginx.conf` as a starting point. It disables buffering for AI and SSH streams and sets a `2m` upload limit for profile images.
 
 ```bash
 sudo cp deploy/nginx.conf /etc/nginx/sites-available/colipas.conf
@@ -268,60 +246,37 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-For repeat releases, install `deploy/server-update.sh` on the server as `/usr/local/sbin/colipas-update`, then run the local guarded release flow:
+Replace `server_name` and TLS certificate paths before using it on a new domain.
+
+## Release Automation
+
+For repeat releases, install `deploy/server-update.sh` on each target server, then run the guarded local release flow:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/release-deploy.ps1
+powershell -ExecutionPolicy Bypass -File scripts\release-deploy.ps1
 ```
 
-The release script runs `npm test` first, requires a clean working tree, pushes GitHub, then triggers each configured server update command over SSH. With no extra configuration it uses a private local host alias such as `colipas-prod`.
-
-For multi-server releases, create an untracked `release-targets.local.json` on your workstation. Keep only SSH aliases in this file; do not commit real IP addresses, passwords, private keys, or runtime data.
-
-```json
-{
-  "targets": [
-    {
-      "name": "primary-systemd",
-      "host": "colipas-prod",
-      "user": "colipas-deploy",
-      "sshKey": "~/.ssh/colipas_deploy_rsa",
-      "command": "sudo /usr/local/sbin/colipas-update",
-      "publicBaseUrl": "https://colipas.example.com",
-      "publicMode": "public"
-    },
-    {
-      "name": "secondary-docker",
-      "host": "colipas-docker",
-      "user": "root",
-      "sshKey": "~/.ssh/colipas_deploy_rsa",
-      "command": "sudo /usr/local/sbin/colipas-cp-update",
-      "publicBaseUrl": "https://cp.example.com",
-      "publicMode": "admin"
-    }
-  ]
-}
-```
+The release script runs `npm test`, checks tracked files for secrets, requires a clean tree, pushes GitHub, updates configured targets over SSH, and runs production browser validation. Keep multi-server release settings in an untracked `release-targets.local.json`; do not commit real IP addresses, passwords, private keys, API keys, runtime DBs, logs, screenshots, or user data.
 
 Preview the resolved release plan without running tests, pushing, or touching servers:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/release-deploy.ps1 -PlanOnly
+powershell -ExecutionPolicy Bypass -File scripts\release-deploy.ps1 -PlanOnly
 ```
 
-To make local commits publish automatically after the same guarded checks, install the optional local hook:
+To publish after local commits automatically, install the optional local hook:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/install-release-hook.ps1
+powershell -ExecutionPolicy Bypass -File scripts\install-release-hook.ps1
 ```
 
-The hook is stored only under your local `.git/hooks/post-commit`. It is not committed to the repository and it still blocks deployment when tests fail, the tree is dirty, GitHub push fails, or the server update command fails.
+The hook lives only under `.git/hooks/post-commit` and is not committed to the repository.
 
-### Forgot the Admin Password
+## Forgot the Admin Password
 
-CoLiPas never stores the admin password in plain text. Passwords are stored as `scrypt` hashes in SQLite, so a forgotten password must be reset instead of recovered.
+CoLiPas stores administrator passwords as `scrypt` hashes. Forgotten passwords must be reset, not recovered.
 
-Native Linux deployment:
+Native Linux:
 
 ```bash
 cd /opt/colipas
@@ -329,57 +284,30 @@ sudo -u colipas env COLIPAS_RESET_PASSWORD='NewStrongPassword123' npm run reset:
 sudo systemctl restart colipas
 ```
 
-Docker Compose deployment:
+Docker Compose:
 
 ```bash
 docker compose exec -e COLIPAS_RESET_PASSWORD='NewStrongPassword123' colipas npm run reset:admin
 docker compose restart colipas
 ```
 
-Optional flags are available when your deployment uses a non-default account or database path:
+Optional flags are available for non-default accounts or database paths:
 
 ```bash
 node scripts/reset-admin-password.mjs --username admin --db /opt/colipas/.data/colipas.sqlite --password 'NewStrongPassword123'
 ```
 
-The reset script only updates the `admin-account` row in `app_settings`. It does not delete servers, SSH credentials, audit entries, AI cache, custom API settings, or other runtime data.
-
-## Server Onboarding
-
-Add servers from the Servers page with provider, region, public/private IP, OS, tags, and optional custom cloud provider names.
-
-CoLiPas supports three onboarding modes:
-
-| Mode | Behavior |
-| --- | --- |
-| Inventory only | Saves the server asset without SSH verification. The lifecycle state stays unconnected until credentials are verified. |
-| Verify SSH | Opens a backend SSH connection using password or private-key authentication before marking the server connected. |
-| Simulated SSH | Creates a demo connection for local release checks and UI demos. |
-
-Connected SSH credentials are stored separately from server assets and encrypted before persistence. Server deletion is available through `DELETE /api/servers/:serverId`.
-
-## AI Provider Flow
-
-The AI console supports OpenAI-compatible providers:
-
-1. Set a base URL and API key.
-2. Load available models from `/models`.
-3. Test connectivity with a streaming request.
-4. Start a streaming multi-turn conversation.
-5. Reuse cached answers or force refresh when current infrastructure state changes.
-
-The backend redacts upstream error bodies and rejects sensitive query parameters in AI base URLs.
+The reset script only updates the `admin-account` row. It does not delete servers, SSH credentials, audit entries, AI cache, custom API settings, or other runtime data.
 
 ## Security Model
 
-CoLiPas is an operations tool, so the default security posture is defensive:
-
 - All operational APIs except health and auth require an authenticated session.
-- Session cookies are HTTP-only and password changes revoke other sessions.
-- The custom API proxy rejects localhost, private IPv4 ranges, link-local ranges, multicast ranges, unsafe headers, and redirect-following.
+- Session cookies are HTTP-only, and password changes revoke other sessions.
+- Stored SSH credentials are encrypted with `CREDENTIAL_ENCRYPTION_KEY`.
+- AI provider keys are stored server-side or accepted as one-time request payloads; smoke checks guard against leakage.
+- The custom API proxy blocks localhost, private IPv4 ranges, link-local ranges, multicast ranges, unsafe headers, and redirect-following.
 - SSH command audit summaries are redacted and bounded.
-- Credentials are encrypted with `CREDENTIAL_ENCRYPTION_KEY` before storage.
-- Audit entries and remediation actions are persisted and linked back into the security panel.
+- Release verification, diagnostics export, and audit reports are sanitized before display.
 
 Before internet exposure, replace all default secrets, restrict `CORS_ORIGIN`, put the service behind HTTPS, and limit SSH access to the minimum required hosts.
 
@@ -387,20 +315,21 @@ Before internet exposure, replace all default secrets, restrict `CORS_ORIGIN`, p
 
 ```text
 src/
-  app/                  React shell, login, and authenticated console entry
+  app/                  React shell, login, docs, and authenticated console entry
   modules/
     ai/                 Streaming AI operations console
     cloud/              Cloud account cards and sync state
-    custom-api/         API request builder
+    custom-api/         API request builder and allowlisted proxy UI
     operations/         Workflow orchestration center
-    security/           Audit and remediation panel
-    servers/            Inventory, map, SSH terminal, server actions
+    security/           Audit, readiness, diagnostics, and remediation
+    servers/            Inventory, map linkage, SSH terminal, server actions
   server/
     app.ts              Express API and static frontend hosting
+    sshShellSocket.ts   WebSocket bridge for live SSH shells
     services/           AI, auth, audit, database, SSH, inventory, proxy
-  shared/               Shared validation and prompt helpers
-deploy/                 systemd and nginx examples
-scripts/                Smoke and production verification scripts
+  shared/               Shared validation and command-risk helpers
+deploy/                 systemd, nginx, and server update examples
+scripts/                Smoke, browser, performance, release, and reset tooling
 .github/assets/         Repository preview assets for GitHub only
 public/                 Static files copied into production builds
 ```
@@ -411,11 +340,13 @@ Run the full production smoke before shipping changes:
 
 ```bash
 npm test
+npm audit --omit=dev --audit-level=high
+node scripts/secret-scan.mjs
 ```
 
-The smoke suite covers authentication, profile/password changes, protected APIs, SQLite persistence, AI streaming and cache behavior, model loading, custom API SSRF guards, SSH terminal contracts, server lifecycle logic, operations target validation, security remediation, dashboard map interaction guards, and production build output.
+`npm test` builds the app, starts a temporary production server on port `18080`, runs API and browser checks, validates SSH terminal behavior, exercises AI/cache/custom API/security flows, checks performance and concurrency, validates reset-password behavior, then cleans up temporary test data.
 
-For UI smoothness checks against a running production server, use:
+For UI smoothness checks against a running production server:
 
 ```bash
 PERF_BASE_URL=http://127.0.0.1:18080 PERF_ADMIN_PASSWORD=admin123456 npm run perf
@@ -423,6 +354,6 @@ PERF_BASE_URL=http://127.0.0.1:18080 PERF_ADMIN_PASSWORD=admin123456 npm run per
 
 The performance check measures login, section switching, map interaction, browser console errors, and Chromium long-task duration. It is a measurement guard, not a replacement for `npm test`.
 
-## Notes
+## Repository Safety Notes
 
-This repository is public for inspection and deployment. Runtime secrets, user data, SSH credentials, `.env`, `.data`, and generated local databases must stay private.
+This public repository is for source code, sanitized examples, deployment scripts, and documentation. Runtime secrets, real server IPs, passwords, API keys, SSH private keys, `.env`, `.data`, SQLite runtime databases, generated logs, screenshots, and user data must stay private.

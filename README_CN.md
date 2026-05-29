@@ -125,20 +125,35 @@ curl -fsS http://127.0.0.1:8080/api/health
 
 ### Docker 仓库镜像
 
-每次推送到 `master` 都会自动发布公开镜像到 GitHub Container Registry：
+每次推送到 `master` 都会自动发布公开镜像到 Docker Hub 和 GitHub Container Registry。
+
+Docker Hub：
+
+```bash
+docker pull heiyue797/colipas:latest
+```
+
+GitHub Container Registry：
 
 ```bash
 docker pull ghcr.io/nmklio/colipas:latest
+```
+
+运行 Docker Hub 镜像：
+
+```bash
+cp .env.example .env
+# 启动前先编辑 .env，替换管理员密码、会话密钥、SSH 加密密钥等默认值。
 docker volume create colipas-data
 docker run -d --name colipas --restart unless-stopped \
   --env-file .env \
   -p 8080:8080 \
   -v colipas-data:/app/.data \
-  ghcr.io/nmklio/colipas:latest
+  heiyue797/colipas:latest
 curl -fsS http://127.0.0.1:8080/api/health
 ```
 
-可用标签包括 `latest`、`master`、`v1.0.0` 这类发布标签，以及 `sha-ab12cd3` 这类短提交标签。
+如果要使用 GHCR，把镜像名换成 `ghcr.io/nmklio/colipas:latest` 即可。可用标签包括 `latest`、`master`、`v1.0.0` 这类发布标签，以及 `sha-ab12cd3` 这类短提交标签。
 
 ### 手动 Linux + systemd
 
