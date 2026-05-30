@@ -368,7 +368,8 @@ export function App() {
   const { onlineCount, avgCpu, connectedCount, openEventCount, busiestServer } = overviewStats;
   const timeLocale = getLocale(language);
   const sessionIdentity = session?.user?.username?.trim() ?? '';
-  const accountDisplayLabel = profile.displayName || sessionIdentity || 'CoLiPas';
+  const sidebarDisplayLabel = profile.displayName || 'CoLiPas';
+  const accountDisplayLabel = sessionIdentity || sidebarDisplayLabel;
   const sessionTooltip = session?.expiresAt
     ? `${accountDisplayLabel} - ${t('login.expiresAt', { time: new Date(session.expiresAt).toLocaleString(timeLocale) })}`
     : accountDisplayLabel;
@@ -559,7 +560,7 @@ export function App() {
         <div className="brand">
           <AvatarMark profile={profile} />
           <div>
-            <strong>{profile.displayName}</strong>
+            <strong>{sidebarDisplayLabel}</strong>
             <span>{t('app.productSubtitle')}</span>
           </div>
         </div>

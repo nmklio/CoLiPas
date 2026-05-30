@@ -2985,8 +2985,15 @@ function assertAccountUiGuards() {
   if (appSource.includes("session.user?.username ?? 'admin'") || !appSource.includes('accountDisplayLabel')) {
     throw new Error('Authenticated account UI must not display admin as a fallback label');
   }
-  if (!appSource.includes('<span>{accountDisplayLabel}</span>') || !appSource.includes('title={sessionTooltip}')) {
-    throw new Error('Account settings entry must display the custom profile label instead of the raw login username');
+  if (
+    !appSource.includes('const accountDisplayLabel = sessionIdentity || sidebarDisplayLabel;')
+    || !appSource.includes('<b>{accountDisplayLabel}</b>')
+    || !appSource.includes('title={sessionTooltip}')
+  ) {
+    throw new Error('Topbar account settings entry must display the authenticated login username, not the sidebar profile name');
+  }
+  if (!appSource.includes('<strong>{sidebarDisplayLabel}</strong>')) {
+    throw new Error('Sidebar brand must keep the custom profile display name separate from the topbar login username');
   }
   const accountTriggerSource = appSource.match(/<button[\s\S]*?className="session-chip account-settings-trigger"[\s\S]*?<\/button>/)?.[0] ?? '';
   if (
@@ -2995,7 +3002,7 @@ function assertAccountUiGuards() {
     || accountTriggerSource.includes('BrandIcon')
     || accountTriggerSource.includes('<img')
   ) {
-    throw new Error('Topbar account settings trigger must display only the custom profile name without an avatar or brand image');
+    throw new Error('Topbar account settings trigger must display only the login username without an avatar or brand image');
   }
   if (globalCss.includes('.session-chip .brand-mark.mini') || globalCss.includes('.session-chip svg')) {
     throw new Error('Topbar account chip must not reserve image or SVG styling; it is text-only');
