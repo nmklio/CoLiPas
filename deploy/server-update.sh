@@ -206,7 +206,7 @@ function replacePositionCard(title, kind, description) {
 replaceAll(/\/\* colipas landing balanced ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\/style>)/g, '');
 replaceAll(/<title>[\s\S]*?<\/title>/g, '<title>CoLiPas云服务器管理面板</title>');
 replaceAll(/<link\s+rel="icon"[^>]*>/g, '');
-replaceOnce(/<title>CoLiPas云服务器管理面板<\/title>/, '<title>CoLiPas云服务器管理面板</title>\n<link rel="icon" type="image/svg+xml" href="/colipas-icon.svg?v=20260530-brand2">');
+replaceOnce(/<title>CoLiPas云服务器管理面板<\/title>/, '<title>CoLiPas云服务器管理面板</title>\n<link rel="icon" type="image/svg+xml" href="/colipas-icon.svg?v=20260530-brand3">');
 replaceAll(/<a class="button github-button" href="https:\/\/github\.com\/nmklio\/CoLiPas"[^>]*>GitHub<\/a>/g, '');
 replaceAll(/<span class="brand-mark">CP<\/span>/g, '<img class="brand-mark" src="/colipas-icon.svg" alt="" aria-hidden="true">');
 
@@ -839,7 +839,7 @@ SVG
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" type="image/svg+xml" href="/colipas-icon.svg?v=20260530-brand2">
+  <link rel="icon" type="image/svg+xml" href="/colipas-icon.svg?v=20260530-brand3">
   <title>CoLiPas云服务器管理面板 使用文档</title>
   <style>
     :root {
@@ -1652,8 +1652,8 @@ server {
 
   location = /colipas-icon.svg {
     try_files /colipas-icon.svg =404;
-    expires 1h;
-    add_header Cache-Control "public, max-age=3600";
+    expires -1;
+    add_header Cache-Control "no-store, max-age=0" always;
   }
 
   location = /favicon.ico {
@@ -1741,8 +1741,8 @@ server {
 
   location = /colipas-icon.svg {
     try_files /colipas-icon.svg =404;
-    expires 1h;
-    add_header Cache-Control "public, max-age=3600";
+    expires -1;
+    add_header Cache-Control "no-store, max-age=0" always;
   }
 
   location = /favicon.ico {

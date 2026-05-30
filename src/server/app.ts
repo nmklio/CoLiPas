@@ -648,7 +648,21 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
   });
 
   const distDir = path.resolve(process.cwd(), 'dist');
+  const iconPath = path.join(distDir, 'colipas-icon.svg');
   if (fs.existsSync(path.join(distDir, 'index.html'))) {
+    app.get('/favicon.ico', (_request, response, next) => {
+      if (!fs.existsSync(iconPath)) {
+        next();
+        return;
+      }
+
+      response.type('image/svg+xml');
+      response.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      response.setHeader('Pragma', 'no-cache');
+      response.setHeader('Expires', '0');
+      response.sendFile(iconPath);
+    });
+
     app.use(
       express.static(distDir, {
         index: false,

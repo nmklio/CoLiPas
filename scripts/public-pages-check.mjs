@@ -81,6 +81,7 @@ async function validatePage(pageSpec, viewport) {
     }
 
     await pageSpec.assert(page, viewport);
+    await assertFaviconResponse(page);
     await assertNoHorizontalOverflow(page, `${pageSpec.name} ${viewport.name}`);
     await assertNoBadBoxes(page, pageSpec.name, viewport.name);
     await captureVisualEvidence(page, `${pageSpec.name}-${viewport.name}`);
@@ -111,7 +112,7 @@ function buildLandingCheck() {
       await expectText(page.locator('h1').first(), /CoLiPas云服务器管理面板|CoLiPas Cloud Server Management Panel|multi-cloud/i, 'landing h1');
       await expectText(page.locator('body'), /云服务器管理与 AI 运维后台|cloud server management/i, 'landing footer product description');
       await expectTextAbsent(page, /多云服务器管理与 AI 运维后台/, 'landing legacy footer product description');
-      await expectLocatorCountAtLeast(page.locator('link[rel="icon"][href="/colipas-icon.svg?v=20260530-brand2"]'), 1, 'landing versioned favicon');
+      await expectLocatorCountAtLeast(page.locator('link[rel="icon"][href="/colipas-icon.svg?v=20260530-brand3"]'), 1, 'landing versioned favicon');
       await expectLink(page, /GitHub/i, 'https://github.com/nmklio/CoLiPas');
       await expectLink(page, /文档|Docs/i, '/docs.html');
       await expectLink(page, /后台|登录|Admin|进入/i, '/admin/');
@@ -138,7 +139,7 @@ function buildDocsCheck() {
     assert: async (page) => {
       await expectTitle(page, /CoLiPas/);
       await expectText(page.locator('h1').first(), /下载、配置、运行|Linux|Docker|CoLiPas云服务器管理面板/i, 'docs h1');
-      await expectLocatorCountAtLeast(page.locator('link[rel="icon"][href="/colipas-icon.svg?v=20260530-brand2"]'), 1, 'docs versioned favicon');
+      await expectLocatorCountAtLeast(page.locator('link[rel="icon"][href="/colipas-icon.svg?v=20260530-brand3"]'), 1, 'docs versioned favicon');
       await expectLocatorCountAtLeast(page.locator('h2'), 6, 'docs h2 sections');
       await expectLink(page, /GitHub/i, 'https://github.com/nmklio/CoLiPas');
       await expectLink(page, /进入后台|立即体验|Admin|后台/i, '/admin/');
@@ -316,10 +317,24 @@ function isLocalhost(value) {
 function isIgnorableResource(value) {
   try {
     const url = new URL(value);
-    return url.pathname === '/favicon.ico'
-      || (url.hostname === 'static.cloudflareinsights.com' && url.pathname.includes('/beacon.min.js'));
+    return url.hostname === 'static.cloudflareinsights.com' && url.pathname.includes('/beacon.min.js');
   } catch {
     return false;
+  }
+}
+
+async function assertFaviconResponse(page) {
+  const response = await page.request.get(new URL('/favicon.ico', baseUrl).toString(), {
+    headers: { Accept: 'image/svg+xml,image/*,*/*;q=0.8' },
+    timeout: 10000,
+  });
+  if (!response.ok()) {
+    throw new Error(`/favicon.ico returned HTTP ${response.status()}`);
+  }
+  const contentType = response.headers()['content-type'] ?? '';
+  const body = await response.text();
+  if (!contentType.includes('image/svg+xml') || !body.includes('<svg') || !body.includes('CoLiPas') || body.includes('<html')) {
+    throw new Error(`/favicon.ico must return the CoLiPas SVG icon, got content-type ${contentType}`);
   }
 }
 

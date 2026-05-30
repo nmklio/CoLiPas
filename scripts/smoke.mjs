@@ -3010,7 +3010,7 @@ function assertAccountUiGuards() {
   }
 
   const brandIconFragments = [
-    '<link rel="icon" type="image/svg+xml" href="/colipas-icon.svg?v=20260530-brand2" />',
+    '<link rel="icon" type="image/svg+xml" href="/colipas-icon.svg?v=20260530-brand3" />',
     'export function BrandIcon',
     'viewBox="0 0 64 64"',
     'A clear cloud terminal mark',
@@ -3018,7 +3018,7 @@ function assertAccountUiGuards() {
     'marketing-brand-mark',
     '.brand-mark svg',
     'cat >"$LANDING_ROOT/colipas-icon.svg"',
-    '<link rel="icon" type="image/svg+xml" href="/colipas-icon.svg?v=20260530-brand2">',
+    '<link rel="icon" type="image/svg+xml" href="/colipas-icon.svg?v=20260530-brand3">',
     '<svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">',
   ];
   const brandIconSourceBundle = `${indexSource}\n${publicIconSource}\n${brandIconSource}\n${loginSource}\n${marketingSource}\n${appSource}\n${globalCss}\n${serverUpdateSource}`;
@@ -3039,14 +3039,14 @@ function assertAccountUiGuards() {
     || !serverUpdateSource.includes('colipas landing balanced ui v8')
     || !serverUpdateSource.includes('landingIcon(kind, className)')
     || !serverUpdateSource.includes('replacePositionCard(')
-    || !serverUpdateSource.includes('(?:(?!<\\\\/article>)[\\\\s\\\\S])*?')
+    || !serverUpdateSource.includes('new RegExp(`<article class="position-card')
     || !serverUpdateSource.includes('position-flow-card')
     || !serverUpdateSource.includes('position-step')
     || !serverUpdateSource.includes('position-state')
     || !serverUpdateSource.includes('position-flow-terminal')
     || !serverUpdateSource.includes('position-flow-ai')
     || !serverUpdateSource.includes('position-flow-shield')
-    || !serverUpdateSource.includes('<title>CoLiPas云服务器管理面板</title>')
+    || !serverUpdateSource.includes("replaceAll(/<title>[\\s\\S]*?<\\/title>/g")
     || !serverUpdateSource.includes('<img class="brand-mark" src="/colipas-icon.svg"')
     || !serverUpdateSource.includes('icon feature-icon')
     || !serverUpdateSource.includes('position-icon')
@@ -3061,8 +3061,10 @@ function assertAccountUiGuards() {
     || !serverUpdateSource.includes('--preserve-env=SSH_ORIGINAL_COMMAND,COLIPAS_RESET_ADMIN_PASSWORD')
     || !serverUpdateSource.includes('try_files /docs.html =404')
     || !serverUpdateSource.includes('CoLiPas cloud server management panel docs page ready')
-    || !serverUpdateSource.includes('href="/colipas-icon.svg?v=20260530-brand2"')
+    || !serverUpdateSource.includes('href="/colipas-icon.svg?v=20260530-brand3"')
     || !serverUpdateSource.includes('location = /favicon.ico')
+    || !serverAppSource.includes("app.get('/favicon.ico'")
+    || !serverAppSource.includes("response.type('image/svg+xml')")
     || !serverUpdateSource.includes('Cache-Control "no-store, max-age=0" always')
   ) {
     throw new Error('Deployment, docs, and login pages must expose public navigation without fake docs links');
