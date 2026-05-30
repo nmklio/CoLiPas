@@ -3016,8 +3016,13 @@ function assertAccountUiGuards() {
     || !serverUpdateSource.includes('write_docs_page')
     || !serverUpdateSource.includes('https://github.com/nmklio/CoLiPas')
     || !serverUpdateSource.includes('href="/docs.html"')
-    || !serverUpdateSource.includes('colipas landing balanced ui')
+    || !serverUpdateSource.includes('colipas landing balanced ui v6')
     || !serverUpdateSource.includes('landingIcon(kind, className)')
+    || !serverUpdateSource.includes('replacePositionCard(')
+    || !serverUpdateSource.includes('(?:(?!<\\\\/article>)[\\\\s\\\\S])*?')
+    || !serverUpdateSource.includes('position-card-modern')
+    || !serverUpdateSource.includes('position-icon-modern')
+    || !serverUpdateSource.includes('<title>CoLiPas云服务器管理面板</title>')
     || !serverUpdateSource.includes('<img class="brand-mark" src="/colipas-icon.svg"')
     || !serverUpdateSource.includes('icon feature-icon')
     || !serverUpdateSource.includes('position-icon')
@@ -3054,7 +3059,11 @@ function assertAccountUiGuards() {
     'landing legacy footer product description',
     'landing feature SVG icons',
     'landing position SVG icons',
+    'landing modern position cards',
+    'landing modern position SVG icons',
+    'landing legacy numbered position badges',
     'landing deploy SVG icons',
+    'CoLiPas - 多云服务器管理面板',
     '云服务器管理与 AI 运维后台',
     "path.resolve('output', 'public-pages-check')",
     "waitUntil: 'domcontentloaded'",

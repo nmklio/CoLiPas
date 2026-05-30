@@ -106,7 +106,8 @@ function buildLandingCheck() {
     name: 'landing',
     path: '/',
     assert: async (page) => {
-      await expectTitle(page, /CoLiPas/);
+      await expectTitle(page, /CoLiPas云服务器管理面板/);
+      await expectTitleAbsent(page, /CoLiPas - 多云服务器管理面板|多云服务器管理面板/);
       await expectText(page.locator('h1').first(), /CoLiPas云服务器管理面板|CoLiPas Cloud Server Management Panel|multi-cloud/i, 'landing h1');
       await expectText(page.locator('body'), /云服务器管理与 AI 运维后台|cloud server management/i, 'landing footer product description');
       await expectTextAbsent(page, /多云服务器管理与 AI 运维后台/, 'landing legacy footer product description');
@@ -116,6 +117,9 @@ function buildLandingCheck() {
       await expectLocatorCountAtLeast(page.locator('section, article, .feature-card, .position-card, .deploy-card'), 6, 'landing content sections');
       await expectLocatorCountAtLeast(page.locator('.feature-card .feature-icon svg'), 6, 'landing feature SVG icons');
       await expectLocatorCountAtLeast(page.locator('.position-card .position-icon svg'), 4, 'landing position SVG icons');
+      await expectLocatorCountAtLeast(page.locator('.position-card.position-card-modern'), 4, 'landing modern position cards');
+      await expectLocatorCountAtLeast(page.locator('.position-card .position-icon.position-icon-modern svg'), 4, 'landing modern position SVG icons');
+      await expectLocatorCount(page.locator('.position-card small'), 0, 'landing legacy numbered position badges');
       await expectLocatorCountAtLeast(page.locator('.deploy-card .deploy-icon svg'), 3, 'landing deploy SVG icons');
       await expectLocatorCountAtLeast(page.locator('.brand img.brand-mark[src="/colipas-icon.svg"]'), 1, 'landing brand icon image');
       await expectLocatorCount(page.locator('.brand .brand-mark').filter({ hasText: /^CP$/ }), 0, 'landing legacy CP brand mark');
@@ -163,6 +167,13 @@ async function expectTitle(page, pattern) {
   const title = await page.title();
   if (!pattern.test(title)) {
     throw new Error(`page title "${title}" did not match ${pattern}`);
+  }
+}
+
+async function expectTitleAbsent(page, pattern) {
+  const title = await page.title();
+  if (pattern.test(title)) {
+    throw new Error(`page title "${title}" still matched legacy pattern ${pattern}`);
   }
 }
 

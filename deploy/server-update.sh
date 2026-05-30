@@ -163,19 +163,36 @@ function replaceAll(pattern, replacement) {
 
 function landingIcon(kind, className) {
   const paths = {
-    cloud: '<path d="M7.6 17.5h8.8a3.7 3.7 0 0 0 .3-7.3A5.7 5.7 0 0 0 5.5 13.2 3.6 3.6 0 0 0 7.6 17.5Z"/><path d="M9.2 13.6h5.6"/>',
+    assets: '<path d="M7.2 16.8h9.4a3.5 3.5 0 0 0 .4-6.9 5.5 5.5 0 0 0-10.8 2.4 3.3 3.3 0 0 0 1 4.5Z"/><rect x="7.7" y="12.6" width="3.8" height="3.1" rx=".8"/><rect x="12.9" y="12.6" width="3.8" height="3.1" rx=".8"/><path d="M11.5 14.1h1.4M12.2 9.2v3.4"/>',
+    cloud: '<path d="M7.2 17.2h9.2a3.6 3.6 0 0 0 .4-7.1 5.5 5.5 0 0 0-10.7 2.6 3.3 3.3 0 0 0 1.1 4.5Z"/><path d="M8.8 12.5h6.4"/><path d="M10.2 9.6h3.7"/>',
     map: '<path d="M12 21s6-5.1 6-10.2A6 6 0 0 0 6 10.8C6 15.9 12 21 12 21Z"/><circle cx="12" cy="10.8" r="2.2"/>',
-    terminal: '<rect x="4" y="5" width="16" height="14" rx="2.4"/><path d="m8 10 2.6 2.2L8 14.4"/><path d="M13 15h4"/>',
-    ai: '<path d="M8.3 9.2a3.2 3.2 0 0 1 6.1-1.3 3.5 3.5 0 0 1 1.2 6.8 3.1 3.1 0 0 1-5.5 2.2 3.2 3.2 0 0 1-1.8-7.7Z"/><path d="M12 7.4v10.2M9.4 12h5.2M15.2 9.4h2.1M6.7 14.6h2.1"/>',
+    terminal: '<rect x="4.2" y="5" width="15.6" height="14" rx="2.7"/><path d="M4.2 8.6h15.6"/><path d="m8 12 2.5 2L8 16"/><path d="M13.4 16h4.1"/><circle cx="7" cy="6.9" r=".45"/><circle cx="8.8" cy="6.9" r=".45"/>',
+    ai: '<rect x="7.1" y="7.1" width="9.8" height="9.8" rx="2.2"/><path d="M12 3.8v3.3M12 16.9v3.3M3.8 12h3.3M16.9 12h3.3M8.5 4.6l1.2 2.8M15.5 4.6l-1.2 2.8M8.5 19.4l1.2-2.8M15.5 19.4l-1.2-2.8"/><circle cx="10.3" cy="11.7" r=".55"/><circle cx="13.7" cy="11.7" r=".55"/><path d="M10.5 14h3"/>',
     flow: '<circle cx="6.5" cy="7" r="2.2"/><circle cx="17.5" cy="7" r="2.2"/><circle cx="12" cy="17" r="2.2"/><path d="M8.6 7h6.8M7.8 9l3.1 5.7M16.2 9l-3.1 5.7"/>',
-    shield: '<path d="M12 3.8 18.4 6v5.4c0 4-2.6 7.2-6.4 8.8-3.8-1.6-6.4-4.8-6.4-8.8V6L12 3.8Z"/><path d="m9.3 12.1 1.9 1.9 3.8-4.2"/>',
+    shield: '<path d="M12 3.8 18.3 6v5.3c0 4.1-2.5 7.2-6.3 8.9-3.8-1.7-6.3-4.8-6.3-8.9V6L12 3.8Z"/><path d="M9.2 12.1 11.1 14l3.9-4.3"/><path d="M8.6 17.3h6.8"/>',
     code: '<path d="m9 8-4 4 4 4M15 8l4 4-4 4"/><path d="m13.2 6.8-2.4 10.4"/>',
     database: '<ellipse cx="12" cy="6.4" rx="6.8" ry="2.8"/><path d="M5.2 6.4v7.2c0 1.6 3 2.8 6.8 2.8s6.8-1.2 6.8-2.8V6.4"/><path d="M5.2 10c0 1.6 3 2.8 6.8 2.8s6.8-1.2 6.8-2.8"/>',
   };
   return `<span class="${className} icon-${kind}" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false">${paths[kind]}</svg></span>`;
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function landingPositionCard(kind, title, description) {
+  return `<article class="position-card position-card-modern">${landingIcon(kind, 'position-icon position-icon-modern')}<strong>${title}</strong><span>${description}</span></article>`;
+}
+
+function replacePositionCard(title, kind, description) {
+  replaceAll(
+    new RegExp(`<article class="position-card(?: [^"]*)?">(?:(?!<\\/article>)[\\s\\S])*?<strong>${escapeRegExp(title)}<\\/strong>(?:(?!<\\/article>)[\\s\\S])*?<\\/article>`, 'g'),
+    landingPositionCard(kind, title, description),
+  );
+}
+
 replaceAll(/\/\* colipas landing balanced ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\/style>)/g, '');
+replaceAll(/<title>[\s\S]*?<\/title>/g, '<title>CoLiPas云服务器管理面板</title>');
 replaceAll(/<a class="button github-button" href="https:\/\/github\.com\/nmklio\/CoLiPas"[^>]*>GitHub<\/a>/g, '');
 replaceAll(/<span class="brand-mark">CP<\/span>/g, '<img class="brand-mark" src="/colipas-icon.svg" alt="" aria-hidden="true">');
 
@@ -216,10 +233,10 @@ replaceOnce(/(<section id="features" class="section wrap">[\s\S]*?<p class="sect
   `${prefix}保留资产、终端、AI、编排和审计入口，介绍页只展示能力边界，真实操作统一进入受保护后台。${suffix}`
 ));
 
-replaceAll(/<article class="position-card"><small>01<\/small><strong>资产接入<\/strong>/g, `<article class="position-card">${landingIcon('cloud', 'position-icon')}<strong>资产接入</strong>`);
-replaceAll(/<article class="position-card"><small>02<\/small><strong>实时运维<\/strong>/g, `<article class="position-card">${landingIcon('terminal', 'position-icon')}<strong>实时运维</strong>`);
-replaceAll(/<article class="position-card"><small>03<\/small><strong>AI 分析<\/strong>/g, `<article class="position-card">${landingIcon('ai', 'position-icon')}<strong>AI 分析</strong>`);
-replaceAll(/<article class="position-card"><small>04<\/small><strong>审计闭环<\/strong>/g, `<article class="position-card">${landingIcon('shield', 'position-icon')}<strong>审计闭环</strong>`);
+replacePositionCard('资产接入', 'assets', '自建 / 海外 / 私有云 / 其他云');
+replacePositionCard('实时运维', 'terminal', 'SSH 终端 / 命令 / 诊断');
+replacePositionCard('AI 分析', 'ai', '流式对话 / 模型拉取 / 缓存');
+replacePositionCard('审计闭环', 'shield', '登录 / API / 编排 / 修复');
 
 replaceAll(/<span class="icon">01<\/span>/g, landingIcon('cloud', 'icon feature-icon'));
 replaceAll(/<span class="icon">02<\/span>/g, landingIcon('map', 'icon feature-icon'));
@@ -271,7 +288,7 @@ if (!html.includes('@media (max-width: 640px) {\n  .nav-actions')) {
   }`);
 }
 
-replaceOnce('</style>', `/* colipas landing balanced ui v5 */
+replaceOnce('</style>', `/* colipas landing balanced ui v6 */
 .brand .brand-mark {
   width: 38px;
   height: 38px;
@@ -300,10 +317,10 @@ replaceOnce('</style>', `/* colipas landing balanced ui v5 */
 .feature-icon,
 .position-icon,
 .deploy-icon {
-  width: 54px;
-  height: 54px;
+  width: 52px;
+  height: 52px;
   border: 0;
-  border-radius: 15px;
+  border-radius: 14px;
   background:
     radial-gradient(circle at 28% 24%, rgba(255, 255, 255, .95), rgba(255, 255, 255, 0) 34%),
     linear-gradient(135deg, #eaf3ff 0%, #d9e8ff 100%);
@@ -312,24 +329,78 @@ replaceOnce('</style>', `/* colipas landing balanced ui v5 */
   place-items: center;
   box-shadow: inset 0 0 0 1px rgba(37, 99, 235, .16), 0 14px 28px rgba(37, 99, 235, .13);
 }
+.position-card-modern {
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  gap: 9px;
+  min-height: 150px;
+  padding: 22px;
+  border-color: rgba(37, 99, 235, .16);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .98), rgba(247, 251, 255, .94)),
+    radial-gradient(circle at 86% 18%, rgba(14, 165, 233, .1), transparent 32%);
+}
+.position-icon-modern {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  margin-bottom: 6px;
+  color: #172033;
+  background:
+    radial-gradient(circle at 30% 22%, rgba(255, 255, 255, .96), rgba(255, 255, 255, 0) 36%),
+    linear-gradient(135deg, #eef6ff 0%, #dcf7ef 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(37, 99, 235, .18),
+    inset 0 -12px 20px rgba(15, 118, 110, .06),
+    0 16px 30px rgba(15, 23, 42, .1);
+}
+.position-card-modern strong {
+  margin-top: 0;
+  font-size: 17px;
+  letter-spacing: 0;
+}
+.position-card-modern span {
+  color: #5a6c83;
+  line-height: 1.55;
+}
+.position-card-modern::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #0f766e;
+  position: absolute;
+  right: 20px;
+  top: 24px;
+  opacity: .38;
+  box-shadow: -12px 0 0 rgba(37, 99, 235, .38);
+}
 .position-icon,
 .deploy-icon {
   margin-bottom: 14px;
 }
+.position-icon-modern {
+  margin-bottom: 6px;
+}
 .feature-icon svg,
 .position-icon svg,
 .deploy-icon svg {
-  width: 28px;
-  height: 28px;
+  width: 27px;
+  height: 27px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 2.35;
+  stroke-width: 2.25;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+.position-icon-modern svg {
+  width: 29px;
+  height: 29px;
+  stroke-width: 2.05;
+}
 .icon-terminal,
 .icon-code {
-  color: #0f766e;
+  color: #122033;
   background:
     radial-gradient(circle at 28% 24%, rgba(255, 255, 255, .95), rgba(255, 255, 255, 0) 34%),
     linear-gradient(135deg, #e5f8f4 0%, #cfeee8 100%);
@@ -337,14 +408,14 @@ replaceOnce('</style>', `/* colipas landing balanced ui v5 */
 }
 .icon-ai,
 .icon-flow {
-  color: #7c3aed;
+  color: #122033;
   background:
     radial-gradient(circle at 28% 24%, rgba(255, 255, 255, .96), rgba(255, 255, 255, 0) 34%),
     linear-gradient(135deg, #f2ebff 0%, #e4d8ff 100%);
   box-shadow: inset 0 0 0 1px rgba(124, 58, 237, .18), 0 14px 28px rgba(124, 58, 237, .12);
 }
 .icon-shield {
-  color: #166534;
+  color: #122033;
   background:
     radial-gradient(circle at 28% 24%, rgba(255, 255, 255, .96), rgba(255, 255, 255, 0) 34%),
     linear-gradient(135deg, #edf9e8 0%, #d8f0d0 100%);
@@ -620,12 +691,31 @@ replaceOnce('</style>', `/* colipas landing balanced ui v5 */
   .position-card {
     padding: 16px;
   }
+  .position-card-modern {
+    min-height: 132px;
+    padding: 16px;
+    gap: 7px;
+  }
+  .position-icon-modern {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    margin-bottom: 4px;
+  }
   .position-card strong {
     margin-top: 10px;
+  }
+  .position-card-modern strong {
+    margin-top: 0;
+    font-size: 15px;
   }
   .position-card span {
     font-size: 11px;
     line-height: 1.45;
+  }
+  .position-icon-modern svg {
+    width: 25px;
+    height: 25px;
   }
   .feature-grid,
   .deploy-grid {
