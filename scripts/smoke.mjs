@@ -3028,16 +3028,16 @@ function assertAccountUiGuards() {
     || !serverUpdateSource.includes('write_docs_page')
     || !serverUpdateSource.includes('https://github.com/nmklio/CoLiPas')
     || !serverUpdateSource.includes('href="/docs.html"')
-    || !serverUpdateSource.includes('colipas landing balanced ui v7')
+    || !serverUpdateSource.includes('colipas landing balanced ui v8')
     || !serverUpdateSource.includes('landingIcon(kind, className)')
     || !serverUpdateSource.includes('replacePositionCard(')
     || !serverUpdateSource.includes('(?:(?!<\\\\/article>)[\\\\s\\\\S])*?')
-    || !serverUpdateSource.includes('landingPositionIcon(kind)')
-    || !serverUpdateSource.includes('position-card-modern')
-    || !serverUpdateSource.includes('position-visual-assets')
-    || !serverUpdateSource.includes('position-visual-terminal')
-    || !serverUpdateSource.includes('position-visual-ai')
-    || !serverUpdateSource.includes('position-visual-shield')
+    || !serverUpdateSource.includes('position-flow-card')
+    || !serverUpdateSource.includes('position-step')
+    || !serverUpdateSource.includes('position-state')
+    || !serverUpdateSource.includes('position-flow-terminal')
+    || !serverUpdateSource.includes('position-flow-ai')
+    || !serverUpdateSource.includes('position-flow-shield')
     || !serverUpdateSource.includes('<title>CoLiPas云服务器管理面板</title>')
     || !serverUpdateSource.includes('<img class="brand-mark" src="/colipas-icon.svg"')
     || !serverUpdateSource.includes('icon feature-icon')
@@ -3054,6 +3054,8 @@ function assertAccountUiGuards() {
     || !serverUpdateSource.includes('try_files /docs.html =404')
     || !serverUpdateSource.includes('CoLiPas cloud server management panel docs page ready')
     || !serverUpdateSource.includes('href="/colipas-icon.svg?v=20260530-brand2"')
+    || !serverUpdateSource.includes('location = /favicon.ico')
+    || !serverUpdateSource.includes('Cache-Control "no-store, max-age=0" always')
   ) {
     throw new Error('Deployment, docs, and login pages must expose public navigation without fake docs links');
   }
@@ -3074,12 +3076,10 @@ function assertAccountUiGuards() {
     'expectTextAbsent',
     'landing legacy footer product description',
     'landing feature SVG icons',
-    'landing modern position cards',
-    'landing modern position visual icons',
-    'landing asset visual icon',
-    'landing terminal visual icon',
-    'landing AI visual icon',
-    'landing audit visual icon',
+    'landing redesigned flow position cards',
+    'landing position flow step numbers',
+    'landing position flow state pills',
+    'landing legacy position icon blocks',
     'landing legacy numbered position badges',
     'landing deploy SVG icons',
     'CoLiPas - 多云服务器管理面板',

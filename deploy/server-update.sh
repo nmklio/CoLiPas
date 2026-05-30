@@ -181,7 +181,19 @@ function escapeRegExp(value) {
 }
 
 function landingPositionCard(kind, title, description) {
-  return `<article class="position-card position-card-modern position-card-${kind}">${landingPositionIcon(kind)}<strong>${title}</strong><span>${description}</span></article>`;
+  const stageLabels = {
+    assets: '登记',
+    terminal: '验证',
+    ai: '诊断',
+    shield: '留痕',
+  };
+  const steps = {
+    assets: '01',
+    terminal: '02',
+    ai: '03',
+    shield: '04',
+  };
+  return `<article class="position-card position-card-modern position-flow-card position-flow-${kind}"><span class="position-step">${steps[kind]}</span><div class="position-copy"><strong>${title}</strong><span>${description}</span></div><span class="position-state">${stageLabels[kind]}</span></article>`;
 }
 
 function replacePositionCard(title, kind, description) {
@@ -189,16 +201,6 @@ function replacePositionCard(title, kind, description) {
     new RegExp(`<article class="position-card(?: [^"]*)?">(?:(?!<\\/article>)[\\s\\S])*?<strong>${escapeRegExp(title)}<\\/strong>(?:(?!<\\/article>)[\\s\\S])*?<\\/article>`, 'g'),
     landingPositionCard(kind, title, description),
   );
-}
-
-function landingPositionIcon(kind) {
-  const icons = {
-    assets: '<rect class="symbol-box" x="5.5" y="12" width="21" height="12.5" rx="3.4"/><path class="symbol-line" d="M10 12V8.8h12V12M10.5 18h11M11 21.5h3M18 21.5h3"/>',
-    terminal: '<rect class="symbol-box" x="5.5" y="7.5" width="21" height="17" rx="3.4"/><path class="symbol-line" d="M5.5 12h21M10.2 17.5l3.2 2.5-3.2 2.5M17 22.5h5.5"/>',
-    ai: '<rect class="symbol-box" x="10" y="10" width="12" height="12" rx="3.2"/><path class="symbol-line" d="M16 5.2V10M16 22v4.8M5.2 16H10M22 16h4.8M9 9l3.1 3.1M23 9l-3.1 3.1M9 23l3.1-3.1M23 23l-3.1-3.1"/><circle class="symbol-dot" cx="13.8" cy="15.7" r="1.1"/><circle class="symbol-dot" cx="18.2" cy="15.7" r="1.1"/><path class="symbol-line thin" d="M13.9 19h4.2"/>',
-    shield: '<path class="symbol-box" d="M16 5.4 24.5 8.7v7c0 5.1-3.1 9-8.5 11-5.4-2-8.5-5.9-8.5-11v-7L16 5.4Z"/><path class="symbol-line" d="m12.2 16.3 2.8 2.8 5.7-6.1M12.4 22.5h7.2"/>',
-  };
-  return `<span class="position-visual position-visual-${kind}" aria-hidden="true"><svg viewBox="0 0 32 32" focusable="false">${icons[kind]}</svg></span>`;
 }
 
 replaceAll(/\/\* colipas landing balanced ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\/style>)/g, '');
@@ -300,7 +302,7 @@ if (!html.includes('@media (max-width: 640px) {\n  .nav-actions')) {
   }`);
 }
 
-replaceOnce('</style>', `/* colipas landing balanced ui v7 */
+replaceOnce('</style>', `/* colipas landing balanced ui v8 */
 .brand .brand-mark {
   width: 38px;
   height: 38px;
@@ -342,96 +344,97 @@ replaceOnce('</style>', `/* colipas landing balanced ui v7 */
   box-shadow: inset 0 0 0 1px rgba(37, 99, 235, .16), 0 14px 28px rgba(37, 99, 235, .13);
 }
 .position-card-modern {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  grid-template-rows: auto auto;
-  gap: 6px 14px;
-  align-items: start;
-  min-height: 124px;
-  padding: 21px;
+  min-height: 126px;
+  padding: 22px;
   border-color: rgba(37, 99, 235, .14);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, .98), rgba(248, 251, 255, .95)),
-    radial-gradient(circle at 96% 0%, rgba(14, 165, 233, .08), transparent 34%);
-  box-shadow: 0 16px 34px rgba(17, 34, 58, .055);
+    radial-gradient(circle at 92% 0%, rgba(37, 99, 235, .08), transparent 36%);
+  box-shadow: 0 18px 38px rgba(17, 34, 58, .06);
 }
-.position-visual {
-  grid-row: 1 / span 2;
-  width: 48px;
-  height: 48px;
-  border-radius: 15px;
-  margin: 0;
+.position-flow-card {
   display: inline-grid;
-  place-items: center;
-  background:
-    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, .95), rgba(255, 255, 255, 0) 38%),
-    linear-gradient(135deg, #eef6ff 0%, #dcecff 100%);
-  box-shadow:
-    inset 0 0 0 1px rgba(37, 99, 235, .14),
-    0 13px 24px rgba(37, 99, 235, .11);
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  gap: 14px 16px;
+  align-items: start;
+  color: #102033;
 }
-.position-visual svg {
-  width: 31px;
-  height: 31px;
-  overflow: visible;
-}
-.position-visual .symbol-box {
-  fill: rgba(255, 255, 255, .72);
-  stroke: currentColor;
-  stroke-width: 1.9;
-  stroke-linejoin: round;
-}
-.position-visual .symbol-line {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2.05;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.position-visual .symbol-line.thin {
-  stroke-width: 1.7;
-}
-.position-visual .symbol-dot {
-  fill: currentColor;
-  stroke: none;
-}
-.position-visual-assets {
+.position-step {
+  display: block;
+  width: max-content;
+  min-width: 48px;
   color: #2563eb;
-  background: linear-gradient(135deg, #edf5ff 0%, #dcecff 100%);
+  font-size: 30px;
+  line-height: .92;
+  font-weight: 950;
+  letter-spacing: 0;
 }
-.position-visual-terminal {
-  color: #0f766e;
-  background: linear-gradient(135deg, #e8fbf6 0%, #d3f2ea 100%);
+.position-copy {
+  min-width: 0;
 }
-.position-visual-ai {
-  color: #7c3aed;
-  background: linear-gradient(135deg, #f5efff 0%, #e5d8ff 100%);
-}
-.position-visual-shield {
-  color: #166534;
-  background: linear-gradient(135deg, #f0faeb 0%, #dcefd4 100%);
+.position-state {
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #eef5ff;
+  color: #2563eb;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 950;
 }
 .position-card-modern strong {
   display: block;
-  margin: 3px 0 0;
-  font-size: 17px;
+  margin: 0;
+  font-size: 18px;
   letter-spacing: 0;
 }
 .position-card-modern span {
   display: block;
+}
+.position-card-modern .position-state {
+  display: inline-flex;
+}
+.position-copy span {
+  margin-top: 9px;
   color: #5a6c83;
-  line-height: 1.48;
+  line-height: 1.55;
+  font-size: 12.5px;
+  font-weight: 820;
 }
 .position-card-modern::after {
   content: "";
-  width: 26px;
-  height: 3px;
+  width: 42px;
+  height: 2px;
   border-radius: 999px;
   background: linear-gradient(90deg, rgba(37, 99, 235, .65), rgba(15, 118, 110, .52));
   position: absolute;
-  right: 19px;
-  top: 20px;
-  opacity: .55;
+  left: 22px;
+  bottom: 18px;
+  opacity: .75;
+}
+.position-flow-terminal .position-step,
+.position-flow-terminal .position-state {
+  color: #0f766e;
+}
+.position-flow-terminal .position-state {
+  background: #e8f7f4;
+}
+.position-flow-ai .position-step,
+.position-flow-ai .position-state {
+  color: #6d28d9;
+}
+.position-flow-ai .position-state {
+  background: #f1eaff;
+}
+.position-flow-shield .position-step,
+.position-flow-shield .position-state {
+  color: #166534;
+}
+.position-flow-shield .position-state {
+  background: #edf8e8;
 }
 .position-icon,
 .deploy-icon {
@@ -746,14 +749,14 @@ replaceOnce('</style>', `/* colipas landing balanced ui v7 */
     padding: 16px;
     gap: 5px 12px;
   }
-  .position-visual {
-    width: 44px;
-    height: 44px;
-    border-radius: 14px;
+  .position-step {
+    min-width: 42px;
+    font-size: 26px;
   }
-  .position-visual svg {
-    width: 28px;
-    height: 28px;
+  .position-state {
+    min-height: 24px;
+    font-size: 11px;
+    padding-inline: 8px;
   }
   .position-card strong {
     margin-top: 10px;
@@ -1634,10 +1637,12 @@ server {
   add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 
   location = / {
+    add_header Cache-Control "no-store, max-age=0" always;
     try_files /index.html =404;
   }
 
   location = /docs.html {
+    add_header Cache-Control "no-store, max-age=0" always;
     try_files /docs.html =404;
   }
 
@@ -1649,6 +1654,12 @@ server {
     try_files /colipas-icon.svg =404;
     expires 1h;
     add_header Cache-Control "public, max-age=3600";
+  }
+
+  location = /favicon.ico {
+    try_files /colipas-icon.svg =404;
+    expires -1;
+    add_header Cache-Control "no-store, max-age=0" always;
   }
 
   location = /admin {
@@ -1715,10 +1726,12 @@ server {
   }
 
   location = / {
+    add_header Cache-Control "no-store, max-age=0" always;
     try_files /index.html =404;
   }
 
   location = /docs.html {
+    add_header Cache-Control "no-store, max-age=0" always;
     try_files /docs.html =404;
   }
 
@@ -1730,6 +1743,12 @@ server {
     try_files /colipas-icon.svg =404;
     expires 1h;
     add_header Cache-Control "public, max-age=3600";
+  }
+
+  location = /favicon.ico {
+    try_files /colipas-icon.svg =404;
+    expires -1;
+    add_header Cache-Control "no-store, max-age=0" always;
   }
 
   location = /admin {

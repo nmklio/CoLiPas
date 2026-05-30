@@ -117,12 +117,10 @@ function buildLandingCheck() {
       await expectLink(page, /后台|登录|Admin|进入/i, '/admin/');
       await expectLocatorCountAtLeast(page.locator('section, article, .feature-card, .position-card, .deploy-card'), 6, 'landing content sections');
       await expectLocatorCountAtLeast(page.locator('.feature-card .feature-icon svg'), 6, 'landing feature SVG icons');
-      await expectLocatorCountAtLeast(page.locator('.position-card.position-card-modern'), 4, 'landing modern position cards');
-      await expectLocatorCountAtLeast(page.locator('.position-card .position-visual svg'), 4, 'landing modern position visual icons');
-      await expectLocatorCountAtLeast(page.locator('.position-card .position-visual-assets svg'), 1, 'landing asset visual icon');
-      await expectLocatorCountAtLeast(page.locator('.position-card .position-visual-terminal svg'), 1, 'landing terminal visual icon');
-      await expectLocatorCountAtLeast(page.locator('.position-card .position-visual-ai svg'), 1, 'landing AI visual icon');
-      await expectLocatorCountAtLeast(page.locator('.position-card .position-visual-shield svg'), 1, 'landing audit visual icon');
+      await expectLocatorCountAtLeast(page.locator('.position-card.position-flow-card'), 4, 'landing redesigned flow position cards');
+      await expectLocatorCount(page.locator('.position-card .position-step'), 4, 'landing position flow step numbers');
+      await expectLocatorCount(page.locator('.position-card .position-state'), 4, 'landing position flow state pills');
+      await expectLocatorCount(page.locator('.position-card .position-visual, .position-card svg'), 0, 'landing legacy position icon blocks');
       await expectLocatorCount(page.locator('.position-card small'), 0, 'landing legacy numbered position badges');
       await expectLocatorCount(page.locator('.position-card .shape-fill, .position-card .shape-line, .position-card .shape-dot'), 0, 'landing legacy bulky position icon shapes');
       await expectLocatorCountAtLeast(page.locator('.deploy-card .deploy-icon svg'), 3, 'landing deploy SVG icons');
