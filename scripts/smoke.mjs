@@ -3002,15 +3002,15 @@ function assertAccountUiGuards() {
   }
 
   const brandIconFragments = [
-    '<link rel="icon" type="image/svg+xml" href="/colipas-icon.svg" />',
+    '<link rel="icon" type="image/svg+xml" href="/colipas-icon.svg?v=20260530-brand2" />',
     'export function BrandIcon',
     'viewBox="0 0 64 64"',
-    'A cloud operations terminal mark',
+    'A clear cloud terminal mark',
     'app-brand-mark',
     'marketing-brand-mark',
     '.brand-mark svg',
     'cat >"$LANDING_ROOT/colipas-icon.svg"',
-    '<link rel="icon" type="image/svg+xml" href="/colipas-icon.svg">',
+    '<link rel="icon" type="image/svg+xml" href="/colipas-icon.svg?v=20260530-brand2">',
     '<svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">',
   ];
   const brandIconSourceBundle = `${indexSource}\n${publicIconSource}\n${brandIconSource}\n${loginSource}\n${marketingSource}\n${appSource}\n${globalCss}\n${serverUpdateSource}`;
@@ -3028,7 +3028,7 @@ function assertAccountUiGuards() {
     || !serverUpdateSource.includes('write_docs_page')
     || !serverUpdateSource.includes('https://github.com/nmklio/CoLiPas')
     || !serverUpdateSource.includes('href="/docs.html"')
-    || !serverUpdateSource.includes('colipas landing balanced ui v6')
+    || !serverUpdateSource.includes('colipas landing balanced ui v7')
     || !serverUpdateSource.includes('landingIcon(kind, className)')
     || !serverUpdateSource.includes('replacePositionCard(')
     || !serverUpdateSource.includes('(?:(?!<\\\\/article>)[\\\\s\\\\S])*?')
@@ -3053,7 +3053,7 @@ function assertAccountUiGuards() {
     || !serverUpdateSource.includes('--preserve-env=SSH_ORIGINAL_COMMAND,COLIPAS_RESET_ADMIN_PASSWORD')
     || !serverUpdateSource.includes('try_files /docs.html =404')
     || !serverUpdateSource.includes('CoLiPas cloud server management panel docs page ready')
-    || !serverUpdateSource.includes('href="/colipas-icon.svg"')
+    || !serverUpdateSource.includes('href="/colipas-icon.svg?v=20260530-brand2"')
   ) {
     throw new Error('Deployment, docs, and login pages must expose public navigation without fake docs links');
   }

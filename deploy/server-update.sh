@@ -193,16 +193,18 @@ function replacePositionCard(title, kind, description) {
 
 function landingPositionIcon(kind) {
   const icons = {
-    assets: '<rect class="shape-fill" x="7" y="12" width="50" height="37" rx="14"/><path class="shape-line" d="M16 35h32M21 28h8M35 28h8M24 22v-6h16v6"/><circle class="shape-dot" cx="20" cy="39" r="3.5"/><circle class="shape-dot" cx="32" cy="39" r="3.5"/><circle class="shape-dot" cx="44" cy="39" r="3.5"/>',
-    terminal: '<rect class="shape-fill" x="8" y="13" width="48" height="36" rx="12"/><path class="shape-line" d="M8 24h48M20 34l7 5-7 5M34 44h12"/><circle class="shape-dot" cx="18" cy="18.5" r="2.6"/><circle class="shape-dot" cx="27" cy="18.5" r="2.6"/>',
-    ai: '<rect class="shape-fill" x="17" y="17" width="30" height="30" rx="10"/><path class="shape-line" d="M32 7v10M32 47v10M7 32h10M47 32h10M16 16l7 7M48 16l-7 7M16 48l7-7M48 48l-7-7"/><circle class="shape-dot" cx="26" cy="31" r="3"/><circle class="shape-dot" cx="38" cy="31" r="3"/><path class="shape-line" d="M27 39h10"/>',
-    shield: '<path class="shape-fill" d="M32 8 51 15v15c0 12-7.3 21.3-19 26-11.7-4.7-19-14-19-26V15L32 8Z"/><path class="shape-line" d="m23 32 6.5 6.5L42 25M22 47h20"/><circle class="shape-dot" cx="45" cy="19" r="3"/>',
+    assets: '<rect class="symbol-box" x="5.5" y="12" width="21" height="12.5" rx="3.4"/><path class="symbol-line" d="M10 12V8.8h12V12M10.5 18h11M11 21.5h3M18 21.5h3"/>',
+    terminal: '<rect class="symbol-box" x="5.5" y="7.5" width="21" height="17" rx="3.4"/><path class="symbol-line" d="M5.5 12h21M10.2 17.5l3.2 2.5-3.2 2.5M17 22.5h5.5"/>',
+    ai: '<rect class="symbol-box" x="10" y="10" width="12" height="12" rx="3.2"/><path class="symbol-line" d="M16 5.2V10M16 22v4.8M5.2 16H10M22 16h4.8M9 9l3.1 3.1M23 9l-3.1 3.1M9 23l3.1-3.1M23 23l-3.1-3.1"/><circle class="symbol-dot" cx="13.8" cy="15.7" r="1.1"/><circle class="symbol-dot" cx="18.2" cy="15.7" r="1.1"/><path class="symbol-line thin" d="M13.9 19h4.2"/>',
+    shield: '<path class="symbol-box" d="M16 5.4 24.5 8.7v7c0 5.1-3.1 9-8.5 11-5.4-2-8.5-5.9-8.5-11v-7L16 5.4Z"/><path class="symbol-line" d="m12.2 16.3 2.8 2.8 5.7-6.1M12.4 22.5h7.2"/>',
   };
-  return `<span class="position-visual position-visual-${kind}" aria-hidden="true"><svg viewBox="0 0 64 64" focusable="false">${icons[kind]}</svg></span>`;
+  return `<span class="position-visual position-visual-${kind}" aria-hidden="true"><svg viewBox="0 0 32 32" focusable="false">${icons[kind]}</svg></span>`;
 }
 
 replaceAll(/\/\* colipas landing balanced ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\/style>)/g, '');
 replaceAll(/<title>[\s\S]*?<\/title>/g, '<title>CoLiPas云服务器管理面板</title>');
+replaceAll(/<link\s+rel="icon"[^>]*>/g, '');
+replaceOnce(/<title>CoLiPas云服务器管理面板<\/title>/, '<title>CoLiPas云服务器管理面板</title>\n<link rel="icon" type="image/svg+xml" href="/colipas-icon.svg?v=20260530-brand2">');
 replaceAll(/<a class="button github-button" href="https:\/\/github\.com\/nmklio\/CoLiPas"[^>]*>GitHub<\/a>/g, '');
 replaceAll(/<span class="brand-mark">CP<\/span>/g, '<img class="brand-mark" src="/colipas-icon.svg" alt="" aria-hidden="true">');
 
@@ -298,7 +300,7 @@ if (!html.includes('@media (max-width: 640px) {\n  .nav-actions')) {
   }`);
 }
 
-replaceOnce('</style>', `/* colipas landing balanced ui v6 */
+replaceOnce('</style>', `/* colipas landing balanced ui v7 */
 .brand .brand-mark {
   width: 38px;
   height: 38px;
@@ -341,47 +343,55 @@ replaceOnce('</style>', `/* colipas landing balanced ui v6 */
 }
 .position-card-modern {
   display: grid;
-  grid-template-rows: auto auto 1fr;
-  gap: 9px;
-  min-height: 150px;
-  padding: 22px;
-  border-color: rgba(37, 99, 235, .16);
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  gap: 6px 14px;
+  align-items: start;
+  min-height: 124px;
+  padding: 21px;
+  border-color: rgba(37, 99, 235, .14);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, .98), rgba(247, 251, 255, .94)),
-    radial-gradient(circle at 86% 18%, rgba(14, 165, 233, .1), transparent 32%);
+    linear-gradient(180deg, rgba(255, 255, 255, .98), rgba(248, 251, 255, .95)),
+    radial-gradient(circle at 96% 0%, rgba(14, 165, 233, .08), transparent 34%);
+  box-shadow: 0 16px 34px rgba(17, 34, 58, .055);
 }
 .position-visual {
-  width: 68px;
-  height: 68px;
-  border-radius: 20px;
-  margin-bottom: 9px;
+  grid-row: 1 / span 2;
+  width: 48px;
+  height: 48px;
+  border-radius: 15px;
+  margin: 0;
   display: inline-grid;
   place-items: center;
-  background: linear-gradient(135deg, #edf6ff 0%, #dff7f1 100%);
+  background:
+    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, .95), rgba(255, 255, 255, 0) 38%),
+    linear-gradient(135deg, #eef6ff 0%, #dcecff 100%);
   box-shadow:
-    inset 0 0 0 1px rgba(37, 99, 235, .16),
-    inset 0 -16px 28px rgba(15, 118, 110, .08),
-    0 18px 34px rgba(15, 23, 42, .1);
+    inset 0 0 0 1px rgba(37, 99, 235, .14),
+    0 13px 24px rgba(37, 99, 235, .11);
 }
 .position-visual svg {
-  width: 46px;
-  height: 46px;
+  width: 31px;
+  height: 31px;
   overflow: visible;
 }
-.position-visual .shape-fill {
-  fill: rgba(255, 255, 255, .8);
+.position-visual .symbol-box {
+  fill: rgba(255, 255, 255, .72);
   stroke: currentColor;
-  stroke-width: 3.2;
+  stroke-width: 1.9;
   stroke-linejoin: round;
 }
-.position-visual .shape-line {
+.position-visual .symbol-line {
   fill: none;
   stroke: currentColor;
-  stroke-width: 3.4;
+  stroke-width: 2.05;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.position-visual .shape-dot {
+.position-visual .symbol-line.thin {
+  stroke-width: 1.7;
+}
+.position-visual .symbol-dot {
   fill: currentColor;
   stroke: none;
 }
@@ -402,25 +412,26 @@ replaceOnce('</style>', `/* colipas landing balanced ui v6 */
   background: linear-gradient(135deg, #f0faeb 0%, #dcefd4 100%);
 }
 .position-card-modern strong {
-  margin-top: 0;
+  display: block;
+  margin: 3px 0 0;
   font-size: 17px;
   letter-spacing: 0;
 }
 .position-card-modern span {
+  display: block;
   color: #5a6c83;
-  line-height: 1.55;
+  line-height: 1.48;
 }
 .position-card-modern::after {
   content: "";
-  width: 7px;
-  height: 7px;
+  width: 26px;
+  height: 3px;
   border-radius: 999px;
-  background: #0f766e;
+  background: linear-gradient(90deg, rgba(37, 99, 235, .65), rgba(15, 118, 110, .52));
   position: absolute;
-  right: 20px;
-  top: 24px;
-  opacity: .38;
-  box-shadow: -12px 0 0 rgba(37, 99, 235, .38);
+  right: 19px;
+  top: 20px;
+  opacity: .55;
 }
 .position-icon,
 .deploy-icon {
@@ -731,19 +742,18 @@ replaceOnce('</style>', `/* colipas landing balanced ui v6 */
     padding: 16px;
   }
   .position-card-modern {
-    min-height: 132px;
+    min-height: 112px;
     padding: 16px;
-    gap: 7px;
+    gap: 5px 12px;
   }
   .position-visual {
-    width: 54px;
-    height: 54px;
-    border-radius: 16px;
-    margin-bottom: 4px;
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
   }
   .position-visual svg {
-    width: 37px;
-    height: 37px;
+    width: 28px;
+    height: 28px;
   }
   .position-card strong {
     margin-top: 10px;
@@ -798,23 +808,25 @@ write_docs_page() {
   cat >"$LANDING_ROOT/colipas-icon.svg" <<'SVG'
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
   <title id="title">CoLiPas云服务器管理面板 icon</title>
-  <desc id="desc">A cloud operations terminal mark on a teal and blue rounded square.</desc>
+  <desc id="desc">A clear cloud terminal mark on a teal and blue rounded square.</desc>
   <defs>
-    <linearGradient id="colipas-bg" x1="8" y1="4" x2="58" y2="62" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#0f172a"/>
-      <stop offset="0.48" stop-color="#0f766e"/>
+    <linearGradient id="colipas-bg" x1="7" y1="5" x2="57" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0f766e"/>
+      <stop offset="0.48" stop-color="#0ea5a5"/>
       <stop offset="1" stop-color="#2563eb"/>
     </linearGradient>
-    <linearGradient id="colipas-edge" x1="16" y1="13" x2="48" y2="49" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#ecfeff"/>
-      <stop offset="1" stop-color="#bae6fd"/>
+    <linearGradient id="colipas-cloud" x1="16" y1="17" x2="50" y2="46" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#dff9ff"/>
     </linearGradient>
   </defs>
-  <rect x="3" y="3" width="58" height="58" rx="16" fill="url(#colipas-bg)"/>
-  <path d="M18.6 41.5h27.2c5.3 0 9.5-3.8 9.5-8.7 0-4.4-3.4-8-7.8-8.6C45.8 17.8 40.2 13 33.5 13c-7.2 0-13.2 5.1-14.3 11.9C13.4 25.7 9 30.4 9 36c0 3.2 1.4 5.8 3.9 7.2" fill="none" stroke="url(#colipas-edge)" stroke-width="4.8" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M22.2 31.8l5 4.2-5 4.2" fill="none" stroke="#5eead4" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M32.4 40.2h10.8" fill="none" stroke="#f8fafc" stroke-width="4" stroke-linecap="round"/>
-  <circle cx="45.4" cy="23.2" r="3.2" fill="#67e8f9"/>
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#colipas-bg)"/>
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="none" stroke="rgba(255,255,255,.34)" stroke-width="2"/>
+  <path d="M19.2 43.5h26.6c5.9 0 10.7-4.2 10.7-9.8 0-5.1-3.9-9.2-8.9-9.7C45.4 18 39.8 14.2 33.2 14.2c-7.2 0-13.1 4.8-14.7 11.4C12.4 26.2 7.8 31 7.8 36.9c0 3.8 1.9 7.1 4.8 9.1 1.9-1.6 4.1-2.5 6.6-2.5Z" fill="url(#colipas-cloud)" opacity=".96"/>
+  <path d="M21.6 33.1 27 37.2l-5.4 4.1" fill="none" stroke="#0f766e" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M33.2 41.2h11.5" fill="none" stroke="#2563eb" stroke-width="4.2" stroke-linecap="round"/>
+  <circle cx="45.5" cy="22.8" r="3.4" fill="#67e8f9"/>
+  <circle cx="45.5" cy="22.8" r="1.5" fill="#0f766e"/>
 </svg>
 SVG
 
@@ -824,7 +836,7 @@ SVG
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" type="image/svg+xml" href="/colipas-icon.svg">
+  <link rel="icon" type="image/svg+xml" href="/colipas-icon.svg?v=20260530-brand2">
   <title>CoLiPas云服务器管理面板 使用文档</title>
   <style>
     :root {
