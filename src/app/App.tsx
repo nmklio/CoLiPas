@@ -664,7 +664,6 @@ export function App() {
               title={sessionTooltip}
               onClick={openSettings}
             >
-              <AvatarMark profile={profile} className="mini" />
               <b>{accountDisplayLabel}</b>
             </button>
             <button type="button" className="icon-button topbar-logout" aria-label={t('login.logout')} title={t('login.logout')} onClick={handleLogout}>

@@ -2988,6 +2988,18 @@ function assertAccountUiGuards() {
   if (!appSource.includes('<span>{accountDisplayLabel}</span>') || !appSource.includes('title={sessionTooltip}')) {
     throw new Error('Account settings entry must display the custom profile label instead of the raw login username');
   }
+  const accountTriggerSource = appSource.match(/<button[\s\S]*?className="session-chip account-settings-trigger"[\s\S]*?<\/button>/)?.[0] ?? '';
+  if (
+    !accountTriggerSource.includes('<b>{accountDisplayLabel}</b>')
+    || accountTriggerSource.includes('AvatarMark')
+    || accountTriggerSource.includes('BrandIcon')
+    || accountTriggerSource.includes('<img')
+  ) {
+    throw new Error('Topbar account settings trigger must display only the custom profile name without an avatar or brand image');
+  }
+  if (globalCss.includes('.session-chip .brand-mark.mini') || globalCss.includes('.session-chip svg')) {
+    throw new Error('Topbar account chip must not reserve image or SVG styling; it is text-only');
+  }
 
   const brandIconFragments = [
     '<link rel="icon" type="image/svg+xml" href="/colipas-icon.svg" />',

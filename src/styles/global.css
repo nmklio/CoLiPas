@@ -1935,12 +1935,11 @@ button:disabled {
   min-height: 34px;
   border: 1px solid #d6e5e8;
   border-radius: 7px;
-  padding: 0 10px;
+  padding: 0 12px;
   background: #ffffff;
   color: #18343c;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
   font-size: 12px;
   font-weight: 850;
 }
@@ -1960,18 +1959,6 @@ button:disabled {
   border-color: var(--brand-line);
   background: #f4fbfa;
   transform: translateY(-1px);
-}
-
-.session-chip svg {
-  color: var(--green);
-}
-
-.session-chip .brand-mark.mini {
-  width: 22px;
-  height: 22px;
-  border-radius: 7px;
-  font-size: 9px;
-  box-shadow: none;
 }
 
 .topbar-logout {

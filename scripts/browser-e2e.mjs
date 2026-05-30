@@ -144,6 +144,10 @@ async function assertAccountSettingsAndAiChat(targetPage) {
   await targetPage.locator('.account-modal .icon-button').first().click();
   await targetPage.locator('.account-modal').waitFor({ state: 'hidden', timeout: 5000 });
   await targetPage.locator('.account-settings-trigger').filter({ hasText: profileName }).waitFor({ timeout: 5000 });
+  const accountTriggerMediaCount = await targetPage.locator('.account-settings-trigger svg, .account-settings-trigger img, .account-settings-trigger .brand-mark').count();
+  if (accountTriggerMediaCount !== 0) {
+    throw new Error(`Topbar account settings trigger must be text-only, found ${accountTriggerMediaCount} media nodes`);
+  }
 
   try {
     const aiSshServer = await createTemporarySimulatedSshServer(targetPage, 'browser-e2e-ai-exec');
