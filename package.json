@@ -14,7 +14,7 @@
     "smoke": "node scripts/smoke.mjs",
     "concurrency": "node scripts/concurrency-check.mjs",
     "test:large-user-simulation": "node scripts/large-user-simulation.mjs",
-    "perf": "node scripts/performance-check.mjs",
+    "perf": "npm run build && node scripts/performance-check.mjs",
     "reset:admin": "node scripts/reset-admin-password.mjs",
     "secrets": "node scripts/secret-scan.mjs",
     "test": "npm run build && npm run secrets && node scripts/verify-production.mjs"

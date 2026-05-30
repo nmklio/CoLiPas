@@ -34,6 +34,7 @@ assertLocalizedFormatCacheGuards();
 assertCustomApiProxySecurityGuards();
 assertSqlitePersistenceGuards();
 assertBuildChunkingGuards();
+assertStandalonePerformanceCheckGuards();
 assertRepositoryPreviewAssetGuards();
 assertInteractiveDeployDocsAndScriptGuards();
 assertContainerRegistryPublishGuards();
@@ -3861,6 +3862,26 @@ function assertBuildChunkingGuards() {
   }
 
   console.log('ok production build splits React, map, and icon vendors');
+}
+
+function assertStandalonePerformanceCheckGuards() {
+  const packageJson = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  const performanceSource = fs.readFileSync(new URL('../scripts/performance-check.mjs', import.meta.url), 'utf8');
+  const requiredFragments = [
+    'const explicitBaseUrl = process.env.PERF_BASE_URL',
+    'if (!baseUrl) {',
+    'startLocalServer(port, baseUrl)',
+    'COLIPAS_DATA_DIR: tempDataDir',
+    'waitForLocalHealth(targetBaseUrl, child',
+    'fs.rmSync(tempDataDir',
+    'getAvailablePort(Number(process.env.PERF_PORT ?? 18080))',
+  ];
+  const missing = requiredFragments.filter((fragment) => !performanceSource.includes(fragment));
+  if (packageJson.scripts?.perf !== 'npm run build && node scripts/performance-check.mjs' || missing.length) {
+    throw new Error(`Standalone performance check guard is incomplete: ${missing.join(', ') || 'package script'}`);
+  }
+
+  console.log('ok standalone performance check starts an isolated local server');
 }
 
 function assertRepositoryPreviewAssetGuards() {

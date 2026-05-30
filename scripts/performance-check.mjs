@@ -1,10 +1,14 @@
 import { chromium } from 'playwright';
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import net from 'node:net';
+import path from 'node:path';
 
-const baseUrl = process.env.PERF_BASE_URL ?? process.env.E2E_BASE_URL ?? process.env.SMOKE_BASE_URL ?? 'http://127.0.0.1:18080';
+const explicitBaseUrl = process.env.PERF_BASE_URL ?? process.env.E2E_BASE_URL ?? process.env.SMOKE_BASE_URL ?? '';
 const username = process.env.PERF_ADMIN_USERNAME ?? process.env.E2E_ADMIN_USERNAME ?? process.env.SMOKE_ADMIN_USERNAME ?? 'admin';
 const password = process.env.PERF_ADMIN_PASSWORD ?? process.env.E2E_ADMIN_PASSWORD ?? process.env.SMOKE_ADMIN_PASSWORD ?? 'admin123456';
 const executablePath = process.env.E2E_BROWSER_PATH || findSystemBrowser();
+const tempDataDir = path.resolve(process.cwd(), '.tmp-perf-data');
 
 const thresholds = {
   loginMs: Number(process.env.PERF_LOGIN_MS ?? 3500),
@@ -12,6 +16,14 @@ const thresholds = {
   mapInteractionMs: Number(process.env.PERF_MAP_MS ?? 1200),
   longTaskMs: Number(process.env.PERF_LONG_TASK_MS ?? 250),
 };
+
+let localServer;
+let baseUrl = explicitBaseUrl;
+if (!baseUrl) {
+  const port = await getAvailablePort(Number(process.env.PERF_PORT ?? 18080));
+  baseUrl = `http://127.0.0.1:${port}`;
+  localServer = await startLocalServer(port, baseUrl);
+}
 
 const browser = await chromium.launch(executablePath ? { executablePath, headless: true } : { headless: true });
 const page = await browser.newPage({ viewport: { width: 1440, height: 980 } });
@@ -97,6 +109,7 @@ try {
   console.log(JSON.stringify({
     ok: true,
     baseUrl,
+    localServer: Boolean(localServer),
     loginMs,
     worstSection,
     mapInteractionMs,
@@ -106,6 +119,10 @@ try {
   }, null, 2));
 } finally {
   await browser.close();
+  await stopLocalServer(localServer);
+  if (localServer) {
+    fs.rmSync(tempDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  }
 }
 
 async function measure(label, action) {
@@ -161,4 +178,115 @@ function findSystemBrowser() {
   ].filter(Boolean);
 
   return candidates.find((candidate) => fs.existsSync(candidate)) ?? '';
+}
+
+function startLocalServer(port, targetBaseUrl) {
+  const serverEntry = path.resolve(process.cwd(), 'build', 'server', 'index.js');
+  if (!fs.existsSync(serverEntry)) {
+    throw new Error('Production server build is missing. Run npm run build before node scripts/performance-check.mjs, or use npm run perf.');
+  }
+
+  fs.rmSync(tempDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  fs.mkdirSync(tempDataDir, { recursive: true });
+
+  const child = spawn(process.execPath, [serverEntry], {
+    env: {
+      ...process.env,
+      NODE_ENV: 'production',
+      PORT: String(port),
+      CORS_ORIGIN: targetBaseUrl,
+      CUSTOM_API_ALLOWED_HOSTS: 'api.example.com,127.0.0.1',
+      COLIPAS_TEST_ALLOW_LOOPBACK_API: '1',
+      AI_API_KEY: '',
+      ADMIN_USERNAME: username,
+      ADMIN_PASSWORD: password,
+      SESSION_SECRET: 'performance-check-session-secret',
+      RELEASE_VERIFY_TOKEN: 'performance-check-release-token-12345',
+      RELEASE_TARGET_NAME: 'performance-local',
+      RELEASE_CHANNEL: 'grey',
+      RELEASE_DEPLOYMENT_MODE: 'node',
+      RELEASE_PUBLIC_URL: targetBaseUrl,
+      RELEASE_GIT_COMMIT: 'performance-check',
+      RELEASE_ARTIFACT_ID: 'performance-check',
+      RELEASE_DEPLOYED_AT: '2026-01-01T00:00:00.000Z',
+      COLIPAS_DATA_DIR: tempDataDir,
+    },
+    shell: false,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  let stderrTail = '';
+  child.stdout.on('data', (chunk) => process.stdout.write(chunk));
+  child.stderr.on('data', (chunk) => {
+    const text = chunk.toString('utf8');
+    stderrTail = `${stderrTail}${text}`.slice(-4000);
+    process.stderr.write(chunk);
+  });
+
+  return waitForLocalHealth(targetBaseUrl, child, () => stderrTail).then(() => child);
+}
+
+async function waitForLocalHealth(targetBaseUrl, child, getStderrTail) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 15000) {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      throw new Error(`Performance check local server exited early: ${formatExit(child.exitCode, child.signalCode)}\n${getStderrTail()}`);
+    }
+    try {
+      const response = await fetch(`${targetBaseUrl}/api/health`);
+      if (response.ok) {
+        return;
+      }
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+  }
+  throw new Error(`Timed out waiting for ${targetBaseUrl}/api/health`);
+}
+
+async function stopLocalServer(child) {
+  if (!child || child.exitCode !== null || child.signalCode !== null) {
+    return;
+  }
+  await new Promise((resolve) => {
+    child.once('exit', resolve);
+    child.kill();
+    setTimeout(resolve, 3000);
+  });
+}
+
+async function getAvailablePort(preferredPort) {
+  if (await canListen(preferredPort)) {
+    return preferredPort;
+  }
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+      server.close(() => resolve(port));
+    });
+  });
+}
+
+function canListen(port) {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.once('error', () => resolve(false));
+    server.listen(port, '127.0.0.1', () => {
+      server.close(() => resolve(true));
+    });
+  });
+}
+
+function formatExit(code, signal) {
+  const parts = [];
+  if (code !== null && code !== undefined) {
+    parts.push(`exit code ${code}`);
+  }
+  if (signal) {
+    parts.push(`signal ${signal}`);
+  }
+  return parts.join(', ') || 'no exit code or signal';
 }
