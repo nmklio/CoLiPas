@@ -3020,8 +3020,12 @@ function assertAccountUiGuards() {
     || !serverUpdateSource.includes('landingIcon(kind, className)')
     || !serverUpdateSource.includes('replacePositionCard(')
     || !serverUpdateSource.includes('(?:(?!<\\\\/article>)[\\\\s\\\\S])*?')
+    || !serverUpdateSource.includes('landingPositionIcon(kind)')
     || !serverUpdateSource.includes('position-card-modern')
-    || !serverUpdateSource.includes('position-icon-modern')
+    || !serverUpdateSource.includes('position-visual-assets')
+    || !serverUpdateSource.includes('position-visual-terminal')
+    || !serverUpdateSource.includes('position-visual-ai')
+    || !serverUpdateSource.includes('position-visual-shield')
     || !serverUpdateSource.includes('<title>CoLiPas云服务器管理面板</title>')
     || !serverUpdateSource.includes('<img class="brand-mark" src="/colipas-icon.svg"')
     || !serverUpdateSource.includes('icon feature-icon')
@@ -3058,9 +3062,12 @@ function assertAccountUiGuards() {
     'expectTextAbsent',
     'landing legacy footer product description',
     'landing feature SVG icons',
-    'landing position SVG icons',
     'landing modern position cards',
-    'landing modern position SVG icons',
+    'landing modern position visual icons',
+    'landing asset visual icon',
+    'landing terminal visual icon',
+    'landing AI visual icon',
+    'landing audit visual icon',
     'landing legacy numbered position badges',
     'landing deploy SVG icons',
     'CoLiPas - 多云服务器管理面板',

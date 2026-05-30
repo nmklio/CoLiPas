@@ -116,9 +116,12 @@ function buildLandingCheck() {
       await expectLink(page, /后台|登录|Admin|进入/i, '/admin/');
       await expectLocatorCountAtLeast(page.locator('section, article, .feature-card, .position-card, .deploy-card'), 6, 'landing content sections');
       await expectLocatorCountAtLeast(page.locator('.feature-card .feature-icon svg'), 6, 'landing feature SVG icons');
-      await expectLocatorCountAtLeast(page.locator('.position-card .position-icon svg'), 4, 'landing position SVG icons');
       await expectLocatorCountAtLeast(page.locator('.position-card.position-card-modern'), 4, 'landing modern position cards');
-      await expectLocatorCountAtLeast(page.locator('.position-card .position-icon.position-icon-modern svg'), 4, 'landing modern position SVG icons');
+      await expectLocatorCountAtLeast(page.locator('.position-card .position-visual svg'), 4, 'landing modern position visual icons');
+      await expectLocatorCountAtLeast(page.locator('.position-card .position-visual-assets svg'), 1, 'landing asset visual icon');
+      await expectLocatorCountAtLeast(page.locator('.position-card .position-visual-terminal svg'), 1, 'landing terminal visual icon');
+      await expectLocatorCountAtLeast(page.locator('.position-card .position-visual-ai svg'), 1, 'landing AI visual icon');
+      await expectLocatorCountAtLeast(page.locator('.position-card .position-visual-shield svg'), 1, 'landing audit visual icon');
       await expectLocatorCount(page.locator('.position-card small'), 0, 'landing legacy numbered position badges');
       await expectLocatorCountAtLeast(page.locator('.deploy-card .deploy-icon svg'), 3, 'landing deploy SVG icons');
       await expectLocatorCountAtLeast(page.locator('.brand img.brand-mark[src="/colipas-icon.svg"]'), 1, 'landing brand icon image');

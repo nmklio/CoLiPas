@@ -181,7 +181,7 @@ function escapeRegExp(value) {
 }
 
 function landingPositionCard(kind, title, description) {
-  return `<article class="position-card position-card-modern">${landingIcon(kind, 'position-icon position-icon-modern')}<strong>${title}</strong><span>${description}</span></article>`;
+  return `<article class="position-card position-card-modern position-card-${kind}">${landingPositionIcon(kind)}<strong>${title}</strong><span>${description}</span></article>`;
 }
 
 function replacePositionCard(title, kind, description) {
@@ -189,6 +189,16 @@ function replacePositionCard(title, kind, description) {
     new RegExp(`<article class="position-card(?: [^"]*)?">(?:(?!<\\/article>)[\\s\\S])*?<strong>${escapeRegExp(title)}<\\/strong>(?:(?!<\\/article>)[\\s\\S])*?<\\/article>`, 'g'),
     landingPositionCard(kind, title, description),
   );
+}
+
+function landingPositionIcon(kind) {
+  const icons = {
+    assets: '<rect class="shape-fill" x="7" y="12" width="50" height="37" rx="14"/><path class="shape-line" d="M16 35h32M21 28h8M35 28h8M24 22v-6h16v6"/><circle class="shape-dot" cx="20" cy="39" r="3.5"/><circle class="shape-dot" cx="32" cy="39" r="3.5"/><circle class="shape-dot" cx="44" cy="39" r="3.5"/>',
+    terminal: '<rect class="shape-fill" x="8" y="13" width="48" height="36" rx="12"/><path class="shape-line" d="M8 24h48M20 34l7 5-7 5M34 44h12"/><circle class="shape-dot" cx="18" cy="18.5" r="2.6"/><circle class="shape-dot" cx="27" cy="18.5" r="2.6"/>',
+    ai: '<rect class="shape-fill" x="17" y="17" width="30" height="30" rx="10"/><path class="shape-line" d="M32 7v10M32 47v10M7 32h10M47 32h10M16 16l7 7M48 16l-7 7M16 48l7-7M48 48l-7-7"/><circle class="shape-dot" cx="26" cy="31" r="3"/><circle class="shape-dot" cx="38" cy="31" r="3"/><path class="shape-line" d="M27 39h10"/>',
+    shield: '<path class="shape-fill" d="M32 8 51 15v15c0 12-7.3 21.3-19 26-11.7-4.7-19-14-19-26V15L32 8Z"/><path class="shape-line" d="m23 32 6.5 6.5L42 25M22 47h20"/><circle class="shape-dot" cx="45" cy="19" r="3"/>',
+  };
+  return `<span class="position-visual position-visual-${kind}" aria-hidden="true"><svg viewBox="0 0 64 64" focusable="false">${icons[kind]}</svg></span>`;
 }
 
 replaceAll(/\/\* colipas landing balanced ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\/style>)/g, '');
@@ -340,19 +350,56 @@ replaceOnce('</style>', `/* colipas landing balanced ui v6 */
     linear-gradient(180deg, rgba(255, 255, 255, .98), rgba(247, 251, 255, .94)),
     radial-gradient(circle at 86% 18%, rgba(14, 165, 233, .1), transparent 32%);
 }
-.position-icon-modern {
-  width: 56px;
-  height: 56px;
-  border-radius: 16px;
-  margin-bottom: 6px;
-  color: #172033;
-  background:
-    radial-gradient(circle at 30% 22%, rgba(255, 255, 255, .96), rgba(255, 255, 255, 0) 36%),
-    linear-gradient(135deg, #eef6ff 0%, #dcf7ef 100%);
+.position-visual {
+  width: 68px;
+  height: 68px;
+  border-radius: 20px;
+  margin-bottom: 9px;
+  display: inline-grid;
+  place-items: center;
+  background: linear-gradient(135deg, #edf6ff 0%, #dff7f1 100%);
   box-shadow:
-    inset 0 0 0 1px rgba(37, 99, 235, .18),
-    inset 0 -12px 20px rgba(15, 118, 110, .06),
-    0 16px 30px rgba(15, 23, 42, .1);
+    inset 0 0 0 1px rgba(37, 99, 235, .16),
+    inset 0 -16px 28px rgba(15, 118, 110, .08),
+    0 18px 34px rgba(15, 23, 42, .1);
+}
+.position-visual svg {
+  width: 46px;
+  height: 46px;
+  overflow: visible;
+}
+.position-visual .shape-fill {
+  fill: rgba(255, 255, 255, .8);
+  stroke: currentColor;
+  stroke-width: 3.2;
+  stroke-linejoin: round;
+}
+.position-visual .shape-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.position-visual .shape-dot {
+  fill: currentColor;
+  stroke: none;
+}
+.position-visual-assets {
+  color: #2563eb;
+  background: linear-gradient(135deg, #edf5ff 0%, #dcecff 100%);
+}
+.position-visual-terminal {
+  color: #0f766e;
+  background: linear-gradient(135deg, #e8fbf6 0%, #d3f2ea 100%);
+}
+.position-visual-ai {
+  color: #7c3aed;
+  background: linear-gradient(135deg, #f5efff 0%, #e5d8ff 100%);
+}
+.position-visual-shield {
+  color: #166534;
+  background: linear-gradient(135deg, #f0faeb 0%, #dcefd4 100%);
 }
 .position-card-modern strong {
   margin-top: 0;
@@ -379,9 +426,6 @@ replaceOnce('</style>', `/* colipas landing balanced ui v6 */
 .deploy-icon {
   margin-bottom: 14px;
 }
-.position-icon-modern {
-  margin-bottom: 6px;
-}
 .feature-icon svg,
 .position-icon svg,
 .deploy-icon svg {
@@ -392,11 +436,6 @@ replaceOnce('</style>', `/* colipas landing balanced ui v6 */
   stroke-width: 2.25;
   stroke-linecap: round;
   stroke-linejoin: round;
-}
-.position-icon-modern svg {
-  width: 29px;
-  height: 29px;
-  stroke-width: 2.05;
 }
 .icon-terminal,
 .icon-code {
@@ -696,11 +735,15 @@ replaceOnce('</style>', `/* colipas landing balanced ui v6 */
     padding: 16px;
     gap: 7px;
   }
-  .position-icon-modern {
-    width: 48px;
-    height: 48px;
-    border-radius: 14px;
+  .position-visual {
+    width: 54px;
+    height: 54px;
+    border-radius: 16px;
     margin-bottom: 4px;
+  }
+  .position-visual svg {
+    width: 37px;
+    height: 37px;
   }
   .position-card strong {
     margin-top: 10px;
@@ -712,10 +755,6 @@ replaceOnce('</style>', `/* colipas landing balanced ui v6 */
   .position-card span {
     font-size: 11px;
     line-height: 1.45;
-  }
-  .position-icon-modern svg {
-    width: 25px;
-    height: 25px;
   }
   .feature-grid,
   .deploy-grid {
