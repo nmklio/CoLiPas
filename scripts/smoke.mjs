@@ -34,6 +34,7 @@ assertInventorySnapshotCacheGuards();
 assertLocalizedFormatCacheGuards();
 assertCustomApiProxySecurityGuards();
 assertSqlitePersistenceGuards();
+assertRepositoryIgnoreGuards();
 assertBuildChunkingGuards();
 assertStandalonePerformanceCheckGuards();
 assertRepositoryPreviewAssetGuards();
@@ -3849,6 +3850,49 @@ function assertSqlitePersistenceGuards() {
   }
 
   console.log('ok SQLite persistence layer stores structural data without churn from health, identity inspect, or overview polling');
+}
+
+function assertRepositoryIgnoreGuards() {
+  const gitignoreSource = fs.readFileSync(new URL('../.gitignore', import.meta.url), 'utf8');
+  const dockerignoreSource = fs.readFileSync(new URL('../.dockerignore', import.meta.url), 'utf8');
+  const requiredGitignore = [
+    '.env',
+    '.env.*',
+    '!.env.example',
+    '.data/',
+    '.tmp-verify-data/',
+    'output/',
+    '*.log',
+    '*.sqlite',
+    '*.sqlite-*',
+    '*.db',
+    '*.db-*',
+    'release-targets.local.json',
+    'release-targets*.local.json',
+  ];
+  const requiredDockerignore = [
+    '.env',
+    '.env.*',
+    '!.env.example',
+    '.data',
+    '.tmp-verify-data',
+    'output',
+    '*.log',
+    '*.sqlite',
+    '*.sqlite-*',
+    '*.db',
+    '*.db-*',
+    'release-targets.local.json',
+  ];
+  const missingGitignore = requiredGitignore.filter((fragment) => !gitignoreSource.includes(fragment));
+  const missingDockerignore = requiredDockerignore.filter((fragment) => !dockerignoreSource.includes(fragment));
+  if (missingGitignore.length || missingDockerignore.length) {
+    throw new Error(
+      `Repository ignore guards are incomplete: gitignore=${missingGitignore.join(', ') || 'ok'} dockerignore=${missingDockerignore.join(', ') || 'ok'}`,
+    );
+  }
+
+  console.log('ok repository and Docker build contexts exclude secrets, runtime data, logs, and local release config');
 }
 
 function assertBuildChunkingGuards() {

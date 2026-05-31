@@ -244,6 +244,36 @@ function ConvertTo-ShellSingleQuoted {
   return "'" + $Value.Replace("'", "'\''") + "'"
 }
 
+function Invoke-GhApiJson {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Path,
+    [Parameter(Mandatory = $true)]
+    [string]$Method,
+    [Parameter(Mandatory = $true)]
+    [object]$Body
+  )
+
+  $gh = Require-Command "gh"
+  $jsonPath = Join-Path ([IO.Path]::GetTempPath()) ("colipas-gh-api-" + [Guid]::NewGuid().ToString("N") + ".json")
+  try {
+    $json = $Body | ConvertTo-Json -Depth 20 -Compress
+    [IO.File]::WriteAllText($jsonPath, $json, [Text.UTF8Encoding]::new($false))
+    $response = & $gh api $Path -X $Method --input $jsonPath
+    if ($LASTEXITCODE -ne 0) {
+      throw "gh api $Method $Path failed."
+    }
+
+    if (-not $response) {
+      throw "gh api $Method $Path returned an empty response."
+    }
+
+    return $response | ConvertFrom-Json
+  } finally {
+    Remove-Item -LiteralPath $jsonPath -Force -ErrorAction SilentlyContinue
+  }
+}
+
 function Push-GitHub {
   git push origin $Branch
   if ($LASTEXITCODE -eq 0) {
@@ -340,11 +370,10 @@ function Push-GitHub {
 
     $localPath = Join-Path $PWD.Path ($file -replace "/", [IO.Path]::DirectorySeparatorChar)
     $content = [Convert]::ToBase64String([IO.File]::ReadAllBytes($localPath))
-    $blobBody = @{
+    $blob = Invoke-GhApiJson -Path "repos/$GitHubRepo/git/blobs" -Method "POST" -Body @{
       content = $content
       encoding = "base64"
-    } | ConvertTo-Json -Depth 5 -Compress
-    $blob = $blobBody | & $gh api "repos/$GitHubRepo/git/blobs" -X POST --input - | ConvertFrom-Json
+    }
 
     $treeEntries += @{
       path = $file
@@ -354,11 +383,10 @@ function Push-GitHub {
     }
   }
 
-  $newTreeBody = @{
+  $newTree = Invoke-GhApiJson -Path "repos/$GitHubRepo/git/trees" -Method "POST" -Body @{
     base_tree = $remoteTree
     tree = $treeEntries
-  } | ConvertTo-Json -Depth 10 -Compress
-  $newTree = $newTreeBody | & $gh api "repos/$GitHubRepo/git/trees" -X POST --input - | ConvertFrom-Json
+  }
   if ($newTree.sha -ne $headTree) {
     throw "GitHub API tree $($newTree.sha) does not match local HEAD tree $headTree."
   }
@@ -374,24 +402,32 @@ function Push-GitHub {
     email = (git show -s --format=%ce HEAD).Trim()
     date = (git show -s --format=%cI HEAD).Trim()
   }
-  $newCommitBody = @{
+  $newCommit = Invoke-GhApiJson -Path "repos/$GitHubRepo/git/commits" -Method "POST" -Body @{
     message = $message
     tree = $newTree.sha
     parents = @($remoteSha)
     author = $author
     committer = $committer
-  } | ConvertTo-Json -Depth 10 -Compress
-  $newCommit = $newCommitBody | & $gh api "repos/$GitHubRepo/git/commits" -X POST --input - | ConvertFrom-Json
-  $updateBody = @{
+  }
+  $updatedRef = Invoke-GhApiJson -Path "repos/$GitHubRepo/git/refs/heads/$Branch" -Method "PATCH" -Body @{
     sha = $newCommit.sha
     force = $false
-  } | ConvertTo-Json -Depth 5 -Compress
-  $updatedRef = $updateBody | & $gh api "repos/$GitHubRepo/git/refs/heads/$Branch" -X PATCH --input - | ConvertFrom-Json
+  }
   if ($updatedRef.object.sha -ne $newCommit.sha) {
     throw "GitHub API ref update did not return expected commit."
   }
 
   $script:PublishedCommitSha = $newCommit.sha
+  if ($newCommit.sha -eq $head) {
+    git update-ref "refs/remotes/origin/$Branch" $head
+    if ($LASTEXITCODE -ne 0) {
+      throw "Unable to align origin/$Branch to the GitHub API published HEAD."
+    }
+
+    Write-Host "GitHub API pushed local HEAD $head."
+    return
+  }
+
   Write-Warning "GitHub API produced commit $($newCommit.sha) for local HEAD $head. The tree matches, so aligning the local branch to the published ref."
   git fetch origin $Branch
   if ($LASTEXITCODE -ne 0) {
