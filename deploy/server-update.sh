@@ -1415,8 +1415,8 @@ SVG
           </article>
           <article class="doc-card">
             <h3><span class="badge">3</span> 无人值守部署</h3>
-            <p>CI 或批量机器可预先传入公网地址与强密码。不要把真实密码写进公开仓库或截图。</p>
-            <code>COLIPAS_PUBLIC_URL='https://colipas.example.com' COLIPAS_ADMIN_PASSWORD='ChangeThisStrongPassword123' COLIPAS_ASSUME_YES=1</code>
+            <p>CI、堡垒机或批量初始化场景可通过受保护的环境变量注入公网地址和初始密码；部署脚本不会在结束时回显已提供的密码。</p>
+            <code>COLIPAS_PUBLIC_URL='https://colipas.example.com' COLIPAS_ADMIN_PASSWORD='replace-with-strong-password' COLIPAS_ASSUME_YES=1</code>
           </article>
           <article class="doc-card">
             <h3><span class="badge">4</span> 本地灰度测试</h3>

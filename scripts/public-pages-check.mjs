@@ -145,6 +145,8 @@ function buildDocsCheck() {
       await expectLink(page, /GitHub/i, 'https://github.com/nmklio/CoLiPas');
       await expectLink(page, /进入后台|立即体验|Admin|后台/i, '/admin/');
       await expectText(page.locator('body'), /Docker|systemd|SSH|AI|安全|SQLite/i, 'docs body');
+      await expectText(page.locator('body'), /受保护的环境变量注入公网地址和初始密码|不会在结束时回显已提供的密码/, 'docs unattended deployment wording');
+      await expectTextAbsent(page, /不要把真实密码写进公开仓库或截图|公开仓库或截图|ChangeThisStrongPassword123/, 'docs awkward unattended secret wording');
       await assertSensitiveTextAbsent(page, 'docs');
     },
   };
