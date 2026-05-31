@@ -205,6 +205,29 @@ body {
   transform: translateY(-1px);
 }
 
+.docs-nav .marketing-actions {
+  gap: 10px;
+}
+
+.docs-nav .marketing-language {
+  min-height: 40px;
+}
+
+.docs-nav-github,
+.docs-trial-link {
+  min-height: 40px;
+  white-space: nowrap;
+}
+
+.docs-nav-github {
+  box-shadow: none;
+}
+
+.docs-trial-link {
+  min-width: 126px;
+  justify-content: center;
+}
+
 .marketing-hero {
   min-height: 674px;
   padding: 74px clamp(22px, 7vw, 100px) 78px;
@@ -7600,6 +7623,16 @@ pre {
 
   .marketing-language {
     grid-column: 1 / -1;
+  }
+
+  .docs-nav .marketing-language {
+    grid-column: 1 / -1;
+  }
+
+  .docs-nav-github,
+  .docs-trial-link {
+    width: 100%;
+    justify-content: center;
   }
 
   .marketing-hero,

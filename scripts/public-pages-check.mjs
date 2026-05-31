@@ -143,7 +143,9 @@ function buildDocsCheck() {
       await expectLocatorCountAtLeast(page.locator('link[rel="icon"][href="/colipas-icon.svg?v=20260530-brand3"]'), 1, 'docs versioned favicon');
       await expectLocatorCountAtLeast(page.locator('h2'), 6, 'docs h2 sections');
       await expectLink(page, /GitHub/i, 'https://github.com/nmklio/CoLiPas');
-      await expectLink(page, /进入后台|立即体验|Admin|后台/i, '/admin/');
+      await expectLink(page, /体验测试地址/i, '/admin/');
+      await expectLocatorCount(page.locator('.nav-actions a'), 2, 'docs top navigation actions');
+      await expectTextAbsent(page.locator('.nav-actions'), /进入后台|管理后台/, 'docs top navigation legacy admin wording');
       await expectText(page.locator('body'), /Docker|systemd|SSH|AI|安全|SQLite/i, 'docs body');
       await expectText(page.locator('body'), /受保护的环境变量注入公网地址和初始密码|不会在结束时回显已提供的密码/, 'docs unattended deployment wording');
       await expectText(page.locator('body'), /未验证的服务器不会显示已接入|不要将 Vite 5173 作为生产入口/, 'docs polished operational wording');
@@ -194,8 +196,9 @@ async function expectText(locator, pattern, label) {
   }
 }
 
-async function expectTextAbsent(page, pattern, label) {
-  const text = await page.locator('body').innerText({ timeout: 10000 });
+async function expectTextAbsent(target, pattern, label) {
+  const locator = typeof target.innerText === 'function' ? target : target.locator('body');
+  const text = await locator.innerText({ timeout: 10000 });
   if (pattern.test(text)) {
     throw new Error(`${label} still rendered`);
   }

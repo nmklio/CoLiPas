@@ -154,11 +154,12 @@ export function DocsPage({ onLogin }: DocsPageProps) {
               ))}
             </select>
           </label>
-          <button type="button" className="marketing-link-button" onClick={onLogin}>
-            管理后台
-          </button>
-          <button type="button" className="marketing-primary small" onClick={onLogin}>
-            进入后台
+          <a className="marketing-secondary compact docs-nav-github" href="https://github.com/nmklio/CoLiPas" target="_blank" rel="noreferrer">
+            <FileText size={16} />
+            GitHub
+          </a>
+          <button type="button" className="marketing-primary small docs-trial-link" onClick={onLogin}>
+            体验测试地址
           </button>
         </div>
       </header>

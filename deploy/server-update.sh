@@ -922,24 +922,27 @@ SVG
     .nav-actions a:hover {
       color: var(--blue);
     }
-    .nav-actions { gap: 10px; }
+    .nav-actions {
+      gap: 10px;
+    }
     .nav-action {
-      min-height: 42px;
+      min-height: 40px;
       border-radius: 10px;
-      padding: 0 18px;
+      padding: 0 16px;
       border: 1px solid transparent;
       background: var(--blue);
       color: #fff !important;
-      box-shadow: 0 16px 34px rgba(37, 99, 235, .2);
+      box-shadow: 0 12px 26px rgba(37, 99, 235, .18);
     }
     .nav-github {
-      min-height: 42px;
+      min-height: 40px;
       border-radius: 10px;
       padding: 0 16px;
       border: 1px solid var(--line);
       background: #fff;
       display: inline-flex;
       align-items: center;
+      box-shadow: none;
     }
     .hero {
       padding: 64px 0 48px;
@@ -1353,7 +1356,7 @@ SVG
       </nav>
       <div class="nav-actions">
         <a class="nav-github" href="https://github.com/nmklio/CoLiPas" target="_blank" rel="noreferrer">GitHub</a>
-        <a class="nav-action" href="/admin/">进入后台</a>
+        <a class="nav-action" href="/admin/">体验测试地址</a>
       </div>
     </div>
   </header>

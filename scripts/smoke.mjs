@@ -3064,6 +3064,7 @@ function assertAccountUiGuards() {
     || !serverUpdateSource.includes('--preserve-env=SSH_ORIGINAL_COMMAND,COLIPAS_RESET_ADMIN_PASSWORD')
     || !serverUpdateSource.includes('try_files /docs.html =404')
     || !serverUpdateSource.includes('CoLiPas cloud server management panel docs page ready')
+    || !serverUpdateSource.includes('体验测试地址')
     || !serverUpdateSource.includes('href="/colipas-icon.svg?v=20260530-brand3"')
     || !serverUpdateSource.includes('location = /favicon.ico')
     || !serverUpdateSource.includes('受保护的环境变量注入公网地址和初始密码')
