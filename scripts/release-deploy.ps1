@@ -279,6 +279,7 @@ function Test-GitHubApiJsonFallback {
   $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("colipas-release-selftest-" + [Guid]::NewGuid().ToString("N"))
   New-Item -ItemType Directory -Path $tempRoot | Out-Null
   $mockGhPath = Join-Path $tempRoot "gh.cmd"
+  $mockGhUnixPath = Join-Path $tempRoot "gh"
   $mockResponderPath = Join-Path $tempRoot "mock-gh-response.ps1"
   $capturePath = Join-Path $tempRoot "capture.json"
   $previousPath = $env:PATH
@@ -303,6 +304,30 @@ goto loop
 if "%input%"=="" exit /b 22
 powershell -NoProfile -ExecutionPolicy Bypass -File "%COLIPAS_GH_SELFTEST_RESPONDER%" "%input%"
 '@ | Set-Content -LiteralPath $mockGhPath -Encoding ASCII
+    @'
+#!/usr/bin/env sh
+if [ "$1" != "api" ]; then
+  exit 21
+fi
+
+input=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--input" ]; then
+    shift
+    input="${1:-}"
+  fi
+  shift || true
+done
+
+if [ -z "$input" ]; then
+  exit 22
+fi
+
+pwsh -NoProfile -ExecutionPolicy Bypass -File "$COLIPAS_GH_SELFTEST_RESPONDER" "$input"
+'@ | Set-Content -LiteralPath $mockGhUnixPath -Encoding ASCII
+    if (Get-Command chmod -ErrorAction SilentlyContinue) {
+      & chmod +x $mockGhUnixPath
+    }
     @'
 param([string]$InputJsonPath)
 
