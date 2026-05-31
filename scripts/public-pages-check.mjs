@@ -145,6 +145,7 @@ function buildDocsCheck() {
       await expectLink(page, /GitHub/i, 'https://github.com/nmklio/CoLiPas');
       await expectLink(page, /体验测试地址/i, '/admin/');
       await expectLocatorCount(page.locator('.nav-actions a'), 2, 'docs top navigation actions');
+      await expectLightweightDocsTrialLink(page);
       await expectTextAbsent(page.locator('.nav-actions'), /进入后台|管理后台/, 'docs top navigation legacy admin wording');
       await expectText(page.locator('body'), /Docker|systemd|SSH|AI|安全|SQLite/i, 'docs body');
       await expectText(page.locator('body'), /受保护的环境变量注入公网地址和初始密码|不会在结束时回显已提供的密码/, 'docs unattended deployment wording');
@@ -224,6 +225,23 @@ async function expectLocatorCount(locator, expected, label) {
   const count = await locator.count();
   if (count !== expected) {
     throw new Error(`${label} expected ${expected}, got ${count}`);
+  }
+}
+
+async function expectLightweightDocsTrialLink(page) {
+  const style = await page.locator('.nav-action, .docs-trial-link').filter({ hasText: /体验测试地址/i }).first().evaluate((element) => {
+    const computed = window.getComputedStyle(element);
+    const box = element.getBoundingClientRect();
+    return {
+      backgroundColor: computed.backgroundColor,
+      color: computed.color,
+      boxShadow: computed.boxShadow,
+      borderRadius: computed.borderRadius,
+      height: Math.round(box.height),
+    };
+  });
+  if (/rgb\(37,\s*99,\s*235\)/.test(style.backgroundColor) || style.color === 'rgb(255, 255, 255)' || style.boxShadow !== 'none' || style.height > 38) {
+    throw new Error(`docs trial link must stay a lightweight top-nav link, got ${JSON.stringify(style)}`);
   }
 }
 

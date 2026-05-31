@@ -925,26 +925,25 @@ SVG
       color: var(--blue);
     }
     .nav-actions {
-      gap: 10px;
+      gap: 8px;
     }
-    .nav-action {
-      min-height: 40px;
-      border-radius: 10px;
-      padding: 0 16px;
-      border: 1px solid transparent;
-      background: var(--blue);
-      color: #fff !important;
-      box-shadow: 0 12px 26px rgba(37, 99, 235, .18);
-    }
+    .nav-action,
     .nav-github {
-      min-height: 40px;
-      border-radius: 10px;
-      padding: 0 16px;
+      min-height: 36px;
+      border-radius: 8px;
+      padding: 0 12px;
       border: 1px solid var(--line);
-      background: #fff;
+      background: rgba(255, 255, 255, .94);
+      color: #243449;
       display: inline-flex;
       align-items: center;
       box-shadow: none;
+    }
+    .nav-action:hover,
+    .nav-github:hover {
+      border-color: #b8d5ff;
+      background: #f8fbff;
+      color: var(--blue);
     }
     .hero {
       padding: 64px 0 48px;

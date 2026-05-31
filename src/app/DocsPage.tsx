@@ -158,7 +158,7 @@ export function DocsPage({ onLogin }: DocsPageProps) {
             <FileText size={16} />
             GitHub
           </a>
-          <button type="button" className="marketing-primary small docs-trial-link" onClick={onLogin}>
+          <button type="button" className="marketing-secondary compact docs-trial-link" onClick={onLogin}>
             体验测试地址
           </button>
         </div>

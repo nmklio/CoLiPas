@@ -206,25 +206,34 @@ body {
 }
 
 .docs-nav .marketing-actions {
-  gap: 10px;
+  gap: 8px;
 }
 
 .docs-nav .marketing-language {
-  min-height: 40px;
+  min-height: 36px;
 }
 
 .docs-nav-github,
 .docs-trial-link {
-  min-height: 40px;
+  min-height: 36px;
+  border-radius: 8px;
+  padding-inline: 12px;
+  border-color: #dbe7f4;
+  background: rgba(255, 255, 255, 0.94);
+  color: #243449;
+  box-shadow: none;
   white-space: nowrap;
 }
 
-.docs-nav-github {
-  box-shadow: none;
+.docs-nav-github:hover,
+.docs-trial-link:hover {
+  border-color: #b8d5ff;
+  background: #f8fbff;
+  color: #2563eb;
 }
 
 .docs-trial-link {
-  min-width: 126px;
+  min-width: 118px;
   justify-content: center;
 }
 
