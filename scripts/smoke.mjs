@@ -4106,6 +4106,17 @@ function assertContainerRegistryPublishGuards() {
 
 async function assertReleaseDeployTargetPlanGuards() {
   const { spawnSync } = await import('node:child_process');
+  const releaseDeploySource = fs.readFileSync(new URL('../scripts/release-deploy.ps1', import.meta.url), 'utf8');
+  if (!releaseDeploySource.includes('function Get-GitCommitTreeSha')) {
+    throw new Error('Release deploy fallback must centralize git tree lookup');
+  }
+  if (!releaseDeploySource.includes('git show -s --format=%T $Revision')) {
+    throw new Error('Release deploy fallback must use shell-stable git tree lookup');
+  }
+  if (/rev-parse\s+"[^"]*\^\{tree\}"/.test(releaseDeploySource)) {
+    throw new Error('Release deploy fallback must not depend on PowerShell-sensitive ^{tree} rev parsing');
+  }
+
   const plan = {
     targets: [
       {

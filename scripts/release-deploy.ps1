@@ -275,6 +275,17 @@ function Invoke-GhApiJson {
   }
 }
 
+function Get-GitCommitTreeSha {
+  param([string]$Revision)
+
+  $tree = (git show -s --format=%T $Revision).Trim()
+  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($tree) -or $tree -notmatch '^[0-9a-f]{40}$') {
+    throw "Unable to read git tree for revision $Revision."
+  }
+
+  return $tree
+}
+
 function Test-GitHubApiJsonFallback {
   $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("colipas-release-selftest-" + [Guid]::NewGuid().ToString("N"))
   New-Item -ItemType Directory -Path $tempRoot | Out-Null
@@ -410,10 +421,7 @@ function Push-GitHub {
   if ($LASTEXITCODE -ne 0) {
     throw "Unable to read local HEAD."
   }
-  $headTree = (git rev-parse "HEAD^{tree}").Trim()
-  if ($LASTEXITCODE -ne 0) {
-    throw "Unable to read local HEAD tree."
-  }
+  $headTree = Get-GitCommitTreeSha "HEAD"
 
   $remoteRef = & $gh api "repos/$GitHubRepo/git/ref/heads/$Branch" | ConvertFrom-Json
   $remoteSha = $remoteRef.object.sha
@@ -453,8 +461,8 @@ function Push-GitHub {
     }
 
     foreach ($candidate in $ancestors) {
-      $candidateTree = (git rev-parse "$candidate^{tree}").Trim()
-      if ($LASTEXITCODE -eq 0 -and $candidateTree -eq $remoteTree) {
+      $candidateTree = Get-GitCommitTreeSha $candidate
+      if ($candidateTree -eq $remoteTree) {
         $baseCommit = $candidate
         break
       }
@@ -558,8 +566,8 @@ function Push-GitHub {
     return
   }
 
-  $publishedTree = (git rev-parse "origin/$Branch^{tree}").Trim()
-  if ($LASTEXITCODE -ne 0 -or $publishedTree -ne $headTree) {
+  $publishedTree = Get-GitCommitTreeSha "origin/$Branch"
+  if ($publishedTree -ne $headTree) {
     throw "Published GitHub tree $publishedTree does not match local HEAD tree $headTree."
   }
 
