@@ -944,11 +944,11 @@ SVG
       align-items: center;
     }
     .hero {
-      padding: 72px 0 58px;
+      padding: 64px 0 48px;
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
-      gap: 48px;
-      align-items: end;
+      grid-template-columns: minmax(0, 1fr) minmax(300px, 370px);
+      gap: 42px;
+      align-items: center;
     }
     .kicker {
       margin: 0 0 18px;
@@ -967,14 +967,14 @@ SVG
     }
     h1 {
       margin: 0;
-      max-width: 900px;
-      font-size: clamp(44px, 6vw, 76px);
-      line-height: 1;
+      max-width: 760px;
+      font-size: clamp(36px, 5vw, 64px);
+      line-height: 1.06;
       letter-spacing: 0;
     }
     .lead {
-      max-width: 820px;
-      margin: 24px 0 0;
+      max-width: 780px;
+      margin: 20px 0 0;
       color: var(--muted);
       font-size: 18px;
       line-height: 1.75;
@@ -984,6 +984,32 @@ SVG
       display: flex;
       gap: 12px;
       flex-wrap: wrap;
+    }
+    .hero-steps {
+      margin-top: 24px;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .hero-step {
+      min-height: 74px;
+      border: 1px solid #dfebf8;
+      border-radius: 10px;
+      padding: 12px;
+      background: rgba(255, 255, 255, .72);
+    }
+    .hero-step b {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--blue);
+      font-size: 12px;
+    }
+    .hero-step span {
+      display: block;
+      color: #20324a;
+      font-size: 13px;
+      font-weight: 850;
+      line-height: 1.35;
     }
     .button {
       min-height: 48px;
@@ -1072,6 +1098,47 @@ SVG
     .section p {
       color: var(--muted);
       line-height: 1.72;
+    }
+    .section-note {
+      margin: 18px 0 0;
+      border: 1px solid #cde7df;
+      border-radius: 10px;
+      padding: 14px 16px;
+      background: #f1fbf8;
+      color: #155e57;
+      font-weight: 850;
+      line-height: 1.65;
+    }
+    .flow {
+      margin-top: 18px;
+      display: grid;
+      gap: 12px;
+    }
+    .flow-step {
+      border: 1px solid #e1ebf7;
+      border-radius: 10px;
+      padding: 16px;
+      background: #fbfdff;
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr);
+      gap: 14px;
+      align-items: start;
+    }
+    .flow-step b {
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      background: #142037;
+      color: #fff;
+    }
+    .flow-step h3 {
+      margin: 0 0 6px;
+      font-size: 18px;
+    }
+    .flow-step p {
+      margin: 0;
     }
     .grid {
       display: grid;
@@ -1194,6 +1261,9 @@ SVG
       .split {
         grid-template-columns: 1fr;
       }
+      .hero-steps {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
       .nav-inner {
         padding: 14px 0;
         align-items: start;
@@ -1234,12 +1304,14 @@ SVG
         padding: 48px 0 34px;
       }
       h1 {
-        font-size: 42px;
+        font-size: 36px;
       }
       .lead {
         font-size: 16px;
       }
       .grid,
+      .flow-step,
+      .hero-steps,
       .table div,
       .sidebar {
         grid-template-columns: 1fr;
@@ -1291,18 +1363,26 @@ SVG
   <section class="hero wrap">
     <div>
       <p class="kicker">使用文档</p>
-      <h1>下载、配置、运行，完整落地 CoLiPas云服务器管理面板</h1>
-      <p class="lead">这份文档按上线顺序组织：先部署生产服务，再接入服务器，随后验证 SSH、AI、自定义 API、运维编排、数据库持久化和安全审计。所有公开内容只使用示例配置，不包含真实服务器、密码、API Key 或用户数据。</p>
+      <h1>CoLiPas 上线与使用手册</h1>
+      <p class="lead">按真实交付顺序整理：先用一键脚本部署生产服务，再完成首次登录、服务器接入、SSH 终端、AI 助手、运维编排、自定义 API 和安全审计。公开页面只保留示例命令，不写入真实服务器、密码、API Key 或用户数据。</p>
       <div class="hero-actions">
         <a class="button primary" href="#install">开始部署</a>
         <a class="button" href="https://github.com/nmklio/CoLiPas" target="_blank" rel="noreferrer">打开 GitHub</a>
+      </div>
+      <div class="hero-steps" aria-label="上线流程">
+        <div class="hero-step"><b>01</b><span>一键部署到 Linux 或 Docker</span></div>
+        <div class="hero-step"><b>02</b><span>登录后台并修改管理员密码</span></div>
+        <div class="hero-step"><b>03</b><span>验证 SSH 后接入资产</span></div>
+        <div class="hero-step"><b>04</b><span>开启 AI、编排与安全审计</span></div>
       </div>
     </div>
     <aside class="quick-card" aria-label="快速导航">
       <strong>快速导航</strong>
       <a href="#install">安装部署 <span>→</span></a>
       <a href="#config">环境变量 <span>→</span></a>
+      <a href="#first-run">首次使用 <span>→</span></a>
       <a href="#server-access">服务器接入 <span>→</span></a>
+      <a href="#ssh">SSH 终端 <span>→</span></a>
       <a href="#ai">AI 设置 <span>→</span></a>
       <a href="#security">安全上线 <span>→</span></a>
     </aside>
@@ -1312,6 +1392,7 @@ SVG
     <aside class="sidebar" aria-label="页面目录">
       <a href="#install">安装部署</a>
       <a href="#config">环境变量</a>
+      <a href="#first-run">首次使用</a>
       <a href="#server-access">服务器接入</a>
       <a href="#ai">AI 助手</a>
       <a href="#ssh">SSH 与编排</a>
@@ -1323,30 +1404,31 @@ SVG
     <main class="content">
       <section id="install" class="section">
         <p class="kicker">安装部署</p>
-        <h2>一套源码，支持 Docker 和 Linux systemd</h2>
-        <p>生产服务统一监听 8080，构建后的前端资源和后端 API 由同一个 Node 服务提供；公网 HTTPS 建议放在 Nginx、Caddy 或云负载均衡之后。</p>
+        <h2>一键脚本优先，Docker 和 Linux systemd 都能落地</h2>
+        <p>推荐直接在 Linux 服务器执行交互式部署脚本。脚本会询问安装目录、公网地址、管理员账号、初始密码和部署模式；已有部署会保留 `.env`、SQLite 数据、SSH 加密凭据、AI 设置和账号配置。</p>
         <div class="grid">
           <article class="doc-card">
-            <h3><span class="badge">1</span> 获取项目</h3>
-            <p>从公开仓库获取源码，安装依赖前先确认 Node.js 版本。</p>
-            <code>git clone https://github.com/nmklio/CoLiPas.git && cd CoLiPas</code>
+            <h3><span class="badge">1</span> Docker 一键部署</h3>
+            <p>适合大多数用户。脚本会在支持的发行版上安装 Docker 和 Compose 插件，并启动 CoLiPas。</p>
+            <code>curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env COLIPAS_DEPLOY_MODE=docker bash</code>
           </article>
           <article class="doc-card">
-            <h3><span class="badge">2</span> 配置环境</h3>
-            <p>复制示例环境变量，替换所有默认密码、密钥和域名配置。</p>
-            <code>cp .env.example .env</code>
+            <h3><span class="badge">2</span> Linux systemd 部署</h3>
+            <p>适合希望由宿主机 systemd 管理服务的场景。apt 系发行版会自动准备 Node.js 24。</p>
+            <code>curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env COLIPAS_DEPLOY_MODE=native bash</code>
           </article>
           <article class="doc-card">
-            <h3><span class="badge">3</span> 灰度测试</h3>
-            <p>上线前先构建、启动临时生产服务并跑 API、浏览器、并发和安全烟测。</p>
+            <h3><span class="badge">3</span> 无人值守部署</h3>
+            <p>CI 或批量机器可预先传入公网地址与强密码。不要把真实密码写进公开仓库或截图。</p>
+            <code>COLIPAS_PUBLIC_URL='https://colipas.example.com' COLIPAS_ADMIN_PASSWORD='ChangeThisStrongPassword123' COLIPAS_ASSUME_YES=1</code>
+          </article>
+          <article class="doc-card">
+            <h3><span class="badge">4</span> 本地灰度测试</h3>
+            <p>开发者改代码后再上线。`npm test` 会构建、扫描敏感信息并启动临时生产服务做自动化验证。</p>
             <code>npm test</code>
           </article>
-          <article class="doc-card">
-            <h3><span class="badge">4</span> 启动服务</h3>
-            <p>本机或服务器上只需要一个生产入口，不要把 5173 当作正式服务。</p>
-            <code>PORT=8080 npm start</code>
-          </article>
         </div>
+        <p class="section-note">公网入口建议放在 Nginx、Caddy 或云负载均衡之后；生产服务统一监听 8080，不要把 Vite 的 5173 当作正式服务。</p>
       </section>
 
       <section id="config" class="section">
@@ -1360,6 +1442,18 @@ SVG
           <div><code>AI_BASE_URL / AI_API_KEY / AI_MODEL</code><p>OpenAI 兼容 API 配置；不配置密钥时只使用本地模拟分析。</p></div>
           <div><code>CUSTOM_API_ALLOWED_HOSTS</code><p>自定义 API 代理允许访问的域名白名单。</p></div>
         </div>
+      </section>
+
+      <section id="first-run" class="section">
+        <p class="kicker">首次使用</p>
+        <h2>部署完成后按这个顺序检查</h2>
+        <div class="flow">
+          <div class="flow-step"><b>1</b><div><h3>打开后台并登录</h3><p>访问你的域名 `/admin/`，使用部署脚本里设置的管理员账号和初始密码登录。首次进入后优先在账号设置中修改密码。</p></div></div>
+          <div class="flow-step"><b>2</b><div><h3>确认系统状态</h3><p>在安全审计和总览页确认健康检查、SQLite、发布信息、会话状态和基础指标正常，再继续接入真实服务器。</p></div></div>
+          <div class="flow-step"><b>3</b><div><h3>添加第一台服务器</h3><p>先填写名称、IP、地区、系统和标签；需要远程操作时必须选择 SSH 验证模式并通过密码或私钥握手。</p></div></div>
+          <div class="flow-step"><b>4</b><div><h3>验证 SSH、AI 与编排联动</h3><p>打开终端执行只读诊断命令，再配置 AI Provider、加载模型、测试自定义 API 白名单，最后执行一条低风险编排任务。</p></div></div>
+        </div>
+        <p class="section-note">忘记管理员密码时只能重置，不能找回明文密码。Docker 部署可在 `/opt/colipas` 执行 `docker compose exec -e COLIPAS_RESET_PASSWORD='NewStrongPassword123' colipas npm run reset:admin` 后重启容器；systemd 部署可执行 `sudo -u colipas env COLIPAS_RESET_PASSWORD='NewStrongPassword123' npm run reset:admin` 后重启服务。</p>
       </section>
 
       <section id="server-access" class="section">
@@ -1392,13 +1486,17 @@ SVG
           <p>AI 面板支持 OpenAI 兼容接口，后端使用 stream:true，并把多轮上下文传给上游。相同问题会在本地缓存窗口内复用结果，也可以强制刷新重新生成。</p>
           <div class="check-list">
             <p class="check-line"><span>✓</span> 模型列表从上游 /v1/models 获取。</p>
-            <p class="check-line"><span>✓</span> API Key 不写入 Git，也不会进入浏览器持久化配置。</p>
+            <p class="check-line"><span>✓</span> API Key 可加密保存到数据库，也可以由服务器环境变量托管。</p>
             <p class="check-line"><span>✓</span> 上游错误会脱敏后再展示。</p>
           </div>
         </div>
         <aside class="terminal-card">
-          <strong>AI request contract</strong>
-          <pre>POST /api/ai/stream
+          <strong>AI 常用接口</strong>
+          <pre>GET /api/ai/provider
+PUT /api/ai/provider
+POST /api/ai/models
+POST /api/ai/test
+POST /api/ai/stream
 {
   "provider": {
     "baseUrl": "https://.../v1",
@@ -1414,21 +1512,25 @@ SVG
       <section id="ssh" class="section split">
         <div>
           <p class="kicker">SSH 与运维编排</p>
-          <h2>先验证目标，再执行命令</h2>
-          <p>实时终端使用 PTY 流式输出，命令执行期间输入框保持可响应；运维编排会拒绝未接入或不存在的服务器，重启、关机等动作需要二次确认。</p>
+          <h2>浏览器 xterm 交互终端，关闭即释放后端会话</h2>
+          <p>SSH 终端在浏览器中以 WebSocket + PTY 流式交互，输入不需要等上一条命令结束。关闭弹窗、断开连接或页面退出时，后端 shell 会同步销毁；运维编排会拒绝未接入或不存在的服务器，重启、关机等动作需要二次确认。</p>
           <div class="check-list">
+            <p class="check-line"><span>✓</span> 支持密码和私钥认证，只有握手成功的服务器才能远程执行。</p>
             <p class="check-line"><span>✓</span> 支持 Ctrl+C 中断长命令。</p>
             <p class="check-line"><span>✓</span> 支持终端 resize 和实时输出。</p>
-            <p class="check-line"><span>✓</span> 任务结果会关联审计 trace。</p>
+            <p class="check-line"><span>✓</span> 关闭终端后继续输入会被拒绝，避免后台残留 shell。</p>
+            <p class="check-line"><span>✓</span> 任务结果和 AI 执行证据会关联审计 trace。</p>
           </div>
         </div>
         <aside class="terminal-card">
-          <strong>常用诊断命令</strong>
+          <strong>上线前建议验证</strong>
           <pre>uptime
 whoami
 df -h
 free -m
-systemctl status ssh --no-pager</pre>
+systemctl status ssh --no-pager
+按 Ctrl+C 中断 ping
+关闭弹窗后确认会话消失</pre>
         </aside>
       </section>
 
@@ -1439,7 +1541,9 @@ systemctl status ssh --no-pager</pre>
           <div><code>GET /api/health</code><p>公开健康检查，返回运行状态、SQLite 驱动名称和短发布标识，不暴露路径或密钥。</p></div>
           <div><code>POST /api/auth/login</code><p>管理员登录，失败次数会限速并返回 Retry-After。</p></div>
           <div><code>GET /api/overview</code><p>登录后读取账号、服务器、事件和总览指标。</p></div>
+          <div><code>GET / PUT /api/ai/provider</code><p>读取和保存 AI Provider 设置；API Key 只返回是否已托管，不回显明文。</p></div>
           <div><code>POST /api/custom-apis/test</code><p>通过后端代理测试外部接口，阻止内网地址、敏感 Header 和重定向 SSRF。</p></div>
+          <div><code>GET /api/servers/shells/status</code><p>登录后查看 SSH shell 连接数和诊断信息，用于排查终端卡顿或残留会话。</p></div>
           <div><code>POST /api/audit/remediate</code><p>执行安全风险确认或修复动作，并写入审计记录。</p></div>
         </div>
       </section>
@@ -1452,6 +1556,7 @@ systemctl status ssh --no-pager</pre>
             <p class="check-line"><span>✓</span> 修改管理员密码，不使用默认演示密码。</p>
             <p class="check-line"><span>✓</span> 使用强随机 SESSION_SECRET 和 CREDENTIAL_ENCRYPTION_KEY。</p>
             <p class="check-line"><span>✓</span> 限制 CUSTOM_API_ALLOWED_HOSTS，避免代理被滥用。</p>
+            <p class="check-line"><span>✓</span> 反向代理关闭 AI/SSH 流式接口缓冲，并把头像上传限制保持为 2m。</p>
             <p class="check-line"><span>✓</span> 备份 .data/colipas.sqlite，不提交 .env、.data、私钥或截图里的真实资产。</p>
           </div>
         </div>
@@ -1471,6 +1576,7 @@ curl -fsS http://127.0.0.1:8080/api/health</pre>
           <details open><summary>后台地址在哪里？</summary><p>生产入口是你的域名或 http://127.0.0.1:8080/，后台登录入口是 /admin/。5173 只用于 Vite 开发服务。</p></details>
           <details><summary>为什么乱填服务器不能显示已接入？</summary><p>真实接入必须通过 SSH 握手。资产模式只登记信息，不会显示已接入，也不会允许执行远程命令。</p></details>
           <details><summary>AI 回答是不是固定的？</summary><p>未配置有效 API Key 时会返回本地模拟分析；配置 OpenAI 兼容 API 并测试成功后，会使用真实流式模型。</p></details>
+          <details><summary>SSH 终端关闭后为什么命令不能继续发？</summary><p>这是正常保护。终端窗口关闭会销毁后端 shell，会话失效后继续输入会被拒绝，避免服务器上残留交互进程。</p></details>
           <details><summary>数据存在哪里？</summary><p>默认保存在 .data/colipas.sqlite。SSH 凭据会加密后存储，请保护 .env 和 .data。</p></details>
         </div>
       </section>

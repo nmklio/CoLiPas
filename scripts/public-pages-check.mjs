@@ -138,7 +138,7 @@ function buildDocsCheck() {
     path: '/docs.html',
     assert: async (page) => {
       await expectTitle(page, /CoLiPas/);
-      await expectText(page.locator('h1').first(), /下载、配置、运行|Linux|Docker|CoLiPas云服务器管理面板/i, 'docs h1');
+      await expectText(page.locator('h1').first(), /CoLiPas 上线与使用手册|下载、配置、运行|Linux|Docker|CoLiPas云服务器管理面板/i, 'docs h1');
       await expectLocatorCountAtLeast(page.locator('link[rel="icon"][href="/colipas-icon.svg?v=20260530-brand3"]'), 1, 'docs versioned favicon');
       await expectLocatorCountAtLeast(page.locator('h2'), 6, 'docs h2 sections');
       await expectLink(page, /GitHub/i, 'https://github.com/nmklio/CoLiPas');
