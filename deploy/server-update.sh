@@ -244,7 +244,7 @@ replaceOnce(/(<section id="features" class="section wrap">[\s\S]*?<h2>)[\s\S]*?(
 ));
 
 replaceOnce(/(<section id="features" class="section wrap">[\s\S]*?<p class="section-copy">)[\s\S]*?(<\/p>\s*<\/div>\s*<div class="feature-grid">)/, (_match, prefix, suffix) => (
-  `${prefix}保留资产、终端、AI、编排和审计入口，介绍页只展示能力边界，真实操作统一进入受保护后台。${suffix}`
+  `${prefix}资产、终端、AI、编排和审计围绕同一批服务器联动，接入状态、命令结果和风险记录都能在后台连续追踪。${suffix}`
 ));
 
 replacePositionCard('资产接入', 'assets', '自建 / 海外 / 私有云 / 其他云');
@@ -262,6 +262,7 @@ replaceAll(/<span class="icon">06<\/span>/g, landingIcon('shield', 'icon feature
 replaceAll(/<article class="deploy-card"><h3>Linux systemd<\/h3>/g, `<article class="deploy-card">${landingIcon('terminal', 'deploy-icon')}<h3>Linux systemd</h3>`);
 replaceAll(/<article class="deploy-card"><h3>Node 20\+<\/h3>/g, `<article class="deploy-card">${landingIcon('code', 'deploy-icon')}<h3>Node 20+</h3>`);
 replaceAll(/<article class="deploy-card"><h3>Docker Compose<\/h3>/g, `<article class="deploy-card">${landingIcon('database', 'deploy-icon')}<h3>Docker Compose</h3>`);
+replaceAll(/<section class="closing">[\s\S]*?<\/section>\s*/g, '');
 
 if (!html.includes('.nav-actions {')) {
   replaceOnce('.nav-action {', `.nav-actions {
@@ -621,9 +622,6 @@ replaceOnce('</style>', `/* colipas landing balanced ui v8 */
   .deploy-grid {
     margin-top: 24px;
   }
-  .closing {
-    padding: 76px 0 84px;
-  }
 }
 @media (min-width: 1280px) {
   .hero { transform: none; }
@@ -708,8 +706,7 @@ replaceOnce('</style>', `/* colipas landing balanced ui v8 */
     padding: 12px;
   }
   .section,
-  .band,
-  .closing {
+  .band {
     padding: 48px 0;
   }
   #product.section {
@@ -718,8 +715,7 @@ replaceOnce('</style>', `/* colipas landing balanced ui v8 */
   #product h2,
   #features h2,
   #security h2,
-  #deploy h2,
-  .closing h2 {
+  #deploy h2 {
     font-size: clamp(30px, 8.4vw, 36px);
     line-height: 1.12;
   }

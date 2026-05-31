@@ -3051,6 +3051,7 @@ function assertAccountUiGuards() {
     || !serverUpdateSource.includes('icon feature-icon')
     || !serverUpdateSource.includes('position-icon')
     || !serverUpdateSource.includes('deploy-icon')
+    || !serverUpdateSource.includes('replaceAll(/<section class="closing">[\\s\\S]*?<\\/section>\\s*/g, \'\')')
     || !serverUpdateSource.includes('云服务器管理与 AI 运维后台')
     || !serverUpdateSource.includes('COLIPAS_RESET_ADMIN_PASSWORD')
     || !serverUpdateSource.includes('SSH_ORIGINAL_COMMAND')

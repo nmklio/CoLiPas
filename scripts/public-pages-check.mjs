@@ -112,6 +112,7 @@ function buildLandingCheck() {
       await expectText(page.locator('h1').first(), /CoLiPas云服务器管理面板|CoLiPas Cloud Server Management Panel|multi-cloud/i, 'landing h1');
       await expectText(page.locator('body'), /云服务器管理与 AI 运维后台|cloud server management/i, 'landing footer product description');
       await expectTextAbsent(page, /多云服务器管理与 AI 运维后台/, 'landing legacy footer product description');
+      await expectTextAbsent(page, /CoLiPas Console|本页只负责介绍项目能力|真正的服务器接入、账号设置、命令执行和 AI 对话都放在受保护后台|服务器管理、SSH、AI 和审计都在后台完成/, 'landing awkward closing copy');
       await expectLocatorCountAtLeast(page.locator('link[rel="icon"][href="/colipas-icon.svg?v=20260530-brand3"]'), 1, 'landing versioned favicon');
       await expectLink(page, /GitHub/i, 'https://github.com/nmklio/CoLiPas');
       await expectLink(page, /文档|Docs/i, '/docs.html');
