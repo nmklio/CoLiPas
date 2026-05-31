@@ -4173,7 +4173,25 @@ async function assertReleaseDeployTargetPlanGuards() {
     throw new Error('Release deploy plan did not preserve sanitized multi-target routing');
   }
 
-  console.log('ok release deploy supports sanitized multi-target publish plans');
+  const selfTest = spawnSync(shell, [
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    'scripts/release-deploy.ps1',
+    '-SelfTest',
+    '-TargetsJson',
+    JSON.stringify({ targets: [{ name: 'selftest', host: 'mock-host', user: 'mock-user', command: 'mock-command' }] }),
+  ], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+  });
+
+  if (selfTest.status !== 0 || !selfTest.stdout.includes('ok release deploy GitHub API JSON fallback uses BOM-free temp-file input')) {
+    throw new Error(`Release deploy GitHub API fallback self-test failed: ${selfTest.stderr || selfTest.stdout}`);
+  }
+
+  console.log('ok release deploy supports sanitized multi-target publish plans and API fallback self-test');
 }
 
 function assertOverviewMapInteractionGuards() {

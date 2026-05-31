@@ -8,7 +8,8 @@ param(
   [string]$TargetsFile = "release-targets.local.json",
   [string]$TargetsJson = "",
   [string]$ProductionBaseUrl = "https://colipas.example.com",
-  [switch]$PlanOnly
+  [switch]$PlanOnly,
+  [switch]$SelfTest
 )
 
 $ErrorActionPreference = "Stop"
@@ -274,6 +275,102 @@ function Invoke-GhApiJson {
   }
 }
 
+function Test-GitHubApiJsonFallback {
+  $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("colipas-release-selftest-" + [Guid]::NewGuid().ToString("N"))
+  New-Item -ItemType Directory -Path $tempRoot | Out-Null
+  $mockGhPath = Join-Path $tempRoot "gh.cmd"
+  $mockResponderPath = Join-Path $tempRoot "mock-gh-response.ps1"
+  $capturePath = Join-Path $tempRoot "capture.json"
+  $previousPath = $env:PATH
+  $previousCapture = $env:COLIPAS_GH_SELFTEST_CAPTURE
+  $previousResponder = $env:COLIPAS_GH_SELFTEST_RESPONDER
+
+  try {
+    @'
+@echo off
+setlocal EnableExtensions
+if "%~1" NEQ "api" exit /b 21
+set "input="
+:loop
+if "%~1"=="" goto done
+if "%~1"=="--input" (
+  set "input=%~2"
+  shift
+)
+shift
+goto loop
+:done
+if "%input%"=="" exit /b 22
+powershell -NoProfile -ExecutionPolicy Bypass -File "%COLIPAS_GH_SELFTEST_RESPONDER%" "%input%"
+'@ | Set-Content -LiteralPath $mockGhPath -Encoding ASCII
+    @'
+param([string]$InputJsonPath)
+
+$bytes = [IO.File]::ReadAllBytes($InputJsonPath)
+if ($bytes.Length -ge 3 -and $bytes[0] -eq 239 -and $bytes[1] -eq 187 -and $bytes[2] -eq 191) {
+  exit 23
+}
+
+$json = [IO.File]::ReadAllText($InputJsonPath, [Text.UTF8Encoding]::new($false))
+$body = $json | ConvertFrom-Json
+[IO.File]::WriteAllText($env:COLIPAS_GH_SELFTEST_CAPTURE, $json, [Text.UTF8Encoding]::new($false))
+[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+[pscustomobject]@{
+  ok = $true
+  sha = 'mock-sha'
+  echo = $body.message
+} | ConvertTo-Json -Compress
+'@ | Set-Content -LiteralPath $mockResponderPath -Encoding UTF8
+
+    $env:COLIPAS_GH_SELFTEST_CAPTURE = $capturePath
+    $env:COLIPAS_GH_SELFTEST_RESPONDER = $mockResponderPath
+    $env:PATH = "$tempRoot$([IO.Path]::PathSeparator)$previousPath"
+    $result = Invoke-GhApiJson -Path "repos/example/repo/git/mock" -Method "POST" -Body @{
+      message = "fallback-file-input"
+      nested = @{
+        value = 42
+      }
+    }
+
+    if ($result.ok -ne $true -or $result.sha -ne "mock-sha" -or $result.echo -ne "fallback-file-input") {
+      throw "GitHub API JSON fallback self-test returned unexpected response."
+    }
+    if (-not (Test-Path -LiteralPath $capturePath)) {
+      throw "GitHub API JSON fallback self-test did not capture request body."
+    }
+
+    $capturedBytes = [IO.File]::ReadAllBytes($capturePath)
+    if ($capturedBytes.Length -ge 3 -and $capturedBytes[0] -eq 239 -and $capturedBytes[1] -eq 187 -and $capturedBytes[2] -eq 191) {
+      throw "GitHub API JSON fallback wrote a BOM-prefixed request body."
+    }
+
+    $captured = Get-Content -LiteralPath $capturePath -Raw | ConvertFrom-Json
+    if ($captured.message -ne "fallback-file-input" -or $captured.nested.value -ne 42) {
+      throw "GitHub API JSON fallback self-test captured an invalid request body."
+    }
+
+    $leftovers = Get-ChildItem -Path ([IO.Path]::GetTempPath()) -Filter "colipas-gh-api-*.json" -ErrorAction SilentlyContinue
+    if ($leftovers | Where-Object { $_.LastWriteTime -gt (Get-Date).AddMinutes(-5) }) {
+      throw "GitHub API JSON fallback left temporary request files behind."
+    }
+
+    Write-Host "ok release deploy GitHub API JSON fallback uses BOM-free temp-file input"
+  } finally {
+    $env:PATH = $previousPath
+    if ($null -eq $previousCapture) {
+      Remove-Item Env:\COLIPAS_GH_SELFTEST_CAPTURE -ErrorAction SilentlyContinue
+    } else {
+      $env:COLIPAS_GH_SELFTEST_CAPTURE = $previousCapture
+    }
+    if ($null -eq $previousResponder) {
+      Remove-Item Env:\COLIPAS_GH_SELFTEST_RESPONDER -ErrorAction SilentlyContinue
+    } else {
+      $env:COLIPAS_GH_SELFTEST_RESPONDER = $previousResponder
+    }
+    Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
+  }
+}
+
 function Push-GitHub {
   git push origin $Branch
   if ($LASTEXITCODE -eq 0) {
@@ -452,6 +549,11 @@ function Push-GitHub {
 $DeployTargets = @(Get-DeployTargets)
 if ($DeployTargets.Count -eq 0) {
   throw "No release deploy targets are enabled."
+}
+
+if ($SelfTest) {
+  Test-GitHubApiJsonFallback
+  exit 0
 }
 
 if ($PlanOnly) {
