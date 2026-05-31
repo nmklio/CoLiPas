@@ -252,6 +252,8 @@ replacePositionCard('实时运维', 'terminal', 'SSH 终端 / 命令 / 诊断');
 replacePositionCard('AI 分析', 'ai', '流式对话 / 模型拉取 / 缓存');
 replacePositionCard('审计闭环', 'shield', '登录 / API / 编排 / 修复');
 
+replaceAll(/\u4e91\u7ef4\u7f16\u6392/g, '运维编排');
+
 replaceAll(/<span class="icon">01<\/span>/g, landingIcon('cloud', 'icon feature-icon'));
 replaceAll(/<span class="icon">02<\/span>/g, landingIcon('map', 'icon feature-icon'));
 replaceAll(/<span class="icon">03<\/span>/g, landingIcon('terminal', 'icon feature-icon'));
