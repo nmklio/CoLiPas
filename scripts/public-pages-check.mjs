@@ -295,13 +295,47 @@ async function assertNoBadBoxes(page, pageName, viewportName) {
 
 async function captureVisualEvidence(page, name) {
   const filePath = path.join(evidenceDir, `${name}.png`);
-  const buffer = await page.screenshot({ path: filePath, fullPage: true });
+  const buffer = await captureScreenshotBuffer(page, filePath);
   if (buffer.length < 12000) {
     throw new Error(`public page screenshot ${name} looks too small or blank: ${buffer.length} bytes`);
   }
   const uniqueByteCount = new Set(buffer).size;
   if (uniqueByteCount < 24) {
     throw new Error(`public page screenshot ${name} has too little pixel entropy: ${uniqueByteCount} unique bytes`);
+  }
+}
+
+async function captureScreenshotBuffer(page, filePath) {
+  try {
+    return await page.screenshot({ path: filePath, fullPage: true, timeout: 12000 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/Timeout|screenshot|fonts/i.test(message)) {
+      throw error;
+    }
+
+    const buffer = await captureScreenshotViaCdp(page);
+    fs.writeFileSync(filePath, buffer);
+    return buffer;
+  }
+}
+
+async function captureScreenshotViaCdp(page) {
+  const client = await page.context().newCDPSession(page);
+  try {
+    const metrics = await client.send('Page.getLayoutMetrics');
+    const contentSize = metrics.cssContentSize ?? metrics.contentSize ?? { width: 1, height: 1 };
+    const width = Math.max(1, Math.ceil(Number(contentSize.width) || 1));
+    const height = Math.max(1, Math.ceil(Number(contentSize.height) || 1));
+    const result = await client.send('Page.captureScreenshot', {
+      format: 'png',
+      fromSurface: true,
+      captureBeyondViewport: true,
+      clip: { x: 0, y: 0, width, height, scale: 1 },
+    });
+    return Buffer.from(result.data, 'base64');
+  } finally {
+    await client.detach().catch(() => undefined);
   }
 }
 
