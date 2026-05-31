@@ -10,6 +10,7 @@ const smokeUsername = process.env.SMOKE_ADMIN_USERNAME ?? 'admin';
 const initialSmokePassword = process.env.SMOKE_ADMIN_PASSWORD ?? 'admin123456';
 const releaseVerifyToken = process.env.SMOKE_RELEASE_VERIFY_TOKEN ?? process.env.RELEASE_VERIFY_TOKEN ?? '';
 let currentSmokePassword = initialSmokePassword;
+let temporarySimulatedSshServerSequence = 1;
 
 assertAiProviderSecretNotPersisted();
 assertAccountUiGuards();
@@ -3066,8 +3067,8 @@ function assertAccountUiGuards() {
     || !serverUpdateSource.includes('location = /favicon.ico')
     || !serverUpdateSource.includes('受保护的环境变量注入公网地址和初始密码')
     || !serverUpdateSource.includes('不会在结束时回显已提供的密码')
-    || serverUpdateSource.includes('不要把真实密码写进公开仓库或截图')
-    || serverUpdateSource.includes('COLIPAS_ADMIN_PASSWORD=\'ChangeThisStrongPassword123\'')
+    || !serverUpdateSource.includes('为什么未验证的服务器不会显示已接入？')
+    || !serverUpdateSource.includes('不要将 Vite 5173 作为生产入口')
     || !serverAppSource.includes("app.get('/favicon.ico'")
     || !serverAppSource.includes("response.type('image/svg+xml')")
     || !serverUpdateSource.includes('Cache-Control "no-store, max-age=0" always')
@@ -3963,6 +3964,39 @@ function assertInteractiveDeployDocsAndScriptGuards() {
   for (const [name, source, phrase] of docsMustExplainPasswordOutput) {
     if (!source.includes(phrase)) {
       throw new Error(`${name} must explain that provided installer passwords are not printed again`);
+    }
+  }
+
+  const forbiddenVisibleCopy = [
+    'ChangeThisStrongPassword123',
+    'NewStrongPassword123',
+    'admin123456',
+    '不要把真实密码写进公开仓库或截图',
+    '公开仓库或截图',
+    '截图里的真实资产',
+    '类 VNC',
+    '乱填',
+    '云维',
+    '当作正式服务',
+    '开发者改代码后再上线',
+    '演示后台',
+    '演示登录',
+    '默认演示密码',
+    '是不是固定',
+    '备用模型',
+  ];
+  const visibleCopySources = [
+    ['README.md', readmeSource],
+    ['README_CN.md', cnReadmeSource],
+    ['README_JP.md', jpReadmeSource],
+    ['DocsPage.tsx', fs.readFileSync(new URL('../src/app/DocsPage.tsx', import.meta.url), 'utf8')],
+    ['MarketingPage.tsx', fs.readFileSync(new URL('../src/app/MarketingPage.tsx', import.meta.url), 'utf8')],
+    ['server-update.sh', fs.readFileSync(new URL('../deploy/server-update.sh', import.meta.url), 'utf8')],
+  ];
+  for (const [name, source] of visibleCopySources) {
+    const badPhrase = forbiddenVisibleCopy.find((phrase) => source.includes(phrase));
+    if (badPhrase) {
+      throw new Error(`${name} contains unpolished visible copy: ${badPhrase}`);
     }
   }
 
@@ -5541,6 +5575,11 @@ function startMockStreamingAi() {
   });
 }
 
+function nextTemporarySimulatedSshPublicIp() {
+  const host = 200 + (temporarySimulatedSshServerSequence++ % 50);
+  return `198.51.100.${host}`;
+}
+
 async function createTemporarySimulatedSshServer(overrides = {}) {
   const serverResponse = await fetch(`${baseUrl}/api/servers`, {
     method: 'POST',
@@ -5549,7 +5588,7 @@ async function createTemporarySimulatedSshServer(overrides = {}) {
       name: overrides.name ?? `ws-shell-${Date.now()}`,
       provider: 'Smoke Lab',
       region: overrides.region ?? 'US - Los Angeles',
-      publicIp: overrides.publicIp ?? `203.0.113.${Math.floor(Math.random() * 200) + 1}`,
+      publicIp: overrides.publicIp ?? nextTemporarySimulatedSshPublicIp(),
       privateIp: overrides.privateIp ?? '10.88.0.77',
       os: overrides.os ?? 'Debian 12',
       tags: ['smoke', 'ssh', 'websocket'],

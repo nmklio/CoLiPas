@@ -72,7 +72,7 @@ const usageBlocks = [
     icon: Server,
     title: '1. 接入服务器',
     body: '进入服务器模块，填写名称、IP、云厂商、地域、操作系统和标签。若选择真实 SSH 验证，后台会先握手成功再标记为运行。',
-    points: ['乱填 IP 不会通过真实 SSH 验证', '未接入资产显示为未接入', '关机后显示已停止'],
+    points: ['未通过 SSH 验证不会标记为已接入', '仅登记资产显示为未接入', '关机后显示已停止'],
   },
   {
     icon: MapPinned,
@@ -83,7 +83,7 @@ const usageBlocks = [
   {
     icon: TerminalSquare,
     title: '3. 打开 SSH 终端',
-    body: '已验证 SSH 的服务器可以打开类 VNC 的弹窗终端。命令实时输出，输入框不会因为命令执行中而锁死。',
+    body: '已验证 SSH 的服务器可以打开浏览器 xterm 交互式终端。命令实时输出，输入框不会因为命令执行中而锁死。',
     points: ['支持 Ctrl+C 中断', '支持实时 PTY 输出', '命令摘要会脱敏进入审计'],
   },
   {
@@ -94,7 +94,7 @@ const usageBlocks = [
   },
   {
     icon: Workflow,
-    title: '5. 执行云维编排',
+    title: '5. 执行运维编排',
     body: '对单台或选中的已接入服务器执行健康检查、脚本命令、重启、关机等任务。',
     points: ['SSH 类任务会过滤未接入目标', '高风险动作需要二次确认', '结果回写事件队列'],
   },
@@ -119,9 +119,9 @@ const apiRows = [
 ];
 
 const faqItems = [
-  ['后台地址在哪里？', '生产环境统一访问 http://127.0.0.1:8080/，反代后访问你自己的域名。不要把 Vite 5173 当生产入口。'],
-  ['为什么服务器乱填也不能接入？', '真实接入必须通过 SSH 握手。库存模式只登记资产，不会显示为已接入。'],
-  ['AI 回答是不是固定的？', '未配置有效 API key 时会走本地模拟；配置 OpenAI 兼容 API 并通过测试后，会使用真实流式模型。'],
+  ['后台地址在哪里？', '生产环境统一访问 http://127.0.0.1:8080/，反代后访问你自己的域名。不要将 Vite 5173 作为生产入口。'],
+  ['为什么未验证的服务器不会显示已接入？', '真实接入必须通过 SSH 握手。资产模式只登记资产，不会显示为已接入。'],
+  ['AI 回答是否固定？', '未配置有效 API key 时会走本地模拟；配置 OpenAI 兼容 API 并通过测试后，会使用真实流式模型。'],
   ['数据存在哪里？', '默认保存在 .data/colipas.sqlite，SSH 凭据加密后存储。部署时要备份 .data，并保护 .env。'],
   ['可以直接暴露公网吗？', '可以，但必须先改管理员密码、SESSION_SECRET、CREDENTIAL_ENCRYPTION_KEY、CORS_ORIGIN，并启用 HTTPS 和防火墙。'],
 ];
@@ -155,10 +155,10 @@ export function DocsPage({ onLogin }: DocsPageProps) {
             </select>
           </label>
           <button type="button" className="marketing-link-button" onClick={onLogin}>
-            演示后台
+            管理后台
           </button>
           <button type="button" className="marketing-primary small" onClick={onLogin}>
-            立即体验
+            进入后台
           </button>
         </div>
       </header>
@@ -276,7 +276,7 @@ export function DocsPage({ onLogin }: DocsPageProps) {
               </div>
               <ol className="docs-ordered">
                 <li>填写 API Base URL，例如 https://api.example.com/v1。</li>
-                <li>填写 API Key，不要写进 README、截图或 Git。</li>
+                <li>填写 API Key，并只通过受保护的配置或后台表单保存。</li>
                 <li>点击加载模型，确认模型列表来自上游。</li>
                 <li>点击测试连接，确认服务端使用 stream:true。</li>
                 <li>开始对话，切换模块后对话不会丢失。</li>
@@ -292,7 +292,7 @@ export function DocsPage({ onLogin }: DocsPageProps) {
           <section id="ssh" className="docs-section docs-split-section">
             <div>
               <div className="docs-section-heading">
-                <span><TerminalSquare size={18} /> SSH 与云维编排</span>
+                <span><TerminalSquare size={18} /> SSH 与运维编排</span>
                 <h2>先验证 SSH，再执行命令和任务</h2>
                 <p>真实 SSH 接入支持密码和私钥。只有已验证的服务器才能打开实时终端和执行远程动作。</p>
               </div>
@@ -331,7 +331,7 @@ export function DocsPage({ onLogin }: DocsPageProps) {
                 <h2>公网部署前逐项确认</h2>
               </div>
               <div className="docs-check-list">
-                <p><ShieldCheck size={16} /> 修改管理员密码，不使用默认演示密码。</p>
+                <p><ShieldCheck size={16} /> 修改管理员密码，不使用默认初始密码。</p>
                 <p><ShieldCheck size={16} /> 使用强随机 SESSION_SECRET 和 CREDENTIAL_ENCRYPTION_KEY。</p>
                 <p><ShieldCheck size={16} /> 配置 HTTPS、反向代理和防火墙。</p>
                 <p><ShieldCheck size={16} /> 限制 CUSTOM_API_ALLOWED_HOSTS，避免代理被滥用。</p>

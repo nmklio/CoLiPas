@@ -59,7 +59,7 @@ const featureCards = [
   },
   {
     icon: Workflow,
-    title: '云维编排',
+    title: '运维编排',
     desc: '对已接入 SSH 的服务器执行健康检查、脚本命令、重启、关机、开机等任务并回写结果。',
     tags: ['批量任务', '二次确认'],
   },
@@ -132,7 +132,7 @@ export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
             </select>
           </label>
           <button type="button" className="marketing-link-button" onClick={scrollToLogin}>
-            演示后台
+            管理后台
           </button>
           <a className="marketing-secondary compact" href="https://github.com/nmklio/CoLiPas" target="_blank" rel="noreferrer">
             <Github size={16} />
@@ -157,7 +157,7 @@ export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
           <div className="marketing-hero-buttons">
             <button type="button" className="marketing-primary" onClick={scrollToLogin}>
               <PlayCircle size={18} />
-              进入演示后台
+              进入管理后台
             </button>
             <a className="marketing-secondary" href="#features">
               查看功能
@@ -328,9 +328,9 @@ export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
 
       <section id="admin-login" className="marketing-login-band">
         <div className="login-intro">
-          <p className="section-kicker">在线体验</p>
+          <p className="section-kicker">管理入口</p>
           <h2>进入 CoLiPas云服务器管理面板后台</h2>
-          <p>使用本地管理员账号登录后，可以查看服务器总览、小地图、AI 助手、SSH、运维编排、自定义 API 和安全审计。</p>
+          <p>使用部署时配置的管理员账号登录后，可以查看服务器总览、小地图、AI 助手、SSH、运维编排、自定义 API 和安全审计。</p>
           <div className="demo-account">
             <Server size={18} />
             <span>安全登录</span>
@@ -405,7 +405,7 @@ export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
         </nav>
         <nav aria-label="管理后台">
           <strong>管理后台</strong>
-          <a href="#admin-login">演示登录</a>
+          <a href="#admin-login">后台登录</a>
           <a href="#top">控制台预览</a>
           <a href="#deploy">端口 8080</a>
         </nav>

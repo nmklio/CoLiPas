@@ -23,7 +23,7 @@ CoLiPas云服务器管理面板是一个面向实际上线环境的服务器运�
 | 模块 | 能力 |
 | --- | --- |
 | 多云资产 | 云账号概览、自定义云厂商、服务器生命周期、区域/系统识别、资源刷新和地图聚合。 |
-| 服务器接入 | 手动添加服务器、库存模式、模拟 SSH、密码/密钥 SSH 验证、诊断和开关机/重启操作。 |
+| 服务器接入 | 手动添加服务器、资产模式、模拟 SSH、密码/密钥 SSH 验证、诊断和开关机/重启操作。 |
 | 浏览器 SSH | xterm 风格交互终端、实时输出、窗口关闭清理后端会话、`Ctrl+C` 中断、复制和清屏工具。 |
 | AI 运维 | OpenAI 兼容接口、模型获取、流式对话、多轮上下文、缓存复用、强制刷新和连接测试。 |
 | 运维编排 | 资产巡检、健康检查、SSH 命令、重启/关机等任务，并在执行前做目标预检。 |
@@ -104,7 +104,7 @@ curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-c
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env \
   COLIPAS_PUBLIC_URL='https://colipas.example.com' \
-  COLIPAS_ADMIN_PASSWORD='ChangeThisStrongPassword123' \
+  COLIPAS_ADMIN_PASSWORD='replace-with-strong-password' \
   COLIPAS_DEPLOY_MODE=docker \
   COLIPAS_ASSUME_YES=1 \
   bash
@@ -129,7 +129,7 @@ curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-c
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env \
   COLIPAS_PUBLIC_URL='https://colipas.example.com' \
-  COLIPAS_ADMIN_PASSWORD='ChangeThisStrongPassword123' \
+  COLIPAS_ADMIN_PASSWORD='replace-with-strong-password' \
   COLIPAS_DEPLOY_MODE=native \
   COLIPAS_ASSUME_YES=1 \
   bash
@@ -145,7 +145,7 @@ Docker 一键部署 / Docker Compose：
 
 ```bash
 cd /opt/colipas
-docker compose exec -e COLIPAS_RESET_PASSWORD='NewStrongPassword123' colipas npm run reset:admin
+docker compose exec -e COLIPAS_RESET_PASSWORD='replace-with-new-strong-password' colipas npm run reset:admin
 docker compose restart colipas
 ```
 
@@ -153,7 +153,7 @@ docker compose restart colipas
 
 ```bash
 cd /opt/colipas
-sudo -u colipas env COLIPAS_RESET_PASSWORD='NewStrongPassword123' npm run reset:admin
+sudo -u colipas env COLIPAS_RESET_PASSWORD='replace-with-new-strong-password' npm run reset:admin
 sudo systemctl restart colipas
 ```
 

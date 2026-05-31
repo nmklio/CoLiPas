@@ -1420,11 +1420,11 @@ SVG
           </article>
           <article class="doc-card">
             <h3><span class="badge">4</span> 本地灰度测试</h3>
-            <p>开发者改代码后再上线。`npm test` 会构建、扫描敏感信息并启动临时生产服务做自动化验证。</p>
+            <p>代码变更上线前运行。`npm test` 会构建、扫描敏感信息并启动临时生产服务做自动化验证。</p>
             <code>npm test</code>
           </article>
         </div>
-        <p class="section-note">公网入口建议放在 Nginx、Caddy 或云负载均衡之后；生产服务统一监听 8080，不要把 Vite 的 5173 当作正式服务。</p>
+        <p class="section-note">公网入口建议放在 Nginx、Caddy 或云负载均衡之后；生产服务统一监听 8080，不要将 Vite 5173 作为生产入口。</p>
       </section>
 
       <section id="config" class="section">
@@ -1449,7 +1449,7 @@ SVG
           <div class="flow-step"><b>3</b><div><h3>添加第一台服务器</h3><p>先填写名称、IP、地区、系统和标签；需要远程操作时必须选择 SSH 验证模式并通过密码或私钥握手。</p></div></div>
           <div class="flow-step"><b>4</b><div><h3>验证 SSH、AI 与编排联动</h3><p>打开终端执行只读诊断命令，再配置 AI Provider、加载模型、测试自定义 API 白名单，最后执行一条低风险编排任务。</p></div></div>
         </div>
-        <p class="section-note">忘记管理员密码时只能重置，不能找回明文密码。Docker 部署可在 `/opt/colipas` 执行 `docker compose exec -e COLIPAS_RESET_PASSWORD='NewStrongPassword123' colipas npm run reset:admin` 后重启容器；systemd 部署可执行 `sudo -u colipas env COLIPAS_RESET_PASSWORD='NewStrongPassword123' npm run reset:admin` 后重启服务。</p>
+        <p class="section-note">忘记管理员密码时只能重置，不能找回明文密码。Docker 部署可在 `/opt/colipas` 执行 `docker compose exec -e COLIPAS_RESET_PASSWORD='replace-with-new-strong-password' colipas npm run reset:admin` 后重启容器；systemd 部署可执行 `sudo -u colipas env COLIPAS_RESET_PASSWORD='replace-with-new-strong-password' npm run reset:admin` 后重启服务。</p>
       </section>
 
       <section id="server-access" class="section">
@@ -1549,11 +1549,11 @@ systemctl status ssh --no-pager
           <p class="kicker">安全上线清单</p>
           <h2>公网部署前逐项确认</h2>
           <div class="check-list">
-            <p class="check-line"><span>✓</span> 修改管理员密码，不使用默认演示密码。</p>
+            <p class="check-line"><span>✓</span> 修改管理员密码，不使用默认初始密码。</p>
             <p class="check-line"><span>✓</span> 使用强随机 SESSION_SECRET 和 CREDENTIAL_ENCRYPTION_KEY。</p>
             <p class="check-line"><span>✓</span> 限制 CUSTOM_API_ALLOWED_HOSTS，避免代理被滥用。</p>
             <p class="check-line"><span>✓</span> 反向代理关闭 AI/SSH 流式接口缓冲，并把头像上传限制保持为 2m。</p>
-            <p class="check-line"><span>✓</span> 备份 .data/colipas.sqlite，不提交 .env、.data、私钥或截图里的真实资产。</p>
+            <p class="check-line"><span>✓</span> 备份 .data/colipas.sqlite，.env、.data、私钥和真实资产信息只保存在受控运行环境。</p>
           </div>
         </div>
         <aside class="terminal-card">
@@ -1570,8 +1570,8 @@ curl -fsS http://127.0.0.1:8080/api/health</pre>
         <h2>排障时先看这里</h2>
         <div class="check-list">
           <details open><summary>后台地址在哪里？</summary><p>生产入口是你的域名或 http://127.0.0.1:8080/，后台登录入口是 /admin/。5173 只用于 Vite 开发服务。</p></details>
-          <details><summary>为什么乱填服务器不能显示已接入？</summary><p>真实接入必须通过 SSH 握手。资产模式只登记信息，不会显示已接入，也不会允许执行远程命令。</p></details>
-          <details><summary>AI 回答是不是固定的？</summary><p>未配置有效 API Key 时会返回本地模拟分析；配置 OpenAI 兼容 API 并测试成功后，会使用真实流式模型。</p></details>
+          <details><summary>为什么未验证的服务器不会显示已接入？</summary><p>真实接入必须通过 SSH 握手。资产模式只登记信息，不会显示已接入，也不会允许执行远程命令。</p></details>
+          <details><summary>AI 回答是否固定？</summary><p>未配置有效 API Key 时会返回本地模拟分析；配置 OpenAI 兼容 API 并测试成功后，会使用真实流式模型。</p></details>
           <details><summary>SSH 终端关闭后为什么命令不能继续发？</summary><p>这是正常保护。终端窗口关闭会销毁后端 shell，会话失效后继续输入会被拒绝，避免服务器上残留交互进程。</p></details>
           <details><summary>数据存在哪里？</summary><p>默认保存在 .data/colipas.sqlite。SSH 凭据会加密后存储，请保护 .env 和 .data。</p></details>
         </div>

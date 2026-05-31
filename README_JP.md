@@ -104,7 +104,7 @@ curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-c
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env \
   COLIPAS_PUBLIC_URL='https://colipas.example.com' \
-  COLIPAS_ADMIN_PASSWORD='ChangeThisStrongPassword123' \
+  COLIPAS_ADMIN_PASSWORD='replace-with-strong-password' \
   COLIPAS_DEPLOY_MODE=docker \
   COLIPAS_ASSUME_YES=1 \
   bash
@@ -129,7 +129,7 @@ curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-c
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env \
   COLIPAS_PUBLIC_URL='https://colipas.example.com' \
-  COLIPAS_ADMIN_PASSWORD='ChangeThisStrongPassword123' \
+  COLIPAS_ADMIN_PASSWORD='replace-with-strong-password' \
   COLIPAS_DEPLOY_MODE=native \
   COLIPAS_ASSUME_YES=1 \
   bash
@@ -145,7 +145,7 @@ Docker ワンコマンドデプロイ / Docker Compose:
 
 ```bash
 cd /opt/colipas
-docker compose exec -e COLIPAS_RESET_PASSWORD='NewStrongPassword123' colipas npm run reset:admin
+docker compose exec -e COLIPAS_RESET_PASSWORD='replace-with-new-strong-password' colipas npm run reset:admin
 docker compose restart colipas
 ```
 
@@ -153,7 +153,7 @@ docker compose restart colipas
 
 ```bash
 cd /opt/colipas
-sudo -u colipas env COLIPAS_RESET_PASSWORD='NewStrongPassword123' npm run reset:admin
+sudo -u colipas env COLIPAS_RESET_PASSWORD='replace-with-new-strong-password' npm run reset:admin
 sudo systemctl restart colipas
 ```
 

@@ -146,7 +146,7 @@ For unattended installs:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env \
   COLIPAS_PUBLIC_URL='https://colipas.example.com' \
-  COLIPAS_ADMIN_PASSWORD='ChangeThisStrongPassword123' \
+  COLIPAS_ADMIN_PASSWORD='replace-with-strong-password' \
   COLIPAS_DEPLOY_MODE=docker \
   COLIPAS_ASSUME_YES=1 \
   bash
@@ -171,7 +171,7 @@ For unattended native Linux deploys:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env \
   COLIPAS_PUBLIC_URL='https://colipas.example.com' \
-  COLIPAS_ADMIN_PASSWORD='ChangeThisStrongPassword123' \
+  COLIPAS_ADMIN_PASSWORD='replace-with-strong-password' \
   COLIPAS_DEPLOY_MODE=native \
   COLIPAS_ASSUME_YES=1 \
   bash
@@ -200,7 +200,7 @@ Docker one-command / Docker Compose deployment:
 
 ```bash
 cd /opt/colipas
-docker compose exec -e COLIPAS_RESET_PASSWORD='NewStrongPassword123' colipas npm run reset:admin
+docker compose exec -e COLIPAS_RESET_PASSWORD='replace-with-new-strong-password' colipas npm run reset:admin
 docker compose restart colipas
 ```
 
@@ -208,14 +208,14 @@ Native Linux + systemd deployment:
 
 ```bash
 cd /opt/colipas
-sudo -u colipas env COLIPAS_RESET_PASSWORD='NewStrongPassword123' npm run reset:admin
+sudo -u colipas env COLIPAS_RESET_PASSWORD='replace-with-new-strong-password' npm run reset:admin
 sudo systemctl restart colipas
 ```
 
 Optional flags are available for non-default accounts or database paths:
 
 ```bash
-node scripts/reset-admin-password.mjs --username admin --db /opt/colipas/.data/colipas.sqlite --password 'NewStrongPassword123'
+node scripts/reset-admin-password.mjs --username admin --db /opt/colipas/.data/colipas.sqlite --password 'replace-with-new-strong-password'
 ```
 
 The reset script only updates the `admin-account` row. It does not delete servers, SSH credentials, audit entries, AI cache, custom API settings, or other runtime data.
@@ -270,7 +270,7 @@ node scripts/secret-scan.mjs
 For UI smoothness checks against a running production server:
 
 ```bash
-PERF_BASE_URL=http://127.0.0.1:18080 PERF_ADMIN_PASSWORD=admin123456 npm run perf
+PERF_BASE_URL=http://127.0.0.1:18080 PERF_ADMIN_PASSWORD='<admin-password>' npm run perf
 ```
 
 The performance check measures login, section switching, map interaction, browser console errors, and Chromium long-task duration. It is a measurement guard, not a replacement for `npm test`.
