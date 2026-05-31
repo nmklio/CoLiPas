@@ -8,6 +8,7 @@ MODE="${COLIPAS_DEPLOY_MODE:-docker}"
 PUBLIC_URL="${COLIPAS_PUBLIC_URL:-http://127.0.0.1:8080}"
 ADMIN_USERNAME="${COLIPAS_ADMIN_USERNAME:-admin}"
 ADMIN_PASSWORD="${COLIPAS_ADMIN_PASSWORD:-}"
+ADMIN_PASSWORD_GENERATED=0
 ASSUME_YES="${COLIPAS_ASSUME_YES:-0}"
 NON_INTERACTIVE="${COLIPAS_NON_INTERACTIVE:-0}"
 TTY_DEVICE="${COLIPAS_TTY:-/dev/tty}"
@@ -250,6 +251,7 @@ write_env_if_missing() {
 
   if [ -z "$ADMIN_PASSWORD" ]; then
     ADMIN_PASSWORD="$(random_secret)"
+    ADMIN_PASSWORD_GENERATED=1
   fi
 
   cat > .env <<EOF
@@ -354,7 +356,11 @@ echo "CoLiPas cloud server management panel deployed successfully."
 echo "URL: ${PUBLIC_URL}"
 echo "Username: ${ADMIN_USERNAME}"
 if [ "$ENV_CREATED" = "1" ]; then
-  echo "Initial password: ${ADMIN_PASSWORD}"
+  if [ "$ADMIN_PASSWORD_GENERATED" = "1" ]; then
+    echo "Initial password: ${ADMIN_PASSWORD}"
+  else
+    echo "Initial password: provided by installer input; not printed again."
+  fi
 else
   echo "Existing ${APP_DIR}/.env was kept; use the current admin password for that deployment."
 fi

@@ -97,7 +97,7 @@ curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-c
 | Deployment mode | `Docker Compose` |
 | Initial admin password | 強いパスワードを入力、または空欄で自動生成 |
 
-インストーラーは秘密情報をサーバー上にだけ保存します。`/opt/colipas/.env` が既に存在する場合、現在の管理者パスワード、DB パス、SSH 暗号化キー、AI 設定、その他のランタイム設定を保持します。
+インストーラーは秘密情報をサーバー上にだけ保存します。`/opt/colipas/.env` が既に存在する場合、現在の管理者パスワード、DB パス、SSH 暗号化キー、AI 設定、その他のランタイム設定を保持します。入力または環境変数で指定した初期パスワードは、デプロイ完了時に再表示されません。自動生成されたパスワードだけが 1 回表示されます。
 
 無人インストールでは環境変数で同じ値を渡せます。
 

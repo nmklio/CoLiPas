@@ -139,7 +139,7 @@ Recommended answers:
 | Deployment mode | `Docker Compose` |
 | Initial admin password | Paste a strong password, or leave blank to auto-generate one |
 
-Existing deployments are preserved. If `/opt/colipas/.env` already exists, the installer keeps the current admin password, database path, SSH encryption key, AI provider settings, and other runtime configuration.
+Existing deployments are preserved. If `/opt/colipas/.env` already exists, the installer keeps the current admin password, database path, SSH encryption key, AI provider settings, and other runtime configuration. When you provide the initial password yourself, the installer writes it to the private `.env` file but does not print it again in the terminal output; only auto-generated passwords are shown once.
 
 For unattended installs:
 

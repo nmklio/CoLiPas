@@ -97,7 +97,7 @@ curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-c
 | Deployment mode | `Docker Compose` |
 | Initial admin password | 输入强密码，或留空自动生成 |
 
-脚本只会把密钥写到服务器本地。如果 `/opt/colipas/.env` 已存在，它会保留当前管理员密码、数据库路径、SSH 加密密钥、AI 配置和其他运行配置。
+脚本只会把密钥写到服务器本地。如果 `/opt/colipas/.env` 已存在，它会保留当前管理员密码、数据库路径、SSH 加密密钥、AI 配置和其他运行配置。手动输入或通过环境变量传入的初始密码不会在部署结束时再次打印；只有脚本自动生成的密码会显示一次。
 
 无人值守部署可以用环境变量传入同样的答案：
 

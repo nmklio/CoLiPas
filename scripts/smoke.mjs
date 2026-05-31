@@ -3921,6 +3921,8 @@ function assertInteractiveDeployDocsAndScriptGuards() {
     'Dry run complete. No packages installed, files changed, or services started.',
     'COLIPAS_ASSUME_YES=1',
     'Initial admin password, leave blank to generate one',
+    'ADMIN_PASSWORD_GENERATED=0',
+    'Initial password: provided by installer input; not printed again.',
   ];
   const missingInstaller = installerRequired.filter((fragment) => !installerSource.includes(fragment));
   if (missingInstaller.length) {
@@ -3946,6 +3948,17 @@ function assertInteractiveDeployDocsAndScriptGuards() {
       || source.includes('docker pull ghcr.io/nmklio/colipas:latest')
     ) {
       throw new Error(`${name} must keep Docker and native Linux one-command deploy paths`);
+    }
+  }
+
+  const docsMustExplainPasswordOutput = [
+    ['README.md', readmeSource, 'does not print it again in the terminal output'],
+    ['README_CN.md', cnReadmeSource, '不会在部署结束时再次打印'],
+    ['README_JP.md', jpReadmeSource, 'デプロイ完了時に再表示されません'],
+  ];
+  for (const [name, source, phrase] of docsMustExplainPasswordOutput) {
+    if (!source.includes(phrase)) {
+      throw new Error(`${name} must explain that provided installer passwords are not printed again`);
     }
   }
 
