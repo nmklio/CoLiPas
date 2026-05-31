@@ -52,6 +52,39 @@ function Require-Command {
   return $command.Source
 }
 
+function Invoke-ProductionBrowserValidation {
+  param(
+    [object]$Target,
+    [int]$MaxAttempts = 3,
+    [int]$RetryDelaySeconds = 8
+  )
+
+  for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+    $env:PUBLIC_PAGES_BASE_URL = $Target.publicBaseUrl
+    $env:PUBLIC_PAGES_MODE = $Target.publicMode
+    try {
+      node scripts/public-pages-check.mjs
+      $validationExitCode = $LASTEXITCODE
+      if ($validationExitCode -eq 0) {
+        return
+      }
+
+      throw "public-pages-check exited with code $validationExitCode"
+    } catch {
+      if ($attempt -ge $MaxAttempts) {
+        throw "Production browser validation failed for target $($Target.name) after $MaxAttempts attempts: $_"
+      }
+
+      Write-Warning "Production browser validation attempt $attempt/$MaxAttempts failed for target $($Target.name): $_"
+      Start-Sleep -Seconds $RetryDelaySeconds
+    } finally {
+      Remove-Item Env:\PUBLIC_PAGES_BASE_URL -ErrorAction SilentlyContinue
+      Remove-Item Env:\PUBLIC_PAGES_MODE -ErrorAction SilentlyContinue
+      $global:LASTEXITCODE = 0
+    }
+  }
+}
+
 function Resolve-LocalPath {
   param([string]$Value)
 
@@ -631,18 +664,7 @@ Run-Step "Production target browser validation" {
     }
 
     Write-Host "Validating $($target.name) at $($target.publicBaseUrl) in $($target.publicMode) mode."
-    $env:PUBLIC_PAGES_BASE_URL = $target.publicBaseUrl
-    $env:PUBLIC_PAGES_MODE = $target.publicMode
-    try {
-      node scripts/public-pages-check.mjs
-      $validationExitCode = $LASTEXITCODE
-      if ($validationExitCode -ne 0) {
-        throw "Production browser validation failed for target $($target.name) with exit code $validationExitCode."
-      }
-    } finally {
-      Remove-Item Env:\PUBLIC_PAGES_BASE_URL -ErrorAction SilentlyContinue
-      Remove-Item Env:\PUBLIC_PAGES_MODE -ErrorAction SilentlyContinue
-    }
+    Invoke-ProductionBrowserValidation -Target $target
   }
 }
 
