@@ -197,7 +197,7 @@ async function expectText(locator, pattern, label) {
 }
 
 async function expectTextAbsent(target, pattern, label) {
-  const locator = typeof target.innerText === 'function' ? target : target.locator('body');
+  const locator = typeof target.content === 'function' ? target.locator('body') : target;
   const text = await locator.innerText({ timeout: 10000 });
   if (pattern.test(text)) {
     throw new Error(`${label} still rendered`);

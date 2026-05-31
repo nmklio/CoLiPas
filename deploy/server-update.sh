@@ -38,6 +38,8 @@ SSL_CERTIFICATE="${COLIPAS_SSL_CERTIFICATE:-/etc/letsencrypt/live/$SERVER_NAME/f
 SSL_CERTIFICATE_KEY="${COLIPAS_SSL_CERTIFICATE_KEY:-/etc/letsencrypt/live/$SERVER_NAME/privkey.pem}"
 RELEASE_VERIFY_TOKEN_VALUE=""
 PUBLIC_URL="${RELEASE_PUBLIC_URL:-https://$SERVER_NAME}"
+RUNTIME_UPDATE_SCRIPT="/usr/local/sbin/colipas-update"
+SCRIPT_REEXECED="${COLIPAS_UPDATE_SCRIPT_REEXECED:-}"
 
 if [ -z "${COLIPAS_SERVER_NAME:-}" ] && [ -n "${RELEASE_PUBLIC_URL:-}" ]; then
   derived_server_name="$(printf '%s' "$RELEASE_PUBLIC_URL" | sed -E 's#^[a-zA-Z][a-zA-Z0-9+.-]*://##; s#/.*$##; s#:[0-9]+$##')"
@@ -1593,8 +1595,21 @@ HTML
 
 install_runtime_update_script() {
   if [ -f "$APP_DIR/deploy/server-update.sh" ]; then
-    install -m 0755 "$APP_DIR/deploy/server-update.sh" /usr/local/sbin/colipas-update
+    install -m 0755 "$APP_DIR/deploy/server-update.sh" "$RUNTIME_UPDATE_SCRIPT"
   fi
+}
+
+reexec_runtime_update_script_if_needed() {
+  if [ "$(id -u)" -ne 0 ] || [ -n "$SCRIPT_REEXECED" ] || [ ! -f "$APP_DIR/deploy/server-update.sh" ]; then
+    return 0
+  fi
+  if [ ! -f "$RUNTIME_UPDATE_SCRIPT" ] || cmp -s "$APP_DIR/deploy/server-update.sh" "$RUNTIME_UPDATE_SCRIPT"; then
+    return 0
+  fi
+
+  install_runtime_update_script
+  export COLIPAS_UPDATE_SCRIPT_REEXECED=1
+  exec "$RUNTIME_UPDATE_SCRIPT"
 }
 
 verify_release_evidence() {
@@ -1917,6 +1932,10 @@ fi
 run_as_app git fetch --prune origin "$BRANCH"
 LOCAL_HEAD="$(run_as_app git rev-parse HEAD)"
 REMOTE_HEAD="$(run_as_app git rev-parse "origin/$BRANCH")"
+if [ "$LOCAL_HEAD" != "$REMOTE_HEAD" ]; then
+  run_as_app git reset --hard "$REMOTE_HEAD"
+  reexec_runtime_update_script_if_needed
+fi
 
 if [ "$LOCAL_HEAD" = "$REMOTE_HEAD" ]; then
   ensure_current_build
@@ -1940,7 +1959,6 @@ if [ "$LOCAL_HEAD" = "$REMOTE_HEAD" ]; then
   exit 0
 fi
 
-run_as_app git reset --hard "$REMOTE_HEAD"
 run_as_app npm ci
 ensure_current_build
 DEPLOYED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
