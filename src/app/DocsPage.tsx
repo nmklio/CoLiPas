@@ -121,7 +121,7 @@ const apiRows = [
 const faqItems = [
   ['后台地址在哪里？', '生产环境统一访问 http://127.0.0.1:8080/，反代后访问你自己的域名。不要将 Vite 5173 作为生产入口。'],
   ['为什么未验证的服务器不会显示已接入？', '真实接入必须通过 SSH 握手。资产模式只登记资产，不会显示为已接入。'],
-  ['AI 回答是否固定？', '未配置有效 API key 时会走本地模拟；配置 OpenAI 兼容 API 并通过测试后，会使用真实流式模型。'],
+  ['AI 回答是否固定？', '未配置有效 API key 时会走本地规则分析；配置 OpenAI 兼容 API 并通过测试后，会使用真实流式模型。'],
   ['数据存在哪里？', '默认保存在 .data/colipas.sqlite，SSH 凭据加密后存储。部署时要备份 .data，并保护 .env。'],
   ['可以直接暴露公网吗？', '可以，但必须先改管理员密码、SESSION_SECRET、CREDENTIAL_ENCRYPTION_KEY、CORS_ORIGIN，并启用 HTTPS 和防火墙。'],
 ];
@@ -246,7 +246,7 @@ export function DocsPage({ onLogin }: DocsPageProps) {
             <div className="docs-section-heading">
               <span><CloudCog size={18} /> 后台使用流程</span>
               <h2>按服务器生命周期操作</h2>
-              <p>下面是推荐使用顺序。每个模块都不是摆设，动作会和资产、事件、审计、AI 上下文联动。</p>
+              <p>建议按以下顺序使用。每个模块都会与资产、事件、审计和 AI 上下文联动。</p>
             </div>
             <div className="docs-usage-grid">
               {usageBlocks.map((block) => {
@@ -272,7 +272,7 @@ export function DocsPage({ onLogin }: DocsPageProps) {
               <div className="docs-section-heading">
                 <span><Bot size={18} /> AI 助手</span>
                 <h2>配置 OpenAI 兼容 API 后使用真实流式对话</h2>
-                <p>AI 面板会先读取模型列表，再通过测试接口确认上游支持流式响应。未配置密钥时，只会返回本地模拟分析。</p>
+                <p>AI 面板会先读取模型列表，再通过测试接口确认上游支持流式响应。未配置密钥时，只会返回本地规则分析。</p>
               </div>
               <ol className="docs-ordered">
                 <li>填写 API Base URL，例如 https://api.example.com/v1。</li>
@@ -348,7 +348,7 @@ export function DocsPage({ onLogin }: DocsPageProps) {
           <section id="faq" className="docs-section">
             <div className="docs-section-heading">
               <span><LifeBuoy size={18} /> 常见问题</span>
-              <h2>排障时先看这里</h2>
+              <h2>常见问题与排障</h2>
             </div>
             <div className="docs-faq-list">
               {faqItems.map(([question, answer]) => (

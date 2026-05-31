@@ -35,8 +35,8 @@ interface MarketingPageProps {
 const featureCards = [
   {
     icon: CloudCog,
-    title: '多云资产接入',
-    desc: '统一登记自建、海外、私有云和自定义云厂商资源，自动归类到其他云并保留地域、系统、标签。',
+    title: '服务器资产接入',
+    desc: '统一登记自建、海外、私有云和自定义云资源，保留云厂商、地域、系统和标签信息。',
     tags: ['自定义云', '资源同步'],
   },
   {
@@ -139,7 +139,7 @@ export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
             GitHub
           </a>
           <button type="button" className="marketing-primary small" onClick={scrollToLogin}>
-            立即体验
+            进入后台
           </button>
         </div>
       </header>
@@ -152,7 +152,7 @@ export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
             <span>接入、监控、修复一体化</span>
           </h1>
           <p className="marketing-lead">
-            CoLiPas云服务器管理面板面向自建服务器、海外节点、私有云和多云混合环境。它把资产接入、地域地图、SSH 终端、AI 分析、运维编排和安全审计放在同一个后台里，减少来回切换工具的成本。
+            面向自建服务器、海外节点、私有云和混合云环境。CoLiPas 把资产接入、地域地图、SSH 终端、AI 分析、运维编排和安全审计放在同一个后台里，减少来回切换工具的成本。
           </p>
           <div className="marketing-hero-buttons">
             <button type="button" className="marketing-primary" onClick={scrollToLogin}>
@@ -320,7 +320,7 @@ export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
             <span className="platform-label">文档</span>
             <ScrollText size={22} />
             <h3>README + deploy</h3>
-            <p>仓库提供 Nginx、systemd 和环境变量示例，便于别人下载后部署。</p>
+            <p>仓库提供 Nginx、systemd 和环境变量示例，便于团队下载后部署。</p>
             <code>deploy/colipas.service</code>
           </article>
         </div>

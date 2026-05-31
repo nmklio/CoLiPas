@@ -1435,7 +1435,7 @@ SVG
           <div><code>SESSION_SECRET</code><p>会话签名密钥，必须使用长随机字符串。</p></div>
           <div><code>CREDENTIAL_ENCRYPTION_KEY</code><p>SSH 密码和私钥的加密密钥，不能提交到 Git。</p></div>
           <div><code>COLIPAS_DATA_DIR / COLIPAS_DB_PATH</code><p>SQLite 数据库和运行数据目录，默认位于 .data。</p></div>
-          <div><code>AI_BASE_URL / AI_API_KEY / AI_MODEL</code><p>OpenAI 兼容 API 配置；不配置密钥时只使用本地模拟分析。</p></div>
+          <div><code>AI_BASE_URL / AI_API_KEY / AI_MODEL</code><p>OpenAI 兼容 API 配置；不配置密钥时只使用本地规则分析。</p></div>
           <div><code>CUSTOM_API_ALLOWED_HOSTS</code><p>自定义 API 代理允许访问的域名白名单。</p></div>
         </div>
       </section>
@@ -1567,11 +1567,11 @@ curl -fsS http://127.0.0.1:8080/api/health</pre>
 
       <section id="faq" class="section">
         <p class="kicker">常见问题</p>
-        <h2>排障时先看这里</h2>
+        <h2>常见问题与排障</h2>
         <div class="check-list">
           <details open><summary>后台地址在哪里？</summary><p>生产入口是你的域名或 http://127.0.0.1:8080/，后台登录入口是 /admin/。5173 只用于 Vite 开发服务。</p></details>
           <details><summary>为什么未验证的服务器不会显示已接入？</summary><p>真实接入必须通过 SSH 握手。资产模式只登记信息，不会显示已接入，也不会允许执行远程命令。</p></details>
-          <details><summary>AI 回答是否固定？</summary><p>未配置有效 API Key 时会返回本地模拟分析；配置 OpenAI 兼容 API 并测试成功后，会使用真实流式模型。</p></details>
+          <details><summary>AI 回答是否固定？</summary><p>未配置有效 API Key 时会返回本地规则分析；配置 OpenAI 兼容 API 并测试成功后，会使用真实流式模型。</p></details>
           <details><summary>SSH 终端关闭后为什么命令不能继续发？</summary><p>这是正常保护。终端窗口关闭会销毁后端 shell，会话失效后继续输入会被拒绝，避免服务器上残留交互进程。</p></details>
           <details><summary>数据存在哪里？</summary><p>默认保存在 .data/colipas.sqlite。SSH 凭据会加密后存储，请保护 .env 和 .data。</p></details>
         </div>

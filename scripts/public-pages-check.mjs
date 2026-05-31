@@ -161,7 +161,7 @@ function buildAdminCheck() {
       await expectTitle(page, /CoLiPas/);
       await page.locator('input[autocomplete="username"]').waitFor({ timeout: 15000 });
       await page.locator('input[autocomplete="current-password"]').waitFor({ timeout: 15000 });
-      await expectText(page.locator('h1').first(), /CoLiPas|控制台|console|多云|安全/i, 'admin login h1');
+      await expectText(page.locator('h1').first(), /CoLiPas|管理后台|console|安全/i, 'admin login h1');
       await expectLink(page, /^GitHub$/i, 'https://github.com/nmklio/CoLiPas');
       const usernameValue = await page.locator('input[autocomplete="username"]').inputValue();
       if (usernameValue.trim()) {
