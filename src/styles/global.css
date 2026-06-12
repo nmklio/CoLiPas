@@ -3860,8 +3860,8 @@ td span,
 .ssh-terminal-screen .xterm-helpers {
   position: absolute !important;
   inset: 0 auto auto 0 !important;
-  width: 0 !important;
-  height: 0 !important;
+  width: 1px !important;
+  height: 1px !important;
   overflow: hidden !important;
   pointer-events: none !important;
 }
@@ -3879,12 +3879,12 @@ td span,
 
 .ssh-terminal-screen .xterm-helper-textarea {
   position: absolute !important;
-  left: -10000px !important;
+  left: 0 !important;
   top: 0 !important;
-  width: 0 !important;
-  height: 0 !important;
-  min-width: 0 !important;
-  min-height: 0 !important;
+  width: 1px !important;
+  height: 1px !important;
+  min-width: 1px !important;
+  min-height: 1px !important;
   padding: 0 !important;
   border: 0 !important;
   opacity: 0 !important;

@@ -4680,6 +4680,7 @@ function assertSshTerminalRealtimeGuards() {
   const sshSocketSource = fs.readFileSync(new URL('../src/server/sshShellSocket.ts', import.meta.url), 'utf8');
   const apiClientSource = fs.readFileSync(new URL('../src/services/apiClient.ts', import.meta.url), 'utf8');
   const redactionSource = fs.readFileSync(new URL('../src/server/services/sensitiveRedaction.ts', import.meta.url), 'utf8');
+  const globalCssSource = fs.readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
   const viteSource = fs.readFileSync(new URL('../vite.config.ts', import.meta.url), 'utf8');
 
   const requiredFrontendFragments = [
@@ -4889,6 +4890,16 @@ function assertSshTerminalRealtimeGuards() {
   const missingSocket = socketRequired.filter((fragment) => !sshSocketSource.includes(fragment));
   if (missingSocket.length) {
     throw new Error(`SSH shell websocket bridge guard is incomplete: ${missingSocket.join(', ')}`);
+  }
+  const socketReadyIndex = sshSocketSource.indexOf("type: 'ready'");
+  const socketSubscribeIndex = sshSocketSource.indexOf('unsubscribe = subscribeServerShell');
+  if (socketReadyIndex === -1 || socketSubscribeIndex === -1 || socketSubscribeIndex > socketReadyIndex) {
+    throw new Error('SSH WebSocket bridge must subscribe to shell output before sending ready to avoid blank terminals');
+  }
+  const xtermHelpersCss = globalCssSource.match(/\.ssh-terminal-screen \.xterm-helpers \{(?<body>[\s\S]+?)\n\}/)?.groups?.body ?? '';
+  const xtermTextareaCss = globalCssSource.match(/\.ssh-terminal-screen \.xterm-helper-textarea \{(?<body>[\s\S]+?)\n\}/)?.groups?.body ?? '';
+  if (!xtermHelpersCss || !xtermTextareaCss || /(?:width|height|min-width|min-height):\s*0\s*!important/.test(`${xtermHelpersCss}\n${xtermTextareaCss}`)) {
+    throw new Error('SSH terminal xterm helper input must remain nonzero sized so browser keyboard capture stays reliable');
   }
 
   const redactionRequired = [

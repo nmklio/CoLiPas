@@ -201,6 +201,13 @@ function bindSshShellSocket(webSocket: WebSocket) {
           return;
         }
         sessionId = shell.sessionId;
+        unsubscribe = subscribeServerShell({ sessionId, replay: 1 }, (event: SshShellStreamEvent) => {
+          sendShellEvent(event);
+          if (event.type === 'close') {
+            cleanup();
+            webSocket.close(1000, 'shell closed');
+          }
+        });
         shellSocketDiagnostics.openedShells += 1;
         touchDiagnostics(true);
         send({
@@ -211,13 +218,6 @@ function bindSshShellSocket(webSocket: WebSocket) {
           sessionId: shell.sessionId,
           mode: shell.mode,
           connectedAt: shell.connectedAt,
-        });
-        unsubscribe = subscribeServerShell({ sessionId, replay: 1 }, (event: SshShellStreamEvent) => {
-          sendShellEvent(event);
-          if (event.type === 'close') {
-            cleanup();
-            webSocket.close(1000, 'shell closed');
-          }
         });
         if (closing) {
           cleanup();
