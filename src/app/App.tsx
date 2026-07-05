@@ -3,6 +3,7 @@ import {
   Activity,
   Bot,
   CheckCircle2,
+  Command,
   Cpu,
   HardDrive,
   LayoutDashboard,
@@ -11,6 +12,7 @@ import {
   Menu,
   PlugZap,
   RefreshCw,
+  Search,
   Server,
   ShieldCheck,
   TerminalSquare,
@@ -57,6 +59,16 @@ const sections: Array<{ id: SectionId; labelKey: string; icon: typeof LayoutDash
   { id: 'api', labelKey: 'nav.api', icon: PlugZap },
   { id: 'security', labelKey: 'nav.security', icon: ShieldCheck },
 ];
+
+interface CommandPaletteAction {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  icon: typeof LayoutDashboard;
+  keywords: string;
+  run: () => void;
+}
 
 interface HashRoute {
   section: SectionId;
@@ -147,9 +159,12 @@ export function App() {
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsError, setSettingsError] = useState('');
   const [settingsSuccess, setSettingsSuccess] = useState('');
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [commandPaletteQuery, setCommandPaletteQuery] = useState('');
   const [profileDraft, setProfileDraft] = useState<AccountProfile>(fallbackProfile);
   const [passwordDraft, setPasswordDraft] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const avatarUploadRef = useRef<HTMLInputElement | null>(null);
+  const commandSearchRef = useRef<HTMLInputElement | null>(null);
   const [activeSection, setActiveSection] = useState<SectionId>(initialHashRouteRef.current.section);
   const [securityTraceFocusId, setSecurityTraceFocusId] = useState(initialHashRouteRef.current.traceId);
   const [filters, setFilters] = useState<ServerFilters>(defaultFilters);
@@ -375,6 +390,87 @@ export function App() {
     : accountDisplayLabel;
   const activeSectionConfig = sections.find((section) => section.id === activeSection) ?? sections[0];
   const ActiveSectionIcon = activeSectionConfig.icon;
+  const commandShortcutLabel = isApplePlatform() ? '⌘K' : 'Ctrl K';
+  const commandPaletteActions: CommandPaletteAction[] = [
+    ...sections.map((section) => ({
+      id: `section-${section.id}`,
+      title: t(section.labelKey),
+      description: t('app.commandGoSection'),
+      category: t('app.commandNavigation'),
+      icon: section.icon,
+      keywords: `${section.id} ${t(section.labelKey)} ${t('app.commandNavigation')}`,
+      run: () => navigateToSection(section.id),
+    })),
+    {
+      id: 'open-ai',
+      title: t('app.commandOpenAi'),
+      description: t('app.aiWorkspaceDesc'),
+      category: t('app.commandTools'),
+      icon: Bot,
+      keywords: `ai chat assistant ${t('app.aiTitle')} ${t('app.commandTools')}`,
+      run: () => {
+        navigateToSection('ai');
+        setAiCollapsed(false);
+      },
+    },
+    {
+      id: 'refresh-assets',
+      title: t('app.commandRefresh'),
+      description: t('app.resourcePending'),
+      category: t('app.commandTools'),
+      icon: RefreshCw,
+      keywords: `refresh sync api assets ${t('app.refresh')} ${t('app.retryApi')}`,
+      run: () => {
+        void refreshOverview();
+      },
+    },
+    {
+      id: 'account-settings',
+      title: t('app.commandAccount'),
+      description: t('account.title'),
+      category: t('app.commandTools'),
+      icon: UserCog,
+      keywords: `account profile password appearance settings ${t('account.title')}`,
+      run: openSettings,
+    },
+  ];
+  const normalizedCommandPaletteQuery = commandPaletteQuery.trim().toLowerCase();
+  const filteredCommandPaletteActions = normalizedCommandPaletteQuery
+    ? commandPaletteActions.filter((action) => (
+      `${action.title} ${action.description} ${action.category} ${action.keywords}`.toLowerCase().includes(normalizedCommandPaletteQuery)
+    ))
+    : commandPaletteActions;
+
+  useEffect(() => {
+    if (!session?.authenticated) {
+      return undefined;
+    }
+
+    function handleCommandShortcut(event: KeyboardEvent) {
+      const key = event.key.toLowerCase();
+      const modifierPressed = event.ctrlKey || event.metaKey;
+      if (modifierPressed && key === 'k') {
+        event.preventDefault();
+        setCommandPaletteOpen(true);
+        return;
+      }
+      if (event.key === 'Escape' && commandPaletteOpen) {
+        event.preventDefault();
+        closeCommandPalette();
+      }
+    }
+
+    window.addEventListener('keydown', handleCommandShortcut);
+    return () => window.removeEventListener('keydown', handleCommandShortcut);
+  }, [session?.authenticated, commandPaletteOpen]);
+
+  useEffect(() => {
+    if (!commandPaletteOpen) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => commandSearchRef.current?.focus(), 30);
+    return () => window.clearTimeout(timer);
+  }, [commandPaletteOpen]);
 
   async function handleLogin(username: string, password: string) {
     setLoginLoading(true);
@@ -459,6 +555,28 @@ export function App() {
     setSettingsError('');
     setSettingsSuccess('');
     setSettingsOpen(true);
+  }
+
+  function openCommandPalette() {
+    setCommandPaletteQuery('');
+    setCommandPaletteOpen(true);
+  }
+
+  function closeCommandPalette() {
+    setCommandPaletteOpen(false);
+    setCommandPaletteQuery('');
+  }
+
+  function runCommandPaletteAction(action: CommandPaletteAction) {
+    closeCommandPalette();
+    action.run();
+  }
+
+  function runFirstCommandPaletteAction() {
+    const [firstAction] = filteredCommandPaletteActions;
+    if (firstAction) {
+      runCommandPaletteAction(firstAction);
+    }
   }
 
   async function handleSaveProfile() {
@@ -630,6 +748,17 @@ export function App() {
             </div>
           </div>
           <div className="topbar-actions">
+            <button
+              type="button"
+              className="command-trigger"
+              aria-label={t('app.openCommandPalette')}
+              title={t('app.openCommandPalette')}
+              onClick={openCommandPalette}
+            >
+              <Command size={15} aria-hidden="true" />
+              <span>{t('app.commandPalette')}</span>
+              <kbd>{commandShortcutLabel}</kbd>
+            </button>
             <div className="language-switcher topbar-language-switcher" role="group" aria-label={t('language.label')}>
               <span className="language-switcher-label">{t('language.label')}</span>
               <div className="language-switcher-options">
@@ -802,6 +931,82 @@ export function App() {
           onTaskFinished={refreshOverview}
         />
 
+        {commandPaletteOpen && (
+          <div
+            className="command-palette-backdrop"
+            role="presentation"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) {
+                closeCommandPalette();
+              }
+            }}
+          >
+            <section className="command-palette" role="dialog" aria-modal="true" aria-labelledby="command-palette-title">
+              <header className="command-palette-header">
+                <div className="command-palette-search">
+                  <Search size={18} aria-hidden="true" />
+                  <input
+                    ref={commandSearchRef}
+                    value={commandPaletteQuery}
+                    aria-label={t('app.commandSearchPlaceholder')}
+                    placeholder={t('app.commandSearchPlaceholder')}
+                    onChange={(event) => setCommandPaletteQuery(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        runFirstCommandPaletteAction();
+                      }
+                      if (event.key === 'Escape') {
+                        event.preventDefault();
+                        closeCommandPalette();
+                      }
+                    }}
+                  />
+                  <kbd>{commandShortcutLabel}</kbd>
+                </div>
+                <div className="command-palette-heading">
+                  <div>
+                    <span>{t('app.commandPalette')}</span>
+                    <h2 id="command-palette-title">{t('app.openCommandPalette')}</h2>
+                  </div>
+                  <button type="button" className="icon-button" aria-label={t('common.cancel')} onClick={closeCommandPalette}>
+                    <X size={18} />
+                  </button>
+                </div>
+              </header>
+
+              <div className="command-palette-list" role="listbox" aria-label={t('app.commandPalette')}>
+                {filteredCommandPaletteActions.map((action) => {
+                  const Icon = action.icon;
+                  return (
+                    <button
+                      key={action.id}
+                      type="button"
+                      className="command-palette-item"
+                      role="option"
+                      onClick={() => runCommandPaletteAction(action)}
+                    >
+                      <span className="command-palette-item-icon" aria-hidden="true">
+                        <Icon size={18} />
+                      </span>
+                      <span>
+                        <strong>{action.title}</strong>
+                        <small>{action.description}</small>
+                      </span>
+                      <em>{action.category}</em>
+                    </button>
+                  );
+                })}
+                {filteredCommandPaletteActions.length === 0 && (
+                  <div className="command-palette-empty" role="status">
+                    {t('app.commandEmpty')}
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
+        )}
+
         {settingsOpen && (
           <div className="account-modal-backdrop" role="presentation" onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
@@ -918,6 +1123,13 @@ export function App() {
       </div>
     </div>
   );
+}
+
+function isApplePlatform() {
+  if (typeof navigator === 'undefined') {
+    return false;
+  }
+  return /mac|iphone|ipad|ipod/i.test(navigator.platform);
 }
 
 function AvatarMark({ profile, className = '' }: { profile: AccountProfile; className?: string }) {

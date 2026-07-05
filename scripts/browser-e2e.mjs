@@ -23,6 +23,7 @@ try {
 
   console.log('ok browser e2e preserves security trace deep link after login');
 
+  await assertCommandPalette(page);
   await assertAccountSettingsAndAiChat(page);
 
   const temporaryServer = await createTemporaryAssetServer(page);
@@ -128,6 +129,26 @@ async function assertReleaseEvidenceBrief(targetPage) {
     throw new Error('Release evidence brief rendered a raw IP address or API key');
   }
   await assertElementHorizontallyWithinViewport(targetPage, '.security-evidence-brief', 'desktop release evidence brief');
+}
+
+async function assertCommandPalette(targetPage) {
+  await targetPage.keyboard.press('Control+K');
+  await targetPage.getByRole('dialog', { name: /open command palette/i }).waitFor({ timeout: 5000 });
+  await targetPage.getByLabel(/search modules, tools, or actions/i).fill('servers');
+  await targetPage.keyboard.press('Enter');
+  await targetPage.waitForURL(/#servers$/, { timeout: 10000 });
+  await targetPage.locator('.command-palette').waitFor({ state: 'hidden', timeout: 5000 });
+  await targetPage.locator('.module-section').filter({ hasText: /server/i }).first().waitFor({ timeout: 10000 });
+
+  await targetPage.getByRole('button', { name: /open command palette/i }).click();
+  await targetPage.getByRole('dialog', { name: /open command palette/i }).waitFor({ timeout: 5000 });
+  await targetPage.getByLabel(/search modules, tools, or actions/i).fill('account');
+  await targetPage.getByRole('option', { name: /account and appearance/i }).click();
+  await targetPage.locator('.account-modal').waitFor({ timeout: 5000 });
+  await targetPage.locator('.account-modal .icon-button').first().click();
+  await targetPage.locator('.account-modal').waitFor({ state: 'hidden', timeout: 5000 });
+
+  console.log('ok browser e2e covers command palette keyboard and mouse actions');
 }
 
 async function assertAccountSettingsAndAiChat(targetPage) {

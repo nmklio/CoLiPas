@@ -14,6 +14,7 @@ let temporarySimulatedSshServerSequence = 1;
 
 assertAiProviderSecretNotPersisted();
 assertAccountUiGuards();
+assertCommandPaletteGuards();
 assertAiStreamingCompatibility();
 assertAiResponseCachingGuards();
 assertAiConsoleI18nCoverage();
@@ -3280,6 +3281,73 @@ function assertAccountUiGuards() {
   }
 
   console.log('ok account UI avoids admin prefill, supports safe avatar upload, and keeps server form hideable');
+}
+
+function assertCommandPaletteGuards() {
+  const appSource = fs.readFileSync(new URL('../src/app/App.tsx', import.meta.url), 'utf8');
+  const globalCss = fs.readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
+  const i18nSource = fs.readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
+  const browserE2eSource = fs.readFileSync(new URL('../scripts/browser-e2e.mjs', import.meta.url), 'utf8');
+
+  const appFragments = [
+    'const [commandPaletteOpen, setCommandPaletteOpen]',
+    'event.ctrlKey || event.metaKey',
+    "key === 'k'",
+    'setCommandPaletteOpen(true)',
+    'function openCommandPalette()',
+    'function runFirstCommandPaletteAction()',
+    'className="command-trigger"',
+    'className="command-palette-backdrop"',
+    'role="dialog"',
+    'role="listbox"',
+    'role="option"',
+    'app.commandSearchPlaceholder',
+  ];
+  const missingApp = appFragments.filter((fragment) => !appSource.includes(fragment));
+  if (missingApp.length) {
+    throw new Error(`Command palette UI wiring is incomplete: ${missingApp.join(', ')}`);
+  }
+
+  const cssFragments = [
+    '.command-trigger',
+    '.command-palette-backdrop',
+    '.command-palette-search',
+    '.command-palette-item',
+    '@media (max-width: 820px)',
+  ];
+  const missingCss = cssFragments.filter((fragment) => !globalCss.includes(fragment));
+  if (missingCss.length) {
+    throw new Error(`Command palette responsive styling is incomplete: ${missingCss.join(', ')}`);
+  }
+
+  const i18nKeys = [
+    'app.commandAccount',
+    'app.commandEmpty',
+    'app.commandGoSection',
+    'app.commandNavigation',
+    'app.commandOpenAi',
+    'app.commandPalette',
+    'app.commandRefresh',
+    'app.commandSearchPlaceholder',
+    'app.commandTools',
+    'app.openCommandPalette',
+  ];
+  for (const key of i18nKeys) {
+    const appearances = i18nSource.match(new RegExp(`'${key}'`, 'g'))?.length ?? 0;
+    if (appearances < 3) {
+      throw new Error(`Command palette i18n key is missing languages: ${key}`);
+    }
+  }
+
+  if (
+    !browserE2eSource.includes('async function assertCommandPalette')
+    || !browserE2eSource.includes("keyboard.press('Control+K')")
+    || !browserE2eSource.includes('ok browser e2e covers command palette keyboard and mouse actions')
+  ) {
+    throw new Error('Command palette must be covered by browser keyboard and mouse regression checks');
+  }
+
+  console.log('ok command palette provides keyboard navigation, responsive UI, and i18n coverage');
 }
 
 function assertAiStreamingCompatibility() {
