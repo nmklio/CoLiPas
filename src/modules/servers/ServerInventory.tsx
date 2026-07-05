@@ -48,7 +48,8 @@ const terminalWriteLargeChunkSize = 96 * 1024;
 const terminalWriteLargeBacklogThreshold = 64 * 1024;
 const terminalWriteImmediateThreshold = 256;
 const terminalCompatibleInputFlushMs = 4;
-const terminalRuntimePrefetchDelayMs = 250;
+const terminalRuntimePrefetchDelayMs = 1500;
+const terminalRuntimeIdleTimeoutMs = 4500;
 const terminalNetworkUiRefreshMs = 900;
 const terminalSelfTestCommand = `printf 'colipas-ssh-self-test-start\\n'; i=1; while [ "$i" -le 40 ]; do printf 'colipas-ssh-self-test-%02d\\n' "$i"; i=$((i+1)); done; printf 'colipas-ssh-self-test-end\\n'`;
 const terminalSelfTestTimeoutMs = 15000;
@@ -238,10 +239,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       return undefined;
     }
 
-    const timer = window.setTimeout(() => {
-      void loadTerminalRuntime();
-    }, terminalRuntimePrefetchDelayMs);
-    return () => window.clearTimeout(timer);
+    return scheduleTerminalRuntimeWarmup();
   }, [visibleConnectedServerCount]);
 
   useEffect(() => {
@@ -1115,6 +1113,42 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     sshConsoleReplayHistoryRef.current = !terminalShellIdRef.current || terminalShellServerIdRef.current !== server.id;
     setSshConsoleOpen(true);
     refreshShellStatus();
+  }
+
+  function scheduleTerminalRuntimeWarmup() {
+    let timerId: number | null = null;
+    let idleId: number | null = null;
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+
+    const warmRuntime = () => {
+      if (!terminalRuntimeRef.current) {
+        void loadTerminalRuntime();
+      }
+    };
+
+    timerId = window.setTimeout(() => {
+      timerId = null;
+      if (typeof idleWindow.requestIdleCallback === 'function') {
+        idleId = idleWindow.requestIdleCallback(() => {
+          idleId = null;
+          warmRuntime();
+        }, { timeout: terminalRuntimeIdleTimeoutMs });
+        return;
+      }
+      warmRuntime();
+    }, terminalRuntimePrefetchDelayMs);
+
+    return () => {
+      if (timerId !== null) {
+        window.clearTimeout(timerId);
+      }
+      if (idleId !== null && typeof idleWindow.cancelIdleCallback === 'function') {
+        idleWindow.cancelIdleCallback(idleId);
+      }
+    };
   }
 
   function closeSshConsole() {
