@@ -124,6 +124,14 @@ interface ReleaseEvidenceBrief {
   text: string;
 }
 
+interface ReleaseFailurePlaybookItem {
+  id: string;
+  tone: 'ok' | 'warn' | 'fail';
+  title: string;
+  signal: string;
+  action: string;
+}
+
 export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, onTraceFocused, onTraceFilterChange }: SecurityPanelProps) {
   const { language, t } = useI18n();
   const copy = securityCopyByLanguage[language] ?? securityCopyByLanguage.zh;
@@ -605,6 +613,30 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
           </div>
         )}
         <small className="security-evidence-generated">{copy.evidenceBriefGenerated(evidenceBrief.generatedLabel)}</small>
+      </article>
+
+      <article className="security-release-playbook" aria-labelledby="security-release-playbook-title" data-release-playbook="true">
+        <div className="security-release-playbook-heading">
+          <div>
+            <h3 id="security-release-playbook-title"><ShieldAlert size={18} /> {copy.releasePlaybookTitle}</h3>
+            <p>{copy.releasePlaybookDescription}</p>
+          </div>
+          <span>{copy.releasePlaybookItems.length}</span>
+        </div>
+        <div className="security-release-playbook-grid">
+          {copy.releasePlaybookItems.map((item) => (
+            <div key={item.id} className={`security-release-playbook-item ${item.tone}`}>
+              <span className="security-release-playbook-icon">
+                {item.tone === 'fail' ? <XCircle size={16} /> : item.tone === 'warn' ? <AlertTriangle size={16} /> : <Wrench size={16} />}
+              </span>
+              <div>
+                <strong>{item.title}</strong>
+                <small><b>{copy.releasePlaybookSignalLabel}</b>{item.signal}</small>
+                <small><b>{copy.releasePlaybookActionLabel}</b>{item.action}</small>
+              </div>
+            </div>
+          ))}
+        </div>
       </article>
 
       <div className="security-kpi-grid">
@@ -1615,6 +1647,11 @@ interface SecurityCopy {
   evidenceMetricAudit: string;
   evidenceMetricQueue: string;
   evidenceDeploymentTitle: string;
+  releasePlaybookTitle: string;
+  releasePlaybookDescription: string;
+  releasePlaybookSignalLabel: string;
+  releasePlaybookActionLabel: string;
+  releasePlaybookItems: ReleaseFailurePlaybookItem[];
   traceApplied: (id: string, count: number) => string;
   remediationTitle: string;
   remediationClear: string;
@@ -1791,6 +1828,33 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     evidenceMetricAudit: '活跃审计问题',
     evidenceMetricQueue: '事件队列',
     evidenceDeploymentTitle: '部署证据',
+    releasePlaybookTitle: '发布失败诊断词典',
+    releasePlaybookDescription: '把发布日志中的典型信号映射为下一步处理动作，便于上线前快速判断是网络、认证还是远端脚本问题。',
+    releasePlaybookSignalLabel: '信号：',
+    releasePlaybookActionLabel: '处理：',
+    releasePlaybookItems: [
+      {
+        id: 'ssh-refused',
+        tone: 'fail',
+        title: 'SSH 端口拒绝',
+        signal: 'connection refused / exit code 255',
+        action: '检查安全组、防火墙和 sshd 监听状态；若发布通道不可达，改用已授权的运维通道执行更新脚本。',
+      },
+      {
+        id: 'ssh-auth',
+        tone: 'warn',
+        title: 'SSH 认证失败',
+        signal: 'permission denied / publickey / too many authentication failures',
+        action: '核对发布用户、部署密钥和 authorized_keys，确认没有把密码、私钥或真实凭据写入仓库。',
+      },
+      {
+        id: 'remote-command',
+        tone: 'warn',
+        title: '远端脚本失败',
+        signal: 'command not found / no such file or directory / non-255 exit',
+        action: '确认远端更新脚本存在且可执行，查看服务日志后再重跑发布。',
+      },
+    ],
     remediationTitle: '风险处置',
     remediationClear: '暂无待处置',
     noRemediation: '当前没有需要处理的风险项。',
@@ -1953,6 +2017,33 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     evidenceMetricAudit: 'Active audit issues',
     evidenceMetricQueue: 'Event queue',
     evidenceDeploymentTitle: 'Deployment evidence',
+    releasePlaybookTitle: 'Release failure playbook',
+    releasePlaybookDescription: 'Maps common release log signals to the next safe action so operators can tell network, authentication, and remote-script failures apart before retrying.',
+    releasePlaybookSignalLabel: 'Signal: ',
+    releasePlaybookActionLabel: 'Action: ',
+    releasePlaybookItems: [
+      {
+        id: 'ssh-refused',
+        tone: 'fail',
+        title: 'SSH port refused',
+        signal: 'connection refused / exit code 255',
+        action: 'Check security groups, firewall rules, and whether sshd is listening; if the release path is unreachable, use the authorized operations channel to run the updater.',
+      },
+      {
+        id: 'ssh-auth',
+        tone: 'warn',
+        title: 'SSH authentication failed',
+        signal: 'permission denied / publickey / too many authentication failures',
+        action: 'Verify the deploy user, key, and authorized_keys without committing passwords, private keys, or real credentials.',
+      },
+      {
+        id: 'remote-command',
+        tone: 'warn',
+        title: 'Remote script failed',
+        signal: 'command not found / no such file or directory / non-255 exit',
+        action: 'Confirm the remote updater exists and is executable, inspect service logs, then rerun the release.',
+      },
+    ],
     remediationTitle: 'Risk remediation',
     remediationClear: 'Nothing to handle',
     noRemediation: 'No risk item requires action right now.',
@@ -2115,6 +2206,33 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     evidenceMetricAudit: '有効な監査課題',
     evidenceMetricQueue: 'イベントキュー',
     evidenceDeploymentTitle: 'デプロイ証跡',
+    releasePlaybookTitle: 'リリース失敗診断プレイブック',
+    releasePlaybookDescription: 'リリースログの代表的なシグナルを次の安全な対応に対応付け、ネットワーク、認証、リモートスクリプトの失敗を切り分けます。',
+    releasePlaybookSignalLabel: 'シグナル: ',
+    releasePlaybookActionLabel: '対応: ',
+    releasePlaybookItems: [
+      {
+        id: 'ssh-refused',
+        tone: 'fail',
+        title: 'SSH ポート拒否',
+        signal: 'connection refused / exit code 255',
+        action: 'セキュリティグループ、ファイアウォール、sshd の待受状態を確認し、通常のリリース経路が使えない場合は承認済みの運用経路で更新スクリプトを実行します。',
+      },
+      {
+        id: 'ssh-auth',
+        tone: 'warn',
+        title: 'SSH 認証失敗',
+        signal: 'permission denied / publickey / too many authentication failures',
+        action: 'デプロイユーザー、鍵、authorized_keys を確認し、パスワード、秘密鍵、実認証情報をリポジトリに入れないことを確認します。',
+      },
+      {
+        id: 'remote-command',
+        tone: 'warn',
+        title: 'リモートスクリプト失敗',
+        signal: 'command not found / no such file or directory / non-255 exit',
+        action: 'リモート更新スクリプトが存在し実行可能であることを確認し、サービスログを見てからリリースを再実行します。',
+      },
+    ],
     remediationTitle: 'リスク対応',
     remediationClear: '対応不要',
     noRemediation: '現在対応が必要なリスク項目はありません。',

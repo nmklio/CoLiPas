@@ -5190,6 +5190,12 @@ function assertSecurityAuditRelationsAreSpecific() {
     'security-evidence-brief',
     'security-evidence-metrics',
     'data-release-deployment-evidence="true"',
+    'data-release-playbook="true"',
+    'security-release-playbook-grid',
+    'releasePlaybookItems: ReleaseFailurePlaybookItem[]',
+    "id: 'ssh-refused'",
+    'connection refused / exit code 255',
+    'permission denied / publickey / too many authentication failures',
     'parseDeploymentEvidence(deploymentCheck.evidence)',
     'copy.evidenceDeploymentDetail(evidenceBrief.deployment.channel, evidenceBrief.deployment.deploymentMode, evidenceBrief.deployment.publicHost)',
     'copy.evidenceBriefCopied',
@@ -5289,6 +5295,10 @@ function assertSecurityAuditRelationsAreSpecific() {
     '.security-evidence-footer',
     '.security-evidence-metric.fail',
     '.security-deployment-evidence',
+    '.security-release-playbook',
+    '.security-release-playbook-grid',
+    '.security-release-playbook-item.fail',
+    '.security-release-playbook-icon',
     '.config-state.action',
   ];
   const missingCss = cssFragments.filter((fragment) => !globalCss.includes(fragment));
