@@ -34,7 +34,7 @@ try {
   temporaryServerId = '';
 
   await assertReleaseEvidenceBrief(page);
-  await captureVisualEvidence(page, 'desktop-security-trace', ['.security-workbench', '.security-readiness-card', '.security-evidence-brief', '.security-release-playbook']);
+  await captureVisualEvidence(page, 'desktop-security-trace', ['.security-workbench', '.security-readiness-card', '.security-evidence-brief', '.security-release-playbook', '.security-ssh-performance-card']);
   await assertMobileConsoleAndMap();
   await assertMobileModuleLayoutSweep();
 
@@ -120,6 +120,7 @@ async function assertSyntheticTraceDeepLink(targetPage, expectedTraceId) {
 async function assertReleaseEvidenceBrief(targetPage) {
   await targetPage.locator('.security-evidence-brief').waitFor({ timeout: 10000 });
   await targetPage.locator('.security-release-playbook').waitFor({ timeout: 10000 });
+  await targetPage.locator('.security-ssh-performance-card').waitFor({ timeout: 10000 });
   await targetPage.getByRole('button', { name: /copy evidence brief/i }).waitFor({ timeout: 5000 });
   const metricCount = await targetPage.locator('.security-evidence-metric').count();
   if (metricCount !== 4) {
@@ -129,12 +130,21 @@ async function assertReleaseEvidenceBrief(targetPage) {
   if (playbookCount !== 3) {
     throw new Error(`Release failure playbook should expose three diagnostic cards, got ${playbookCount}`);
   }
-  const text = `${await targetPage.locator('.security-evidence-brief').innerText()}\n${await targetPage.locator('.security-release-playbook').innerText()}`;
+  const sshPerfMetricCount = await targetPage.locator('.security-ssh-performance-metric').count();
+  if (sshPerfMetricCount !== 4) {
+    throw new Error(`SSH performance card should expose four aggregate metrics, got ${sshPerfMetricCount}`);
+  }
+  const sshPerfText = await targetPage.locator('.security-ssh-performance-card').innerText();
+  if (!/input batching|输入合并|入力バッチ/i.test(sshPerfText) || !/socket errors|连接错误|接続エラー/i.test(sshPerfText)) {
+    throw new Error(`SSH performance card did not render batching/error evidence: ${sshPerfText}`);
+  }
+  const text = `${await targetPage.locator('.security-evidence-brief').innerText()}\n${await targetPage.locator('.security-release-playbook').innerText()}\n${sshPerfText}`;
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(text) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(text)) {
-    throw new Error('Release evidence or failure playbook rendered a raw IP address or API key');
+    throw new Error('Release evidence, failure playbook, or SSH performance card rendered a raw IP address or API key');
   }
   await assertElementHorizontallyWithinViewport(targetPage, '.security-evidence-brief', 'desktop release evidence brief');
   await assertElementHorizontallyWithinViewport(targetPage, '.security-release-playbook', 'desktop release failure playbook');
+  await assertElementHorizontallyWithinViewport(targetPage, '.security-ssh-performance-card', 'desktop SSH performance card');
 }
 
 async function assertCommandPalette(targetPage) {

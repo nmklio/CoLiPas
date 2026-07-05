@@ -20,7 +20,7 @@ import { getLocale, useI18n } from '../../i18n';
 import { OperationEvent } from '../../types';
 import { fetchDiagnosticExport, fetchReleaseReadiness, fetchReleaseReadinessReport, recordReleaseReadinessSnapshot, remediateSecurityRisk } from '../../services/apiClient';
 import type { SecurityRemediationResponse } from '../../services/apiClient';
-import type { ReleaseDeploymentEvidence, ReleaseReadinessResponse } from '../../types';
+import type { DiagnosticExportResponse, ReleaseDeploymentEvidence, ReleaseReadinessResponse } from '../../types';
 
 interface SecurityPanelProps {
   events: OperationEvent[];
@@ -132,13 +132,29 @@ interface ReleaseFailurePlaybookItem {
   action: string;
 }
 
+interface SshPerformanceMetric {
+  label: string;
+  value: string;
+  detail: string;
+  tone: 'ok' | 'warn' | 'fail';
+}
+
+interface SshPerformanceSummary {
+  tone: 'ok' | 'warn' | 'fail';
+  status: string;
+  nextAction: string;
+  metrics: SshPerformanceMetric[];
+}
+
 export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, onTraceFocused, onTraceFilterChange }: SecurityPanelProps) {
   const { language, t } = useI18n();
   const copy = securityCopyByLanguage[language] ?? securityCopyByLanguage.zh;
   const diagnosticCopy = diagnosticCopyByLanguage[language] ?? diagnosticCopyByLanguage.zh;
+  const sshPerformanceCopy = sshPerformanceCopyByLanguage[language] ?? sshPerformanceCopyByLanguage.zh;
   const locale = getLocale(language);
   const [config, setConfig] = useState<ConfigSummary | null>(null);
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
+  const [diagnosticBundle, setDiagnosticBundle] = useState<DiagnosticExportResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<AuditStatusFilter>('all');
   const [relationFilter, setRelationFilter] = useState<SecurityRelationKey | null>(null);
@@ -204,6 +220,10 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
     }),
     [activeAuditIssues.blocked, activeAuditIssues.failed, activeAuditIssues.total, auditEntries.length, copy, lastRefreshedAt, locale, openEvents.length, readiness, successRate],
   );
+  const sshPerformance = useMemo(
+    () => buildSshPerformanceSummary(diagnosticBundle, sshPerformanceCopy),
+    [diagnosticBundle, sshPerformanceCopy],
+  );
 
   useEffect(() => {
     refreshSecurityData().catch(() => undefined);
@@ -262,13 +282,15 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
         fetch('/api/audit/events'),
       ]);
       const readinessPromise = fetchReleaseReadiness();
+      const diagnosticPromise = fetchDiagnosticExport().catch(() => null);
       if (!configResponse.ok || !auditResponse.ok) {
         throw new Error(copy.loadFailed);
       }
-      const [configBody, auditBody, readinessBody] = await Promise.all([
+      const [configBody, auditBody, readinessBody, diagnosticBody] = await Promise.all([
         configResponse.json(),
         auditResponse.json(),
         readinessPromise,
+        diagnosticPromise,
       ]);
       if (!Array.isArray(auditBody.items)) {
         throw new Error(copy.loadFailed);
@@ -276,12 +298,14 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
       setConfig(configBody as ConfigSummary);
       setAuditEntries((auditBody.items ?? []) as AuditEntry[]);
       setReadiness(readinessBody);
+      setDiagnosticBundle(diagnosticBody);
       setLastRefreshedAt(new Date());
     } catch {
       setLoadError(copy.loadFailed);
       setConfig(null);
       setAuditEntries([]);
       setReadiness(null);
+      setDiagnosticBundle(null);
     } finally {
       setLoading(false);
     }
@@ -637,6 +661,26 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
             </div>
           ))}
         </div>
+      </article>
+
+      <article className={`security-ssh-performance-card ${sshPerformance.tone}`} aria-labelledby="security-ssh-performance-title" data-ssh-performance-card="true">
+        <div className="security-ssh-performance-heading">
+          <div>
+            <h3 id="security-ssh-performance-title"><SlidersHorizontal size={18} /> {sshPerformanceCopy.title}</h3>
+            <p>{sshPerformanceCopy.description}</p>
+          </div>
+          <span>{sshPerformance.status}</span>
+        </div>
+        <div className="security-ssh-performance-grid">
+          {sshPerformance.metrics.map((metric) => (
+            <div key={metric.label} className={`security-ssh-performance-metric ${metric.tone}`}>
+              <span>{metric.label}</span>
+              <strong>{metric.value}</strong>
+              <small>{metric.detail}</small>
+            </div>
+          ))}
+        </div>
+        <p className="security-ssh-performance-next">{sshPerformance.nextAction}</p>
       </article>
 
       <div className="security-kpi-grid">
@@ -1519,6 +1563,73 @@ function buildReleaseEvidenceBrief(input: {
   };
 }
 
+function buildSshPerformanceSummary(
+  diagnostic: DiagnosticExportResponse | null,
+  copy: SshPerformanceCopy,
+): SshPerformanceSummary {
+  const websocket = diagnostic?.sshTerminal?.websocket;
+  const activeSessions = diagnostic?.sshTerminal?.activeSessions ?? 0;
+  const inputEvents = websocket?.inputEvents ?? 0;
+  const inputFlushes = websocket?.inputFlushes ?? 0;
+  const outputEvents = websocket?.outputEvents ?? 0;
+  const outputFlushes = websocket?.outputFlushes ?? 0;
+  const errors = websocket?.errors ?? 0;
+  const inputRatio = calculateBatchRatio(inputEvents, inputFlushes);
+  const outputRatio = calculateBatchRatio(outputEvents, outputFlushes);
+  const hasEvidence = Boolean(websocket) && (inputEvents > 0 || outputEvents > 0 || activeSessions > 0);
+  const tone: SshPerformanceSummary['tone'] = errors > 0
+    ? 'fail'
+    : hasEvidence && inputEvents >= 8 && inputRatio < 1.2
+      ? 'warn'
+      : 'ok';
+
+  return {
+    tone,
+    status: tone === 'fail' ? copy.statusFail : tone === 'warn' ? copy.statusWarn : copy.statusOk,
+    nextAction: !hasEvidence ? copy.nextActionNoEvidence : tone === 'fail' ? copy.nextActionFail : tone === 'warn' ? copy.nextActionWarn : copy.nextActionOk,
+    metrics: [
+      {
+        label: copy.activeSessions,
+        value: String(activeSessions),
+        detail: copy.activeSessionsDetail(activeSessions),
+        tone: activeSessions > 8 ? 'warn' : 'ok',
+      },
+      {
+        label: copy.inputBatch,
+        value: inputFlushes > 0 ? `${formatBatchRatio(inputRatio)}×` : '--',
+        detail: copy.inputBatchDetail(inputEvents, inputFlushes),
+        tone: inputEvents >= 8 && inputRatio < 1.2 ? 'warn' : 'ok',
+      },
+      {
+        label: copy.outputBatch,
+        value: outputFlushes > 0 ? `${formatBatchRatio(outputRatio)}×` : '--',
+        detail: copy.outputBatchDetail(outputEvents, outputFlushes),
+        tone: outputEvents >= 8 && outputRatio < 1.2 ? 'warn' : 'ok',
+      },
+      {
+        label: copy.websocketErrors,
+        value: String(errors),
+        detail: copy.websocketErrorsDetail(errors),
+        tone: errors > 0 ? 'fail' : 'ok',
+      },
+    ],
+  };
+}
+
+function calculateBatchRatio(events: number, flushes: number) {
+  if (events <= 0 || flushes <= 0) {
+    return 0;
+  }
+  return events / flushes;
+}
+
+function formatBatchRatio(value: number) {
+  if (!Number.isFinite(value) || value <= 0) {
+    return '0';
+  }
+  return value >= 10 ? Math.round(value).toString() : value.toFixed(1);
+}
+
 function parseDeploymentEvidence(value: string): ReleaseDeploymentEvidence | null {
   const fields = Object.fromEntries(
     value
@@ -1706,6 +1817,86 @@ interface SecurityCopy {
   evidenceDeploymentDetail: (channel: string, mode: string, host: string) => string;
   auditStatus: (status: AuditStatusFilter) => string;
 }
+
+interface SshPerformanceCopy {
+  title: string;
+  description: string;
+  activeSessions: string;
+  inputBatch: string;
+  outputBatch: string;
+  websocketErrors: string;
+  statusOk: string;
+  statusWarn: string;
+  statusFail: string;
+  nextActionOk: string;
+  nextActionWarn: string;
+  nextActionFail: string;
+  nextActionNoEvidence: string;
+  activeSessionsDetail: (count: number) => string;
+  inputBatchDetail: (events: number, flushes: number) => string;
+  outputBatchDetail: (events: number, flushes: number) => string;
+  websocketErrorsDetail: (count: number) => string;
+}
+
+const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
+  zh: {
+    title: 'SSH 终端性能',
+    description: '用脱敏诊断数据观察终端输入合并、输出批次和连接错误，定位卡顿不暴露服务器信息。',
+    activeSessions: '活跃会话',
+    inputBatch: '输入合并',
+    outputBatch: '输出合并',
+    websocketErrors: '连接错误',
+    statusOk: '链路流畅',
+    statusWarn: '需要观察',
+    statusFail: '存在异常',
+    nextActionOk: '继续用实时终端测试真实命令；若用户反馈卡顿，优先对比输入合并率、RTT 和输出批次。',
+    nextActionWarn: '输入合并率偏低，建议继续采集真实 SSH 粘贴、大输出和弱网场景的诊断包。',
+    nextActionFail: 'WebSocket 错误非零，优先检查反向代理升级头、超时和终端会话关闭链路。',
+    nextActionNoEvidence: '暂无终端交互证据；打开一次 SSH 终端并执行安全命令后刷新即可生成性能指标。',
+    activeSessionsDetail: (count) => `${count} 个实时 shell 保持在服务端`,
+    inputBatchDetail: (events, flushes) => `${events} 次输入事件 / ${flushes} 次后端写入`,
+    outputBatchDetail: (events, flushes) => `${events} 次输出事件 / ${flushes} 次前端推送`,
+    websocketErrorsDetail: (count) => count > 0 ? `${count} 次连接/解析错误` : '未记录连接错误',
+  },
+  en: {
+    title: 'SSH terminal performance',
+    description: 'Uses sanitized diagnostics to track input batching, output flushes, and socket errors without exposing server data.',
+    activeSessions: 'Active sessions',
+    inputBatch: 'Input batching',
+    outputBatch: 'Output batching',
+    websocketErrors: 'Socket errors',
+    statusOk: 'Healthy path',
+    statusWarn: 'Watch closely',
+    statusFail: 'Errors found',
+    nextActionOk: 'Keep testing real terminal commands; compare input batching, RTT, and output flushes when users report lag.',
+    nextActionWarn: 'Input batching is low. Capture diagnostics for paste bursts, large output, and weak-network SSH sessions.',
+    nextActionFail: 'WebSocket errors are non-zero. Check proxy upgrade headers, timeouts, and terminal close cleanup first.',
+    nextActionNoEvidence: 'No terminal interaction evidence yet. Open an SSH terminal, run a safe command, then refresh this panel.',
+    activeSessionsDetail: (count) => `${count} live shell session(s) retained server-side`,
+    inputBatchDetail: (events, flushes) => `${events} input event(s) / ${flushes} backend write(s)`,
+    outputBatchDetail: (events, flushes) => `${events} output event(s) / ${flushes} frontend flush(es)`,
+    websocketErrorsDetail: (count) => count > 0 ? `${count} connection or parse error(s)` : 'No socket errors recorded',
+  },
+  ja: {
+    title: 'SSH 端末パフォーマンス',
+    description: '匿名化診断で入力バッチ、出力フラッシュ、ソケットエラーを確認し、サーバー情報は表示しません。',
+    activeSessions: 'アクティブセッション',
+    inputBatch: '入力バッチ',
+    outputBatch: '出力バッチ',
+    websocketErrors: '接続エラー',
+    statusOk: '正常',
+    statusWarn: '要観察',
+    statusFail: '異常あり',
+    nextActionOk: '実 SSH コマンドで継続検証し、遅延時は入力バッチ率、RTT、出力フラッシュを比較してください。',
+    nextActionWarn: '入力バッチ率が低めです。貼り付け、大量出力、弱いネットワークの診断を追加取得してください。',
+    nextActionFail: 'WebSocket エラーがあります。プロキシの Upgrade ヘッダー、タイムアウト、端末終了処理を優先確認してください。',
+    nextActionNoEvidence: '端末操作の証跡がまだありません。SSH 端末で安全なコマンドを実行し、再読み込みしてください。',
+    activeSessionsDetail: (count) => `${count} 件のライブ shell セッション`,
+    inputBatchDetail: (events, flushes) => `${events} 入力イベント / ${flushes} バックエンド書き込み`,
+    outputBatchDetail: (events, flushes) => `${events} 出力イベント / ${flushes} フロントエンド送信`,
+    websocketErrorsDetail: (count) => count > 0 ? `${count} 件の接続/解析エラー` : '接続エラーは記録されていません',
+  },
+};
 
 const diagnosticCopyByLanguage: Record<string, {
   export: string;
