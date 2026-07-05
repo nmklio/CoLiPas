@@ -1975,6 +1975,8 @@ const shellSelfTestResponse = await fetch(`${baseUrl}/api/servers/shells/${shell
     lines: 40,
     durationMs: 48,
     linesPerSecond: 833.3,
+    rttMs: 12,
+    throughputBytesPerSecond: 65536,
     networkLabel: 'RTT 12ms / 64 KB/s',
   }),
 });
@@ -1986,10 +1988,13 @@ if (
   shellSelfTestBody.status !== 'complete'
   || shellSelfTestBody.lines !== 40
   || shellSelfTestBody.durationMs !== 48
+  || shellSelfTestBody.rttMs !== 12
+  || shellSelfTestBody.throughputBytesPerSecond !== 65536
   || shellSelfTestBody.networkLabel !== 'RTT 12ms / 64 KB/s'
+  || shellSelfTestBody.bottleneck !== 'healthy'
   || 'sessionId' in shellSelfTestBody
 ) {
-  throw new Error('/api/servers/shells/:sessionId/self-test returned unsafe or incomplete payload');
+  throw new Error(`/api/servers/shells/:sessionId/self-test returned unsafe or incomplete payload: ${JSON.stringify(shellSelfTestBody)}`);
 }
 const shellAiEvidenceResponse = await fetch(`${baseUrl}/api/ai/stream`, {
   method: 'POST',
@@ -2802,6 +2807,9 @@ if (
   || diagnosticExportBody.sshTerminal?.lastSelfTest?.status !== 'complete'
   || diagnosticExportBody.sshTerminal?.lastSelfTest?.lines !== 40
   || diagnosticExportBody.sshTerminal?.lastSelfTest?.durationMs !== 48
+  || diagnosticExportBody.sshTerminal?.lastSelfTest?.rttMs !== 12
+  || diagnosticExportBody.sshTerminal?.lastSelfTest?.throughputBytesPerSecond !== 65536
+  || diagnosticExportBody.sshTerminal?.lastSelfTest?.bottleneck !== 'healthy'
   || typeof diagnosticExportBody.sshTerminal?.lastSelfTest?.recordedAt !== 'string'
   || 'sessionId' in (diagnosticExportBody.sshTerminal?.lastSelfTest ?? {})
 ) {
@@ -4933,6 +4941,7 @@ function assertSshTerminalRealtimeGuards() {
     'formatTerminalSelfTestLabel(nextState, language)',
     "terminal.writeln(`\\r\\n${t('servers.sshSelfTestTerminalLine'",
     'recordServerShellSelfTest(tracker.sessionId',
+    'throughputBytesPerSecond: nextState.throughputBytesPerSecond',
     'sendTerminalInput(sessionId, `${terminalSelfTestCommand}\\r`)',
     "t('servers.runTerminalSelfTest')",
     "t('servers.sshSelfTestStarted')",
@@ -5022,6 +5031,7 @@ function assertSshTerminalRealtimeGuards() {
     'export function recordSshShellSelfTestResult',
     'export function getLastSshShellSelfTestResult',
     'lastSshShellSelfTestRecord',
+    'diagnoseSshSelfTest',
     'oldestConnectedAt',
     'newestConnectedAt',
   ];
@@ -5351,6 +5361,9 @@ function assertSecurityAuditRelationsAreSpecific() {
     'formatBatchRatio(inputRatio)',
     'diagnostic?.sshTerminal?.lastSelfTest',
     'copy.lastSelfTest',
+    'copy.likelyBottleneck',
+    'copy.bottleneckDetail(',
+    'formatBottleneckValue(',
     'copy.lastSelfTestDetail(',
     'formatSelfTestRate(rate',
     'data-ssh-performance-card="true"',

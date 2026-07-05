@@ -349,7 +349,10 @@ export interface DiagnosticExportResponse {
       lines: number;
       durationMs: number;
       linesPerSecond: number;
+      rttMs: number | null;
+      throughputBytesPerSecond: number;
       networkLabel: string;
+      bottleneck: 'healthy' | 'network' | 'throughput' | 'terminal' | 'connection';
       recordedAt: string;
       active: boolean;
     } | null;

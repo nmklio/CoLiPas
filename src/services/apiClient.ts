@@ -205,6 +205,8 @@ export interface ServerShellSelfTestPayload {
   lines: number;
   durationMs: number;
   linesPerSecond: number;
+  rttMs?: number | null;
+  throughputBytesPerSecond?: number;
   networkLabel: string;
 }
 
@@ -892,6 +894,7 @@ export async function recordServerShellSelfTest(
   return (await response.json()) as ServerShellSelfTestPayload & {
     serverName: string;
     mode: SshVerifyMode;
+    bottleneck: 'healthy' | 'network' | 'throughput' | 'terminal' | 'connection';
     recordedAt: string;
     active: boolean;
   };

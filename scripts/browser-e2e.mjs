@@ -131,11 +131,11 @@ async function assertReleaseEvidenceBrief(targetPage) {
     throw new Error(`Release failure playbook should expose three diagnostic cards, got ${playbookCount}`);
   }
   const sshPerfMetricCount = await targetPage.locator('.security-ssh-performance-metric').count();
-  if (sshPerfMetricCount !== 5) {
-    throw new Error(`SSH performance card should expose five aggregate metrics, got ${sshPerfMetricCount}`);
+  if (sshPerfMetricCount !== 6) {
+    throw new Error(`SSH performance card should expose six aggregate metrics, got ${sshPerfMetricCount}`);
   }
   const sshPerfText = await targetPage.locator('.security-ssh-performance-card').innerText();
-  if (!/input batching/i.test(sshPerfText) || !/socket errors/i.test(sshPerfText) || !/last safe test/i.test(sshPerfText)) {
+  if (!/input batching/i.test(sshPerfText) || !/socket errors/i.test(sshPerfText) || !/last safe test/i.test(sshPerfText) || !/likely bottleneck/i.test(sshPerfText)) {
     throw new Error(`SSH performance card did not render batching/error evidence: ${sshPerfText}`);
   }
   await targetPage.evaluate(() => {
@@ -151,7 +151,7 @@ async function assertReleaseEvidenceBrief(targetPage) {
   });
   await targetPage.getByRole('button', { name: /copy summary|复制摘要|サマリーをコピー/i }).click();
   const copiedSshPerfText = await targetPage.evaluate(() => window.__colipasCopiedSshPerformanceText ?? '');
-  if (!/SSH terminal performance|Input batching/i.test(copiedSshPerfText) || !/Socket errors/i.test(copiedSshPerfText) || !/Last safe test/i.test(copiedSshPerfText)) {
+  if (!/SSH terminal performance|Input batching/i.test(copiedSshPerfText) || !/Socket errors/i.test(copiedSshPerfText) || !/Last safe test/i.test(copiedSshPerfText) || !/Likely bottleneck/i.test(copiedSshPerfText)) {
     throw new Error(`SSH performance copy output is incomplete: ${copiedSshPerfText}`);
   }
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshPerfText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshPerfText)) {
@@ -539,6 +539,7 @@ async function assertSshTerminalPanel(targetPage) {
       const diagnostic = await response.json();
       return diagnostic?.sshTerminal?.lastSelfTest?.status === 'complete'
         && diagnostic.sshTerminal.lastSelfTest.lines === 40
+        && diagnostic.sshTerminal.lastSelfTest.bottleneck === 'healthy'
         && !('sessionId' in diagnostic.sshTerminal.lastSelfTest);
     }, undefined, { timeout: 5000 });
     console.log(`ok browser e2e SSH safe speed test rendered in ${selfTestDurationMs}ms`);

@@ -141,7 +141,10 @@ export interface SshShellSelfTestRecord {
   lines: number;
   durationMs: number;
   linesPerSecond: number;
+  rttMs: number | null;
+  throughputBytesPerSecond: number;
   networkLabel: string;
+  bottleneck: 'healthy' | 'network' | 'throughput' | 'terminal' | 'connection';
   recordedAt: string;
   active: boolean;
 }
@@ -413,9 +416,14 @@ export function getSshShellSessionStats(): SshShellSessionStats {
 
 export function recordSshShellSelfTestResult(
   sessionId: string,
-  input: Pick<SshShellSelfTestRecord, 'status' | 'lines' | 'durationMs' | 'linesPerSecond' | 'networkLabel'>,
+  input: Pick<SshShellSelfTestRecord, 'status' | 'lines' | 'durationMs' | 'linesPerSecond' | 'networkLabel'>
+    & Partial<Pick<SshShellSelfTestRecord, 'rttMs' | 'throughputBytesPerSecond'>>,
 ): SshShellSelfTestRecord {
   const session = getActiveShellSession(sessionId);
+  const rttMs = typeof input.rttMs === 'number' && Number.isFinite(input.rttMs)
+    ? clampNumber(input.rttMs, 0, 60_000)
+    : null;
+  const throughputBytesPerSecond = clampNumber(input.throughputBytesPerSecond ?? 0, 0, 1_000_000_000);
   const record: InternalSshShellSelfTestRecord = {
     sessionId,
     serverName: session.serverName,
@@ -424,7 +432,10 @@ export function recordSshShellSelfTestResult(
     lines: clampNumber(input.lines, 0, 10000),
     durationMs: clampNumber(input.durationMs, 0, 60_000),
     linesPerSecond: clampNumber(input.linesPerSecond, 0, 1_000_000),
+    rttMs,
+    throughputBytesPerSecond,
     networkLabel: redactSensitiveText(input.networkLabel).slice(0, 100),
+    bottleneck: diagnoseSshSelfTest(input.status, input.durationMs, input.linesPerSecond, rttMs, throughputBytesPerSecond),
     recordedAt: new Date().toISOString(),
     active: !session.closed,
   };
@@ -1100,10 +1111,38 @@ function stripSelfTestSessionId(record: InternalSshShellSelfTestRecord): SshShel
     lines: record.lines,
     durationMs: record.durationMs,
     linesPerSecond: record.linesPerSecond,
+    rttMs: record.rttMs,
+    throughputBytesPerSecond: record.throughputBytesPerSecond,
     networkLabel: record.networkLabel,
+    bottleneck: record.bottleneck,
     recordedAt: record.recordedAt,
     active: record.active,
   };
+}
+
+function diagnoseSshSelfTest(
+  status: SshShellSelfTestRecord['status'],
+  durationMs: number,
+  linesPerSecond: number,
+  rttMs: number | null,
+  throughputBytesPerSecond: number,
+): SshShellSelfTestRecord['bottleneck'] {
+  if (status === 'failed') {
+    return 'connection';
+  }
+  if (status === 'timeout') {
+    return 'terminal';
+  }
+  if (rttMs !== null && rttMs >= 350) {
+    return 'network';
+  }
+  if (throughputBytesPerSecond > 0 && throughputBytesPerSecond < 16 * 1024) {
+    return 'throughput';
+  }
+  if (durationMs >= 3000 || linesPerSecond > 0 && linesPerSecond < 35) {
+    return 'terminal';
+  }
+  return 'healthy';
 }
 
 function getActiveShellSession(sessionId: string) {

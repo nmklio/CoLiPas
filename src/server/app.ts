@@ -611,6 +611,8 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
         lines: request.body?.lines,
         durationMs: request.body?.durationMs,
         linesPerSecond: request.body?.linesPerSecond,
+        rttMs: request.body?.rttMs,
+        throughputBytesPerSecond: request.body?.throughputBytesPerSecond,
         networkLabel: request.body?.networkLabel,
       }));
     } catch (error) {

@@ -81,6 +81,8 @@ interface TerminalSelfTestState {
   lines: number;
   durationMs: number;
   linesPerSecond: number;
+  rttMs: number | null;
+  throughputBytesPerSecond: number;
   networkLabel: string;
   message?: string;
 }
@@ -1392,7 +1394,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
 
   function beginTerminalSelfTest(sessionId: string) {
     clearTerminalSelfTestTimer();
-    const networkLabel = terminalNetworkLabel || formatTerminalRtt(terminalNetworkRenderedRef.current?.rttMs ?? null);
+    const networkStats = terminalNetworkRenderedRef.current;
+    const networkLabel = terminalNetworkLabel || formatTerminalRtt(networkStats?.rttMs ?? null);
     const tracker: TerminalSelfTestTracker = {
       sessionId,
       startedAt: performance.now(),
@@ -1408,6 +1411,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       lines: 0,
       durationMs: 0,
       linesPerSecond: 0,
+      rttMs: networkStats?.rttMs ?? null,
+      throughputBytesPerSecond: networkStats?.throughputBytesPerSecond ?? 0,
       networkLabel,
     });
   }
@@ -1441,12 +1446,15 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     const tracker = terminalSelfTestRef.current;
     if (!tracker) {
       if (status === 'failed' && message) {
+        const networkStats = terminalNetworkRenderedRef.current;
         setTerminalSelfTest({
           status,
           lines: 0,
           durationMs: 0,
           linesPerSecond: 0,
-          networkLabel: terminalNetworkLabel || formatTerminalRtt(terminalNetworkRenderedRef.current?.rttMs ?? null),
+          rttMs: networkStats?.rttMs ?? null,
+          throughputBytesPerSecond: networkStats?.throughputBytesPerSecond ?? 0,
+          networkLabel: terminalNetworkLabel || formatTerminalRtt(networkStats?.rttMs ?? null),
           message,
         });
       }
@@ -1454,6 +1462,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     }
 
     const durationMs = Math.max(0, performance.now() - tracker.startedAt);
+    const networkStats = terminalNetworkRenderedRef.current;
     clearTerminalSelfTestTimer();
     terminalSelfTestRef.current = null;
 
@@ -1462,7 +1471,9 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       lines: tracker.lineCount,
       durationMs,
       linesPerSecond: calculateSelfTestRate(tracker.lineCount, durationMs),
-      networkLabel: terminalNetworkLabel || formatTerminalRtt(terminalNetworkRenderedRef.current?.rttMs ?? null),
+      rttMs: networkStats?.rttMs ?? null,
+      throughputBytesPerSecond: networkStats?.throughputBytesPerSecond ?? 0,
+      networkLabel: terminalNetworkLabel || formatTerminalRtt(networkStats?.rttMs ?? null),
       message,
     };
     setTerminalSelfTest(nextState);
@@ -1471,6 +1482,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       lines: nextState.lines,
       durationMs: nextState.durationMs,
       linesPerSecond: nextState.linesPerSecond,
+      rttMs: nextState.rttMs,
+      throughputBytesPerSecond: nextState.throughputBytesPerSecond,
       networkLabel: nextState.networkLabel,
     }).catch(() => undefined);
 

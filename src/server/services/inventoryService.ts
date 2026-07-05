@@ -818,6 +818,8 @@ export function recordServerShellSelfTest(input: unknown) {
     lines: z.coerce.number().int().min(0).max(10000),
     durationMs: z.coerce.number().min(0).max(60_000),
     linesPerSecond: z.coerce.number().min(0).max(1_000_000),
+    rttMs: z.coerce.number().min(0).max(60_000).nullable().optional(),
+    throughputBytesPerSecond: z.coerce.number().min(0).max(1_000_000_000).optional().default(0),
     networkLabel: z.string().max(100).optional().default(''),
   }).parse(input);
 
@@ -826,6 +828,8 @@ export function recordServerShellSelfTest(input: unknown) {
     lines: parsed.lines,
     durationMs: parsed.durationMs,
     linesPerSecond: parsed.linesPerSecond,
+    rttMs: parsed.rttMs ?? null,
+    throughputBytesPerSecond: parsed.throughputBytesPerSecond,
     networkLabel: parsed.networkLabel,
   });
 }
