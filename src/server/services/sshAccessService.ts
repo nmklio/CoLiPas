@@ -1173,7 +1173,7 @@ function registerSshShellSessionReplay(session: ActiveSshShellSession) {
     errorCount: 0,
     closeSignal: null,
     lastEventAt: connectedAt,
-    timeline: [{ type: 'start', at: connectedAt, bytes: 0, lines: 0 }],
+    timeline: [],
   });
   pruneRecentSshShellSessionReplays();
 }

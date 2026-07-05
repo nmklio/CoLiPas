@@ -2855,7 +2855,8 @@ if (
   || diagnosticExportBody.sshTerminal.websocket.outputFlushes < 1
   || !Array.isArray(diagnosticExportBody.sshTerminal.recentEvidence)
   || !diagnosticExportBody.sshTerminal.recentEvidence.some((item) => item.transcriptLines > 0 && item.transcriptChars > 0)
-  || !diagnosticExportBody.sshTerminal.sessionReplays.every((item) => !('sessionId' in item) && !('serverId' in item) && item.timeline.every((event) => !('content' in event) && !('message' in event)))
+  || !diagnosticExportBody.sshTerminal.sessionReplays.some((item) => item.timeline.filter((event) => event.type === 'start').length === 1)
+  || !diagnosticExportBody.sshTerminal.sessionReplays.every((item) => !('sessionId' in item) && !('serverId' in item) && item.timeline.filter((event) => event.type === 'start').length <= 1 && item.timeline.every((event) => !('content' in event) && !('message' in event)))
 ) {
   throw new Error('/api/audit/diagnostics/export did not include SSH terminal observability evidence');
 }
