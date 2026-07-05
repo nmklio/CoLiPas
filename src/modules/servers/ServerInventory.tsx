@@ -702,6 +702,36 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     </>
                   )}
                 </div>
+                <div className="server-mobile-ops" data-mobile-server-ops="true">
+                  <div className="server-mobile-status-strip" aria-label={`${server.name} ${t('servers.tableResource')}`}>
+                    <span>
+                      <small>{t('common.region')}</small>
+                      <strong>{regionDisplayName(server.region)}</strong>
+                    </span>
+                    <span>
+                      <small>CPU</small>
+                      <strong>{server.cpu}%</strong>
+                    </span>
+                    <span>
+                      <small>SSH</small>
+                      <strong>{connected ? (sshAccess?.authType === 'password' ? t('servers.passwordAuth') : t('servers.keyAuth')) : t('servers.unconnected')}</strong>
+                    </span>
+                  </div>
+                  <div className="server-mobile-action-strip" aria-label={`${server.name} ${t('common.actions')}`}>
+                    <button type="button" className="server-mobile-primary-action" disabled={!canOpenTerminal} onClick={() => openSshConsole(server)}>
+                      <Terminal size={15} />
+                      {t('servers.ssh')}
+                    </button>
+                    <button type="button" onClick={() => startEdit(server)}>
+                      <Edit3 size={15} />
+                      {t('common.edit')}
+                    </button>
+                    <button type="button" disabled={!connected} onClick={() => runAction(server, 'reboot')}>
+                      <RotateCcw size={15} />
+                      {t('servers.reboot')}
+                    </button>
+                  </div>
+                </div>
                 <div className="icon-actions server-row-actions compact" aria-label={`${server.name} ${t('common.actions')}`}>
                   <ActionButton label={t('servers.powerOn')} disabled={!connected} onClick={() => runAction(server, 'powerOn')} icon={<Power size={15} />} />
                   <ActionButton label={t('servers.shutdown')} disabled={!connected} onClick={() => runAction(server, 'shutdown')} icon={<PowerOff size={15} />} />

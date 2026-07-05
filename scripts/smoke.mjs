@@ -4774,6 +4774,33 @@ function assertServerStatusLifecycleGuards() {
     throw new Error(`Server action audit trace CSS is incomplete: ${missingTraceCss.join(', ')}`);
   }
 
+  const mobileOpsFragments = [
+    'className="server-mobile-ops"',
+    'data-mobile-server-ops="true"',
+    'className="server-mobile-status-strip"',
+    'className="server-mobile-action-strip"',
+    'className="server-mobile-primary-action"',
+    'disabled={!canOpenTerminal}',
+    "onClick={() => openSshConsole(server)}",
+  ];
+  const missingMobileOps = mobileOpsFragments.filter((fragment) => !inventorySource.includes(fragment));
+  if (missingMobileOps.length) {
+    throw new Error(`Mobile server SSH action strip is incomplete: ${missingMobileOps.join(', ')}`);
+  }
+
+  const mobileOpsCssFragments = [
+    '.server-mobile-ops',
+    '.server-mobile-status-strip',
+    '.server-mobile-action-strip',
+    '.server-mobile-primary-action',
+    '.server-row-actions',
+    'display: none;',
+  ];
+  const missingMobileOpsCss = mobileOpsCssFragments.filter((fragment) => !globalCss.includes(fragment));
+  if (missingMobileOpsCss.length) {
+    throw new Error(`Mobile server SSH action strip CSS is incomplete: ${missingMobileOpsCss.join(', ')}`);
+  }
+
   const viewTraceI18nCount = (i18nSource.match(/common\.viewTrace/g) ?? []).length;
   if (viewTraceI18nCount < 3) {
     throw new Error('Common audit trace navigation i18n key is missing languages');

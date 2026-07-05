@@ -720,6 +720,7 @@ async function assertMobileModuleLayoutSweep() {
       '.server-workspace-row',
     ]);
     await assertSingleColumnStack(mobilePage, '.server-workspace-row', 'mobile server inventory row');
+    await assertMobileServerOpsLayout(mobilePage);
     await mobilePage.locator('.module-section .section-header .tool-button.primary').first().click();
     await mobilePage.locator('.connect-form.open').waitFor({ timeout: 5000 });
     await assertElementHorizontallyWithinViewport(mobilePage, '.connect-form.open', 'mobile server connect form');
@@ -1116,6 +1117,39 @@ async function assertMobileAuditRowLayout(targetPage) {
   }
   if (metrics.metaRight > metrics.viewportWidth + 1 || metrics.rowWidth > metrics.viewportWidth + 1) {
     throw new Error(`Mobile audit row overflowed viewport: ${JSON.stringify(metrics)}`);
+  }
+}
+
+async function assertMobileServerOpsLayout(targetPage) {
+  await targetPage.locator('.server-workspace-row').first().waitFor({ timeout: 10000 });
+  const metrics = await targetPage.locator('.server-workspace-row').first().evaluate((row) => {
+    const ops = row.querySelector('.server-mobile-ops');
+    const statusStrip = row.querySelector('.server-mobile-status-strip');
+    const actionStrip = row.querySelector('.server-mobile-action-strip');
+    const primary = row.querySelector('.server-mobile-primary-action');
+    const iconActions = row.querySelector('.server-row-actions');
+    return {
+      opsDisplay: ops ? getComputedStyle(ops).display : '',
+      statusColumns: statusStrip ? getComputedStyle(statusStrip).gridTemplateColumns : '',
+      actionColumns: actionStrip ? getComputedStyle(actionStrip).gridTemplateColumns : '',
+      primaryText: primary?.textContent?.trim() ?? '',
+      iconActionsDisplay: iconActions ? getComputedStyle(iconActions).display : '',
+      opsRight: ops ? ops.getBoundingClientRect().right : 0,
+      rowRight: row.getBoundingClientRect().right,
+      viewportWidth: window.innerWidth,
+    };
+  });
+  if (metrics.opsDisplay !== 'grid') {
+    throw new Error(`Mobile server operation strip should be visible as grid: ${JSON.stringify(metrics)}`);
+  }
+  if (metrics.statusColumns.split(' ').filter(Boolean).length !== 3 || metrics.actionColumns.split(' ').filter(Boolean).length !== 3) {
+    throw new Error(`Mobile server operation strip should expose three status chips and three actions: ${JSON.stringify(metrics)}`);
+  }
+  if (!/ssh/i.test(metrics.primaryText) || metrics.iconActionsDisplay !== 'none') {
+    throw new Error(`Mobile server primary SSH action should replace crowded icon actions: ${JSON.stringify(metrics)}`);
+  }
+  if (metrics.opsRight > metrics.viewportWidth + 1 || metrics.rowRight > metrics.viewportWidth + 1) {
+    throw new Error(`Mobile server operation strip overflowed viewport: ${JSON.stringify(metrics)}`);
   }
 }
 
