@@ -4199,6 +4199,18 @@ async function assertReleaseDeployTargetPlanGuards() {
   ) {
     throw new Error('Release deploy API fallback must upload committed git blob bytes, not CRLF-normalized working-tree files');
   }
+  const apiCommitImportFragments = [
+    'function Import-GitHubApiCommitObject',
+    'function New-GitCommitObjectPayload',
+    'git hash-object -t commit -w $commitPath',
+    'Import-GitHubApiCommitObject -CommitSha $newCommit.sha',
+    'Unable to fetch published GitHub API commit; importing the API-created commit object locally.',
+    'Test-GitHubApiCommitObjectImport',
+  ];
+  const missingApiCommitImport = apiCommitImportFragments.filter((fragment) => !releaseDeploySource.includes(fragment));
+  if (missingApiCommitImport.length) {
+    throw new Error(`Release deploy API commit-object import fallback is incomplete: ${missingApiCommitImport.join(', ')}`);
+  }
 
   const plan = {
     targets: [
@@ -4286,6 +4298,7 @@ async function assertReleaseDeployTargetPlanGuards() {
   if (
     selfTest.status !== 0
     || !selfTest.stdout.includes('ok release deploy GitHub API JSON fallback uses BOM-free temp-file input')
+    || !selfTest.stdout.includes('ok release deploy imports GitHub API commit objects when fetch is unavailable')
     || !selfTest.stdout.includes('ok release deploy continues updating healthy targets and reports partial failures')
   ) {
     throw new Error(`Release deploy GitHub API fallback self-test failed: ${selfTest.stderr || selfTest.stdout}`);

@@ -402,6 +402,134 @@ function Get-GitBlobContentBase64 {
   }
 }
 
+function ConvertTo-GitCommitIdentity {
+  param([object]$Identity)
+
+  if ($null -eq $Identity) {
+    throw "Git commit identity is missing."
+  }
+
+  $name = [string]$Identity.name
+  $email = [string]$Identity.email
+  $dateText = [string]$Identity.date
+  if ([string]::IsNullOrWhiteSpace($name) -or $name.Contains("`n") -or $name.Contains("<") -or $name.Contains(">")) {
+    throw "Invalid git commit identity name."
+  }
+  if ([string]::IsNullOrWhiteSpace($email) -or $email.Contains("`n") -or $email.Contains("<") -or $email.Contains(">")) {
+    throw "Invalid git commit identity email."
+  }
+
+  $date = [DateTimeOffset]::Parse($dateText, [Globalization.CultureInfo]::InvariantCulture)
+  $totalOffsetMinutes = [int][Math]::Abs($date.Offset.TotalMinutes)
+  $sign = if ($date.Offset.TotalMinutes -lt 0) { "-" } else { "+" }
+  $offsetHours = [Math]::Floor($totalOffsetMinutes / 60)
+  $offsetMinutes = $totalOffsetMinutes % 60
+  $offsetText = "{0}{1:00}{2:00}" -f $sign, $offsetHours, $offsetMinutes
+
+  return "$name <$email> $($date.ToUnixTimeSeconds()) $offsetText"
+}
+
+function New-GitCommitObjectPayload {
+  param(
+    [string]$TreeSha,
+    [string[]]$ParentShas,
+    [object]$Author,
+    [object]$Committer,
+    [string]$Message
+  )
+
+  if ([string]::IsNullOrWhiteSpace($TreeSha) -or $TreeSha -notmatch '^[0-9a-f]{40}$') {
+    throw "Invalid git tree sha: $TreeSha"
+  }
+
+  $lines = @("tree $TreeSha")
+  foreach ($parent in $ParentShas) {
+    if ([string]::IsNullOrWhiteSpace($parent) -or $parent -notmatch '^[0-9a-f]{40}$') {
+      throw "Invalid git parent sha: $parent"
+    }
+    $lines += "parent $parent"
+  }
+  $lines += "author $(ConvertTo-GitCommitIdentity $Author)"
+  $lines += "committer $(ConvertTo-GitCommitIdentity $Committer)"
+
+  return (($lines -join "`n") + "`n`n" + $Message)
+}
+
+function Import-GitHubApiCommitObject {
+  param(
+    [string]$CommitSha,
+    [string]$TreeSha,
+    [string[]]$ParentShas,
+    [object]$Author,
+    [object]$Committer,
+    [string]$Message
+  )
+
+  $payload = New-GitCommitObjectPayload -TreeSha $TreeSha -ParentShas $ParentShas -Author $Author -Committer $Committer -Message $Message
+  $commitPath = Join-Path ([IO.Path]::GetTempPath()) ("colipas-gh-commit-" + [Guid]::NewGuid().ToString("N") + ".txt")
+  try {
+    [IO.File]::WriteAllText($commitPath, $payload, [Text.UTF8Encoding]::new($false))
+    $writtenSha = (git hash-object -t commit -w $commitPath).Trim()
+    if ($LASTEXITCODE -ne 0 -or $writtenSha -ne $CommitSha) {
+      throw "Imported GitHub API commit object $writtenSha did not match expected $CommitSha."
+    }
+
+    return $writtenSha
+  } finally {
+    Remove-Item -LiteralPath $commitPath -Force -ErrorAction SilentlyContinue
+  }
+}
+
+function Get-GitObjectSha1 {
+  param(
+    [string]$Type,
+    [byte[]]$Payload
+  )
+
+  $header = [Text.UTF8Encoding]::new($false).GetBytes("$Type $($Payload.Length)`0")
+  $combined = [byte[]]::new($header.Length + $Payload.Length)
+  [Array]::Copy($header, 0, $combined, 0, $header.Length)
+  [Array]::Copy($Payload, 0, $combined, $header.Length, $Payload.Length)
+  $sha1 = [Security.Cryptography.SHA1]::Create()
+  try {
+    $hash = $sha1.ComputeHash($combined)
+    return (($hash | ForEach-Object { $_.ToString("x2") }) -join "")
+  } finally {
+    $sha1.Dispose()
+  }
+}
+
+function Test-GitHubApiCommitObjectImport {
+  $tree = Get-GitCommitTreeSha "HEAD"
+  $parent = (git rev-parse "HEAD").Trim()
+  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($parent)) {
+    throw "Unable to read HEAD for GitHub API commit object import self-test."
+  }
+
+  $author = [pscustomobject]@{
+    name = "CoLiPas Builder"
+    email = "colipas@example.local"
+    date = "2026-07-05T23:45:46+08:00"
+  }
+  $committer = [pscustomobject]@{
+    name = "CoLiPas Builder"
+    email = "colipas@example.local"
+    date = "2026-07-05T23:45:46+08:00"
+  }
+  $message = "release-selftest-no-trailing-newline"
+  $payload = New-GitCommitObjectPayload -TreeSha $tree -ParentShas @($parent) -Author $author -Committer $committer -Message $message
+  $payloadBytes = [Text.UTF8Encoding]::new($false).GetBytes($payload)
+  $expectedSha = Get-GitObjectSha1 -Type "commit" -Payload $payloadBytes
+  $writtenSha = Import-GitHubApiCommitObject -CommitSha $expectedSha -TreeSha $tree -ParentShas @($parent) -Author $author -Committer $committer -Message $message
+
+  git cat-file -e "$writtenSha^{commit}"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Imported GitHub API commit object is not readable by git."
+  }
+
+  Write-Host "ok release deploy imports GitHub API commit objects when fetch is unavailable"
+}
+
 function Test-GitHubApiJsonFallback {
   $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("colipas-release-selftest-" + [Guid]::NewGuid().ToString("N"))
   New-Item -ItemType Directory -Path $tempRoot | Out-Null
@@ -775,14 +903,18 @@ function Push-GitHub {
   Write-Warning "GitHub API produced commit $($newCommit.sha) for local HEAD $head. The tree matches, so aligning the local branch to the published ref."
   git fetch origin $Branch
   if ($LASTEXITCODE -ne 0) {
-    Write-Warning "Unable to fetch published GitHub API commit; continuing because GitHub ref already points to a matching tree."
+    Write-Warning "Unable to fetch published GitHub API commit; importing the API-created commit object locally."
     $global:LASTEXITCODE = 0
-    return
-  }
-
-  $publishedTree = Get-GitCommitTreeSha "origin/$Branch"
-  if ($publishedTree -ne $headTree) {
-    throw "Published GitHub tree $publishedTree does not match local HEAD tree $headTree."
+    $null = Import-GitHubApiCommitObject -CommitSha $newCommit.sha -TreeSha $newTree.sha -ParentShas @($remoteSha) -Author $author -Committer $committer -Message $message
+    git update-ref "refs/remotes/origin/$Branch" $newCommit.sha
+    if ($LASTEXITCODE -ne 0) {
+      throw "Unable to align origin/$Branch to imported GitHub API commit."
+    }
+  } else {
+    $publishedTree = Get-GitCommitTreeSha "origin/$Branch"
+    if ($publishedTree -ne $headTree) {
+      throw "Published GitHub tree $publishedTree does not match local HEAD tree $headTree."
+    }
   }
 
   git update-ref "refs/heads/$Branch" "origin/$Branch"
@@ -800,6 +932,7 @@ if ($DeployTargets.Count -eq 0) {
 
 if ($SelfTest) {
   Test-GitHubApiJsonFallback
+  Test-GitHubApiCommitObjectImport
   Test-TargetUpdateFailureIsolation
   exit 0
 }
