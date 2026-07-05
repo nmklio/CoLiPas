@@ -4,7 +4,7 @@ import type { RuntimeConfig } from '../config.js';
 import { getDatabasePath } from './database.js';
 import { buildReleaseReadiness } from './releaseReadinessService.js';
 import { listAuditEntries } from './auditService.js';
-import { getServerShellEvidence, getServerShellStatus, listCloudAccounts, summarizeServerInventory } from './inventoryService.js';
+import { getServerShellEvidence, getServerShellSelfTest, getServerShellStatus, listCloudAccounts, summarizeServerInventory } from './inventoryService.js';
 import { getAiProviderStatus } from './aiSettingsService.js';
 import { getSshShellSocketDiagnostics } from '../sshShellSocket.js';
 
@@ -87,6 +87,7 @@ export function buildDiagnosticExport(config: RuntimeConfig): DiagnosticExportRe
       oldestConnectedAt: shellStatus.oldestConnectedAt,
       newestConnectedAt: shellStatus.newestConnectedAt,
       websocket: shellSocketDiagnostics,
+      lastSelfTest: getServerShellSelfTest(),
       recentEvidence: shellEvidence.map((item) => ({
         serverName: item.serverName,
         mode: item.mode,

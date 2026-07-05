@@ -31,6 +31,7 @@ import {
   listOperationEvents,
   listServers,
   openServerShell,
+  recordServerShellSelfTest,
   refreshServerMetrics,
   resizeServerShell,
   runServerCommand,
@@ -596,6 +597,21 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
         sessionId: request.params.sessionId,
         cols: request.body?.cols,
         rows: request.body?.rows,
+      }));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post('/api/servers/shells/:sessionId/self-test', (request, response, next) => {
+    try {
+      response.json(recordServerShellSelfTest({
+        sessionId: request.params.sessionId,
+        status: request.body?.status,
+        lines: request.body?.lines,
+        durationMs: request.body?.durationMs,
+        linesPerSecond: request.body?.linesPerSecond,
+        networkLabel: request.body?.networkLabel,
       }));
     } catch (error) {
       next(error);

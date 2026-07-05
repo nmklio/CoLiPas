@@ -342,6 +342,17 @@ export interface DiagnosticExportResponse {
       errors: number;
       lastActivityAt: string | null;
     };
+    lastSelfTest: {
+      serverName: string;
+      mode: SshVerifyMode;
+      status: 'complete' | 'timeout' | 'failed';
+      lines: number;
+      durationMs: number;
+      linesPerSecond: number;
+      networkLabel: string;
+      recordedAt: string;
+      active: boolean;
+    } | null;
     recentEvidence: Array<{
       serverName: string;
       mode: SshVerifyMode;

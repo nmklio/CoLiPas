@@ -134,6 +134,22 @@ export interface SshShellSessionStats {
   newestConnectedAt: string | null;
 }
 
+export interface SshShellSelfTestRecord {
+  serverName: string;
+  mode: SshVerifyMode;
+  status: 'complete' | 'timeout' | 'failed';
+  lines: number;
+  durationMs: number;
+  linesPerSecond: number;
+  networkLabel: string;
+  recordedAt: string;
+  active: boolean;
+}
+
+interface InternalSshShellSelfTestRecord extends SshShellSelfTestRecord {
+  sessionId: string;
+}
+
 export interface SshShellStreamEvent {
   type: 'start' | 'stdout' | 'stderr' | 'close' | 'error';
   content?: string;
@@ -162,6 +178,7 @@ interface ActiveSshShellSession {
 }
 
 const activeSshShellSessions = new Map<string, ActiveSshShellSession>();
+let lastSshShellSelfTestRecord: InternalSshShellSelfTestRecord | null = null;
 
 interface SshShellEvidenceRecord {
   serverId: string;
@@ -392,6 +409,39 @@ export function getSshShellSessionStats(): SshShellSessionStats {
   }
 
   return stats;
+}
+
+export function recordSshShellSelfTestResult(
+  sessionId: string,
+  input: Pick<SshShellSelfTestRecord, 'status' | 'lines' | 'durationMs' | 'linesPerSecond' | 'networkLabel'>,
+): SshShellSelfTestRecord {
+  const session = getActiveShellSession(sessionId);
+  const record: InternalSshShellSelfTestRecord = {
+    sessionId,
+    serverName: session.serverName,
+    mode: session.mode,
+    status: input.status,
+    lines: clampNumber(input.lines, 0, 10000),
+    durationMs: clampNumber(input.durationMs, 0, 60_000),
+    linesPerSecond: clampNumber(input.linesPerSecond, 0, 1_000_000),
+    networkLabel: redactSensitiveText(input.networkLabel).slice(0, 100),
+    recordedAt: new Date().toISOString(),
+    active: !session.closed,
+  };
+  lastSshShellSelfTestRecord = record;
+  return stripSelfTestSessionId(record);
+}
+
+export function getLastSshShellSelfTestResult(): SshShellSelfTestRecord | null {
+  if (!lastSshShellSelfTestRecord) {
+    return null;
+  }
+
+  const activeSession = activeSshShellSessions.get(lastSshShellSelfTestRecord.sessionId);
+  return stripSelfTestSessionId({
+    ...lastSshShellSelfTestRecord,
+    active: Boolean(activeSession && !activeSession.closed),
+  });
 }
 
 export function getRecentSshShellEvidence(serverIds?: string[]): SshShellEvidenceSummary[] {
@@ -1033,6 +1083,27 @@ function finalizeSshShellSession(session: ActiveSshShellSession) {
   clearTimeout(session.idleTimer);
   session.listeners.clear();
   activeSshShellSessions.delete(session.id);
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) {
+    return min;
+  }
+  return Math.min(max, Math.max(min, value));
+}
+
+function stripSelfTestSessionId(record: InternalSshShellSelfTestRecord): SshShellSelfTestRecord {
+  return {
+    serverName: record.serverName,
+    mode: record.mode,
+    status: record.status,
+    lines: record.lines,
+    durationMs: record.durationMs,
+    linesPerSecond: record.linesPerSecond,
+    networkLabel: record.networkLabel,
+    recordedAt: record.recordedAt,
+    active: record.active,
+  };
 }
 
 function getActiveShellSession(sessionId: string) {

@@ -23,10 +23,12 @@ import {
   StoredSshCredential,
   buildStoredSshCredential,
   closeSshShellSession,
+  getLastSshShellSelfTestResult,
   getRecentSshShellEvidence,
   collectSshMetrics,
   getSshShellSessionStats,
   openStoredSshShell,
+  recordSshShellSelfTestResult,
   resizeSshShellSession,
   runStoredSshCommand,
   type SshCommandStreamEvent,
@@ -809,6 +811,25 @@ export function resizeServerShell(input: unknown) {
   return { ok: true };
 }
 
+export function recordServerShellSelfTest(input: unknown) {
+  const parsed = z.object({
+    sessionId: z.string().min(1),
+    status: z.enum(['complete', 'timeout', 'failed']),
+    lines: z.coerce.number().int().min(0).max(10000),
+    durationMs: z.coerce.number().min(0).max(60_000),
+    linesPerSecond: z.coerce.number().min(0).max(1_000_000),
+    networkLabel: z.string().max(100).optional().default(''),
+  }).parse(input);
+
+  return recordSshShellSelfTestResult(parsed.sessionId, {
+    status: parsed.status,
+    lines: parsed.lines,
+    durationMs: parsed.durationMs,
+    linesPerSecond: parsed.linesPerSecond,
+    networkLabel: parsed.networkLabel,
+  });
+}
+
 export function closeServerShell(input: unknown) {
   const parsed = z.object({
     sessionId: z.string().min(1),
@@ -823,6 +844,10 @@ export function getServerShellStatus() {
 
 export function getServerShellEvidence(serverIds?: string[]) {
   return getRecentSshShellEvidence(serverIds);
+}
+
+export function getServerShellSelfTest() {
+  return getLastSshShellSelfTestResult();
 }
 
 export function setServerRuntimeStatus(serverId: string, status: Extract<ServerStatus, 'running' | 'stopped' | 'warning'>) {

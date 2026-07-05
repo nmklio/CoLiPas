@@ -13,6 +13,7 @@ import {
   fetchServerShellStatus,
   inspectServerIdentity,
   openServerShell,
+  recordServerShellSelfTest,
   resizeServerShell,
   streamServerShell,
   writeServerShell,
@@ -1436,7 +1437,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     }
   }
 
-  function finishTerminalSelfTest(status: TerminalSelfTestState['status'], terminal?: XTerm, message?: string) {
+  function finishTerminalSelfTest(status: Exclude<TerminalSelfTestState['status'], 'running'>, terminal?: XTerm, message?: string) {
     const tracker = terminalSelfTestRef.current;
     if (!tracker) {
       if (status === 'failed' && message) {
@@ -1465,6 +1466,13 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       message,
     };
     setTerminalSelfTest(nextState);
+    void recordServerShellSelfTest(tracker.sessionId, {
+      status,
+      lines: nextState.lines,
+      durationMs: nextState.durationMs,
+      linesPerSecond: nextState.linesPerSecond,
+      networkLabel: nextState.networkLabel,
+    }).catch(() => undefined);
 
     const summary = formatTerminalSelfTestLabel(nextState, language);
     if (terminal) {

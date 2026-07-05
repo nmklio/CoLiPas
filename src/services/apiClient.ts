@@ -200,6 +200,14 @@ export interface ServerShellSocketMetrics {
   rttMs: number | null;
 }
 
+export interface ServerShellSelfTestPayload {
+  status: 'complete' | 'timeout' | 'failed';
+  lines: number;
+  durationMs: number;
+  linesPerSecond: number;
+  networkLabel: string;
+}
+
 export interface ServerActionResponse extends ServerCommandResponse {
   id: string;
   action: 'powerOn' | 'shutdown' | 'reboot';
@@ -864,6 +872,29 @@ export async function resizeServerShell(
   if (!response.ok) {
     throw new Error(await readApiError(response));
   }
+}
+
+export async function recordServerShellSelfTest(
+  sessionId: string,
+  payload: ServerShellSelfTestPayload,
+  fetcher: typeof fetch = fetch,
+) {
+  const response = await fetcher(`/api/servers/shells/${encodeURIComponent(sessionId)}/self-test`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as ServerShellSelfTestPayload & {
+    serverName: string;
+    mode: SshVerifyMode;
+    recordedAt: string;
+    active: boolean;
+  };
 }
 
 export async function closeServerShell(sessionId: string, fetcher: typeof fetch = fetch) {

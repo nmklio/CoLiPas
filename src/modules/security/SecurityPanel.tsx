@@ -1598,12 +1598,18 @@ function buildSshPerformanceSummary(
   const outputEvents = websocket?.outputEvents ?? 0;
   const outputFlushes = websocket?.outputFlushes ?? 0;
   const errors = websocket?.errors ?? 0;
+  const lastSelfTest = diagnostic?.sshTerminal?.lastSelfTest ?? null;
   const inputRatio = calculateBatchRatio(inputEvents, inputFlushes);
   const outputRatio = calculateBatchRatio(outputEvents, outputFlushes);
-  const hasEvidence = Boolean(websocket) && (inputEvents > 0 || outputEvents > 0 || activeSessions > 0);
-  const tone: SshPerformanceSummary['tone'] = errors > 0
+  const hasEvidence = Boolean(websocket) && (inputEvents > 0 || outputEvents > 0 || activeSessions > 0 || Boolean(lastSelfTest));
+  const lastSelfTestTone: SshPerformanceMetric['tone'] = lastSelfTest?.status === 'failed'
     ? 'fail'
-    : hasEvidence && inputEvents >= 8 && inputRatio < 1.2
+    : lastSelfTest?.status === 'timeout'
+      ? 'warn'
+      : 'ok';
+  const tone: SshPerformanceSummary['tone'] = errors > 0 || lastSelfTestTone === 'fail'
+    ? 'fail'
+    : lastSelfTestTone === 'warn' || (hasEvidence && inputEvents >= 8 && inputRatio < 1.2)
       ? 'warn'
       : 'ok';
   const metrics: SshPerformanceMetric[] = [
@@ -1624,6 +1630,14 @@ function buildSshPerformanceSummary(
       value: outputFlushes > 0 ? `${formatBatchRatio(outputRatio)}x` : '--',
       detail: copy.outputBatchDetail(outputEvents, outputFlushes),
       tone: outputEvents >= 8 && outputRatio < 1.2 ? 'warn' : 'ok',
+    },
+    {
+      label: copy.lastSelfTest,
+      value: lastSelfTest ? `${lastSelfTest.lines}/${Math.round(lastSelfTest.durationMs)}ms` : '--',
+      detail: lastSelfTest
+        ? copy.lastSelfTestDetail(lastSelfTest.status, lastSelfTest.lines, lastSelfTest.durationMs, lastSelfTest.linesPerSecond, lastSelfTest.recordedAt)
+        : copy.lastSelfTestNone,
+      tone: lastSelfTest ? lastSelfTestTone : 'warn',
     },
     {
       label: copy.websocketErrors,
@@ -1662,6 +1676,14 @@ function formatBatchRatio(value: number) {
     return '0';
   }
   return value >= 10 ? Math.round(value).toString() : value.toFixed(1);
+}
+
+function formatSelfTestRate(value: number, language: string) {
+  const unit = language === 'en' ? 'lines/s' : '行/秒';
+  if (!Number.isFinite(value) || value <= 0) {
+    return `0 ${unit}`;
+  }
+  return value >= 100 ? `${Math.round(value)} ${unit}` : `${value.toFixed(1)} ${unit}`;
 }
 
 function parseDeploymentEvidence(value: string): ReleaseDeploymentEvidence | null {
@@ -1858,6 +1880,7 @@ interface SshPerformanceCopy {
   activeSessions: string;
   inputBatch: string;
   outputBatch: string;
+  lastSelfTest: string;
   websocketErrors: string;
   copySummary: string;
   copyCopied: string;
@@ -1873,6 +1896,8 @@ interface SshPerformanceCopy {
   activeSessionsDetail: (count: number) => string;
   inputBatchDetail: (events: number, flushes: number) => string;
   outputBatchDetail: (events: number, flushes: number) => string;
+  lastSelfTestDetail: (status: string, lines: number, durationMs: number, rate: number, recordedAt: string) => string;
+  lastSelfTestNone: string;
   websocketErrorsDetail: (count: number) => string;
 }
 
@@ -1883,6 +1908,7 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     activeSessions: '活跃会话',
     inputBatch: '输入合并',
     outputBatch: '输出合并',
+    lastSelfTest: '\u6700\u8fd1\u6d4b\u901f',
     websocketErrors: '连接错误',
     copySummary: '\u590d\u5236\u6458\u8981',
     copyCopied: 'SSH \u6027\u80fd\u6458\u8981\u5df2\u590d\u5236',
@@ -1898,6 +1924,8 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     activeSessionsDetail: (count) => `${count} 个实时 shell 保持在服务端`,
     inputBatchDetail: (events, flushes) => `${events} 次输入事件 / ${flushes} 次后端写入`,
     outputBatchDetail: (events, flushes) => `${events} 次输出事件 / ${flushes} 次前端推送`,
+    lastSelfTestDetail: (status, lines, durationMs, rate, recordedAt) => `${status} / ${lines} \u884c / ${Math.round(durationMs)}ms / ${formatSelfTestRate(rate, 'zh')} / ${recordedAt}`,
+    lastSelfTestNone: '\u6682\u65e0\u5b89\u5168\u6d4b\u901f\u7ed3\u679c\uff0c\u53ef\u5728 SSH \u7ec8\u7aef\u70b9\u51fb CPU \u56fe\u6807\u8fd0\u884c\u3002',
     websocketErrorsDetail: (count) => count > 0 ? `${count} 次连接/解析错误` : '未记录连接错误',
   },
   en: {
@@ -1906,6 +1934,7 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     activeSessions: 'Active sessions',
     inputBatch: 'Input batching',
     outputBatch: 'Output batching',
+    lastSelfTest: 'Last safe test',
     websocketErrors: 'Socket errors',
     copySummary: 'Copy summary',
     copyCopied: 'SSH performance summary copied',
@@ -1921,6 +1950,8 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     activeSessionsDetail: (count) => `${count} live shell session(s) retained server-side`,
     inputBatchDetail: (events, flushes) => `${events} input event(s) / ${flushes} backend write(s)`,
     outputBatchDetail: (events, flushes) => `${events} output event(s) / ${flushes} frontend flush(es)`,
+    lastSelfTestDetail: (status, lines, durationMs, rate, recordedAt) => `${status} / ${lines} lines / ${Math.round(durationMs)}ms / ${formatSelfTestRate(rate, 'en')} / ${recordedAt}`,
+    lastSelfTestNone: 'No safe speed test result yet. Run it from the SSH terminal CPU button.',
     websocketErrorsDetail: (count) => count > 0 ? `${count} connection or parse error(s)` : 'No socket errors recorded',
   },
   ja: {
@@ -1929,6 +1960,7 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     activeSessions: 'アクティブセッション',
     inputBatch: '入力バッチ',
     outputBatch: '出力バッチ',
+    lastSelfTest: '\u6700\u8fd1\u306e\u901f\u5ea6\u30c6\u30b9\u30c8',
     websocketErrors: '接続エラー',
     copySummary: '\u30b5\u30de\u30ea\u30fc\u3092\u30b3\u30d4\u30fc',
     copyCopied: 'SSH \u30d1\u30d5\u30a9\u30fc\u30de\u30f3\u30b9\u30b5\u30de\u30ea\u30fc\u3092\u30b3\u30d4\u30fc\u3057\u307e\u3057\u305f',
@@ -1944,6 +1976,8 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     activeSessionsDetail: (count) => `${count} 件のライブ shell セッション`,
     inputBatchDetail: (events, flushes) => `${events} 入力イベント / ${flushes} バックエンド書き込み`,
     outputBatchDetail: (events, flushes) => `${events} 出力イベント / ${flushes} フロントエンド送信`,
+    lastSelfTestDetail: (status, lines, durationMs, rate, recordedAt) => `${status} / ${lines} \u884c / ${Math.round(durationMs)}ms / ${formatSelfTestRate(rate, 'ja')} / ${recordedAt}`,
+    lastSelfTestNone: '\u307e\u3060\u901f\u5ea6\u30c6\u30b9\u30c8\u7d50\u679c\u304c\u3042\u308a\u307e\u305b\u3093\u3002SSH \u7aef\u672b\u306e CPU \u30dc\u30bf\u30f3\u304b\u3089\u5b9f\u884c\u3067\u304d\u307e\u3059\u3002',
     websocketErrorsDetail: (count) => count > 0 ? `${count} 件の接続/解析エラー` : '接続エラーは記録されていません',
   },
 };

@@ -1967,6 +1967,30 @@ const shellStreamText = await readSseUntil(shellStreamResponse, (text) => text.i
 if (!shellStreamText.includes('"type":"start"') || !shellStreamText.includes('"type":"stdout"')) {
   throw new Error('/api/servers/shells/:sessionId/stream returned unexpected SSE payload');
 }
+const shellSelfTestResponse = await fetch(`${baseUrl}/api/servers/shells/${shellBody.sessionId}/self-test`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    status: 'complete',
+    lines: 40,
+    durationMs: 48,
+    linesPerSecond: 833.3,
+    networkLabel: 'RTT 12ms / 64 KB/s',
+  }),
+});
+if (!shellSelfTestResponse.ok) {
+  throw new Error(`/api/servers/shells/:sessionId/self-test returned HTTP ${shellSelfTestResponse.status}`);
+}
+const shellSelfTestBody = await shellSelfTestResponse.json();
+if (
+  shellSelfTestBody.status !== 'complete'
+  || shellSelfTestBody.lines !== 40
+  || shellSelfTestBody.durationMs !== 48
+  || shellSelfTestBody.networkLabel !== 'RTT 12ms / 64 KB/s'
+  || 'sessionId' in shellSelfTestBody
+) {
+  throw new Error('/api/servers/shells/:sessionId/self-test returned unsafe or incomplete payload');
+}
 const shellAiEvidenceResponse = await fetch(`${baseUrl}/api/ai/stream`, {
   method: 'POST',
   headers: { ...authHeaders, 'Content-Type': 'application/json' },
@@ -2775,6 +2799,11 @@ if (
   || !Number.isInteger(diagnosticExportBody.sshTerminal?.websocket?.inputFlushes)
   || !Number.isInteger(diagnosticExportBody.sshTerminal?.websocket?.outputFlushes)
   || !Number.isInteger(diagnosticExportBody.sshTerminal?.websocket?.outputBytes)
+  || diagnosticExportBody.sshTerminal?.lastSelfTest?.status !== 'complete'
+  || diagnosticExportBody.sshTerminal?.lastSelfTest?.lines !== 40
+  || diagnosticExportBody.sshTerminal?.lastSelfTest?.durationMs !== 48
+  || typeof diagnosticExportBody.sshTerminal?.lastSelfTest?.recordedAt !== 'string'
+  || 'sessionId' in (diagnosticExportBody.sshTerminal?.lastSelfTest ?? {})
 ) {
   throw new Error('/api/audit/diagnostics/export returned incomplete diagnostic bundle');
 }
@@ -4903,6 +4932,7 @@ function assertSshTerminalRealtimeGuards() {
     'function finishTerminalSelfTest(',
     'formatTerminalSelfTestLabel(nextState, language)',
     "terminal.writeln(`\\r\\n${t('servers.sshSelfTestTerminalLine'",
+    'recordServerShellSelfTest(tracker.sessionId',
     'sendTerminalInput(sessionId, `${terminalSelfTestCommand}\\r`)',
     "t('servers.runTerminalSelfTest')",
     "t('servers.sshSelfTestStarted')",
@@ -4989,6 +5019,9 @@ function assertSshTerminalRealtimeGuards() {
     'if (session.history.length > sshShellHistoryLimit)',
     'if (record.events.length > sshShellEvidenceLimit)',
     'export function getSshShellSessionStats',
+    'export function recordSshShellSelfTestResult',
+    'export function getLastSshShellSelfTestResult',
+    'lastSshShellSelfTestRecord',
     'oldestConnectedAt',
     'newestConnectedAt',
   ];
@@ -5002,6 +5035,7 @@ function assertSshTerminalRealtimeGuards() {
     "app.get('/api/servers/shells/status'",
     "app.get('/api/servers/shells/:sessionId/stream'",
     "app.post('/api/servers/shells/:sessionId/input'",
+    "app.post('/api/servers/shells/:sessionId/self-test'",
     "app.delete('/api/servers/shells/:sessionId'",
     'flushSse(response)',
     'X-Accel-Buffering',
@@ -5017,6 +5051,7 @@ function assertSshTerminalRealtimeGuards() {
     'export async function resizeServerShell',
     'export async function closeServerShell',
     'export async function fetchServerShellStatus',
+    'export async function recordServerShellSelfTest',
     'const shellSocketInputFlushMs = 2',
     'const shellSocketInputChunkSize = 8000',
     'input.includes(\'\\u0003\')',
@@ -5314,6 +5349,10 @@ function assertSecurityAuditRelationsAreSpecific() {
     'summaryNextAction',
     'calculateBatchRatio(inputEvents, inputFlushes)',
     'formatBatchRatio(inputRatio)',
+    'diagnostic?.sshTerminal?.lastSelfTest',
+    'copy.lastSelfTest',
+    'copy.lastSelfTestDetail(',
+    'formatSelfTestRate(rate',
     'data-ssh-performance-card="true"',
     'security-ssh-performance-actions',
     'security-ssh-performance-grid',
