@@ -2840,6 +2840,8 @@ if (
   || diagnosticExportBody.sshTerminal?.selfTestTrend?.latestDurationMs !== 48
   || diagnosticExportBody.sshTerminal?.selfTestTrend?.previousDurationMs !== 80
   || diagnosticExportBody.sshTerminal?.selfTestTrend?.latestBottleneck !== 'healthy'
+  || !Array.isArray(diagnosticExportBody.sshTerminal?.sessionReplays)
+  || !diagnosticExportBody.sshTerminal.sessionReplays.some((item) => item.inputEvents > 0 && item.inputBytes > 0 && item.inputSubmits > 0 && item.outputEvents > 0 && item.outputBytes > 0 && item.outputLines > 0 && Array.isArray(item.timeline) && item.timeline.some((event) => event.type === 'input' && event.bytes > 0) && item.timeline.some((event) => event.type === 'stdout' && event.lines > 0))
   || typeof diagnosticExportBody.sshTerminal?.lastSelfTest?.recordedAt !== 'string'
   || 'sessionId' in (diagnosticExportBody.sshTerminal?.lastSelfTest ?? {})
 ) {
@@ -2853,6 +2855,7 @@ if (
   || diagnosticExportBody.sshTerminal.websocket.outputFlushes < 1
   || !Array.isArray(diagnosticExportBody.sshTerminal.recentEvidence)
   || !diagnosticExportBody.sshTerminal.recentEvidence.some((item) => item.transcriptLines > 0 && item.transcriptChars > 0)
+  || !diagnosticExportBody.sshTerminal.sessionReplays.every((item) => !('sessionId' in item) && !('serverId' in item) && item.timeline.every((event) => !('content' in event) && !('message' in event)))
 ) {
   throw new Error('/api/audit/diagnostics/export did not include SSH terminal observability evidence');
 }
@@ -5048,6 +5051,13 @@ function assertSshTerminalRealtimeGuards() {
     'client.shell({',
     "term: 'xterm-256color'",
     'activeSshShellSessions',
+    'export interface SshShellSessionReplaySummary',
+    'getRecentSshShellSessionReplays',
+    'recordSshShellInputReplay(session, input)',
+    'recordSshShellEventReplay(session, safeEvent)',
+    'stripReplaySessionIdentity',
+    'countShellInputSubmits(input)',
+    'countShellOutputLines(text)',
     'emitSshShellEvent(session, { type: \'stdout\'',
     "command === 'colipas-long-output'",
     "command === 'colipas-hang'",
@@ -5408,6 +5418,9 @@ function assertSecurityAuditRelationsAreSpecific() {
     'copy.trendDetail(',
     'formatTrendValue(',
     'copy.likelyBottleneck',
+    'diagnostic?.sshTerminal?.sessionReplays',
+    'copy.sessionReplay',
+    'copy.sessionReplayDetail(',
     'copy.bottleneckDetail(',
     'formatBottleneckValue(',
     'copy.lastSelfTestDetail(',

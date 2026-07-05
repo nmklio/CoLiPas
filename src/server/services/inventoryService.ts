@@ -25,6 +25,7 @@ import {
   closeSshShellSession,
   getLastSshShellSelfTestResult,
   getRecentSshShellEvidence,
+  getRecentSshShellSessionReplays,
   getSshShellSelfTestTrend,
   collectSshMetrics,
   getSshShellSessionStats,
@@ -853,6 +854,10 @@ export function getServerShellStatus() {
 
 export function getServerShellEvidence(serverIds?: string[]) {
   return getRecentSshShellEvidence(serverIds);
+}
+
+export function getServerShellSessionReplays(serverIds?: string[]) {
+  return getRecentSshShellSessionReplays(serverIds);
 }
 
 export function getServerShellSelfTest() {

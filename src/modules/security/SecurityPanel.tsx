@@ -1602,9 +1602,12 @@ function buildSshPerformanceSummary(
   const errors = websocket?.errors ?? 0;
   const lastSelfTest = diagnostic?.sshTerminal?.lastSelfTest ?? null;
   const selfTestTrend = diagnostic?.sshTerminal?.selfTestTrend ?? null;
+  const sessionReplays = diagnostic?.sshTerminal?.sessionReplays ?? [];
+  const latestReplay = sessionReplays[0] ?? null;
+  const activeReplayCount = sessionReplays.filter((item) => item.active).length;
   const inputRatio = calculateBatchRatio(inputEvents, inputFlushes);
   const outputRatio = calculateBatchRatio(outputEvents, outputFlushes);
-  const hasEvidence = Boolean(websocket) && (inputEvents > 0 || outputEvents > 0 || activeSessions > 0 || Boolean(lastSelfTest));
+  const hasEvidence = Boolean(websocket) && (inputEvents > 0 || outputEvents > 0 || activeSessions > 0 || Boolean(lastSelfTest) || sessionReplays.length > 0);
   const bottleneckTone: SshPerformanceMetric['tone'] = !lastSelfTest
     ? 'warn'
     : lastSelfTest.bottleneck === 'healthy'
@@ -1672,6 +1675,14 @@ function buildSshPerformanceSummary(
         ? copy.bottleneckDetail(lastSelfTest.bottleneck, lastSelfTest.rttMs, lastSelfTest.throughputBytesPerSecond)
         : copy.bottleneckNone,
       tone: bottleneckTone,
+    },
+    {
+      label: copy.sessionReplay,
+      value: sessionReplays.length > 0 ? copy.sessionReplayValue(sessionReplays.length, activeReplayCount) : '--',
+      detail: latestReplay
+        ? copy.sessionReplayDetail(latestReplay.inputSubmits, latestReplay.outputEvents, latestReplay.outputLines, latestReplay.durationMs, latestReplay.closeSignal)
+        : copy.sessionReplayNone,
+      tone: latestReplay?.errorCount ? 'warn' : sessionReplays.length > 0 ? 'ok' : 'warn',
     },
     {
       label: copy.websocketErrors,
@@ -2000,6 +2011,7 @@ interface SshPerformanceCopy {
   responseSplit: string;
   selfTestTrend: string;
   likelyBottleneck: string;
+  sessionReplay: string;
   websocketErrors: string;
   copySummary: string;
   copyCopied: string;
@@ -2025,6 +2037,9 @@ interface SshPerformanceCopy {
   bottleneckValue: (bottleneck: SshSelfTestBottleneck) => string;
   bottleneckDetail: (bottleneck: SshSelfTestBottleneck, rttMs: number | null, throughputBytesPerSecond: number) => string;
   bottleneckNone: string;
+  sessionReplayValue: (sessions: number, active: number) => string;
+  sessionReplayDetail: (inputSubmits: number, outputEvents: number, outputLines: number, durationMs: number, closeSignal: string | null) => string;
+  sessionReplayNone: string;
   websocketErrorsDetail: (count: number) => string;
 }
 
@@ -2039,6 +2054,7 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     responseSplit: '\u54cd\u5e94\u5206\u6bb5',
     selfTestTrend: '\u6d4b\u901f\u8d8b\u52bf',
     likelyBottleneck: '\u7591\u4f3c\u74f6\u9888',
+    sessionReplay: '会话回放',
     websocketErrors: '连接错误',
     copySummary: '\u590d\u5236\u6458\u8981',
     copyCopied: 'SSH \u6027\u80fd\u6458\u8981\u5df2\u590d\u5236',
@@ -2064,6 +2080,9 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     bottleneckValue: (bottleneck) => formatBottleneckValue(bottleneck, 'zh'),
     bottleneckDetail: (bottleneck, rttMs, throughputBytesPerSecond) => formatBottleneckDetail(bottleneck, rttMs, throughputBytesPerSecond, 'zh'),
     bottleneckNone: '\u5b8c\u6210 SSH \u5b89\u5168\u6d4b\u901f\u540e\u4f1a\u57fa\u4e8e RTT\u3001\u541e\u5410\u548c\u884c\u901f\u7387\u7ed9\u51fa\u5224\u65ad\u3002',
+    sessionReplayValue: (sessions, active) => `${sessions} 段 / ${active} 活跃`,
+    sessionReplayDetail: (inputSubmits, outputEvents, outputLines, durationMs, closeSignal) => `${inputSubmits} 次提交 / ${outputEvents} 次输出 / ${outputLines} 行 / ${Math.round(durationMs)}ms / ${closeSignal ?? '进行中'}`,
+    sessionReplayNone: '暂无脱敏会话回放；打开 SSH 终端并执行一次命令后自动生成。',
     websocketErrorsDetail: (count) => count > 0 ? `${count} 次连接/解析错误` : '未记录连接错误',
   },
   en: {
@@ -2076,6 +2095,7 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     responseSplit: 'Response split',
     selfTestTrend: 'Safe test trend',
     likelyBottleneck: 'Likely bottleneck',
+    sessionReplay: 'Session replay',
     websocketErrors: 'Socket errors',
     copySummary: 'Copy summary',
     copyCopied: 'SSH performance summary copied',
@@ -2101,6 +2121,9 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     bottleneckValue: (bottleneck) => formatBottleneckValue(bottleneck, 'en'),
     bottleneckDetail: (bottleneck, rttMs, throughputBytesPerSecond) => formatBottleneckDetail(bottleneck, rttMs, throughputBytesPerSecond, 'en'),
     bottleneckNone: 'Run the SSH safe speed test to classify lag by RTT, throughput, and terminal line rate.',
+    sessionReplayValue: (sessions, active) => `${sessions} trace(s) / ${active} active`,
+    sessionReplayDetail: (inputSubmits, outputEvents, outputLines, durationMs, closeSignal) => `${inputSubmits} submit(s) / ${outputEvents} output event(s) / ${outputLines} line(s) / ${Math.round(durationMs)}ms / ${closeSignal ?? 'live'}`,
+    sessionReplayNone: 'No sanitized session replay yet. Open SSH and run one command to generate it.',
     websocketErrorsDetail: (count) => count > 0 ? `${count} connection or parse error(s)` : 'No socket errors recorded',
   },
   ja: {
@@ -2113,6 +2136,7 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     responseSplit: '\u5fdc\u7b54\u5206\u5272',
     selfTestTrend: '\u901f\u5ea6\u30c8\u30ec\u30f3\u30c9',
     likelyBottleneck: '\u63a8\u5b9a\u30dc\u30c8\u30eb\u30cd\u30c3\u30af',
+    sessionReplay: 'セッション再生',
     websocketErrors: '接続エラー',
     copySummary: '\u30b5\u30de\u30ea\u30fc\u3092\u30b3\u30d4\u30fc',
     copyCopied: 'SSH \u30d1\u30d5\u30a9\u30fc\u30de\u30f3\u30b9\u30b5\u30de\u30ea\u30fc\u3092\u30b3\u30d4\u30fc\u3057\u307e\u3057\u305f',
@@ -2138,6 +2162,9 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     bottleneckValue: (bottleneck) => formatBottleneckValue(bottleneck, 'ja'),
     bottleneckDetail: (bottleneck, rttMs, throughputBytesPerSecond) => formatBottleneckDetail(bottleneck, rttMs, throughputBytesPerSecond, 'ja'),
     bottleneckNone: '\u5b89\u5168\u901f\u5ea6\u30c6\u30b9\u30c8\u5f8c\u306b RTT\u3001\u541e\u5410\u3001\u884c\u901f\u5ea6\u304b\u3089\u5224\u5b9a\u3057\u307e\u3059\u3002',
+    sessionReplayValue: (sessions, active) => `${sessions} 件 / ${active} アクティブ`,
+    sessionReplayDetail: (inputSubmits, outputEvents, outputLines, durationMs, closeSignal) => `${inputSubmits} 送信 / ${outputEvents} 出力 / ${outputLines} 行 / ${Math.round(durationMs)}ms / ${closeSignal ?? '実行中'}`,
+    sessionReplayNone: '匿名化セッション再生はまだありません。SSH 端末で 1 回実行すると生成されます。',
     websocketErrorsDetail: (count) => count > 0 ? `${count} 件の接続/解析エラー` : '接続エラーは記録されていません',
   },
 };

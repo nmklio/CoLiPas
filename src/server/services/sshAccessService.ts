@@ -18,6 +18,8 @@ const sshShellEvidenceLimit = 80;
 const sshShellEvidenceRetentionMs = 30 * 60 * 1000;
 const sshShellEvidencePruneIntervalMs = 60 * 1000;
 const sshShellEvidenceMaxChars = 6000;
+const sshShellReplayLimit = 12;
+const sshShellReplayTimelineLimit = 48;
 const simulatedShellPrompt = 'simulated$ ';
 const privateKeyBlockPattern = /^-----BEGIN (?:OPENSSH PRIVATE KEY|RSA PRIVATE KEY|EC PRIVATE KEY|DSA PRIVATE KEY|PRIVATE KEY)-----[\s\S]+-----END (?:OPENSSH PRIVATE KEY|RSA PRIVATE KEY|EC PRIVATE KEY|DSA PRIVATE KEY|PRIVATE KEY)-----$/;
 const puttyPrivateKeyPattern = /^PuTTY-User-Key-File-2: ssh-(?:rsa|dss)\r?\nEncryption: (?:aes256-cbc|none)\r?\nComment: [^\r\n]*\r?\nPublic-Lines: \d+\r?\n[\s\S]+?\r?\nPrivate-Lines: \d+\r?\n[\s\S]+?\r?\nPrivate-MAC: [^\r\n]+/;
@@ -127,6 +129,30 @@ export interface SshShellEvidenceSummary {
   transcript: string;
 }
 
+export interface SshShellSessionReplaySummary {
+  serverName: string;
+  mode: SshVerifyMode;
+  active: boolean;
+  connectedAt: string;
+  closedAt: string | null;
+  durationMs: number;
+  inputEvents: number;
+  inputBytes: number;
+  inputSubmits: number;
+  outputEvents: number;
+  outputBytes: number;
+  outputLines: number;
+  errorCount: number;
+  closeSignal: string | null;
+  lastEventAt: string;
+  timeline: Array<{
+    type: 'start' | 'input' | 'stdout' | 'stderr' | 'close' | 'error';
+    at: string;
+    bytes: number;
+    lines: number;
+  }>;
+}
+
 export interface SshShellSessionStats {
   activeCount: number;
   byMode: Record<SshVerifyMode, number>;
@@ -213,6 +239,13 @@ interface SshShellEvidenceRecord {
 
 const recentSshShellEvidenceByServer = new Map<string, SshShellEvidenceRecord>();
 let lastSshShellEvidencePruneAt = 0;
+
+interface InternalSshShellSessionReplayRecord extends SshShellSessionReplaySummary {
+  sessionId: string;
+  serverId: string;
+}
+
+const recentSshShellSessionReplays = new Map<string, InternalSshShellSessionReplayRecord>();
 
 export interface SshVerificationResult {
   connected: boolean;
@@ -380,6 +413,7 @@ export function subscribeSshShellSession(
 export function writeSshShellSession(sessionId: string, input: string) {
   const session = getActiveShellSession(sessionId);
   session.touch();
+  recordSshShellInputReplay(session, input);
   session.write(input);
 }
 
@@ -525,6 +559,17 @@ export function getRecentSshShellEvidence(serverIds?: string[]): SshShellEvidenc
       transcript: summarizeShellEvidence(record),
     }))
     .filter((summary) => summary.transcript.trim());
+}
+
+export function getRecentSshShellSessionReplays(serverIds?: string[]): SshShellSessionReplaySummary[] {
+  pruneRecentSshShellSessionReplays();
+  const allowedServerIds = serverIds?.length ? new Set(serverIds) : null;
+
+  return Array.from(recentSshShellSessionReplays.values())
+    .filter((record) => !allowedServerIds || allowedServerIds.has(record.serverId))
+    .sort((a, b) => b.lastEventAt.localeCompare(a.lastEventAt))
+    .slice(0, sshShellReplayLimit)
+    .map(stripReplaySessionIdentity);
 }
 
 export async function collectSshMetrics(credential: StoredSshCredential, mode: SshVerifyMode) {
@@ -1057,6 +1102,7 @@ function registerSshShellSession(input: {
 
   refreshIdleTimer();
   activeSshShellSessions.set(session.id, session);
+  registerSshShellSessionReplay(session);
   return session;
 }
 
@@ -1070,6 +1116,7 @@ function emitSshShellEvent(session: ActiveSshShellSession, event: SshShellStream
   if (session.history.length > sshShellHistoryLimit) {
     session.history.splice(0, session.history.length - sshShellHistoryLimit);
   }
+  recordSshShellEventReplay(session, safeEvent);
   recordSshShellEvidence(session, safeEvent);
   session.listeners.forEach((listener) => listener(safeEvent));
 }
@@ -1105,6 +1152,90 @@ function recordSshShellEvidence(session: ActiveSshShellSession, event: SshShellS
   recentSshShellEvidenceByServer.set(session.serverId, record);
 }
 
+function registerSshShellSessionReplay(session: ActiveSshShellSession) {
+  maybePruneRecentSshShellEvidence();
+  const connectedAt = session.connectedAt;
+  recentSshShellSessionReplays.set(session.id, {
+    sessionId: session.id,
+    serverId: session.serverId,
+    serverName: session.serverName,
+    mode: session.mode,
+    active: true,
+    connectedAt,
+    closedAt: null,
+    durationMs: 0,
+    inputEvents: 0,
+    inputBytes: 0,
+    inputSubmits: 0,
+    outputEvents: 0,
+    outputBytes: 0,
+    outputLines: 0,
+    errorCount: 0,
+    closeSignal: null,
+    lastEventAt: connectedAt,
+    timeline: [{ type: 'start', at: connectedAt, bytes: 0, lines: 0 }],
+  });
+  pruneRecentSshShellSessionReplays();
+}
+
+function recordSshShellInputReplay(session: ActiveSshShellSession, input: string) {
+  if (!input) {
+    return;
+  }
+  const record = recentSshShellSessionReplays.get(session.id);
+  if (!record) {
+    return;
+  }
+  const at = new Date().toISOString();
+  const bytes = Buffer.byteLength(input, 'utf8');
+  const submits = countShellInputSubmits(input);
+  record.inputEvents += 1;
+  record.inputBytes += bytes;
+  record.inputSubmits += submits;
+  record.lastEventAt = at;
+  appendSshShellReplayEvent(record, { type: 'input', at, bytes, lines: submits });
+}
+
+function recordSshShellEventReplay(session: ActiveSshShellSession, event: SshShellStreamEvent) {
+  const record = recentSshShellSessionReplays.get(session.id);
+  if (!record) {
+    return;
+  }
+  const at = new Date().toISOString();
+  const text = event.content ?? event.message ?? '';
+  const bytes = text ? Buffer.byteLength(text, 'utf8') : 0;
+  const lines = countShellOutputLines(text);
+
+  record.serverName = session.serverName;
+  record.mode = session.mode;
+  record.lastEventAt = at;
+  if (event.type === 'stdout' || event.type === 'stderr') {
+    record.outputEvents += 1;
+    record.outputBytes += bytes;
+    record.outputLines += lines;
+  }
+  if (event.type === 'error') {
+    record.errorCount += 1;
+  }
+  if (event.type === 'close') {
+    record.active = false;
+    record.closedAt = at;
+    record.closeSignal = event.signal ?? event.code?.toString() ?? 'closed';
+  }
+  record.durationMs = calculateReplayDurationMs(record);
+  appendSshShellReplayEvent(record, { type: event.type, at, bytes, lines });
+}
+
+function appendSshShellReplayEvent(
+  record: InternalSshShellSessionReplayRecord,
+  event: SshShellSessionReplaySummary['timeline'][number],
+) {
+  record.timeline.push(event);
+  if (record.timeline.length > sshShellReplayTimelineLimit) {
+    record.timeline.splice(0, record.timeline.length - sshShellReplayTimelineLimit);
+  }
+}
+
 function maybePruneRecentSshShellEvidence() {
   const now = Date.now();
   if (now - lastSshShellEvidencePruneAt < sshShellEvidencePruneIntervalMs) {
@@ -1119,6 +1250,26 @@ function pruneRecentSshShellEvidence(now = Date.now()) {
   for (const [serverId, record] of recentSshShellEvidenceByServer) {
     if (new Date(record.updatedAt).getTime() < cutoff) {
       recentSshShellEvidenceByServer.delete(serverId);
+    }
+  }
+  pruneRecentSshShellSessionReplays(now);
+}
+
+function pruneRecentSshShellSessionReplays(now = Date.now()) {
+  const cutoff = now - sshShellEvidenceRetentionMs;
+  for (const [sessionId, record] of recentSshShellSessionReplays) {
+    if (!record.active && new Date(record.lastEventAt).getTime() < cutoff) {
+      recentSshShellSessionReplays.delete(sessionId);
+    }
+  }
+
+  const removable = Array.from(recentSshShellSessionReplays.values())
+    .filter((record) => !record.active)
+    .sort((a, b) => a.lastEventAt.localeCompare(b.lastEventAt));
+  while (recentSshShellSessionReplays.size > sshShellReplayLimit && removable.length > 0) {
+    const oldest = removable.shift();
+    if (oldest) {
+      recentSshShellSessionReplays.delete(oldest.sessionId);
     }
   }
 }
@@ -1146,6 +1297,60 @@ function finalizeSshShellSession(session: ActiveSshShellSession) {
   clearTimeout(session.idleTimer);
   session.listeners.clear();
   activeSshShellSessions.delete(session.id);
+  const replay = recentSshShellSessionReplays.get(session.id);
+  if (replay && replay.active) {
+    replay.active = false;
+    replay.closedAt = replay.closedAt ?? new Date().toISOString();
+    replay.closeSignal = replay.closeSignal ?? 'closed';
+    replay.durationMs = calculateReplayDurationMs(replay);
+  }
+  pruneRecentSshShellSessionReplays();
+}
+
+function stripReplaySessionIdentity(record: InternalSshShellSessionReplayRecord): SshShellSessionReplaySummary {
+  return {
+    serverName: record.serverName,
+    mode: record.mode,
+    active: record.active,
+    connectedAt: record.connectedAt,
+    closedAt: record.closedAt,
+    durationMs: calculateReplayDurationMs(record),
+    inputEvents: record.inputEvents,
+    inputBytes: record.inputBytes,
+    inputSubmits: record.inputSubmits,
+    outputEvents: record.outputEvents,
+    outputBytes: record.outputBytes,
+    outputLines: record.outputLines,
+    errorCount: record.errorCount,
+    closeSignal: record.closeSignal,
+    lastEventAt: record.lastEventAt,
+    timeline: record.timeline.map((event) => ({ ...event })),
+  };
+}
+
+function calculateReplayDurationMs(record: Pick<SshShellSessionReplaySummary, 'connectedAt' | 'closedAt' | 'lastEventAt'>) {
+  const start = new Date(record.connectedAt).getTime();
+  const end = new Date(record.closedAt ?? record.lastEventAt).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) {
+    return 0;
+  }
+  return end - start;
+}
+
+function countShellInputSubmits(input: string) {
+  return (input.match(/[\r\n]/g) ?? []).length;
+}
+
+function countShellOutputLines(text: string) {
+  if (!text.trim()) {
+    return 0;
+  }
+  return text
+    .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '')
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .filter((line) => line.trim())
+    .length;
 }
 
 function clampNumber(value: number, min: number, max: number) {

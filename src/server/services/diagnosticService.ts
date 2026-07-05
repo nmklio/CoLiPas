@@ -4,7 +4,7 @@ import type { RuntimeConfig } from '../config.js';
 import { getDatabasePath } from './database.js';
 import { buildReleaseReadiness } from './releaseReadinessService.js';
 import { listAuditEntries } from './auditService.js';
-import { getServerShellEvidence, getServerShellSelfTest, getServerShellSelfTestTrend, getServerShellStatus, listCloudAccounts, summarizeServerInventory } from './inventoryService.js';
+import { getServerShellEvidence, getServerShellSelfTest, getServerShellSelfTestTrend, getServerShellSessionReplays, getServerShellStatus, listCloudAccounts, summarizeServerInventory } from './inventoryService.js';
 import { getAiProviderStatus } from './aiSettingsService.js';
 import { getSshShellSocketDiagnostics } from '../sshShellSocket.js';
 
@@ -18,6 +18,7 @@ export function buildDiagnosticExport(config: RuntimeConfig): DiagnosticExportRe
   const shellStatus = getServerShellStatus();
   const shellSocketDiagnostics = getSshShellSocketDiagnostics();
   const shellEvidence = getServerShellEvidence();
+  const shellSessionReplays = getServerShellSessionReplays();
 
   return {
     generatedAt,
@@ -96,6 +97,29 @@ export function buildDiagnosticExport(config: RuntimeConfig): DiagnosticExportRe
         updatedAt: item.updatedAt,
         transcriptLines: countTranscriptLines(item.transcript),
         transcriptChars: item.transcript.length,
+      })),
+      sessionReplays: shellSessionReplays.map((item) => ({
+        serverName: item.serverName,
+        mode: item.mode,
+        active: item.active,
+        connectedAt: item.connectedAt,
+        closedAt: item.closedAt,
+        durationMs: item.durationMs,
+        inputEvents: item.inputEvents,
+        inputBytes: item.inputBytes,
+        inputSubmits: item.inputSubmits,
+        outputEvents: item.outputEvents,
+        outputBytes: item.outputBytes,
+        outputLines: item.outputLines,
+        errorCount: item.errorCount,
+        closeSignal: item.closeSignal,
+        lastEventAt: item.lastEventAt,
+        timeline: item.timeline.map((event) => ({
+          type: event.type,
+          at: event.at,
+          bytes: event.bytes,
+          lines: event.lines,
+        })),
       })),
     },
   };

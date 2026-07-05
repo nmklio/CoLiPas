@@ -138,11 +138,11 @@ async function assertReleaseEvidenceBrief(targetPage) {
     throw new Error(`Release failure playbook should expose three diagnostic cards, got ${playbookCount}`);
   }
   const sshPerfMetricCount = await targetPage.locator('.security-ssh-performance-metric').count();
-  if (sshPerfMetricCount !== 8) {
-    throw new Error(`SSH performance card should expose eight aggregate metrics, got ${sshPerfMetricCount}`);
+  if (sshPerfMetricCount !== 9) {
+    throw new Error(`SSH performance card should expose nine aggregate metrics, got ${sshPerfMetricCount}`);
   }
   const sshPerfText = await targetPage.locator('.security-ssh-performance-card').innerText();
-  if (!/input batching/i.test(sshPerfText) || !/socket errors/i.test(sshPerfText) || !/last safe test/i.test(sshPerfText) || !/response split/i.test(sshPerfText) || !/safe test trend/i.test(sshPerfText) || !/likely bottleneck/i.test(sshPerfText)) {
+  if (!/input batching/i.test(sshPerfText) || !/socket errors/i.test(sshPerfText) || !/last safe test/i.test(sshPerfText) || !/response split/i.test(sshPerfText) || !/safe test trend/i.test(sshPerfText) || !/likely bottleneck/i.test(sshPerfText) || !/session replay/i.test(sshPerfText)) {
     throw new Error(`SSH performance card did not render batching/error evidence: ${sshPerfText}`);
   }
   await targetPage.evaluate(() => {
@@ -158,7 +158,7 @@ async function assertReleaseEvidenceBrief(targetPage) {
   });
   await targetPage.getByRole('button', { name: /copy summary|复制摘要|サマリーをコピー/i }).click();
   const copiedSshPerfText = await targetPage.evaluate(() => window.__colipasCopiedSshPerformanceText ?? '');
-  if (!/SSH terminal performance|Input batching/i.test(copiedSshPerfText) || !/Socket errors/i.test(copiedSshPerfText) || !/Last safe test/i.test(copiedSshPerfText) || !/Response split/i.test(copiedSshPerfText) || !/Safe test trend/i.test(copiedSshPerfText) || !/Likely bottleneck/i.test(copiedSshPerfText)) {
+  if (!/SSH terminal performance|Input batching/i.test(copiedSshPerfText) || !/Socket errors/i.test(copiedSshPerfText) || !/Last safe test/i.test(copiedSshPerfText) || !/Response split/i.test(copiedSshPerfText) || !/Safe test trend/i.test(copiedSshPerfText) || !/Likely bottleneck/i.test(copiedSshPerfText) || !/Session replay/i.test(copiedSshPerfText)) {
     throw new Error(`SSH performance copy output is incomplete: ${copiedSshPerfText}`);
   }
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshPerfText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshPerfText)) {

@@ -376,6 +376,29 @@ export interface DiagnosticExportResponse {
       transcriptLines: number;
       transcriptChars: number;
     }>;
+    sessionReplays: Array<{
+      serverName: string;
+      mode: SshVerifyMode;
+      active: boolean;
+      connectedAt: string;
+      closedAt: string | null;
+      durationMs: number;
+      inputEvents: number;
+      inputBytes: number;
+      inputSubmits: number;
+      outputEvents: number;
+      outputBytes: number;
+      outputLines: number;
+      errorCount: number;
+      closeSignal: string | null;
+      lastEventAt: string;
+      timeline: Array<{
+        type: 'start' | 'input' | 'stdout' | 'stderr' | 'close' | 'error';
+        at: string;
+        bytes: number;
+        lines: number;
+      }>;
+    }>;
   };
 }
 
