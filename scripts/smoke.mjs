@@ -4199,17 +4199,6 @@ async function assertReleaseDeployTargetPlanGuards() {
   ) {
     throw new Error('Release deploy API fallback must upload committed git blob bytes, not CRLF-normalized working-tree files');
   }
-  const termarkDeployFragments = [
-    'termarkAssetId',
-    'termarkTimeoutSeconds',
-    'Require-Command "termark"',
-    'termark exec $Target.termarkAssetId --stdin --timeout $timeoutSeconds',
-    'COLIPAS_TERMARK_SELFTEST_CAPTURE',
-  ];
-  const missingTermarkDeploy = termarkDeployFragments.filter((fragment) => !releaseDeploySource.includes(fragment));
-  if (missingTermarkDeploy.length) {
-    throw new Error(`Release deploy Termark routing is incomplete: ${missingTermarkDeploy.join(', ')}`);
-  }
 
   const plan = {
     targets: [
@@ -4272,6 +4261,8 @@ async function assertReleaseDeployTargetPlanGuards() {
     || targets[1].command !== 'sudo /usr/local/sbin/colipas-cp-update'
     || targets[0].deploymentMode !== 'systemd'
     || targets[1].deploymentMode !== 'docker'
+    || targets[0].sshKeyConfigured !== true
+    || Object.hasOwn(targets[0], 'sshKey')
     || targets.some((target) => Object.hasOwn(target, 'enabled'))
     || targets.some((target) => /\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(JSON.stringify(target)))
   ) {

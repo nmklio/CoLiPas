@@ -183,8 +183,6 @@ function ConvertTo-DeployTargets {
         user = $userName
         command = $command
         sshKey = Get-PropertyValue $item "sshKey" $SshKey
-        termarkAssetId = Get-PropertyValue $item "termarkAssetId" ""
-        termarkTimeoutSeconds = Get-PropertyValue $item "termarkTimeoutSeconds" "900"
         publicBaseUrl = Get-PropertyValue $item "publicBaseUrl" $ProductionBaseUrl
         publicMode = Get-PropertyValue $item "publicMode" "public"
         deploymentMode = Get-PropertyValue $item "deploymentMode" "systemd"
@@ -227,9 +225,7 @@ function Write-DeployPlan {
       host = $_.host
       user = $_.user
       command = $_.command
-      sshKey = $_.sshKey
-      termarkAssetId = $_.termarkAssetId
-      termarkTimeoutSeconds = $_.termarkTimeoutSeconds
+      sshKeyConfigured = -not [string]::IsNullOrWhiteSpace($_.sshKey)
       publicBaseUrl = $_.publicBaseUrl
       publicMode = $_.publicMode
       deploymentMode = $_.deploymentMode
@@ -264,20 +260,6 @@ function Invoke-TargetUpdate {
     $evidenceCommand = "sudo env $releaseEnv $($Matches[1])"
   } else {
     $evidenceCommand = "$releaseEnv $targetCommand"
-  }
-
-  if (-not [string]::IsNullOrWhiteSpace($Target.termarkAssetId)) {
-    $termark = Require-Command "termark"
-    $timeoutSeconds = 900
-    if (-not [string]::IsNullOrWhiteSpace($Target.termarkTimeoutSeconds)) {
-      $timeoutSeconds = [int]$Target.termarkTimeoutSeconds
-    }
-    Write-Host "Updating target $($Target.name) via Termark asset."
-    ($evidenceCommand + "`n") | & $termark exec $Target.termarkAssetId --stdin --timeout $timeoutSeconds
-    if ($LASTEXITCODE -ne 0) {
-      throw "Target $($Target.name) Termark update failed with exit code $LASTEXITCODE."
-    }
-    return
   }
 
   $sshArgs += @("-o", "StrictHostKeyChecking=accept-new", "$($Target.user)@$($Target.host)", $evidenceCommand)
@@ -546,13 +528,9 @@ function Test-TargetUpdateFailureIsolation {
   New-Item -ItemType Directory -Path $tempRoot | Out-Null
   $mockSshPath = Join-Path $tempRoot "ssh.cmd"
   $mockSshUnixPath = Join-Path $tempRoot "ssh"
-  $mockTermarkPath = Join-Path $tempRoot "termark.cmd"
-  $mockTermarkUnixPath = Join-Path $tempRoot "termark"
   $capturePath = Join-Path $tempRoot "ssh-calls.txt"
-  $termarkCapturePath = Join-Path $tempRoot "termark-calls.txt"
   $previousPath = $env:PATH
   $previousCapture = $env:COLIPAS_SSH_SELFTEST_CAPTURE
-  $previousTermarkCapture = $env:COLIPAS_TERMARK_SELFTEST_CAPTURE
   $previousResults = $script:TargetUpdateResults
   $previousSuccessfulTargets = $script:SuccessfulDeployTargets
 
@@ -572,26 +550,11 @@ case "$*" in
   *) exit 0 ;;
 esac
 '@ | Set-Content -LiteralPath $mockSshUnixPath -Encoding ASCII
-    @'
-@echo off
-echo %*>>"%COLIPAS_TERMARK_SELFTEST_CAPTURE%"
-set /p COLIPAS_TERMARK_STDIN=
-echo %COLIPAS_TERMARK_STDIN%>>"%COLIPAS_TERMARK_SELFTEST_CAPTURE%"
-exit /b 0
-'@ | Set-Content -LiteralPath $mockTermarkPath -Encoding ASCII
-    @'
-#!/usr/bin/env sh
-printf '%s\n' "$*" >> "$COLIPAS_TERMARK_SELFTEST_CAPTURE"
-cat >> "$COLIPAS_TERMARK_SELFTEST_CAPTURE"
-exit 0
-'@ | Set-Content -LiteralPath $mockTermarkUnixPath -Encoding ASCII
     if (Get-Command chmod -ErrorAction SilentlyContinue) {
       & chmod +x $mockSshUnixPath
-      & chmod +x $mockTermarkUnixPath
     }
 
     $env:COLIPAS_SSH_SELFTEST_CAPTURE = $capturePath
-    $env:COLIPAS_TERMARK_SELFTEST_CAPTURE = $termarkCapturePath
     $env:PATH = "$tempRoot$([IO.Path]::PathSeparator)$previousPath"
 
     $targets = @(
@@ -601,8 +564,6 @@ exit 0
         user = "mock-user"
         command = "mock-command"
         sshKey = ""
-        termarkAssetId = ""
-        termarkTimeoutSeconds = "900"
         publicBaseUrl = "https://fail.example.test"
         publicMode = "public"
         deploymentMode = "systemd"
@@ -614,8 +575,6 @@ exit 0
         user = "mock-user"
         command = "mock-command"
         sshKey = ""
-        termarkAssetId = "ok-asset"
-        termarkTimeoutSeconds = "120"
         publicBaseUrl = "https://ok.example.test"
         publicMode = "public"
         deploymentMode = "docker"
@@ -629,9 +588,8 @@ exit 0
     }
 
     $captured = Get-Content -LiteralPath $capturePath -Raw
-    $termarkCaptured = Get-Content -LiteralPath $termarkCapturePath -Raw
-    if (-not $captured.Contains("fail-host") -or -not $termarkCaptured.Contains("ok-asset") -or -not $termarkCaptured.Contains("RELEASE_TARGET_NAME='ok-target'")) {
-      throw "Target update failure isolation did not attempt every target through the expected transport."
+    if (-not $captured.Contains("fail-host") -or -not $captured.Contains("ok-host")) {
+      throw "Target update failure isolation did not attempt every target."
     }
 
     $failureGuardRaised = $false
@@ -657,11 +615,6 @@ exit 0
       Remove-Item Env:\COLIPAS_SSH_SELFTEST_CAPTURE -ErrorAction SilentlyContinue
     } else {
       $env:COLIPAS_SSH_SELFTEST_CAPTURE = $previousCapture
-    }
-    if ($null -eq $previousTermarkCapture) {
-      Remove-Item Env:\COLIPAS_TERMARK_SELFTEST_CAPTURE -ErrorAction SilentlyContinue
-    } else {
-      $env:COLIPAS_TERMARK_SELFTEST_CAPTURE = $previousTermarkCapture
     }
     Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
   }
