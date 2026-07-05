@@ -2772,6 +2772,8 @@ if (
   || !Number.isInteger(diagnosticExportBody.inventory?.servers?.connectedSsh)
   || !Number.isInteger(diagnosticExportBody.sshTerminal?.activeSessions)
   || !Number.isInteger(diagnosticExportBody.sshTerminal?.websocket?.openedShells)
+  || !Number.isInteger(diagnosticExportBody.sshTerminal?.websocket?.inputFlushes)
+  || !Number.isInteger(diagnosticExportBody.sshTerminal?.websocket?.outputFlushes)
   || !Number.isInteger(diagnosticExportBody.sshTerminal?.websocket?.outputBytes)
 ) {
   throw new Error('/api/audit/diagnostics/export returned incomplete diagnostic bundle');
@@ -2779,6 +2781,9 @@ if (
 if (
   diagnosticExportBody.sshTerminal.websocket.openedShells < 1
   || diagnosticExportBody.sshTerminal.websocket.outputBytes < 1
+  || diagnosticExportBody.sshTerminal.websocket.inputEvents <= diagnosticExportBody.sshTerminal.websocket.inputFlushes
+  || diagnosticExportBody.sshTerminal.websocket.inputFlushes < 1
+  || diagnosticExportBody.sshTerminal.websocket.outputFlushes < 1
   || !Array.isArray(diagnosticExportBody.sshTerminal.recentEvidence)
   || !diagnosticExportBody.sshTerminal.recentEvidence.some((item) => item.transcriptLines > 0 && item.transcriptChars > 0)
 ) {
@@ -5008,16 +5013,23 @@ function assertSshTerminalRealtimeGuards() {
     'tcpSocket.setNoDelay?.(true)',
     'tcpSocket.setKeepAlive?.(true, 10000)',
     'closeServerShell({ sessionId })',
+    'const shellSocketInputFlushMs = 6',
+    'const shellSocketInputFlushMaxChars = 8 * 1024',
     'const shellSocketOutputFlushMs = 4',
-    'const shellSocketOutputImmediateChars = 16',
     'const shellSocketOutputFlushMaxChars = 96 * 1024',
     'const shellSocketDiagnosticsTouchIntervalMs = 250',
     'let shellSocketDiagnosticsLastTouchAt = 0',
     'function bindSshShellSocket',
+    "let pendingInput = ''",
+    'const flushInput = () =>',
+    'const queueInput = (input: string) =>',
+    'input.includes(\'\\u0003\')',
+    'setTimeout(safeFlushInput, shellSocketInputFlushMs)',
+    'shellSocketDiagnostics.inputFlushes += 1',
     'let pendingOutputEvent: SshShellStreamEvent | null = null',
     'pendingOutputEvent.content?.length',
-    'pendingOutputEvent.content?.length ?? 0) <= shellSocketOutputImmediateChars',
     'setTimeout(flushOutput, shellSocketOutputFlushMs)',
+    'shellSocketDiagnostics.outputFlushes += 1',
     'touchDiagnostics(true)',
     'function touchDiagnostics(force = false)',
     'new Date(now).toISOString()',
@@ -5934,7 +5946,9 @@ async function exerciseShellWebSocket(serverId) {
     if (payload.type === 'ready') {
       readySessionId = payload.sessionId;
       readyResolver(payload);
-      socket.send(JSON.stringify({ type: 'input', data: 'whoami\n' }));
+      for (const inputChunk of ['w', 'h', 'o', 'a', 'm', 'i', '\n']) {
+        socket.send(JSON.stringify({ type: 'input', data: inputChunk }));
+      }
       return;
     }
     if (payload.type === 'stdout' && payload.content) {

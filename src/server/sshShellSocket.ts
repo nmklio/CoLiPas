@@ -18,8 +18,9 @@ type ClientMessage =
   | { type: 'ping'; sentAt?: unknown }
   | { type: 'close' };
 
+const shellSocketInputFlushMs = 6;
+const shellSocketInputFlushMaxChars = 8 * 1024;
 const shellSocketOutputFlushMs = 4;
-const shellSocketOutputImmediateChars = 16;
 const shellSocketOutputFlushMaxChars = 96 * 1024;
 const shellSocketDiagnosticsTouchIntervalMs = 250;
 
@@ -29,8 +30,10 @@ export interface SshShellSocketDiagnostics {
   openedShells: number;
   closedShells: number;
   inputEvents: number;
+  inputFlushes: number;
   inputBytes: number;
   outputEvents: number;
+  outputFlushes: number;
   outputBytes: number;
   pingCount: number;
   pongCount: number;
@@ -44,8 +47,10 @@ const shellSocketDiagnostics: SshShellSocketDiagnostics = {
   openedShells: 0,
   closedShells: 0,
   inputEvents: 0,
+  inputFlushes: 0,
   inputBytes: 0,
   outputEvents: 0,
+  outputFlushes: 0,
   outputBytes: 0,
   pingCount: 0,
   pongCount: 0,
@@ -94,6 +99,8 @@ function bindSshShellSocket(webSocket: WebSocket) {
   let unsubscribe: (() => void) | null = null;
   let closing = false;
   let socketClosed = false;
+  let pendingInput = '';
+  let inputFlushTimer: ReturnType<typeof setTimeout> | null = null;
   let pendingOutputEvent: SshShellStreamEvent | null = null;
   let outputFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -107,6 +114,62 @@ function bindSshShellSocket(webSocket: WebSocket) {
     }
   };
 
+  const clearInputFlushTimer = () => {
+    if (inputFlushTimer) {
+      clearTimeout(inputFlushTimer);
+      inputFlushTimer = null;
+    }
+  };
+
+  const flushInput = () => {
+    clearInputFlushTimer();
+    const input = pendingInput;
+    pendingInput = '';
+    if (!input || !sessionId || closing) {
+      return;
+    }
+
+    writeServerShell({ sessionId, input });
+    shellSocketDiagnostics.inputFlushes += 1;
+    touchDiagnostics();
+  };
+
+  const safeFlushInput = () => {
+    try {
+      flushInput();
+    } catch (error) {
+      shellSocketDiagnostics.errors += 1;
+      touchDiagnostics(true);
+      send({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'SSH input failed',
+      });
+      cleanup();
+    }
+  };
+
+  const queueInput = (input: string) => {
+    pendingInput += input;
+    if (
+      input.includes('\r')
+      || input.includes('\n')
+      || input.includes('\u0003')
+      || pendingInput.length >= shellSocketInputFlushMaxChars
+    ) {
+      flushInput();
+      return;
+    }
+
+    if (!inputFlushTimer) {
+      inputFlushTimer = setTimeout(safeFlushInput, shellSocketInputFlushMs);
+    }
+  };
+
+  const clearPendingInput = () => {
+    clearInputFlushTimer();
+    pendingInput = '';
+  };
+
   const flushOutput = () => {
     if (outputFlushTimer) {
       clearTimeout(outputFlushTimer);
@@ -116,6 +179,8 @@ function bindSshShellSocket(webSocket: WebSocket) {
       const event = pendingOutputEvent;
       pendingOutputEvent = null;
       send(event);
+      shellSocketDiagnostics.outputFlushes += 1;
+      touchDiagnostics();
     }
   };
 
@@ -147,11 +212,6 @@ function bindSshShellSocket(webSocket: WebSocket) {
       return;
     }
 
-    if ((pendingOutputEvent.content?.length ?? 0) <= shellSocketOutputImmediateChars) {
-      flushOutput();
-      return;
-    }
-
     if (!outputFlushTimer) {
       outputFlushTimer = setTimeout(flushOutput, shellSocketOutputFlushMs);
     }
@@ -162,6 +222,7 @@ function bindSshShellSocket(webSocket: WebSocket) {
       return;
     }
     closing = true;
+    clearPendingInput();
     flushOutput();
     unsubscribe?.();
     unsubscribe = null;
@@ -236,7 +297,7 @@ function bindSshShellSocket(webSocket: WebSocket) {
         shellSocketDiagnostics.inputEvents += 1;
         shellSocketDiagnostics.inputBytes += Buffer.byteLength(input, 'utf8');
         touchDiagnostics();
-        writeServerShell({ sessionId, input });
+        queueInput(input);
         return;
       }
 
@@ -254,6 +315,7 @@ function bindSshShellSocket(webSocket: WebSocket) {
       }
 
       if (message.type === 'close') {
+        flushInput();
         cleanup();
         send({ type: 'close', signal: 'closed' });
         webSocket.close(1000, 'closed');
@@ -273,6 +335,7 @@ function bindSshShellSocket(webSocket: WebSocket) {
 
   webSocket.on('close', () => {
     markSocketClosed();
+    clearPendingInput();
     if (outputFlushTimer) {
       clearTimeout(outputFlushTimer);
       outputFlushTimer = null;

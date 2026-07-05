@@ -332,8 +332,10 @@ export interface DiagnosticExportResponse {
       openedShells: number;
       closedShells: number;
       inputEvents: number;
+      inputFlushes: number;
       inputBytes: number;
       outputEvents: number;
+      outputFlushes: number;
       outputBytes: number;
       pingCount: number;
       pongCount: number;
