@@ -7034,7 +7034,15 @@ pre {
   line-height: 1.45;
 }
 
-.security-ssh-performance-heading > span {
+.security-ssh-performance-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.security-ssh-performance-actions > span {
   min-height: 30px;
   border-radius: 999px;
   padding: 7px 11px;
@@ -7048,12 +7056,12 @@ pre {
   white-space: nowrap;
 }
 
-.security-ssh-performance-card.warn .security-ssh-performance-heading > span {
+.security-ssh-performance-card.warn .security-ssh-performance-actions > span {
   background: #fff1d6;
   color: #b65f00;
 }
 
-.security-ssh-performance-card.fail .security-ssh-performance-heading > span {
+.security-ssh-performance-card.fail .security-ssh-performance-actions > span {
   background: #ffe8e6;
   color: var(--red);
 }
@@ -8608,6 +8616,10 @@ pre {
   .security-audit-workspace,
   .server-load-row {
     grid-template-columns: 1fr;
+  }
+
+  .security-ssh-performance-actions {
+    justify-content: flex-start;
   }
 
   .security-audit-row {

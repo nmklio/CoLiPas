@@ -138,6 +138,25 @@ async function assertReleaseEvidenceBrief(targetPage) {
   if (!/input batching|输入合并|入力バッチ/i.test(sshPerfText) || !/socket errors|连接错误|接続エラー/i.test(sshPerfText)) {
     throw new Error(`SSH performance card did not render batching/error evidence: ${sshPerfText}`);
   }
+  await targetPage.evaluate(() => {
+    window.__colipasCopiedSshPerformanceText = '';
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (text) => {
+          window.__colipasCopiedSshPerformanceText = text;
+        },
+      },
+    });
+  });
+  await targetPage.getByRole('button', { name: /copy summary|复制摘要|サマリーをコピー/i }).click();
+  const copiedSshPerfText = await targetPage.evaluate(() => window.__colipasCopiedSshPerformanceText ?? '');
+  if (!/SSH terminal performance|Input batching|SSH 性能|SSH パフォーマンス/i.test(copiedSshPerfText) || !/Socket errors|连接错误|接続エラー/i.test(copiedSshPerfText)) {
+    throw new Error(`SSH performance copy output is incomplete: ${copiedSshPerfText}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshPerfText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshPerfText)) {
+    throw new Error('SSH performance copy output leaked a raw IP address or API key');
+  }
   const text = `${await targetPage.locator('.security-evidence-brief').innerText()}\n${await targetPage.locator('.security-release-playbook').innerText()}\n${sshPerfText}`;
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(text) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(text)) {
     throw new Error('Release evidence, failure playbook, or SSH performance card rendered a raw IP address or API key');

@@ -143,6 +143,7 @@ interface SshPerformanceSummary {
   tone: 'ok' | 'warn' | 'fail';
   status: string;
   nextAction: string;
+  copyText: string;
   metrics: SshPerformanceMetric[];
 }
 
@@ -380,6 +381,23 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
       setRemediationError(false);
     } catch {
       setRemediationMessage(evidenceBrief.text);
+      setRemediationError(false);
+    }
+  }
+
+  async function copySshPerformanceSummary() {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) {
+      setRemediationMessage(sshPerformance.copyText);
+      setRemediationError(false);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(sshPerformance.copyText);
+      setRemediationMessage(sshPerformanceCopy.copyCopied);
+      setRemediationError(false);
+    } catch {
+      setRemediationMessage(sshPerformance.copyText);
       setRemediationError(false);
     }
   }
@@ -669,7 +687,13 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
             <h3 id="security-ssh-performance-title"><SlidersHorizontal size={18} /> {sshPerformanceCopy.title}</h3>
             <p>{sshPerformanceCopy.description}</p>
           </div>
-          <span>{sshPerformance.status}</span>
+          <div className="security-ssh-performance-actions">
+            <span>{sshPerformance.status}</span>
+            <button type="button" className="tool-button" onClick={copySshPerformanceSummary}>
+              <ClipboardCheck size={15} />
+              {sshPerformanceCopy.copySummary}
+            </button>
+          </div>
         </div>
         <div className="security-ssh-performance-grid">
           {sshPerformance.metrics.map((metric) => (
@@ -1582,37 +1606,47 @@ function buildSshPerformanceSummary(
     : hasEvidence && inputEvents >= 8 && inputRatio < 1.2
       ? 'warn'
       : 'ok';
+  const metrics: SshPerformanceMetric[] = [
+    {
+      label: copy.activeSessions,
+      value: String(activeSessions),
+      detail: copy.activeSessionsDetail(activeSessions),
+      tone: activeSessions > 8 ? 'warn' : 'ok',
+    },
+    {
+      label: copy.inputBatch,
+      value: inputFlushes > 0 ? `${formatBatchRatio(inputRatio)}x` : '--',
+      detail: copy.inputBatchDetail(inputEvents, inputFlushes),
+      tone: inputEvents >= 8 && inputRatio < 1.2 ? 'warn' : 'ok',
+    },
+    {
+      label: copy.outputBatch,
+      value: outputFlushes > 0 ? `${formatBatchRatio(outputRatio)}x` : '--',
+      detail: copy.outputBatchDetail(outputEvents, outputFlushes),
+      tone: outputEvents >= 8 && outputRatio < 1.2 ? 'warn' : 'ok',
+    },
+    {
+      label: copy.websocketErrors,
+      value: String(errors),
+      detail: copy.websocketErrorsDetail(errors),
+      tone: errors > 0 ? 'fail' : 'ok',
+    },
+  ];
+  const status = tone === 'fail' ? copy.statusFail : tone === 'warn' ? copy.statusWarn : copy.statusOk;
+  const nextAction = !hasEvidence ? copy.nextActionNoEvidence : tone === 'fail' ? copy.nextActionFail : tone === 'warn' ? copy.nextActionWarn : copy.nextActionOk;
+  const copyText = [
+    `# ${copy.title}`,
+    `${copy.summaryStatus}: ${status}`,
+    ...metrics.map((metric) => `${metric.label}: ${metric.value} (${metric.detail})`),
+    `${copy.summaryNextAction}: ${nextAction}`,
+  ].join('\n');
 
   return {
     tone,
-    status: tone === 'fail' ? copy.statusFail : tone === 'warn' ? copy.statusWarn : copy.statusOk,
-    nextAction: !hasEvidence ? copy.nextActionNoEvidence : tone === 'fail' ? copy.nextActionFail : tone === 'warn' ? copy.nextActionWarn : copy.nextActionOk,
-    metrics: [
-      {
-        label: copy.activeSessions,
-        value: String(activeSessions),
-        detail: copy.activeSessionsDetail(activeSessions),
-        tone: activeSessions > 8 ? 'warn' : 'ok',
-      },
-      {
-        label: copy.inputBatch,
-        value: inputFlushes > 0 ? `${formatBatchRatio(inputRatio)}×` : '--',
-        detail: copy.inputBatchDetail(inputEvents, inputFlushes),
-        tone: inputEvents >= 8 && inputRatio < 1.2 ? 'warn' : 'ok',
-      },
-      {
-        label: copy.outputBatch,
-        value: outputFlushes > 0 ? `${formatBatchRatio(outputRatio)}×` : '--',
-        detail: copy.outputBatchDetail(outputEvents, outputFlushes),
-        tone: outputEvents >= 8 && outputRatio < 1.2 ? 'warn' : 'ok',
-      },
-      {
-        label: copy.websocketErrors,
-        value: String(errors),
-        detail: copy.websocketErrorsDetail(errors),
-        tone: errors > 0 ? 'fail' : 'ok',
-      },
-    ],
+    status,
+    nextAction,
+    copyText,
+    metrics,
   };
 }
 
@@ -1825,6 +1859,10 @@ interface SshPerformanceCopy {
   inputBatch: string;
   outputBatch: string;
   websocketErrors: string;
+  copySummary: string;
+  copyCopied: string;
+  summaryStatus: string;
+  summaryNextAction: string;
   statusOk: string;
   statusWarn: string;
   statusFail: string;
@@ -1846,6 +1884,10 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     inputBatch: '输入合并',
     outputBatch: '输出合并',
     websocketErrors: '连接错误',
+    copySummary: '\u590d\u5236\u6458\u8981',
+    copyCopied: 'SSH \u6027\u80fd\u6458\u8981\u5df2\u590d\u5236',
+    summaryStatus: '\u72b6\u6001',
+    summaryNextAction: '\u4e0b\u4e00\u6b65',
     statusOk: '链路流畅',
     statusWarn: '需要观察',
     statusFail: '存在异常',
@@ -1865,6 +1907,10 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     inputBatch: 'Input batching',
     outputBatch: 'Output batching',
     websocketErrors: 'Socket errors',
+    copySummary: 'Copy summary',
+    copyCopied: 'SSH performance summary copied',
+    summaryStatus: 'Status',
+    summaryNextAction: 'Next action',
     statusOk: 'Healthy path',
     statusWarn: 'Watch closely',
     statusFail: 'Errors found',
@@ -1884,6 +1930,10 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     inputBatch: '入力バッチ',
     outputBatch: '出力バッチ',
     websocketErrors: '接続エラー',
+    copySummary: '\u30b5\u30de\u30ea\u30fc\u3092\u30b3\u30d4\u30fc',
+    copyCopied: 'SSH \u30d1\u30d5\u30a9\u30fc\u30de\u30f3\u30b9\u30b5\u30de\u30ea\u30fc\u3092\u30b3\u30d4\u30fc\u3057\u307e\u3057\u305f',
+    summaryStatus: '\u72b6\u614b',
+    summaryNextAction: '\u6b21\u306e\u5bfe\u5fdc',
     statusOk: '正常',
     statusWarn: '要観察',
     statusFail: '異常あり',
