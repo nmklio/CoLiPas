@@ -205,6 +205,8 @@ export interface ServerShellSelfTestPayload {
   lines: number;
   durationMs: number;
   linesPerSecond: number;
+  firstResponseMs?: number;
+  outputSpanMs?: number;
   rttMs?: number | null;
   throughputBytesPerSecond?: number;
   networkLabel: string;

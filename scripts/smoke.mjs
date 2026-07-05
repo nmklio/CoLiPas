@@ -1975,6 +1975,8 @@ const shellSelfTestResponse = await fetch(`${baseUrl}/api/servers/shells/${shell
     lines: 40,
     durationMs: 48,
     linesPerSecond: 833.3,
+    firstResponseMs: 9,
+    outputSpanMs: 39,
     rttMs: 12,
     throughputBytesPerSecond: 65536,
     networkLabel: 'RTT 12ms / 64 KB/s',
@@ -1988,6 +1990,8 @@ if (
   shellSelfTestBody.status !== 'complete'
   || shellSelfTestBody.lines !== 40
   || shellSelfTestBody.durationMs !== 48
+  || shellSelfTestBody.firstResponseMs !== 9
+  || shellSelfTestBody.outputSpanMs !== 39
   || shellSelfTestBody.rttMs !== 12
   || shellSelfTestBody.throughputBytesPerSecond !== 65536
   || shellSelfTestBody.networkLabel !== 'RTT 12ms / 64 KB/s'
@@ -2807,6 +2811,8 @@ if (
   || diagnosticExportBody.sshTerminal?.lastSelfTest?.status !== 'complete'
   || diagnosticExportBody.sshTerminal?.lastSelfTest?.lines !== 40
   || diagnosticExportBody.sshTerminal?.lastSelfTest?.durationMs !== 48
+  || diagnosticExportBody.sshTerminal?.lastSelfTest?.firstResponseMs !== 9
+  || diagnosticExportBody.sshTerminal?.lastSelfTest?.outputSpanMs !== 39
   || diagnosticExportBody.sshTerminal?.lastSelfTest?.rttMs !== 12
   || diagnosticExportBody.sshTerminal?.lastSelfTest?.throughputBytesPerSecond !== 65536
   || diagnosticExportBody.sshTerminal?.lastSelfTest?.bottleneck !== 'healthy'
@@ -4941,6 +4947,8 @@ function assertSshTerminalRealtimeGuards() {
     'formatTerminalSelfTestLabel(nextState, language)',
     "terminal.writeln(`\\r\\n${t('servers.sshSelfTestTerminalLine'",
     'recordServerShellSelfTest(tracker.sessionId',
+    'firstResponseMs: nextState.firstResponseMs',
+    'outputSpanMs: nextState.outputSpanMs',
     'throughputBytesPerSecond: nextState.throughputBytesPerSecond',
     'sendTerminalInput(sessionId, `${terminalSelfTestCommand}\\r`)',
     "t('servers.runTerminalSelfTest')",
@@ -5361,6 +5369,8 @@ function assertSecurityAuditRelationsAreSpecific() {
     'formatBatchRatio(inputRatio)',
     'diagnostic?.sshTerminal?.lastSelfTest',
     'copy.lastSelfTest',
+    'copy.responseSplit',
+    'copy.responseSplitDetail(',
     'copy.likelyBottleneck',
     'copy.bottleneckDetail(',
     'formatBottleneckValue(',

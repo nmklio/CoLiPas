@@ -1649,6 +1649,14 @@ function buildSshPerformanceSummary(
       tone: lastSelfTest ? lastSelfTestTone : 'warn',
     },
     {
+      label: copy.responseSplit,
+      value: lastSelfTest ? `${Math.round(lastSelfTest.firstResponseMs)}/${Math.round(lastSelfTest.outputSpanMs)}ms` : '--',
+      detail: lastSelfTest
+        ? copy.responseSplitDetail(lastSelfTest.firstResponseMs, lastSelfTest.outputSpanMs)
+        : copy.responseSplitNone,
+      tone: lastSelfTest && (lastSelfTest.firstResponseMs >= 2000 || lastSelfTest.outputSpanMs >= 2500) ? 'warn' : lastSelfTest ? 'ok' : 'warn',
+    },
+    {
       label: copy.likelyBottleneck,
       value: lastSelfTest ? copy.bottleneckValue(lastSelfTest.bottleneck) : '--',
       detail: lastSelfTest
@@ -1955,6 +1963,7 @@ interface SshPerformanceCopy {
   inputBatch: string;
   outputBatch: string;
   lastSelfTest: string;
+  responseSplit: string;
   likelyBottleneck: string;
   websocketErrors: string;
   copySummary: string;
@@ -1973,6 +1982,8 @@ interface SshPerformanceCopy {
   outputBatchDetail: (events: number, flushes: number) => string;
   lastSelfTestDetail: (status: string, lines: number, durationMs: number, rate: number, recordedAt: string) => string;
   lastSelfTestNone: string;
+  responseSplitDetail: (firstResponseMs: number, outputSpanMs: number) => string;
+  responseSplitNone: string;
   bottleneckValue: (bottleneck: SshSelfTestBottleneck) => string;
   bottleneckDetail: (bottleneck: SshSelfTestBottleneck, rttMs: number | null, throughputBytesPerSecond: number) => string;
   bottleneckNone: string;
@@ -1987,6 +1998,7 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     inputBatch: '输入合并',
     outputBatch: '输出合并',
     lastSelfTest: '\u6700\u8fd1\u6d4b\u901f',
+    responseSplit: '\u54cd\u5e94\u5206\u6bb5',
     likelyBottleneck: '\u7591\u4f3c\u74f6\u9888',
     websocketErrors: '连接错误',
     copySummary: '\u590d\u5236\u6458\u8981',
@@ -2005,6 +2017,8 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     outputBatchDetail: (events, flushes) => `${events} 次输出事件 / ${flushes} 次前端推送`,
     lastSelfTestDetail: (status, lines, durationMs, rate, recordedAt) => `${status} / ${lines} \u884c / ${Math.round(durationMs)}ms / ${formatSelfTestRate(rate, 'zh')} / ${recordedAt}`,
     lastSelfTestNone: '\u6682\u65e0\u5b89\u5168\u6d4b\u901f\u7ed3\u679c\uff0c\u53ef\u5728 SSH \u7ec8\u7aef\u70b9\u51fb CPU \u56fe\u6807\u8fd0\u884c\u3002',
+    responseSplitDetail: (firstResponseMs, outputSpanMs) => `\u9996\u5305 ${Math.round(firstResponseMs)}ms / \u8f93\u51fa ${Math.round(outputSpanMs)}ms`,
+    responseSplitNone: '\u8fd0\u884c SSH \u5b89\u5168\u6d4b\u901f\u540e\u663e\u793a\u9996\u5305\u548c\u8f93\u51fa\u6bb5\u8017\u65f6\u3002',
     bottleneckValue: (bottleneck) => formatBottleneckValue(bottleneck, 'zh'),
     bottleneckDetail: (bottleneck, rttMs, throughputBytesPerSecond) => formatBottleneckDetail(bottleneck, rttMs, throughputBytesPerSecond, 'zh'),
     bottleneckNone: '\u5b8c\u6210 SSH \u5b89\u5168\u6d4b\u901f\u540e\u4f1a\u57fa\u4e8e RTT\u3001\u541e\u5410\u548c\u884c\u901f\u7387\u7ed9\u51fa\u5224\u65ad\u3002',
@@ -2017,6 +2031,7 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     inputBatch: 'Input batching',
     outputBatch: 'Output batching',
     lastSelfTest: 'Last safe test',
+    responseSplit: 'Response split',
     likelyBottleneck: 'Likely bottleneck',
     websocketErrors: 'Socket errors',
     copySummary: 'Copy summary',
@@ -2035,6 +2050,8 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     outputBatchDetail: (events, flushes) => `${events} output event(s) / ${flushes} frontend flush(es)`,
     lastSelfTestDetail: (status, lines, durationMs, rate, recordedAt) => `${status} / ${lines} lines / ${Math.round(durationMs)}ms / ${formatSelfTestRate(rate, 'en')} / ${recordedAt}`,
     lastSelfTestNone: 'No safe speed test result yet. Run it from the SSH terminal CPU button.',
+    responseSplitDetail: (firstResponseMs, outputSpanMs) => `First response ${Math.round(firstResponseMs)}ms / output span ${Math.round(outputSpanMs)}ms`,
+    responseSplitNone: 'Run the SSH safe speed test to split first-response and output timing.',
     bottleneckValue: (bottleneck) => formatBottleneckValue(bottleneck, 'en'),
     bottleneckDetail: (bottleneck, rttMs, throughputBytesPerSecond) => formatBottleneckDetail(bottleneck, rttMs, throughputBytesPerSecond, 'en'),
     bottleneckNone: 'Run the SSH safe speed test to classify lag by RTT, throughput, and terminal line rate.',
@@ -2047,6 +2064,7 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     inputBatch: '入力バッチ',
     outputBatch: '出力バッチ',
     lastSelfTest: '\u6700\u8fd1\u306e\u901f\u5ea6\u30c6\u30b9\u30c8',
+    responseSplit: '\u5fdc\u7b54\u5206\u5272',
     likelyBottleneck: '\u63a8\u5b9a\u30dc\u30c8\u30eb\u30cd\u30c3\u30af',
     websocketErrors: '接続エラー',
     copySummary: '\u30b5\u30de\u30ea\u30fc\u3092\u30b3\u30d4\u30fc',
@@ -2065,6 +2083,8 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     outputBatchDetail: (events, flushes) => `${events} 出力イベント / ${flushes} フロントエンド送信`,
     lastSelfTestDetail: (status, lines, durationMs, rate, recordedAt) => `${status} / ${lines} \u884c / ${Math.round(durationMs)}ms / ${formatSelfTestRate(rate, 'ja')} / ${recordedAt}`,
     lastSelfTestNone: '\u307e\u3060\u901f\u5ea6\u30c6\u30b9\u30c8\u7d50\u679c\u304c\u3042\u308a\u307e\u305b\u3093\u3002SSH \u7aef\u672b\u306e CPU \u30dc\u30bf\u30f3\u304b\u3089\u5b9f\u884c\u3067\u304d\u307e\u3059\u3002',
+    responseSplitDetail: (firstResponseMs, outputSpanMs) => `\u521d\u56de\u5fdc\u7b54 ${Math.round(firstResponseMs)}ms / \u51fa\u529b ${Math.round(outputSpanMs)}ms`,
+    responseSplitNone: 'SSH \u5b89\u5168\u901f\u5ea6\u30c6\u30b9\u30c8\u5f8c\u306b\u5fdc\u7b54\u3068\u51fa\u529b\u3092\u5206\u5272\u3057\u307e\u3059\u3002',
     bottleneckValue: (bottleneck) => formatBottleneckValue(bottleneck, 'ja'),
     bottleneckDetail: (bottleneck, rttMs, throughputBytesPerSecond) => formatBottleneckDetail(bottleneck, rttMs, throughputBytesPerSecond, 'ja'),
     bottleneckNone: '\u5b89\u5168\u901f\u5ea6\u30c6\u30b9\u30c8\u5f8c\u306b RTT\u3001\u541e\u5410\u3001\u884c\u901f\u5ea6\u304b\u3089\u5224\u5b9a\u3057\u307e\u3059\u3002',
