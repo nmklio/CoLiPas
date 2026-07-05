@@ -4199,6 +4199,17 @@ async function assertReleaseDeployTargetPlanGuards() {
   ) {
     throw new Error('Release deploy API fallback must upload committed git blob bytes, not CRLF-normalized working-tree files');
   }
+  const termarkDeployFragments = [
+    'termarkAssetId',
+    'termarkTimeoutSeconds',
+    'Require-Command "termark"',
+    'termark exec $Target.termarkAssetId --stdin --timeout $timeoutSeconds',
+    'COLIPAS_TERMARK_SELFTEST_CAPTURE',
+  ];
+  const missingTermarkDeploy = termarkDeployFragments.filter((fragment) => !releaseDeploySource.includes(fragment));
+  if (missingTermarkDeploy.length) {
+    throw new Error(`Release deploy Termark routing is incomplete: ${missingTermarkDeploy.join(', ')}`);
+  }
 
   const plan = {
     targets: [
