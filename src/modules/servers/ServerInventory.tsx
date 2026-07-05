@@ -49,6 +49,7 @@ const terminalWriteImmediateThreshold = 256;
 const terminalCompatibleInputFlushMs = 4;
 const terminalRuntimePrefetchDelayMs = 250;
 const terminalNetworkUiRefreshMs = 900;
+const terminalSelfTestCommand = `printf 'colipas-ssh-self-test-start\\n'; i=1; while [ "$i" -le 40 ]; do printf 'colipas-ssh-self-test-%02d\\n' "$i"; i=$((i+1)); done; printf 'colipas-ssh-self-test-end\\n'`;
 
 const actionCommands: Record<'powerOn' | 'shutdown' | 'reboot', string> = {
   powerOn: 'printf "server reachable via SSH\\n"; uptime',
@@ -822,6 +823,9 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                       </button>
                       <button type="button" aria-label={t('servers.clearTerminalOutput')} title={t('servers.clearTerminalOutput')} onClick={clearTerminalOutput}>
                         <Eraser size={14} />
+                      </button>
+                      <button type="button" aria-label={t('servers.runTerminalSelfTest')} title={t('servers.runTerminalSelfTest')} onClick={runTerminalSelfTest} disabled={!terminalShellId || sshInterrupting}>
+                        <Cpu size={14} />
                       </button>
                       <button type="button" aria-label={t('servers.sendCtrlC')} title={t('servers.sendCtrlC')} onClick={interruptTerminalCommand} disabled={!terminalShellId || sshInterrupting}>
                         <span className="ssh-terminal-shortcut-glyph" aria-hidden="true">^C</span>
@@ -1612,6 +1616,24 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     terminal.clear();
     showActionMessage(t('servers.terminalCleared'));
     terminal.focus();
+  }
+
+  function runTerminalSelfTest() {
+    const sessionId = terminalShellId;
+    if (!sessionId) {
+      showActionMessage(t('servers.sshSelfTestUnavailable'));
+      return;
+    }
+
+    flushTerminalInput(sessionId)
+      .then(() => sendTerminalInput(sessionId, `${terminalSelfTestCommand}\r`))
+      .then(() => {
+        showActionMessage(t('servers.sshSelfTestStarted'));
+        xtermRef.current?.focus();
+      })
+      .catch((error) => {
+        showActionMessage(error instanceof Error ? error.message : 'SSH self-test failed');
+      });
   }
 
   function interruptTerminalCommand() {

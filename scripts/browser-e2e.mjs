@@ -520,6 +520,19 @@ async function assertSshTerminalPanel(targetPage) {
       const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
       return terminalText.includes('simulated$ id') && terminalText.includes('command simulated.');
     }, undefined, { timeout: 10000 });
+    const selfTestStartedAt = Date.now();
+    await targetPage.getByRole('button', { name: /run ssh safe speed test/i }).click();
+    await targetPage.waitForFunction(() => {
+      const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
+      return terminalText.includes('colipas-ssh-self-test-40')
+        && terminalText.includes('colipas-ssh-self-test-end')
+        && terminalText.includes('simulated$');
+    }, undefined, { timeout: 10000 });
+    const selfTestDurationMs = Date.now() - selfTestStartedAt;
+    if (selfTestDurationMs > 6000) {
+      throw new Error(`SSH safe speed test output rendered too slowly: ${selfTestDurationMs}ms`);
+    }
+    console.log(`ok browser e2e SSH safe speed test rendered in ${selfTestDurationMs}ms`);
     const longOutputStartedAt = Date.now();
     await targetPage.evaluate(() => {
       window.__colipasSshLongTasks = [];

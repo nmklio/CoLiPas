@@ -4892,6 +4892,12 @@ function assertSshTerminalRealtimeGuards() {
     'getVisibleTerminalText(terminal)',
     'function clearTerminalOutput()',
     'terminal.clear()',
+    'terminalSelfTestCommand',
+    'function runTerminalSelfTest()',
+    'sendTerminalInput(sessionId, `${terminalSelfTestCommand}\\r`)',
+    "t('servers.runTerminalSelfTest')",
+    "t('servers.sshSelfTestStarted')",
+    "t('servers.sshSelfTestUnavailable')",
   ];
   const missingFrontend = requiredFrontendFragments.filter((fragment) => !inventorySource.includes(fragment));
   if (missingFrontend.length) {
@@ -4924,6 +4930,9 @@ function assertSshTerminalRealtimeGuards() {
     'servers.sshInterruptUnavailable',
     'servers.activeShellSessions',
     'servers.activeShellSessionsShort',
+    'servers.runTerminalSelfTest',
+    'servers.sshSelfTestStarted',
+    'servers.sshSelfTestUnavailable',
   ];
   const missingToolLabels = requiredToolLabels.filter((key) => !inventorySource.includes(key) || !fs.readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8').includes(key));
   if (missingToolLabels.length) {
@@ -4947,6 +4956,8 @@ function assertSshTerminalRealtimeGuards() {
     'emitSshShellEvent(session, { type: \'stdout\'',
     "command === 'colipas-long-output'",
     "command === 'colipas-hang'",
+    "command.includes('colipas-ssh-self-test-start')",
+    'colipas-ssh-self-test-end',
     "let inputBuffer = ''",
     "for (const char of input)",
     "runSimulatedShellCommand(shell, command",

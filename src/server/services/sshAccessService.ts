@@ -751,6 +751,14 @@ function runSimulatedShellCommand(
     emitSshShellEvent(shell, { type: 'stdout', content: simulatedShellPrompt });
     return;
   }
+  if (command.includes('colipas-ssh-self-test-start')) {
+    emitSshShellEvent(shell, { type: 'stdout', content: `${simulatedShellPrompt}${command}\r\ncolipas-ssh-self-test-start\r\n` });
+    for (let index = 1; index <= 40; index += 1) {
+      emitSshShellEvent(shell, { type: 'stdout', content: `colipas-ssh-self-test-${String(index).padStart(2, '0')}\r\n` });
+    }
+    emitSshShellEvent(shell, { type: 'stdout', content: `colipas-ssh-self-test-end\r\n${simulatedShellPrompt}` });
+    return;
+  }
   if (command === 'colipas-hang') {
     state.setInterrupted(false);
     emitSshShellEvent(shell, { type: 'stdout', content: `${simulatedShellPrompt}${command}\r\nhanging until interrupt\r\n` });
