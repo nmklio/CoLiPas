@@ -763,6 +763,7 @@ async function assertMobileModuleLayoutSweep() {
     await assertElementHorizontallyWithinViewport(mobilePage, '.security-evidence-brief', 'mobile release evidence brief');
     await assertElementHorizontallyWithinViewport(mobilePage, '.security-release-playbook', 'mobile release failure playbook');
     await assertSingleColumnStack(mobilePage, '.security-control-grid', 'mobile security control grid');
+    await assertMobileAuditRowLayout(mobilePage);
     await mobilePage.locator('.security-audit-row').first().click();
     await mobilePage.locator('.security-audit-detail-card').waitFor({ timeout: 5000 });
     await assertElementHorizontallyWithinViewport(mobilePage, '.security-audit-detail-card', 'mobile security audit detail');
@@ -1081,6 +1082,40 @@ async function assertSingleColumnStack(targetPage, selector, label) {
   const columnCount = columns.split(' ').filter(Boolean).length;
   if (columnCount !== 1) {
     throw new Error(`${label} should collapse to one grid column on mobile, got ${columns}`);
+  }
+}
+
+async function assertMobileAuditRowLayout(targetPage) {
+  await targetPage.locator('.security-audit-row').first().waitFor({ timeout: 10000 });
+  const metrics = await targetPage.locator('.security-audit-row').first().evaluate((row) => {
+    const style = getComputedStyle(row);
+    const meta = row.querySelector('.security-audit-meta');
+    const time = row.querySelector('time');
+    const target = row.querySelector('.security-audit-main small');
+    const chip = row.querySelector('.security-audit-main em');
+    return {
+      columns: style.gridTemplateColumns,
+      metaDisplay: meta ? getComputedStyle(meta).display : '',
+      timeDisplay: time ? getComputedStyle(time).display : '',
+      targetWhiteSpace: target ? getComputedStyle(target).whiteSpace : '',
+      hasChip: Boolean(chip),
+      rowWidth: row.getBoundingClientRect().width,
+      metaRight: meta ? meta.getBoundingClientRect().right : 0,
+      viewportWidth: window.innerWidth,
+    };
+  });
+  const columnCount = metrics.columns.split(' ').filter(Boolean).length;
+  if (columnCount > 2) {
+    throw new Error(`Mobile audit row should use at most two columns, got ${metrics.columns}`);
+  }
+  if (metrics.metaDisplay !== 'flex' || metrics.timeDisplay === 'none') {
+    throw new Error(`Mobile audit row meta should keep status and time visible: ${JSON.stringify(metrics)}`);
+  }
+  if (metrics.targetWhiteSpace !== 'normal') {
+    throw new Error(`Mobile audit row target should wrap instead of truncating: ${JSON.stringify(metrics)}`);
+  }
+  if (metrics.metaRight > metrics.viewportWidth + 1 || metrics.rowWidth > metrics.viewportWidth + 1) {
+    throw new Error(`Mobile audit row overflowed viewport: ${JSON.stringify(metrics)}`);
   }
 }
 

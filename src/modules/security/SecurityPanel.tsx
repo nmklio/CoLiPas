@@ -801,12 +801,15 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
                   onClick={() => setSelectedAuditId(entry.id)}
                 >
                   <span className={`audit-status-dot ${entry.status}`} />
-                  <span>
+                  <span className="security-audit-main">
                     <strong>{entry.action}</strong>
                     <small>{entry.target}</small>
+                    {entry.correlationId && <em>{shortenOperationCorrelationId(entry.correlationId)}</em>}
                   </span>
-                  <b>{copy.auditStatus(entry.status)}</b>
-                  <time>{formatAuditTime(entry.createdAt, locale)}</time>
+                  <span className="security-audit-meta">
+                    <b>{copy.auditStatus(entry.status)}</b>
+                    <time>{formatAuditTime(entry.createdAt, locale)}</time>
+                  </span>
                 </button>
               ))
             )}

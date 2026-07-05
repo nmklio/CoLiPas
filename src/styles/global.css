@@ -7296,7 +7296,7 @@ pre {
   background: #ffffff;
   color: var(--text);
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto 54px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 9px;
   text-align: left;
@@ -7317,7 +7317,8 @@ pre {
 }
 
 .security-audit-row strong,
-.security-audit-row small {
+.security-audit-row small,
+.security-audit-row em {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -7325,9 +7326,34 @@ pre {
 }
 
 .security-audit-row small,
-.security-audit-row time {
+.security-audit-row time,
+.security-audit-row em {
   color: var(--muted);
   font-size: 12px;
+}
+
+.security-audit-main {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.security-audit-row em {
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 2px;
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: #edf6f7;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.security-audit-meta {
+  min-width: 0;
+  display: grid;
+  justify-items: end;
+  gap: 4px;
 }
 
 .security-audit-row b {
@@ -8444,7 +8470,46 @@ pre {
   }
 
   .security-audit-row {
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: 8px 10px;
+    border-radius: 12px;
+    padding: 12px;
+  }
+
+  .security-audit-main strong {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+  }
+
+  .security-audit-main small {
+    display: -webkit-box;
+    overflow: hidden;
+    text-overflow: clip;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-height: 1.35;
+  }
+
+  .security-audit-meta {
+    grid-column: 2;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .security-audit-row b,
+  .security-audit-row time,
+  .security-audit-row em {
+    min-height: 24px;
+    display: inline-flex;
+    align-items: center;
   }
 
   .security-audit-trace-steps {
@@ -8458,10 +8523,6 @@ pre {
 
   .api-integration-row b {
     text-align: left;
-  }
-
-  .security-audit-row time {
-    display: none;
   }
 
   .cloud-map {
