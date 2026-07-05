@@ -25,6 +25,7 @@ import {
   closeSshShellSession,
   getLastSshShellSelfTestResult,
   getRecentSshShellEvidence,
+  getSshShellSelfTestTrend,
   collectSshMetrics,
   getSshShellSessionStats,
   openStoredSshShell,
@@ -856,6 +857,10 @@ export function getServerShellEvidence(serverIds?: string[]) {
 
 export function getServerShellSelfTest() {
   return getLastSshShellSelfTestResult();
+}
+
+export function getServerShellSelfTestTrend() {
+  return getSshShellSelfTestTrend();
 }
 
 export function setServerRuntimeStatus(serverId: string, status: Extract<ServerStatus, 'running' | 'stopped' | 'warning'>) {

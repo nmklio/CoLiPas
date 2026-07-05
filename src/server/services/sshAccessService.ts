@@ -151,6 +151,17 @@ export interface SshShellSelfTestRecord {
   active: boolean;
 }
 
+export interface SshShellSelfTestTrend {
+  samples: number;
+  direction: 'unknown' | 'stable' | 'improving' | 'degrading';
+  averageDurationMs: number;
+  averageFirstResponseMs: number;
+  averageOutputSpanMs: number;
+  latestDurationMs: number;
+  previousDurationMs: number | null;
+  latestBottleneck: SshShellSelfTestRecord['bottleneck'] | null;
+}
+
 interface InternalSshShellSelfTestRecord extends SshShellSelfTestRecord {
   sessionId: string;
 }
@@ -184,6 +195,8 @@ interface ActiveSshShellSession {
 
 const activeSshShellSessions = new Map<string, ActiveSshShellSession>();
 let lastSshShellSelfTestRecord: InternalSshShellSelfTestRecord | null = null;
+const recentSshShellSelfTestRecords: InternalSshShellSelfTestRecord[] = [];
+const recentSshShellSelfTestLimit = 8;
 
 interface SshShellEvidenceRecord {
   serverId: string;
@@ -446,6 +459,10 @@ export function recordSshShellSelfTestResult(
     active: !session.closed,
   };
   lastSshShellSelfTestRecord = record;
+  recentSshShellSelfTestRecords.push(record);
+  while (recentSshShellSelfTestRecords.length > recentSshShellSelfTestLimit) {
+    recentSshShellSelfTestRecords.shift();
+  }
   return stripSelfTestSessionId(record);
 }
 
@@ -459,6 +476,35 @@ export function getLastSshShellSelfTestResult(): SshShellSelfTestRecord | null {
     ...lastSshShellSelfTestRecord,
     active: Boolean(activeSession && !activeSession.closed),
   });
+}
+
+export function getSshShellSelfTestTrend(): SshShellSelfTestTrend {
+  const records = recentSshShellSelfTestRecords.map(stripSelfTestSessionId);
+  if (records.length === 0) {
+    return {
+      samples: 0,
+      direction: 'unknown',
+      averageDurationMs: 0,
+      averageFirstResponseMs: 0,
+      averageOutputSpanMs: 0,
+      latestDurationMs: 0,
+      previousDurationMs: null,
+      latestBottleneck: null,
+    };
+  }
+
+  const latest = records[records.length - 1];
+  const previous = records.length >= 2 ? records[records.length - 2] : null;
+  return {
+    samples: records.length,
+    direction: calculateSelfTestTrendDirection(latest.durationMs, previous?.durationMs ?? null),
+    averageDurationMs: averageSelfTestMetric(records, 'durationMs'),
+    averageFirstResponseMs: averageSelfTestMetric(records, 'firstResponseMs'),
+    averageOutputSpanMs: averageSelfTestMetric(records, 'outputSpanMs'),
+    latestDurationMs: latest.durationMs,
+    previousDurationMs: previous?.durationMs ?? null,
+    latestBottleneck: latest.bottleneck,
+  };
 }
 
 export function getRecentSshShellEvidence(serverIds?: string[]): SshShellEvidenceSummary[] {
@@ -1159,6 +1205,28 @@ function diagnoseSshSelfTest(
     return 'terminal';
   }
   return 'healthy';
+}
+
+function averageSelfTestMetric(records: SshShellSelfTestRecord[], field: 'durationMs' | 'firstResponseMs' | 'outputSpanMs') {
+  if (records.length === 0) {
+    return 0;
+  }
+  const total = records.reduce((sum, record) => sum + record[field], 0);
+  return Math.round(total / records.length);
+}
+
+function calculateSelfTestTrendDirection(latestDurationMs: number, previousDurationMs: number | null): SshShellSelfTestTrend['direction'] {
+  if (previousDurationMs === null || previousDurationMs <= 0) {
+    return 'unknown';
+  }
+  const deltaRatio = (latestDurationMs - previousDurationMs) / previousDurationMs;
+  if (deltaRatio >= 0.2) {
+    return 'degrading';
+  }
+  if (deltaRatio <= -0.15) {
+    return 'improving';
+  }
+  return 'stable';
 }
 
 function getActiveShellSession(sessionId: string) {

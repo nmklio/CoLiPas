@@ -358,6 +358,16 @@ export interface DiagnosticExportResponse {
       recordedAt: string;
       active: boolean;
     } | null;
+    selfTestTrend: {
+      samples: number;
+      direction: 'unknown' | 'stable' | 'improving' | 'degrading';
+      averageDurationMs: number;
+      averageFirstResponseMs: number;
+      averageOutputSpanMs: number;
+      latestDurationMs: number;
+      previousDurationMs: number | null;
+      latestBottleneck: 'healthy' | 'network' | 'throughput' | 'terminal' | 'connection' | null;
+    };
     recentEvidence: Array<{
       serverName: string;
       mode: SshVerifyMode;

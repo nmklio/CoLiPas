@@ -1601,6 +1601,7 @@ function buildSshPerformanceSummary(
   const outputFlushes = websocket?.outputFlushes ?? 0;
   const errors = websocket?.errors ?? 0;
   const lastSelfTest = diagnostic?.sshTerminal?.lastSelfTest ?? null;
+  const selfTestTrend = diagnostic?.sshTerminal?.selfTestTrend ?? null;
   const inputRatio = calculateBatchRatio(inputEvents, inputFlushes);
   const outputRatio = calculateBatchRatio(outputEvents, outputFlushes);
   const hasEvidence = Boolean(websocket) && (inputEvents > 0 || outputEvents > 0 || activeSessions > 0 || Boolean(lastSelfTest));
@@ -1655,6 +1656,14 @@ function buildSshPerformanceSummary(
         ? copy.responseSplitDetail(lastSelfTest.firstResponseMs, lastSelfTest.outputSpanMs)
         : copy.responseSplitNone,
       tone: lastSelfTest && (lastSelfTest.firstResponseMs >= 2000 || lastSelfTest.outputSpanMs >= 2500) ? 'warn' : lastSelfTest ? 'ok' : 'warn',
+    },
+    {
+      label: copy.selfTestTrend,
+      value: selfTestTrend && selfTestTrend.samples > 0 ? copy.trendValue(selfTestTrend.direction, selfTestTrend.samples) : '--',
+      detail: selfTestTrend && selfTestTrend.samples > 0
+        ? copy.trendDetail(selfTestTrend.averageDurationMs, selfTestTrend.latestDurationMs, selfTestTrend.previousDurationMs)
+        : copy.trendNone,
+      tone: selfTestTrend?.direction === 'degrading' ? 'warn' : selfTestTrend?.direction === 'unknown' ? 'warn' : 'ok',
     },
     {
       label: copy.likelyBottleneck,
@@ -1766,6 +1775,31 @@ function formatBottleneckDetail(
     return `${formatBottleneckValue(bottleneck, language)} from sanitized ${evidence}`;
   }
   return `${formatBottleneckValue(bottleneck, language)} / ${evidence}`;
+}
+
+function formatTrendValue(direction: DiagnosticExportResponse['sshTerminal']['selfTestTrend']['direction'], samples: number, language: string) {
+  const labels: Record<string, Record<DiagnosticExportResponse['sshTerminal']['selfTestTrend']['direction'], string>> = {
+    zh: {
+      unknown: '\u5f85\u7d2f\u79ef',
+      stable: '\u7a33\u5b9a',
+      improving: '\u53d8\u5feb',
+      degrading: '\u53d8\u6162',
+    },
+    en: {
+      unknown: 'Collecting',
+      stable: 'Stable',
+      improving: 'Improving',
+      degrading: 'Degrading',
+    },
+    ja: {
+      unknown: '\u84c4\u7a4d\u4e2d',
+      stable: '\u5b89\u5b9a',
+      improving: '\u6539\u5584',
+      degrading: '\u4f4e\u4e0b',
+    },
+  };
+  const label = (labels[language] ?? labels.zh)[direction];
+  return language === 'en' ? `${label} · ${samples}` : `${label} · ${samples}\u6b21`;
 }
 
 function parseDeploymentEvidence(value: string): ReleaseDeploymentEvidence | null {
@@ -1964,6 +1998,7 @@ interface SshPerformanceCopy {
   outputBatch: string;
   lastSelfTest: string;
   responseSplit: string;
+  selfTestTrend: string;
   likelyBottleneck: string;
   websocketErrors: string;
   copySummary: string;
@@ -1984,6 +2019,9 @@ interface SshPerformanceCopy {
   lastSelfTestNone: string;
   responseSplitDetail: (firstResponseMs: number, outputSpanMs: number) => string;
   responseSplitNone: string;
+  trendValue: (direction: DiagnosticExportResponse['sshTerminal']['selfTestTrend']['direction'], samples: number) => string;
+  trendDetail: (averageDurationMs: number, latestDurationMs: number, previousDurationMs: number | null) => string;
+  trendNone: string;
   bottleneckValue: (bottleneck: SshSelfTestBottleneck) => string;
   bottleneckDetail: (bottleneck: SshSelfTestBottleneck, rttMs: number | null, throughputBytesPerSecond: number) => string;
   bottleneckNone: string;
@@ -1999,6 +2037,7 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     outputBatch: '输出合并',
     lastSelfTest: '\u6700\u8fd1\u6d4b\u901f',
     responseSplit: '\u54cd\u5e94\u5206\u6bb5',
+    selfTestTrend: '\u6d4b\u901f\u8d8b\u52bf',
     likelyBottleneck: '\u7591\u4f3c\u74f6\u9888',
     websocketErrors: '连接错误',
     copySummary: '\u590d\u5236\u6458\u8981',
@@ -2019,6 +2058,9 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     lastSelfTestNone: '\u6682\u65e0\u5b89\u5168\u6d4b\u901f\u7ed3\u679c\uff0c\u53ef\u5728 SSH \u7ec8\u7aef\u70b9\u51fb CPU \u56fe\u6807\u8fd0\u884c\u3002',
     responseSplitDetail: (firstResponseMs, outputSpanMs) => `\u9996\u5305 ${Math.round(firstResponseMs)}ms / \u8f93\u51fa ${Math.round(outputSpanMs)}ms`,
     responseSplitNone: '\u8fd0\u884c SSH \u5b89\u5168\u6d4b\u901f\u540e\u663e\u793a\u9996\u5305\u548c\u8f93\u51fa\u6bb5\u8017\u65f6\u3002',
+    trendValue: (direction, samples) => formatTrendValue(direction, samples, 'zh'),
+    trendDetail: (averageDurationMs, latestDurationMs, previousDurationMs) => `\u5e73\u5747 ${Math.round(averageDurationMs)}ms / \u6700\u8fd1 ${Math.round(latestDurationMs)}ms / \u4e0a\u6b21 ${previousDurationMs === null ? '--' : `${Math.round(previousDurationMs)}ms`}`,
+    trendNone: '\u81f3\u5c11\u9700\u8981\u4e00\u6b21 SSH \u5b89\u5168\u6d4b\u901f\u624d\u80fd\u751f\u6210\u8d8b\u52bf\u3002',
     bottleneckValue: (bottleneck) => formatBottleneckValue(bottleneck, 'zh'),
     bottleneckDetail: (bottleneck, rttMs, throughputBytesPerSecond) => formatBottleneckDetail(bottleneck, rttMs, throughputBytesPerSecond, 'zh'),
     bottleneckNone: '\u5b8c\u6210 SSH \u5b89\u5168\u6d4b\u901f\u540e\u4f1a\u57fa\u4e8e RTT\u3001\u541e\u5410\u548c\u884c\u901f\u7387\u7ed9\u51fa\u5224\u65ad\u3002',
@@ -2032,6 +2074,7 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     outputBatch: 'Output batching',
     lastSelfTest: 'Last safe test',
     responseSplit: 'Response split',
+    selfTestTrend: 'Safe test trend',
     likelyBottleneck: 'Likely bottleneck',
     websocketErrors: 'Socket errors',
     copySummary: 'Copy summary',
@@ -2052,6 +2095,9 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     lastSelfTestNone: 'No safe speed test result yet. Run it from the SSH terminal CPU button.',
     responseSplitDetail: (firstResponseMs, outputSpanMs) => `First response ${Math.round(firstResponseMs)}ms / output span ${Math.round(outputSpanMs)}ms`,
     responseSplitNone: 'Run the SSH safe speed test to split first-response and output timing.',
+    trendValue: (direction, samples) => formatTrendValue(direction, samples, 'en'),
+    trendDetail: (averageDurationMs, latestDurationMs, previousDurationMs) => `Average ${Math.round(averageDurationMs)}ms / latest ${Math.round(latestDurationMs)}ms / previous ${previousDurationMs === null ? '--' : `${Math.round(previousDurationMs)}ms`}`,
+    trendNone: 'Run at least one SSH safe speed test to build the trend.',
     bottleneckValue: (bottleneck) => formatBottleneckValue(bottleneck, 'en'),
     bottleneckDetail: (bottleneck, rttMs, throughputBytesPerSecond) => formatBottleneckDetail(bottleneck, rttMs, throughputBytesPerSecond, 'en'),
     bottleneckNone: 'Run the SSH safe speed test to classify lag by RTT, throughput, and terminal line rate.',
@@ -2065,6 +2111,7 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     outputBatch: '出力バッチ',
     lastSelfTest: '\u6700\u8fd1\u306e\u901f\u5ea6\u30c6\u30b9\u30c8',
     responseSplit: '\u5fdc\u7b54\u5206\u5272',
+    selfTestTrend: '\u901f\u5ea6\u30c8\u30ec\u30f3\u30c9',
     likelyBottleneck: '\u63a8\u5b9a\u30dc\u30c8\u30eb\u30cd\u30c3\u30af',
     websocketErrors: '接続エラー',
     copySummary: '\u30b5\u30de\u30ea\u30fc\u3092\u30b3\u30d4\u30fc',
@@ -2085,6 +2132,9 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     lastSelfTestNone: '\u307e\u3060\u901f\u5ea6\u30c6\u30b9\u30c8\u7d50\u679c\u304c\u3042\u308a\u307e\u305b\u3093\u3002SSH \u7aef\u672b\u306e CPU \u30dc\u30bf\u30f3\u304b\u3089\u5b9f\u884c\u3067\u304d\u307e\u3059\u3002',
     responseSplitDetail: (firstResponseMs, outputSpanMs) => `\u521d\u56de\u5fdc\u7b54 ${Math.round(firstResponseMs)}ms / \u51fa\u529b ${Math.round(outputSpanMs)}ms`,
     responseSplitNone: 'SSH \u5b89\u5168\u901f\u5ea6\u30c6\u30b9\u30c8\u5f8c\u306b\u5fdc\u7b54\u3068\u51fa\u529b\u3092\u5206\u5272\u3057\u307e\u3059\u3002',
+    trendValue: (direction, samples) => formatTrendValue(direction, samples, 'ja'),
+    trendDetail: (averageDurationMs, latestDurationMs, previousDurationMs) => `\u5e73\u5747 ${Math.round(averageDurationMs)}ms / \u6700\u65b0 ${Math.round(latestDurationMs)}ms / \u524d\u56de ${previousDurationMs === null ? '--' : `${Math.round(previousDurationMs)}ms`}`,
+    trendNone: 'SSH \u5b89\u5168\u901f\u5ea6\u30c6\u30b9\u30c8\u3092 1 \u56de\u4ee5\u4e0a\u5b9f\u884c\u3059\u308b\u3068\u30c8\u30ec\u30f3\u30c9\u3092\u751f\u6210\u3057\u307e\u3059\u3002',
     bottleneckValue: (bottleneck) => formatBottleneckValue(bottleneck, 'ja'),
     bottleneckDetail: (bottleneck, rttMs, throughputBytesPerSecond) => formatBottleneckDetail(bottleneck, rttMs, throughputBytesPerSecond, 'ja'),
     bottleneckNone: '\u5b89\u5168\u901f\u5ea6\u30c6\u30b9\u30c8\u5f8c\u306b RTT\u3001\u541e\u5410\u3001\u884c\u901f\u5ea6\u304b\u3089\u5224\u5b9a\u3057\u307e\u3059\u3002',

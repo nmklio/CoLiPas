@@ -1967,6 +1967,24 @@ const shellStreamText = await readSseUntil(shellStreamResponse, (text) => text.i
 if (!shellStreamText.includes('"type":"start"') || !shellStreamText.includes('"type":"stdout"')) {
   throw new Error('/api/servers/shells/:sessionId/stream returned unexpected SSE payload');
 }
+const shellSelfTestWarmupResponse = await fetch(`${baseUrl}/api/servers/shells/${shellBody.sessionId}/self-test`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    status: 'complete',
+    lines: 40,
+    durationMs: 80,
+    linesPerSecond: 500,
+    firstResponseMs: 18,
+    outputSpanMs: 62,
+    rttMs: 15,
+    throughputBytesPerSecond: 32768,
+    networkLabel: 'RTT 15ms / 32 KB/s',
+  }),
+});
+if (!shellSelfTestWarmupResponse.ok) {
+  throw new Error(`/api/servers/shells/:sessionId/self-test warmup returned HTTP ${shellSelfTestWarmupResponse.status}`);
+}
 const shellSelfTestResponse = await fetch(`${baseUrl}/api/servers/shells/${shellBody.sessionId}/self-test`, {
   method: 'POST',
   headers: { ...authHeaders, 'Content-Type': 'application/json' },
@@ -2816,6 +2834,12 @@ if (
   || diagnosticExportBody.sshTerminal?.lastSelfTest?.rttMs !== 12
   || diagnosticExportBody.sshTerminal?.lastSelfTest?.throughputBytesPerSecond !== 65536
   || diagnosticExportBody.sshTerminal?.lastSelfTest?.bottleneck !== 'healthy'
+  || diagnosticExportBody.sshTerminal?.selfTestTrend?.samples < 2
+  || diagnosticExportBody.sshTerminal?.selfTestTrend?.direction !== 'improving'
+  || diagnosticExportBody.sshTerminal?.selfTestTrend?.averageDurationMs !== 64
+  || diagnosticExportBody.sshTerminal?.selfTestTrend?.latestDurationMs !== 48
+  || diagnosticExportBody.sshTerminal?.selfTestTrend?.previousDurationMs !== 80
+  || diagnosticExportBody.sshTerminal?.selfTestTrend?.latestBottleneck !== 'healthy'
   || typeof diagnosticExportBody.sshTerminal?.lastSelfTest?.recordedAt !== 'string'
   || 'sessionId' in (diagnosticExportBody.sshTerminal?.lastSelfTest ?? {})
 ) {
@@ -5372,9 +5396,13 @@ function assertSecurityAuditRelationsAreSpecific() {
     'calculateBatchRatio(inputEvents, inputFlushes)',
     'formatBatchRatio(inputRatio)',
     'diagnostic?.sshTerminal?.lastSelfTest',
+    'diagnostic?.sshTerminal?.selfTestTrend',
     'copy.lastSelfTest',
     'copy.responseSplit',
     'copy.responseSplitDetail(',
+    'copy.selfTestTrend',
+    'copy.trendDetail(',
+    'formatTrendValue(',
     'copy.likelyBottleneck',
     'copy.bottleneckDetail(',
     'formatBottleneckValue(',
