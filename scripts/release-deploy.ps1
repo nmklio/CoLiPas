@@ -20,6 +20,8 @@ if ($LASTEXITCODE -ne 0 -or -not $RepoRoot) {
 }
 Set-Location $RepoRoot
 $script:PublishedCommitSha = ""
+$script:TargetUpdateResults = @()
+$script:SuccessfulDeployTargets = @()
 
 function Run-Step {
   param(
@@ -268,6 +270,51 @@ function Invoke-TargetUpdate {
   }
 }
 
+function Invoke-TargetUpdates {
+  param([object[]]$Targets)
+
+  $results = @()
+  foreach ($target in $Targets) {
+    try {
+      Invoke-TargetUpdate $target
+      $results += [pscustomobject]@{
+        name = $target.name
+        target = $target
+        ok = $true
+        error = ""
+      }
+    } catch {
+      $message = [string]$_
+      Write-Warning "Target $($target.name) update failed; continuing with remaining targets: $message"
+      $global:LASTEXITCODE = 0
+      $results += [pscustomobject]@{
+        name = $target.name
+        target = $target
+        ok = $false
+        error = $message
+      }
+    }
+  }
+
+  $script:TargetUpdateResults = @($results)
+  $script:SuccessfulDeployTargets = @($results | Where-Object { $_.ok } | ForEach-Object { $_.target })
+
+  if ($script:SuccessfulDeployTargets.Count -eq 0) {
+    $failedNames = ($results | ForEach-Object { $_.name }) -join ", "
+    throw "No server targets updated successfully. Failed targets: $failedNames"
+  }
+}
+
+function Assert-NoTargetUpdateFailures {
+  $failed = @($script:TargetUpdateResults | Where-Object { -not $_.ok })
+  if ($failed.Count -eq 0) {
+    return
+  }
+
+  $failedNames = ($failed | ForEach-Object { $_.name }) -join ", "
+  throw "Release deploy finished with failed server targets: $failedNames"
+}
+
 function ConvertTo-ShellSingleQuoted {
   param([string]$Value)
 
@@ -439,6 +486,104 @@ $body = $json | ConvertFrom-Json
     Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
   }
 }
+
+function Test-TargetUpdateFailureIsolation {
+  $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("colipas-release-target-selftest-" + [Guid]::NewGuid().ToString("N"))
+  New-Item -ItemType Directory -Path $tempRoot | Out-Null
+  $mockSshPath = Join-Path $tempRoot "ssh.cmd"
+  $mockSshUnixPath = Join-Path $tempRoot "ssh"
+  $capturePath = Join-Path $tempRoot "ssh-calls.txt"
+  $previousPath = $env:PATH
+  $previousCapture = $env:COLIPAS_SSH_SELFTEST_CAPTURE
+  $previousResults = $script:TargetUpdateResults
+  $previousSuccessfulTargets = $script:SuccessfulDeployTargets
+
+  try {
+    @'
+@echo off
+echo %*>>"%COLIPAS_SSH_SELFTEST_CAPTURE%"
+echo %* | findstr /C:"fail-host" >nul
+if not errorlevel 1 exit /b 31
+exit /b 0
+'@ | Set-Content -LiteralPath $mockSshPath -Encoding ASCII
+    @'
+#!/usr/bin/env sh
+printf '%s\n' "$*" >> "$COLIPAS_SSH_SELFTEST_CAPTURE"
+case "$*" in
+  *fail-host*) exit 31 ;;
+  *) exit 0 ;;
+esac
+'@ | Set-Content -LiteralPath $mockSshUnixPath -Encoding ASCII
+    if (Get-Command chmod -ErrorAction SilentlyContinue) {
+      & chmod +x $mockSshUnixPath
+    }
+
+    $env:COLIPAS_SSH_SELFTEST_CAPTURE = $capturePath
+    $env:PATH = "$tempRoot$([IO.Path]::PathSeparator)$previousPath"
+
+    $targets = @(
+      [pscustomobject]@{
+        name = "fail-target"
+        host = "fail-host"
+        user = "mock-user"
+        command = "mock-command"
+        sshKey = ""
+        publicBaseUrl = "https://fail.example.test"
+        publicMode = "public"
+        deploymentMode = "systemd"
+        skipPublicValidation = $false
+      },
+      [pscustomobject]@{
+        name = "ok-target"
+        host = "ok-host"
+        user = "mock-user"
+        command = "mock-command"
+        sshKey = ""
+        publicBaseUrl = "https://ok.example.test"
+        publicMode = "public"
+        deploymentMode = "docker"
+        skipPublicValidation = $false
+      }
+    )
+
+    Invoke-TargetUpdates $targets
+    if ($script:SuccessfulDeployTargets.Count -ne 1 -or $script:SuccessfulDeployTargets[0].name -ne "ok-target") {
+      throw "Target update failure isolation did not preserve the successful target."
+    }
+
+    $captured = Get-Content -LiteralPath $capturePath -Raw
+    if (-not $captured.Contains("fail-host") -or -not $captured.Contains("ok-host")) {
+      throw "Target update failure isolation did not attempt every target."
+    }
+
+    $failureGuardRaised = $false
+    try {
+      Assert-NoTargetUpdateFailures
+    } catch {
+      $failureGuardRaised = $true
+      if (-not ([string]$_).Contains("fail-target")) {
+        throw "Target update failure guard did not include the failed target name."
+      }
+      $global:LASTEXITCODE = 0
+    }
+    if (-not $failureGuardRaised) {
+      throw "Target update failure guard did not fail after a partial release."
+    }
+
+    Write-Host "ok release deploy continues updating healthy targets and reports partial failures"
+  } finally {
+    $env:PATH = $previousPath
+    $script:TargetUpdateResults = $previousResults
+    $script:SuccessfulDeployTargets = $previousSuccessfulTargets
+    if ($null -eq $previousCapture) {
+      Remove-Item Env:\COLIPAS_SSH_SELFTEST_CAPTURE -ErrorAction SilentlyContinue
+    } else {
+      $env:COLIPAS_SSH_SELFTEST_CAPTURE = $previousCapture
+    }
+    Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
+  }
+}
+
 
 function Push-GitHub {
   git push origin $Branch
@@ -619,6 +764,7 @@ if ($DeployTargets.Count -eq 0) {
 
 if ($SelfTest) {
   Test-GitHubApiJsonFallback
+  Test-TargetUpdateFailureIsolation
   exit 0
 }
 
@@ -647,13 +793,11 @@ Run-Step "Push GitHub" {
 }
 
 Run-Step "Update server targets" {
-  foreach ($target in $DeployTargets) {
-    Invoke-TargetUpdate $target
-  }
+  Invoke-TargetUpdates $DeployTargets
 }
 
 Run-Step "Production target browser validation" {
-  foreach ($target in $DeployTargets) {
+  foreach ($target in $script:SuccessfulDeployTargets) {
     if ($target.skipPublicValidation) {
       Write-Host "Skipping browser validation for target $($target.name)."
       continue
@@ -666,6 +810,10 @@ Run-Step "Production target browser validation" {
     Write-Host "Validating $($target.name) at $($target.publicBaseUrl) in $($target.publicMode) mode."
     Invoke-ProductionBrowserValidation -Target $target
   }
+}
+
+Run-Step "Server target failure guard" {
+  Assert-NoTargetUpdateFailures
 }
 
 Write-Host "CoLiPas cloud server management panel release deploy completed."
