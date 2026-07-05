@@ -57,6 +57,9 @@ async function createE2ePage(options) {
   });
   targetPage.on('console', (message) => {
     if (message.type() === 'error' || message.type() === 'warning') {
+      if (isExpectedBrowserConsoleNoise(message.text())) {
+        return;
+      }
       consoleProblems.push(`${message.type()}: ${message.text()}`);
     }
   });
@@ -64,6 +67,10 @@ async function createE2ePage(options) {
     consoleProblems.push(`pageerror: ${error.message}`);
   });
   return targetPage;
+}
+
+function isExpectedBrowserConsoleNoise(text) {
+  return /WebSocket connection to .+\/api\/servers\/shells\/ws.+WebSocket is closed before the connection is established/i.test(text);
 }
 
 async function openAndLogin(targetPage, url) {
