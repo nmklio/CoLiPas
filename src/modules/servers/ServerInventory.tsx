@@ -50,6 +50,8 @@ const terminalCompatibleInputFlushMs = 4;
 const terminalRuntimePrefetchDelayMs = 250;
 const terminalNetworkUiRefreshMs = 900;
 const terminalSelfTestCommand = `printf 'colipas-ssh-self-test-start\\n'; i=1; while [ "$i" -le 40 ]; do printf 'colipas-ssh-self-test-%02d\\n' "$i"; i=$((i+1)); done; printf 'colipas-ssh-self-test-end\\n'`;
+const terminalSelfTestTimeoutMs = 15000;
+const terminalSelfTestLinePattern = /colipas-ssh-self-test-\d{2}/g;
 
 const actionCommands: Record<'powerOn' | 'shutdown' | 'reboot', string> = {
   powerOn: 'printf "server reachable via SSH\\n"; uptime',
@@ -71,6 +73,22 @@ interface TerminalNetworkStats {
   bytesReceived: number;
   throughputBytesPerSecond: number;
   rttMs: number | null;
+}
+
+interface TerminalSelfTestState {
+  status: 'running' | 'complete' | 'timeout' | 'failed';
+  lines: number;
+  durationMs: number;
+  linesPerSecond: number;
+  networkLabel: string;
+  message?: string;
+}
+
+interface TerminalSelfTestTracker {
+  sessionId: string;
+  startedAt: number;
+  lineCount: number;
+  timeoutId: number | null;
 }
 
 const initialForm: ConnectServerPayload = {
@@ -119,6 +137,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const [terminalShellId, setTerminalShellId] = useState<string | null>(null);
   const [activeShellCount, setActiveShellCount] = useState(0);
   const [terminalNetworkStats, setTerminalNetworkStats] = useState<TerminalNetworkStats | null>(null);
+  const [terminalSelfTest, setTerminalSelfTest] = useState<TerminalSelfTestState | null>(null);
   const [loginProbe, setLoginProbe] = useState<LoginProbe | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [formDismissed, setFormDismissed] = useState(false);
@@ -147,6 +166,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const terminalInputFlushAgainRef = useRef(false);
   const terminalNetworkRenderedRef = useRef<TerminalNetworkStats | null>(null);
   const terminalNetworkRenderedAtRef = useRef(0);
+  const terminalSelfTestRef = useRef<TerminalSelfTestTracker | null>(null);
   const terminalCssInjectedRef = useRef(false);
   const actionMessageTimerRef = useRef<number | null>(null);
   const sshConsoleOpenRef = useRef(false);
@@ -166,6 +186,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const terminalNetworkLabel = terminalNetworkStats
     ? `${formatTerminalRtt(terminalNetworkStats.rttMs)} / ${formatBytesPerSecond(terminalNetworkStats.throughputBytesPerSecond)}`
     : '';
+  const terminalSelfTestRunning = terminalSelfTest?.status === 'running';
+  const terminalSelfTestLabel = terminalSelfTest ? formatTerminalSelfTestLabel(terminalSelfTest, language) : '';
   const visibleSummary = useMemo(() => {
     let maxLoadServer: ServerNode | undefined;
     let maxLoad = -1;
@@ -824,7 +846,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                       <button type="button" aria-label={t('servers.clearTerminalOutput')} title={t('servers.clearTerminalOutput')} onClick={clearTerminalOutput}>
                         <Eraser size={14} />
                       </button>
-                      <button type="button" aria-label={t('servers.runTerminalSelfTest')} title={t('servers.runTerminalSelfTest')} onClick={runTerminalSelfTest} disabled={!terminalShellId || sshInterrupting}>
+                      <button type="button" aria-label={t('servers.runTerminalSelfTest')} title={t('servers.runTerminalSelfTest')} onClick={runTerminalSelfTest} disabled={!terminalShellId || sshInterrupting || terminalSelfTestRunning}>
                         <Cpu size={14} />
                       </button>
                       <button type="button" aria-label={t('servers.sendCtrlC')} title={t('servers.sendCtrlC')} onClick={interruptTerminalCommand} disabled={!terminalShellId || sshInterrupting}>
@@ -837,6 +859,13 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     {terminalShellId && terminalNetworkLabel && (
                       <span className="ssh-terminal-network" title={t('servers.terminalNetworkStats')}>
                         {terminalNetworkLabel}
+                      </span>
+                    )}
+                    {terminalSelfTest && (
+                      <span className={`ssh-terminal-self-test ${terminalSelfTest.status}`} title={terminalSelfTestLabel}>
+                        {terminalSelfTest.status === 'running'
+                          ? t('servers.sshSelfTestRunning')
+                          : t('servers.sshSelfTestBadge', { lines: terminalSelfTest.lines, duration: Math.round(terminalSelfTest.durationMs) })}
                       </span>
                     )}
                     <div className="ssh-terminal-state">
@@ -1308,6 +1337,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     }
     if ((event.type === 'stdout' || event.type === 'stderr') && event.content) {
       queueTerminalWrite(terminal, event.content);
+      captureTerminalSelfTestOutput(terminal, event.content);
       return;
     }
     if (event.type === 'close') {
@@ -1357,6 +1387,116 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     terminalNetworkRenderedRef.current = null;
     terminalNetworkRenderedAtRef.current = 0;
     setTerminalNetworkStats(null);
+  }
+
+  function beginTerminalSelfTest(sessionId: string) {
+    clearTerminalSelfTestTimer();
+    const networkLabel = terminalNetworkLabel || formatTerminalRtt(terminalNetworkRenderedRef.current?.rttMs ?? null);
+    const tracker: TerminalSelfTestTracker = {
+      sessionId,
+      startedAt: performance.now(),
+      lineCount: 0,
+      timeoutId: null,
+    };
+    tracker.timeoutId = window.setTimeout(() => {
+      finishTerminalSelfTest('timeout');
+    }, terminalSelfTestTimeoutMs);
+    terminalSelfTestRef.current = tracker;
+    setTerminalSelfTest({
+      status: 'running',
+      lines: 0,
+      durationMs: 0,
+      linesPerSecond: 0,
+      networkLabel,
+    });
+  }
+
+  function captureTerminalSelfTestOutput(terminal: XTerm, content: string) {
+    const tracker = terminalSelfTestRef.current;
+    if (!tracker) {
+      return;
+    }
+
+    const lineMatches = content.match(terminalSelfTestLinePattern);
+    if (lineMatches) {
+      tracker.lineCount += lineMatches.length;
+      const elapsedMs = Math.max(0, performance.now() - tracker.startedAt);
+      setTerminalSelfTest((current) => current?.status === 'running'
+        ? {
+            ...current,
+            lines: tracker.lineCount,
+            durationMs: elapsedMs,
+            linesPerSecond: calculateSelfTestRate(tracker.lineCount, elapsedMs),
+          }
+        : current);
+    }
+
+    if (content.includes('colipas-ssh-self-test-end')) {
+      finishTerminalSelfTest('complete', terminal);
+    }
+  }
+
+  function finishTerminalSelfTest(status: TerminalSelfTestState['status'], terminal?: XTerm, message?: string) {
+    const tracker = terminalSelfTestRef.current;
+    if (!tracker) {
+      if (status === 'failed' && message) {
+        setTerminalSelfTest({
+          status,
+          lines: 0,
+          durationMs: 0,
+          linesPerSecond: 0,
+          networkLabel: terminalNetworkLabel || formatTerminalRtt(terminalNetworkRenderedRef.current?.rttMs ?? null),
+          message,
+        });
+      }
+      return;
+    }
+
+    const durationMs = Math.max(0, performance.now() - tracker.startedAt);
+    clearTerminalSelfTestTimer();
+    terminalSelfTestRef.current = null;
+
+    const nextState: TerminalSelfTestState = {
+      status,
+      lines: tracker.lineCount,
+      durationMs,
+      linesPerSecond: calculateSelfTestRate(tracker.lineCount, durationMs),
+      networkLabel: terminalNetworkLabel || formatTerminalRtt(terminalNetworkRenderedRef.current?.rttMs ?? null),
+      message,
+    };
+    setTerminalSelfTest(nextState);
+
+    const summary = formatTerminalSelfTestLabel(nextState, language);
+    if (terminal) {
+      flushTerminalWriteBuffer(terminal, { drainAll: true });
+      terminal.writeln(`\r\n${t('servers.sshSelfTestTerminalLine', { summary })}`);
+      terminal.scrollToBottom();
+    }
+
+    if (status === 'complete') {
+      showActionMessage(t('servers.sshSelfTestFinished', { summary }));
+      return;
+    }
+    if (status === 'timeout') {
+      showActionMessage(t('servers.sshSelfTestTimeout', { lines: tracker.lineCount }), { autoDismissMs: 7000 });
+      return;
+    }
+    if (status === 'failed') {
+      showActionMessage(message || 'SSH self-test failed');
+    }
+  }
+
+  function clearTerminalSelfTestTimer() {
+    const timeoutId = terminalSelfTestRef.current?.timeoutId;
+    if (timeoutId !== null && timeoutId !== undefined) {
+      window.clearTimeout(timeoutId);
+    }
+  }
+
+  function resetTerminalSelfTest() {
+    clearTerminalSelfTestTimer();
+    terminalSelfTestRef.current = null;
+    setTerminalSelfTest(null);
   }
 
   async function ensureXterm() {
@@ -1625,6 +1765,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       return;
     }
 
+    beginTerminalSelfTest(sessionId);
     flushTerminalInput(sessionId)
       .then(() => sendTerminalInput(sessionId, `${terminalSelfTestCommand}\r`))
       .then(() => {
@@ -1632,7 +1773,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
         xtermRef.current?.focus();
       })
       .catch((error) => {
-        showActionMessage(error instanceof Error ? error.message : 'SSH self-test failed');
+        finishTerminalSelfTest('failed', undefined, error instanceof Error ? error.message : 'SSH self-test failed');
       });
   }
 
@@ -1697,6 +1838,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     terminalShellIdRef.current = null;
     clearTerminalWriteBuffer();
     clearTerminalInputBuffer();
+    resetTerminalSelfTest();
     if (syncState) {
       setTerminalShellId(null);
       clearTerminalNetworkStats();
@@ -1835,6 +1977,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   function disposeXterm() {
     clearTerminalWriteBuffer();
     clearTerminalInputBuffer();
+    resetTerminalSelfTest();
     if (terminalResizeTimerRef.current !== null) {
       window.clearTimeout(terminalResizeTimerRef.current);
       terminalResizeTimerRef.current = null;
@@ -2101,6 +2244,41 @@ function shouldRenderTerminalNetworkStats(
 
 function terminalNetworkDisplayKey(stats: TerminalNetworkStats) {
   return `${formatTerminalRtt(stats.rttMs)}|${formatBytesPerSecond(stats.throughputBytesPerSecond)}`;
+}
+
+function calculateSelfTestRate(lines: number, durationMs: number) {
+  if (lines <= 0 || durationMs <= 0) {
+    return 0;
+  }
+  return lines / (durationMs / 1000);
+}
+
+function formatSelfTestRate(linesPerSecond: number, language: Language) {
+  const unit = language === 'en' ? 'lines/s' : '行/秒';
+  if (!Number.isFinite(linesPerSecond) || linesPerSecond <= 0) {
+    return `0 ${unit}`;
+  }
+  return linesPerSecond >= 100
+    ? `${Math.round(linesPerSecond)} ${unit}`
+    : `${linesPerSecond.toFixed(1)} ${unit}`;
+}
+
+function formatTerminalSelfTestLabel(state: TerminalSelfTestState, language: Language) {
+  if (state.status === 'running') {
+    const runningLabel = language === 'en' ? 'running' : language === 'ja' ? '測定中' : '测速中';
+    const lineUnit = language === 'en' ? 'lines' : '行';
+    return `${runningLabel} · ${state.lines} ${lineUnit}`;
+  }
+  if (state.status === 'failed') {
+    const failedLabel = language === 'en' ? 'failed' : language === 'ja' ? '失敗' : '失败';
+    return `${failedLabel} · ${state.message ?? 'send failed'}`;
+  }
+
+  const lineUnit = language === 'en' ? 'lines' : '行';
+  const base = `${state.lines} ${lineUnit} / ${Math.round(state.durationMs)}ms / ${formatSelfTestRate(state.linesPerSecond, language)}`;
+  const network = state.networkLabel ? ` / ${state.networkLabel}` : '';
+  const timeoutLabel = language === 'en' ? 'timeout' : language === 'ja' ? 'タイムアウト' : '超时';
+  return state.status === 'timeout' ? `${timeoutLabel} · ${base}${network}` : `${base}${network}`;
 }
 
 function ActionButton({ label, icon, disabled, onClick }: { label: string; icon: ReactNode; disabled?: boolean; onClick: () => void }) {

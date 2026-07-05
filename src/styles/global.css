@@ -3983,6 +3983,36 @@ td span,
   white-space: nowrap;
 }
 
+.ssh-terminal-self-test {
+  min-height: 24px;
+  max-width: 190px;
+  border: 1px solid rgba(250, 204, 21, 0.28);
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: rgba(113, 63, 18, 0.22);
+  color: #fde68a;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ssh-terminal-self-test.complete {
+  border-color: rgba(74, 222, 128, 0.28);
+  background: rgba(22, 101, 52, 0.24);
+  color: #bbf7d0;
+}
+
+.ssh-terminal-self-test.timeout,
+.ssh-terminal-self-test.failed {
+  border-color: rgba(248, 113, 113, 0.34);
+  background: rgba(127, 29, 29, 0.24);
+  color: #fecaca;
+}
+
 .ssh-terminal-tools button {
   width: 28px;
   min-height: 28px;

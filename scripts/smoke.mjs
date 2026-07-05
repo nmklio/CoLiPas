@@ -4893,11 +4893,22 @@ function assertSshTerminalRealtimeGuards() {
     'function clearTerminalOutput()',
     'terminal.clear()',
     'terminalSelfTestCommand',
+    'terminalSelfTestTimeoutMs',
+    'terminalSelfTestLinePattern',
+    'const [terminalSelfTest, setTerminalSelfTest]',
+    'const terminalSelfTestRef = useRef<TerminalSelfTestTracker | null>(null)',
     'function runTerminalSelfTest()',
+    'function beginTerminalSelfTest(',
+    'function captureTerminalSelfTestOutput(',
+    'function finishTerminalSelfTest(',
+    'formatTerminalSelfTestLabel(nextState, language)',
+    "terminal.writeln(`\\r\\n${t('servers.sshSelfTestTerminalLine'",
     'sendTerminalInput(sessionId, `${terminalSelfTestCommand}\\r`)',
     "t('servers.runTerminalSelfTest')",
     "t('servers.sshSelfTestStarted')",
     "t('servers.sshSelfTestUnavailable')",
+    "t('servers.sshSelfTestBadge'",
+    'ssh-terminal-self-test',
   ];
   const missingFrontend = requiredFrontendFragments.filter((fragment) => !inventorySource.includes(fragment));
   if (missingFrontend.length) {
@@ -4933,6 +4944,11 @@ function assertSshTerminalRealtimeGuards() {
     'servers.runTerminalSelfTest',
     'servers.sshSelfTestStarted',
     'servers.sshSelfTestUnavailable',
+    'servers.sshSelfTestRunning',
+    'servers.sshSelfTestBadge',
+    'servers.sshSelfTestTerminalLine',
+    'servers.sshSelfTestFinished',
+    'servers.sshSelfTestTimeout',
   ];
   const missingToolLabels = requiredToolLabels.filter((key) => !inventorySource.includes(key) || !fs.readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8').includes(key));
   if (missingToolLabels.length) {
@@ -5059,6 +5075,9 @@ function assertSshTerminalRealtimeGuards() {
   const xtermTextareaCss = globalCssSource.match(/\.ssh-terminal-screen \.xterm-helper-textarea \{(?<body>[\s\S]+?)\n\}/)?.groups?.body ?? '';
   if (!xtermHelpersCss || !xtermTextareaCss || /(?:width|height|min-width|min-height):\s*0\s*!important/.test(`${xtermHelpersCss}\n${xtermTextareaCss}`)) {
     throw new Error('SSH terminal xterm helper input must remain nonzero sized so browser keyboard capture stays reliable');
+  }
+  if (!globalCssSource.includes('.ssh-terminal-self-test') || !globalCssSource.includes('.ssh-terminal-self-test.complete')) {
+    throw new Error('SSH terminal self-test result chip styles are missing');
   }
 
   const redactionRequired = [

@@ -526,8 +526,10 @@ async function assertSshTerminalPanel(targetPage) {
       const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
       return terminalText.includes('colipas-ssh-self-test-40')
         && terminalText.includes('colipas-ssh-self-test-end')
+        && terminalText.includes('CoLiPas SSH self-test:')
         && terminalText.includes('simulated$');
     }, undefined, { timeout: 10000 });
+    await targetPage.locator('.ssh-terminal-self-test.complete').filter({ hasText: /40 lines/i }).waitFor({ timeout: 5000 });
     const selfTestDurationMs = Date.now() - selfTestStartedAt;
     if (selfTestDurationMs > 6000) {
       throw new Error(`SSH safe speed test output rendered too slowly: ${selfTestDurationMs}ms`);
