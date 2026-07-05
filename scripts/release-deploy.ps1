@@ -366,6 +366,41 @@ function Get-GitCommitTreeSha {
   return $tree
 }
 
+function Get-GitBlobContentBase64 {
+  param([string]$BlobSha)
+
+  if ([string]::IsNullOrWhiteSpace($BlobSha) -or $BlobSha -notmatch '^[0-9a-f]{40}$') {
+    throw "Invalid git blob sha: $BlobSha"
+  }
+
+  $process = [Diagnostics.Process]::new()
+  $process.StartInfo.FileName = "git"
+  $process.StartInfo.Arguments = "cat-file blob $BlobSha"
+  $process.StartInfo.RedirectStandardOutput = $true
+  $process.StartInfo.RedirectStandardError = $true
+  $process.StartInfo.UseShellExecute = $false
+  $process.StartInfo.CreateNoWindow = $true
+
+  $memory = [IO.MemoryStream]::new()
+  try {
+    if (-not $process.Start()) {
+      throw "Unable to start git cat-file for blob $BlobSha."
+    }
+
+    $process.StandardOutput.BaseStream.CopyTo($memory)
+    $stderr = $process.StandardError.ReadToEnd()
+    $process.WaitForExit()
+    if ($process.ExitCode -ne 0) {
+      throw "git cat-file blob $BlobSha failed: $stderr"
+    }
+
+    return [Convert]::ToBase64String($memory.ToArray())
+  } finally {
+    $memory.Dispose()
+    $process.Dispose()
+  }
+}
+
 function Test-GitHubApiJsonFallback {
   $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("colipas-release-selftest-" + [Guid]::NewGuid().ToString("N"))
   New-Item -ItemType Directory -Path $tempRoot | Out-Null
@@ -669,15 +704,15 @@ function Push-GitHub {
       continue
     }
 
-    $parts = $treeLine -split "\s+"
+    $parts = $treeLine -split "\s+", 4
     $mode = $parts[0]
     $type = $parts[1]
+    $blobSha = $parts[2]
     if ($type -ne "blob") {
       throw "GitHub API fallback only supports file blobs, got $type for $file"
     }
 
-    $localPath = Join-Path $PWD.Path ($file -replace "/", [IO.Path]::DirectorySeparatorChar)
-    $content = [Convert]::ToBase64String([IO.File]::ReadAllBytes($localPath))
+    $content = Get-GitBlobContentBase64 $blobSha
     $blob = Invoke-GhApiJson -Path "repos/$GitHubRepo/git/blobs" -Method "POST" -Body @{
       content = $content
       encoding = "base64"

@@ -4192,6 +4192,13 @@ async function assertReleaseDeployTargetPlanGuards() {
   if (/rev-parse\s+"[^"]*\^\{tree\}"/.test(releaseDeploySource)) {
     throw new Error('Release deploy fallback must not depend on PowerShell-sensitive ^{tree} rev parsing');
   }
+  if (
+    !releaseDeploySource.includes('function Get-GitBlobContentBase64')
+    || !releaseDeploySource.includes('git cat-file blob $BlobSha')
+    || releaseDeploySource.includes('[IO.File]::ReadAllBytes($localPath)')
+  ) {
+    throw new Error('Release deploy API fallback must upload committed git blob bytes, not CRLF-normalized working-tree files');
+  }
 
   const plan = {
     targets: [
