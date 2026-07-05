@@ -3159,7 +3159,8 @@ function assertAccountUiGuards() {
     'ConvertTo-ShellSingleQuoted',
     'RELEASE_ARTIFACT_ID=$safeArtifact',
     '$script:PublishedCommitSha',
-    'throw "Target $($Target.name) update failed with exit code $LASTEXITCODE."',
+    'Invoke-SshWithDiagnostics -TargetName $Target.name',
+    'throw "Target $TargetName update failed with exit code $sshExitCode.',
     'generate_release_verify_token',
     'write_release_evidence_env',
     'ensure_current_build',
@@ -4210,6 +4211,19 @@ async function assertReleaseDeployTargetPlanGuards() {
   const missingApiCommitImport = apiCommitImportFragments.filter((fragment) => !releaseDeploySource.includes(fragment));
   if (missingApiCommitImport.length) {
     throw new Error(`Release deploy API commit-object import fallback is incomplete: ${missingApiCommitImport.join(', ')}`);
+  }
+  const sshDiagnosticsFragments = [
+    'function Get-SshFailureHint',
+    'function Invoke-SshWithDiagnostics',
+    'SSH transport failed: connection refused',
+    'SSH authentication failed.',
+    'SSH host-key verification failed.',
+    'Target host: $TargetHost',
+    'Target update diagnostics did not explain the SSH connection-refused failure.',
+  ];
+  const missingSshDiagnostics = sshDiagnosticsFragments.filter((fragment) => !releaseDeploySource.includes(fragment));
+  if (missingSshDiagnostics.length) {
+    throw new Error(`Release deploy SSH failure diagnostics are incomplete: ${missingSshDiagnostics.join(', ')}`);
   }
 
   const plan = {

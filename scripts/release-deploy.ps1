@@ -234,6 +234,65 @@ function Write-DeployPlan {
   } | ConvertTo-Json -Depth 5
 }
 
+function Get-SshFailureHint {
+  param(
+    [int]$ExitCode,
+    [string[]]$OutputLines
+  )
+
+  $combined = (($OutputLines | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join "`n")
+  if ($combined -match '(?i)connection refused') {
+    return "SSH transport failed: connection refused. The target host was reachable, but the SSH port is closed or sshd/firewall is rejecting it."
+  }
+  if ($combined -match '(?i)(connection timed out|operation timed out|timed out|no route to host|network is unreachable)') {
+    return "SSH transport failed: network timeout or route problem. Check DNS, security group/firewall rules, and whether the configured SSH port is reachable."
+  }
+  if ($combined -match '(?i)(permission denied|authentication failed|too many authentication failures|publickey|password)') {
+    return "SSH authentication failed. Check the deploy user, key, authorized_keys, and whether the target allows this authentication method."
+  }
+  if ($combined -match '(?i)(could not resolve hostname|name or service not known|temporary failure in name resolution|nodename nor servname provided)') {
+    return "SSH host resolution failed. Check the release target host alias or DNS record."
+  }
+  if ($combined -match '(?i)(host key verification failed|remote host identification has changed|offending .*key)') {
+    return "SSH host-key verification failed. Check known_hosts for a changed or stale host key before retrying."
+  }
+  if ($combined -match '(?i)(command not found|no such file or directory|not found)') {
+    return "Remote update command failed before deployment. Check that the configured update script exists and is executable on the target."
+  }
+  if ($ExitCode -eq 255) {
+    return "SSH transport failed with exit code 255. Check connectivity, host alias, SSH daemon, firewall, and deploy credentials."
+  }
+
+  return "Remote update command failed with exit code $ExitCode. Check the target update script logs on the server."
+}
+
+function Invoke-SshWithDiagnostics {
+  param(
+    [string]$TargetName,
+    [string]$TargetHost,
+    [string[]]$SshArgs
+  )
+
+  $capturedLines = [Collections.Generic.List[string]]::new()
+  $previousErrorActionPreference = $ErrorActionPreference
+  try {
+    $ErrorActionPreference = "Continue"
+    & ssh @SshArgs 2>&1 | ForEach-Object {
+      $line = [string]$_
+      $capturedLines.Add($line)
+      Write-Host $line
+    }
+    $sshExitCode = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+  }
+
+  if ($sshExitCode -ne 0) {
+    $hint = Get-SshFailureHint -ExitCode $sshExitCode -OutputLines $capturedLines.ToArray()
+    throw "Target $TargetName update failed with exit code $sshExitCode. $hint Target host: $TargetHost."
+  }
+}
+
 function Invoke-TargetUpdate {
   param([object]$Target)
 
@@ -265,10 +324,7 @@ function Invoke-TargetUpdate {
   $sshArgs += @("-o", "StrictHostKeyChecking=accept-new", "$($Target.user)@$($Target.host)", $evidenceCommand)
 
   Write-Host "Updating target $($Target.name) via $($Target.host)."
-  & ssh @sshArgs
-  if ($LASTEXITCODE -ne 0) {
-    throw "Target $($Target.name) update failed with exit code $LASTEXITCODE."
-  }
+  Invoke-SshWithDiagnostics -TargetName $Target.name -TargetHost $Target.host -SshArgs $sshArgs
 }
 
 function Invoke-TargetUpdates {
@@ -667,14 +723,17 @@ function Test-TargetUpdateFailureIsolation {
 @echo off
 echo %*>>"%COLIPAS_SSH_SELFTEST_CAPTURE%"
 echo %* | findstr /C:"fail-host" >nul
-if not errorlevel 1 exit /b 31
+if not errorlevel 1 (
+  echo ssh: connect to host fail-host port 22: Connection refused 1>&2
+  exit /b 255
+)
 exit /b 0
 '@ | Set-Content -LiteralPath $mockSshPath -Encoding ASCII
     @'
 #!/usr/bin/env sh
 printf '%s\n' "$*" >> "$COLIPAS_SSH_SELFTEST_CAPTURE"
 case "$*" in
-  *fail-host*) exit 31 ;;
+  *fail-host*) printf '%s\n' 'ssh: connect to host fail-host port 22: Connection refused' >&2; exit 255 ;;
   *) exit 0 ;;
 esac
 '@ | Set-Content -LiteralPath $mockSshUnixPath -Encoding ASCII
@@ -718,6 +777,17 @@ esac
     $captured = Get-Content -LiteralPath $capturePath -Raw
     if (-not $captured.Contains("fail-host") -or -not $captured.Contains("ok-host")) {
       throw "Target update failure isolation did not attempt every target."
+    }
+
+    $failedResults = @($script:TargetUpdateResults | Where-Object { -not $_.ok })
+    if ($failedResults.Count -ne 1) {
+      throw "Target update failure isolation did not record exactly one failed target."
+    }
+    if (
+      -not ([string]$failedResults[0].error).Contains("SSH transport failed: connection refused") -or
+      -not ([string]$failedResults[0].error).Contains("Target host: fail-host")
+    ) {
+      throw "Target update diagnostics did not explain the SSH connection-refused failure."
     }
 
     $failureGuardRaised = $false
