@@ -4268,6 +4268,10 @@ async function assertReleaseDeployTargetPlanGuards() {
     'SSH host-key verification failed.',
     'Target host: $TargetHost',
     'Target update diagnostics did not explain the SSH connection-refused failure.',
+    'function Get-PropertyInt',
+    'sshPort = Get-PropertyInt $item @("sshPort", "port") 0',
+    '$sshArgs += @("-p", ([string][int]$Target.sshPort))',
+    'Target update did not pass the configured SSH port.',
   ];
   const missingSshDiagnostics = sshDiagnosticsFragments.filter((fragment) => !releaseDeploySource.includes(fragment));
   if (missingSshDiagnostics.length) {

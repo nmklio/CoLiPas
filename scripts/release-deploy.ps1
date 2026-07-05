@@ -130,6 +130,32 @@ function Get-PropertyValue {
   return $value
 }
 
+function Get-PropertyInt {
+  param(
+    [object]$Object,
+    [string[]]$Names,
+    [int]$Default = 0
+  )
+
+  foreach ($name in $Names) {
+    $rawValue = Get-PropertyValue $Object $name ""
+    if ([string]::IsNullOrWhiteSpace($rawValue)) {
+      continue
+    }
+
+    $parsedValue = 0
+    if (-not [int]::TryParse($rawValue, [ref]$parsedValue)) {
+      throw "Release target field '$name' must be an integer."
+    }
+    if ($parsedValue -lt 1 -or $parsedValue -gt 65535) {
+      throw "Release target field '$name' must be between 1 and 65535."
+    }
+    return $parsedValue
+  }
+
+  return $Default
+}
+
 function Get-PropertyBool {
   param(
     [object]$Object,
@@ -183,6 +209,7 @@ function ConvertTo-DeployTargets {
         user = $userName
         command = $command
         sshKey = Get-PropertyValue $item "sshKey" $SshKey
+        sshPort = Get-PropertyInt $item @("sshPort", "port") 0
         publicBaseUrl = Get-PropertyValue $item "publicBaseUrl" $ProductionBaseUrl
         publicMode = Get-PropertyValue $item "publicMode" "public"
         deploymentMode = Get-PropertyValue $item "deploymentMode" "systemd"
@@ -210,6 +237,7 @@ function Get-DeployTargets {
     user = $RemoteUser
     command = $RemoteCommand
     sshKey = $SshKey
+    sshPort = 0
     publicBaseUrl = $ProductionBaseUrl
     publicMode = "public"
     deploymentMode = "systemd"
@@ -300,6 +328,9 @@ function Invoke-TargetUpdate {
   $resolvedSshKey = Resolve-LocalPath $Target.sshKey
   if ($resolvedSshKey) {
     $sshArgs += @("-i", $resolvedSshKey, "-o", "IdentitiesOnly=yes")
+  }
+  if ($Target.sshPort -and [int]$Target.sshPort -gt 0) {
+    $sshArgs += @("-p", ([string][int]$Target.sshPort))
   }
   $head = $script:PublishedCommitSha
   if ([string]::IsNullOrWhiteSpace($head)) {
@@ -762,6 +793,7 @@ esac
         user = "mock-user"
         command = "mock-command"
         sshKey = ""
+        sshPort = 22674
         publicBaseUrl = "https://ok.example.test"
         publicMode = "public"
         deploymentMode = "docker"
@@ -777,6 +809,9 @@ esac
     $captured = Get-Content -LiteralPath $capturePath -Raw
     if (-not $captured.Contains("fail-host") -or -not $captured.Contains("ok-host")) {
       throw "Target update failure isolation did not attempt every target."
+    }
+    if (-not $captured.Contains("-p 22674")) {
+      throw "Target update did not pass the configured SSH port."
     }
 
     $failedResults = @($script:TargetUpdateResults | Where-Object { -not $_.ok })
