@@ -17,6 +17,7 @@ import {
   resizeServerShell,
   streamServerShell,
   writeServerShell,
+  type ServerShellSocketCloseEvent,
   type ServerIdentityResponse,
   type ServerShellSocketMetrics,
   type ServerShellStreamEvent,
@@ -1526,6 +1527,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
           }
         },
         (metrics) => updateTerminalNetworkStats(metrics),
+        (event) => handleTerminalSocketClose(server, terminal, lifecycleSeq, event),
       );
       terminalShellSocketRef.current = socket;
       terminalShellTransportRef.current = 'websocket';
@@ -1614,6 +1616,47 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       terminal.writeln(`\r\n${event.message ?? 'SSH shell stream failed'}`);
       terminal.scrollToBottom();
     }
+  }
+
+  function handleTerminalSocketClose(
+    server: ServerNode,
+    terminal: XTerm,
+    lifecycleSeq: number,
+    event: ServerShellSocketCloseEvent,
+  ) {
+    if (!event.ready || !isCurrentTerminalLifecycle(server.id, lifecycleSeq) || terminalShellTransportRef.current !== 'websocket' || !terminalShellIdRef.current) {
+      return;
+    }
+
+    const closedSessionId = terminalShellIdRef.current;
+    flushTerminalWriteBuffer(terminal, { drainAll: true });
+    terminalShellSocketRef.current = null;
+    terminalShellTransportRef.current = null;
+    terminalShellIdRef.current = null;
+    setTerminalShellId(null);
+    setTerminalTransport(null);
+    clearTerminalInputBuffer();
+    clearTerminalNetworkStats();
+    terminal.writeln(`\r\nWebSocket terminal disconnected (${event.code || 'closed'}); reconnecting with compatible stream mode...`);
+    terminal.scrollToBottom();
+    closeServerShell(closedSessionId).catch(() => undefined);
+    openCompatibleTerminalTransport(server, terminal, lifecycleSeq)
+      .then(() => {
+        if (isCurrentTerminalLifecycle(server.id, lifecycleSeq)) {
+          terminal.writeln('\r\nCompatible stream mode is active.');
+          terminal.scrollToBottom();
+          showActionMessage(t('servers.sshConnectedMessage', { name: server.name }));
+        }
+      })
+      .catch((error) => {
+        if (!isCurrentTerminalLifecycle(server.id, lifecycleSeq)) {
+          return;
+        }
+        terminal.writeln(`\r\n${error instanceof Error ? error.message : 'SSH fallback reconnect failed'}`);
+        terminal.scrollToBottom();
+        showActionMessage(error instanceof Error ? error.message : 'SSH fallback reconnect failed', { autoDismissMs: 7000 });
+        refreshShellStatus();
+      });
   }
 
   function updateTerminalNetworkStats(metrics: ServerShellSocketMetrics) {

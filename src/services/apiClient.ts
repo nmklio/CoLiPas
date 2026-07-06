@@ -200,6 +200,13 @@ export interface ServerShellSocketMetrics {
   rttMs: number | null;
 }
 
+export interface ServerShellSocketCloseEvent {
+  opened: boolean;
+  ready: boolean;
+  code: number;
+  reason: string;
+}
+
 export interface ServerShellSelfTestPayload {
   status: 'complete' | 'timeout' | 'failed';
   lines: number;
@@ -969,6 +976,7 @@ export function connectServerShellSocket(
   onReady: (event: ServerShellSocketReady) => void,
   onError: (error: Error) => void,
   onMetrics?: (metrics: ServerShellSocketMetrics) => void,
+  onClose?: (event: ServerShellSocketCloseEvent) => void,
 ) {
   const shellSocketInputFlushMs = 2;
   const shellSocketInputChunkSize = 8000;
@@ -1114,12 +1122,18 @@ export function connectServerShellSocket(
     onError(new Error('SSH WebSocket connection failed'));
   });
 
-  socket.addEventListener('close', () => {
+  socket.addEventListener('close', (event) => {
     stopTimers();
     pendingInput = '';
     if (!opened || !ready) {
       onError(new Error('SSH WebSocket connection closed before opening'));
     }
+    onClose?.({
+      opened,
+      ready,
+      code: event.code,
+      reason: event.reason,
+    });
   });
 
   return {
