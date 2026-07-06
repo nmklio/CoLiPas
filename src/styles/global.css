@@ -9880,6 +9880,7 @@ pre {
   .ops-type-grid,
   .ops-form-grid,
   .ops-server-choice-grid,
+  .ops-runner-footer,
   .ops-output-grid,
   .api-status-strip,
   .api-template-grid,
@@ -9902,6 +9903,17 @@ pre {
   .security-audit-workspace,
   .server-load-row {
     grid-template-columns: 1fr;
+  }
+
+  .ops-builder,
+  .ops-runner-footer {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .ops-runner-footer .tool-button {
+    width: 100%;
+    justify-content: center;
   }
 
   .security-ssh-performance-actions {
