@@ -905,7 +905,7 @@ async function assertOverviewHealthBaseline(targetPage) {
   const preflightHistoryItem = preflightHistoryPanel.locator('[data-ops-preflight-history-item="true"]').first();
   await preflightHistoryItem.waitFor({ timeout: 10000 });
   const preflightHistoryText = await preflightHistoryPanel.innerText();
-  if (!/Preflight history|Latest|Ready to run|Blocked|Targets/i.test(preflightHistoryText)) {
+  if (!/Preflight history|Latest|Ready to run|Blocked|Targets|Evidence/i.test(preflightHistoryText)) {
     throw new Error(`Operations preflight history should keep the latest preflight evidence, got ${preflightHistoryText}`);
   }
   if (/0\/0/.test(preflightHistoryText)) {
@@ -917,6 +917,14 @@ async function assertOverviewHealthBaseline(targetPage) {
     throw new Error(`Restoring preflight history should not create a task, before=${tasksBeforePreflight}, after=${tasksAfterHistoryRestore}`);
   }
   await captureVisualEvidence(targetPage, 'desktop-ops-health-draft', ['[data-ops-draft-banner="true"]', '.ops-builder']);
+  const preflightEvidenceButton = preflightHistoryPanel.locator('[data-ops-preflight-evidence-button="true"]').first();
+  await preflightEvidenceButton.click();
+  await targetPage.waitForURL(/#security\?trace=ops-trace-[a-f0-9-]+$/, { timeout: 10000 });
+  const preflightTraceId = new URL(targetPage.url()).hash.replace(/^#security\?trace=/, '');
+  const preflightAuditRows = await waitForAuditEvents(targetPage, preflightTraceId, 1);
+  if (preflightAuditRows.length < 1) {
+    throw new Error(`Preflight evidence button should focus its audit trace, got ${preflightAuditRows.length} rows`);
+  }
 
   await targetPage.locator('button.nav-item', { hasText: /Overview/i }).click();
   const rerenderedBaseline = targetPage.locator('[data-health-baseline="true"]');
@@ -1098,7 +1106,7 @@ async function assertMobileModuleLayoutSweep() {
   }
 }
 
-async function waitForAuditEvents(targetPage, expectedTraceId) {
+async function waitForAuditEvents(targetPage, expectedTraceId, minimumCount = 2) {
   const startedAt = Date.now();
   let lastCount = 0;
   while (Date.now() - startedAt < 10000) {
@@ -1111,7 +1119,7 @@ async function waitForAuditEvents(targetPage, expectedTraceId) {
       ? body.items.filter((item) => item.correlationId === expectedTraceId)
       : [];
     lastCount = matches.length;
-    if (matches.length >= 2) {
+    if (matches.length >= minimumCount) {
       return matches;
     }
     await targetPage.waitForTimeout(350);

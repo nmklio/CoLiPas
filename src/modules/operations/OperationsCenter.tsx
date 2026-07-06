@@ -123,6 +123,7 @@ type Copy = {
   preflightHistory: string;
   noPreflightHistory: string;
   restorePreflight: string;
+  viewPreflightEvidence: string;
   latestPreflight: string;
   truncatedOutputs?: string;
 };
@@ -178,14 +179,15 @@ const copyByLanguage: Record<string, Copy> = {
     viewTrace: '查看审计链',
     choiceWindow: '已显示 {shown} / {total} 台候选服务器，继续加载不会影响已选择目标。',
     loadMoreTargets: '再加载 {count} 台',
-    draftApplied: '健康草案已生成',
-    draftHint: '草案只预填任务；点击执行编排后仍会先预检并要求确认。',
-    dismissDraft: '收起草案提示',
+    draftApplied: '健康草稿已生成',
+    draftHint: '草稿只预填任务；点击执行编排后仍会先预检并要求确认。',
+    dismissDraft: '收起草稿提示',
     runPreflight: '只预检',
     preflightOnlyHint: '只验证目标和风险，不执行命令。',
     preflightHistory: '最近预检记录',
     noPreflightHistory: '还没有预检记录。点击“只预检”后会在这里留下上线前检查证据。',
     restorePreflight: '恢复这次预检上下文',
+    viewPreflightEvidence: '证据',
     latestPreflight: '最新',
   },
   en: {
@@ -241,6 +243,7 @@ const copyByLanguage: Record<string, Copy> = {
     preflightHistory: 'Preflight history',
     noPreflightHistory: 'No preflight evidence yet. Run Preflight only to keep a release-check record here.',
     restorePreflight: 'Restore this preflight context',
+    viewPreflightEvidence: 'Evidence',
     latestPreflight: 'Latest',
   },
   ja: {
@@ -252,7 +255,7 @@ const copyByLanguage: Record<string, Copy> = {
     dashboard: '運用編成コンソール',
     assets: '資産',
     sshReady: 'SSH 接続済み',
-    warning: '要対応',
+    warning: '対応が必要',
     executed: '実行済みタスク',
     targetScope: '対象範囲',
     allConnected: 'SSH 接続済みすべて',
@@ -270,8 +273,8 @@ const copyByLanguage: Record<string, Copy> = {
     selectAtLeastOne: '少なくとも 1 台のサーバーを選択してください。',
     commandRequired: '実行する SSH コマンドを入力してください。',
     confirm: '運用編成タスクを実行します。続行しますか？',
-    confirmDanger: '{count} 台のサーバーに実際の{name}コマンドを実行します。続行しますか？',
-    confirmPower: '{count} 台のサーバーに{name}を実行します。続行しますか？',
+    confirmDanger: '{count} 台のサーバーで実際の{name}コマンドを実行します。続行しますか？',
+    confirmPower: '{count} 台のサーバーで{name}を実行します。続行しますか？',
     queue: 'タスクキュー',
     noTasks: 'タスクはまだありません。新規タスクから作成してください。',
     result: '実行結果',
@@ -285,17 +288,18 @@ const copyByLanguage: Record<string, Copy> = {
     preview: '影響プレビュー',
     activeServers: '実行可能サーバー',
     serverLoad: 'サーバー負荷',
-    viewTrace: '監査 trace を表示',
+    viewTrace: '監査トレースを表示',
     choiceWindow: '候補サーバー {shown} / {total} 台を表示中。追加読み込みしても選択は維持されます。',
     loadMoreTargets: '{count} 台を追加読み込み',
     draftApplied: 'ヘルス草案を生成しました',
-    draftHint: '草案はタスクを入力するだけです。実行時は先にチェックと確認を行います。',
+    draftHint: '草案はタスクを入力するだけです。実行時は先にプリフライトと確認を行います。',
     dismissDraft: '草案メモを閉じる',
-    runPreflight: 'チェックのみ',
+    runPreflight: 'プリフライトのみ',
     preflightOnlyHint: 'コマンドを実行せず、対象とリスクだけ確認します。',
-    preflightHistory: '最新チェック履歴',
-    noPreflightHistory: 'チェック履歴はまだありません。チェックのみを実行すると、リリース前の確認証跡を残せます。',
-    restorePreflight: 'このチェック内容を復元',
+    preflightHistory: '最新プリフライト履歴',
+    noPreflightHistory: 'プリフライト履歴はまだありません。プリフライトのみを実行すると、リリース前の確認証跡を残せます。',
+    restorePreflight: 'このプリフライト内容を復元',
+    viewPreflightEvidence: '証跡',
     latestPreflight: '最新',
   },
 };
@@ -343,13 +347,13 @@ const preflightCopyByLanguage: Record<string, {
     commandPreview: 'Command preview',
   },
   ja: {
-    title: '実行前チェック',
+    title: '実行前プリフライト',
     ready: '実行できます',
-    blocked: 'チェックでブロックされました',
+    blocked: 'プリフライトでブロックされました',
     warn: '確認後に実行できます',
     targets: '対象 / 実行可能',
     issues: 'リスク項目',
-    unavailable: '未チェック',
+    unavailable: '未プリフライト',
     runnable: '実行可能',
     blockedTarget: 'ブロック',
     detailTitle: '対象詳細',
@@ -887,13 +891,23 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
                   const meta = taskMeta[entry.type];
                   const Icon = meta.icon;
                   return (
-                    <button
+                    <div
                       key={entry.id}
-                      type="button"
                       className={`ops-preflight-history-item ${preflightTone(entry.preflight)}`}
                       title={copy.restorePreflight}
+                      role="button"
+                      tabIndex={0}
                       data-ops-preflight-history-item="true"
                       onClick={() => restorePreflightHistory(entry)}
+                      onKeyDown={(event) => {
+                        if (event.currentTarget !== event.target) {
+                          return;
+                        }
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          restorePreflightHistory(entry);
+                        }
+                      }}
                     >
                       <Icon size={16} />
                       <span>
@@ -905,8 +919,22 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
                           {formatTaskTime(entry.createdAt, language)} / {formatPreflightSummaryLine(entry.preflight, preflightCopy, copy.preview, entry.targetCount)}
                         </small>
                       </span>
-                      <b>{preflightStatusText(entry.preflight, preflightCopy)}</b>
-                    </button>
+                      <div className="ops-preflight-history-actions">
+                        <b>{preflightStatusText(entry.preflight, preflightCopy)}</b>
+                        <button
+                          type="button"
+                          className="ops-preflight-evidence-button"
+                          data-ops-preflight-evidence-button="true"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onAuditTraceOpen?.(entry.id);
+                          }}
+                        >
+                          <ShieldCheck size={13} />
+                          {copy.viewPreflightEvidence}
+                        </button>
+                      </div>
+                    </div>
                   );
                 })
               )}

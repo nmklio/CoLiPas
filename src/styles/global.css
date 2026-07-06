@@ -5092,7 +5092,8 @@ td span,
   transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
 }
 
-.ops-preflight-history-item:hover {
+.ops-preflight-history-item:hover,
+.ops-preflight-history-item:focus-visible {
   border-color: var(--brand-line);
   box-shadow: 0 12px 24px rgba(18, 35, 41, 0.07);
   transform: translateY(-1px);
@@ -5159,6 +5160,40 @@ td span,
   color: #37515a;
   font-size: 11px;
   white-space: nowrap;
+}
+
+.ops-preflight-history-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ops-preflight-evidence-button {
+  border: 1px solid rgba(16, 94, 86, 0.18);
+  border-radius: 999px;
+  padding: 5px 8px;
+  background:
+    linear-gradient(135deg, rgba(233, 248, 245, 0.95), rgba(255, 255, 255, 0.96));
+  color: var(--brand-strong);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.ops-preflight-evidence-button:hover,
+.ops-preflight-evidence-button:focus-visible {
+  border-color: var(--brand-line);
+  box-shadow: 0 8px 18px rgba(15, 118, 110, 0.13);
+  transform: translateY(-1px);
 }
 
 .ops-task-item {
@@ -10020,9 +10055,10 @@ pre {
     align-items: start;
   }
 
-  .ops-preflight-history-item b {
+  .ops-preflight-history-actions {
     grid-column: 2;
     justify-self: start;
+    justify-content: flex-start;
   }
 
   .security-ssh-performance-actions {

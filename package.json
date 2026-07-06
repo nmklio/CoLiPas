@@ -15,6 +15,7 @@
     "concurrency": "node scripts/concurrency-check.mjs",
     "test:large-user-simulation": "node scripts/large-user-simulation.mjs",
     "perf": "npm run build && node scripts/performance-check.mjs",
+    "probe:ssh-production": "node scripts/production-ssh-probe.mjs",
     "reset:admin": "node scripts/reset-admin-password.mjs",
     "secrets": "node scripts/secret-scan.mjs",
     "test": "npm run build && npm run secrets && node scripts/verify-production.mjs"

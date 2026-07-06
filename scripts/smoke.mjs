@@ -35,6 +35,7 @@ assertSessionCookieSecurityGuards();
 assertServerIdentityDetectionGuards();
 assertServerStatusLifecycleGuards();
 assertSshTerminalRealtimeGuards();
+assertProductionSshProbeGuards();
 assertSshKeyAuthenticationGuards();
 assertMobileTopbarKeepsCoreActions();
 assertSecurityAuditRelationsAreSpecific();
@@ -5292,6 +5293,35 @@ function assertSshTerminalRealtimeGuards() {
   console.log('ok SSH terminal uses live PTY shell streaming and keeps input responsive');
 }
 
+function assertProductionSshProbeGuards() {
+  const packageJson = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  const probeSource = fs.readFileSync(new URL('../scripts/production-ssh-probe.mjs', import.meta.url), 'utf8');
+  const requiredFragments = [
+    'COLIPAS_PROBE_BASE_URL',
+    'COLIPAS_PROBE_ADMIN_PASSWORD',
+    'COLIPAS_PROBE_EXISTING',
+    'COLIPAS_PROBE_SKIP_TEMP',
+    'temporary-simulated',
+    'existing-connected',
+    'deleteServer(baseUrl, cookie, tempServerId)',
+    'activeShellsAfter',
+    'sanitizeError(error)',
+    "replace(password, '[password]')",
+  ];
+  const missing = requiredFragments.filter((fragment) => !probeSource.includes(fragment));
+  if (missing.length) {
+    throw new Error(`Production SSH probe guard is incomplete: ${missing.join(', ')}`);
+  }
+  if (packageJson.scripts?.['probe:ssh-production'] !== 'node scripts/production-ssh-probe.mjs') {
+    throw new Error('Production SSH probe npm script is missing');
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(probeSource.replace(/198\.51\.100\.239|10\.99\.0\.239/g, ''))) {
+    throw new Error('Production SSH probe must not contain real IP addresses');
+  }
+
+  console.log('ok production SSH probe is sanitized and optional');
+}
+
 function assertSshKeyAuthenticationGuards() {
   const inventorySource = fs.readFileSync(new URL('../src/modules/servers/ServerInventory.tsx', import.meta.url), 'utf8');
   const sshServiceSource = fs.readFileSync(new URL('../src/server/services/sshAccessService.ts', import.meta.url), 'utf8');
@@ -5888,6 +5918,10 @@ function assertOperationsTargetSelectionGuards() {
     'preflight.targetsTruncated',
     'formatPreflightTruncation(preflight, language)',
     'ops-preflight-truncated',
+    'viewPreflightEvidence',
+    'data-ops-preflight-evidence-button="true"',
+    'event.stopPropagation()',
+    'onAuditTraceOpen?.(entry.id)',
   ];
   const missingFrontend = frontendRequired.filter((fragment) => !operationsSource.includes(fragment));
   if (missingFrontend.length) {
