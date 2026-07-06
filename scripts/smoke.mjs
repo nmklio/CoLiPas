@@ -3201,6 +3201,9 @@ function assertAccountUiGuards() {
     'Invoke-ProductionBrowserValidation',
     '[int]$MaxAttempts = 3',
     'Start-Sleep -Seconds $RetryDelaySeconds',
+    'Invoke-TargetUpdateWithRetry',
+    'updateAttempts',
+    'retryDelaySeconds',
     'foreach ($target in $script:SuccessfulDeployTargets)',
     'Assert-NoTargetUpdateFailures',
     'skipPublicValidation',
@@ -4532,12 +4535,12 @@ async function assertReleaseDeployTargetPlanGuards() {
     selfTest.status !== 0
     || !selfTest.stdout.includes('ok release deploy GitHub API JSON fallback uses BOM-free temp-file input')
     || !selfTest.stdout.includes('ok release deploy imports GitHub API commit objects when fetch is unavailable')
-    || !selfTest.stdout.includes('ok release deploy continues updating healthy targets and reports partial failures')
+    || !selfTest.stdout.includes('ok release deploy retries transient target updates, preserves healthy targets, and reports partial failures')
   ) {
     throw new Error(`Release deploy GitHub API fallback self-test failed: ${selfTest.stderr || selfTest.stdout}`);
   }
 
-  console.log('ok release deploy supports sanitized multi-target publish plans, API fallback, and partial-failure isolation self-tests');
+  console.log('ok release deploy supports sanitized multi-target publish plans, API fallback, retrying target updates, and partial-failure isolation self-tests');
 }
 
 function assertOverviewMapInteractionGuards() {

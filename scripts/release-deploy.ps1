@@ -22,6 +22,8 @@ Set-Location $RepoRoot
 $script:PublishedCommitSha = ""
 $script:TargetUpdateResults = @()
 $script:SuccessfulDeployTargets = @()
+$script:DefaultTargetUpdateAttempts = 2
+$script:DefaultTargetUpdateRetryDelaySeconds = 15
 
 function Run-Step {
   param(
@@ -156,6 +158,38 @@ function Get-PropertyInt {
   return $Default
 }
 
+function Get-PropertyIntRange {
+  param(
+    [object]$Object,
+    [string[]]$Names,
+    [int]$Default,
+    [int]$Min,
+    [int]$Max
+  )
+
+  foreach ($name in $Names) {
+    if ($null -eq $Object -or $null -eq $Object.PSObject.Properties[$name]) {
+      continue
+    }
+
+    $rawValue = [string]$Object.$name
+    if ([string]::IsNullOrWhiteSpace($rawValue)) {
+      continue
+    }
+
+    $parsedValue = 0
+    if (-not [int]::TryParse($rawValue, [ref]$parsedValue)) {
+      throw "Release target field '$name' must be an integer."
+    }
+    if ($parsedValue -lt $Min -or $parsedValue -gt $Max) {
+      throw "Release target field '$name' must be between $Min and $Max."
+    }
+    return $parsedValue
+  }
+
+  return $Default
+}
+
 function Get-PropertyBool {
   param(
     [object]$Object,
@@ -214,6 +248,8 @@ function ConvertTo-DeployTargets {
         publicMode = Get-PropertyValue $item "publicMode" "public"
         deploymentMode = Get-PropertyValue $item "deploymentMode" "systemd"
         skipPublicValidation = Get-PropertyBool $item "skipPublicValidation" $false
+        updateAttempts = Get-PropertyIntRange $item @("updateAttempts", "retryAttempts") $script:DefaultTargetUpdateAttempts 1 5
+        retryDelaySeconds = Get-PropertyIntRange $item @("retryDelaySeconds", "updateRetryDelaySeconds") $script:DefaultTargetUpdateRetryDelaySeconds 0 300
       }
     }
   }
@@ -258,6 +294,8 @@ function Write-DeployPlan {
       publicMode = $_.publicMode
       deploymentMode = $_.deploymentMode
       skipPublicValidation = $_.skipPublicValidation
+      updateAttempts = $_.updateAttempts
+      retryDelaySeconds = $_.retryDelaySeconds
     }
   } | ConvertTo-Json -Depth 5
 }
@@ -358,30 +396,64 @@ function Invoke-TargetUpdate {
   Invoke-SshWithDiagnostics -TargetName $Target.name -TargetHost $Target.host -SshArgs $sshArgs
 }
 
+function Invoke-TargetUpdateWithRetry {
+  param([object]$Target)
+
+  $maxAttempts = [int]$Target.updateAttempts
+  if ($maxAttempts -lt 1) {
+    $maxAttempts = $script:DefaultTargetUpdateAttempts
+  }
+  $retryDelaySeconds = [int]$Target.retryDelaySeconds
+  if ($retryDelaySeconds -lt 0) {
+    $retryDelaySeconds = $script:DefaultTargetUpdateRetryDelaySeconds
+  }
+
+  $lastError = ""
+  for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+    try {
+      if ($maxAttempts -gt 1) {
+        Write-Host "Target $($Target.name) update attempt $attempt/$maxAttempts."
+      }
+      Invoke-TargetUpdate $Target
+      return [pscustomobject]@{
+        name = $Target.name
+        target = $Target
+        ok = $true
+        error = ""
+        attempts = $attempt
+      }
+    } catch {
+      $lastError = [string]$_
+      $global:LASTEXITCODE = 0
+      if ($attempt -lt $maxAttempts) {
+        Write-Warning "Target $($Target.name) update attempt $attempt/$maxAttempts failed; retrying: $lastError"
+        if ($retryDelaySeconds -gt 0) {
+          Start-Sleep -Seconds $retryDelaySeconds
+        }
+        continue
+      }
+    }
+  }
+
+  return [pscustomobject]@{
+    name = $Target.name
+    target = $Target
+    ok = $false
+    error = $lastError
+    attempts = $maxAttempts
+  }
+}
+
 function Invoke-TargetUpdates {
   param([object[]]$Targets)
 
   $results = @()
   foreach ($target in $Targets) {
-    try {
-      Invoke-TargetUpdate $target
-      $results += [pscustomobject]@{
-        name = $target.name
-        target = $target
-        ok = $true
-        error = ""
-      }
-    } catch {
-      $message = [string]$_
-      Write-Warning "Target $($target.name) update failed; continuing with remaining targets: $message"
-      $global:LASTEXITCODE = 0
-      $results += [pscustomobject]@{
-        name = $target.name
-        target = $target
-        ok = $false
-        error = $message
-      }
+    $result = Invoke-TargetUpdateWithRetry $target
+    if (-not $result.ok) {
+      Write-Warning "Target $($target.name) update failed after $($result.attempts) attempt(s); continuing with remaining targets: $($result.error)"
     }
+    $results += $result
   }
 
   $script:TargetUpdateResults = @($results)
@@ -744,8 +816,10 @@ function Test-TargetUpdateFailureIsolation {
   $mockSshPath = Join-Path $tempRoot "ssh.cmd"
   $mockSshUnixPath = Join-Path $tempRoot "ssh"
   $capturePath = Join-Path $tempRoot "ssh-calls.txt"
+  $flakyMarkerPath = Join-Path $tempRoot "flaky-marker.txt"
   $previousPath = $env:PATH
   $previousCapture = $env:COLIPAS_SSH_SELFTEST_CAPTURE
+  $previousFlakyMarker = $env:COLIPAS_SSH_SELFTEST_FLAKY_MARKER
   $previousResults = $script:TargetUpdateResults
   $previousSuccessfulTargets = $script:SuccessfulDeployTargets
 
@@ -753,6 +827,14 @@ function Test-TargetUpdateFailureIsolation {
     @'
 @echo off
 echo %*>>"%COLIPAS_SSH_SELFTEST_CAPTURE%"
+echo %* | findstr /C:"flaky-host" >nul
+if not errorlevel 1 (
+  if not exist "%COLIPAS_SSH_SELFTEST_FLAKY_MARKER%" (
+    echo first>"%COLIPAS_SSH_SELFTEST_FLAKY_MARKER%"
+    echo fatal: unable to access repository: Failed to connect to github.com port 443 1>&2
+    exit /b 128
+  )
+)
 echo %* | findstr /C:"fail-host" >nul
 if not errorlevel 1 (
   echo ssh: connect to host fail-host port 22: Connection refused 1>&2
@@ -764,6 +846,7 @@ exit /b 0
 #!/usr/bin/env sh
 printf '%s\n' "$*" >> "$COLIPAS_SSH_SELFTEST_CAPTURE"
 case "$*" in
+  *flaky-host*) if [ ! -f "$COLIPAS_SSH_SELFTEST_FLAKY_MARKER" ]; then printf first > "$COLIPAS_SSH_SELFTEST_FLAKY_MARKER"; printf '%s\n' 'fatal: unable to access repository: Failed to connect to github.com port 443' >&2; exit 128; fi ;;
   *fail-host*) printf '%s\n' 'ssh: connect to host fail-host port 22: Connection refused' >&2; exit 255 ;;
   *) exit 0 ;;
 esac
@@ -773,6 +856,7 @@ esac
     }
 
     $env:COLIPAS_SSH_SELFTEST_CAPTURE = $capturePath
+    $env:COLIPAS_SSH_SELFTEST_FLAKY_MARKER = $flakyMarkerPath
     $env:PATH = "$tempRoot$([IO.Path]::PathSeparator)$previousPath"
 
     $targets = @(
@@ -786,6 +870,21 @@ esac
         publicMode = "public"
         deploymentMode = "systemd"
         skipPublicValidation = $false
+        updateAttempts = 2
+        retryDelaySeconds = 0
+      },
+      [pscustomobject]@{
+        name = "flaky-target"
+        host = "flaky-host"
+        user = "mock-user"
+        command = "mock-command"
+        sshKey = ""
+        publicBaseUrl = "https://flaky.example.test"
+        publicMode = "public"
+        deploymentMode = "systemd"
+        skipPublicValidation = $false
+        updateAttempts = 2
+        retryDelaySeconds = 0
       },
       [pscustomobject]@{
         name = "ok-target"
@@ -798,17 +897,23 @@ esac
         publicMode = "public"
         deploymentMode = "docker"
         skipPublicValidation = $false
+        updateAttempts = 1
+        retryDelaySeconds = 0
       }
     )
 
     Invoke-TargetUpdates $targets
-    if ($script:SuccessfulDeployTargets.Count -ne 1 -or $script:SuccessfulDeployTargets[0].name -ne "ok-target") {
+    $successfulNames = @($script:SuccessfulDeployTargets | ForEach-Object { $_.name })
+    if ($script:SuccessfulDeployTargets.Count -ne 2 -or -not $successfulNames.Contains("flaky-target") -or -not $successfulNames.Contains("ok-target")) {
       throw "Target update failure isolation did not preserve the successful target."
     }
 
     $captured = Get-Content -LiteralPath $capturePath -Raw
-    if (-not $captured.Contains("fail-host") -or -not $captured.Contains("ok-host")) {
+    if (-not $captured.Contains("fail-host") -or -not $captured.Contains("flaky-host") -or -not $captured.Contains("ok-host")) {
       throw "Target update failure isolation did not attempt every target."
+    }
+    if (([regex]::Matches($captured, "fail-host")).Count -ne 2 -or ([regex]::Matches($captured, "flaky-host")).Count -ne 2) {
+      throw "Target update retry attempts were not recorded for failed and flaky targets."
     }
     if (-not $captured.Contains("-p 22674")) {
       throw "Target update did not pass the configured SSH port."
@@ -818,11 +923,18 @@ esac
     if ($failedResults.Count -ne 1) {
       throw "Target update failure isolation did not record exactly one failed target."
     }
+    if ([int]$failedResults[0].attempts -ne 2) {
+      throw "Target update failure isolation did not retain failed attempt evidence."
+    }
     if (
       -not ([string]$failedResults[0].error).Contains("SSH transport failed: connection refused") -or
       -not ([string]$failedResults[0].error).Contains("Target host: fail-host")
     ) {
       throw "Target update diagnostics did not explain the SSH connection-refused failure."
+    }
+    $flakyResult = @($script:TargetUpdateResults | Where-Object { $_.name -eq "flaky-target" })[0]
+    if (-not $flakyResult.ok -or [int]$flakyResult.attempts -ne 2) {
+      throw "Target update retry did not recover a transiently failing target."
     }
 
     $failureGuardRaised = $false
@@ -839,7 +951,7 @@ esac
       throw "Target update failure guard did not fail after a partial release."
     }
 
-    Write-Host "ok release deploy continues updating healthy targets and reports partial failures"
+    Write-Host "ok release deploy retries transient target updates, preserves healthy targets, and reports partial failures"
   } finally {
     $env:PATH = $previousPath
     $script:TargetUpdateResults = $previousResults
@@ -848,6 +960,11 @@ esac
       Remove-Item Env:\COLIPAS_SSH_SELFTEST_CAPTURE -ErrorAction SilentlyContinue
     } else {
       $env:COLIPAS_SSH_SELFTEST_CAPTURE = $previousCapture
+    }
+    if ($null -eq $previousFlakyMarker) {
+      Remove-Item Env:\COLIPAS_SSH_SELFTEST_FLAKY_MARKER -ErrorAction SilentlyContinue
+    } else {
+      $env:COLIPAS_SSH_SELFTEST_FLAKY_MARKER = $previousFlakyMarker
     }
     Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
   }
