@@ -702,9 +702,16 @@ async function assertSshTerminalPanel(targetPage) {
     if (!/\b(good|warn|slow|pending)\b/.test(terminalNetworkClass ?? '')) {
       throw new Error(`SSH terminal network diagnostics did not expose a quality tone: ${terminalNetworkClass}`);
     }
+    const terminalQualityText = await targetPage.locator('.ssh-terminal-quality').innerText();
+    if (!/(Interaction is smooth|Network latency is high|Output throughput is low|Collecting quality data|Compatible channel active)/i.test(terminalQualityText)) {
+      throw new Error(`SSH terminal quality insight did not render an actionable summary: ${terminalQualityText}`);
+    }
+    if (!/(WebSocket live channel|Compatible stream|RTT\s+\d+ms)/i.test(terminalQualityText)) {
+      throw new Error(`SSH terminal quality insight did not expose transport or metric evidence: ${terminalQualityText}`);
+    }
     console.log(`ok browser e2e SSH burst output rendered in ${burstOutputDurationMs}ms with max long task ${maxBurstLongTaskMs}ms`);
     await assertElementWithinViewport(targetPage, '.ssh-console', 'desktop SSH console');
-    await captureVisualEvidence(targetPage, 'desktop-ssh-terminal-network', ['.ssh-console', '.ssh-terminal-network']);
+    await captureVisualEvidence(targetPage, 'desktop-ssh-terminal-network', ['.ssh-console', '.ssh-terminal-network', '.ssh-terminal-quality']);
     await targetPage.getByRole('button', { name: /disconnect/i }).click();
     await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });
     const disconnectMessage = targetPage.locator('.action-message').filter({ hasText: /disconnected/i });

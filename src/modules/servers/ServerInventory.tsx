@@ -83,6 +83,13 @@ interface TerminalNetworkQuality {
   detail: string;
 }
 
+interface TerminalQualityInsight {
+  tone: TerminalNetworkQuality['tone'];
+  title: string;
+  detail: string;
+  metric: string;
+}
+
 interface TerminalSelfTestState {
   status: 'running' | 'complete' | 'timeout' | 'failed';
   lines: number;
@@ -153,6 +160,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const [activeShellCount, setActiveShellCount] = useState(0);
   const [terminalNetworkStats, setTerminalNetworkStats] = useState<TerminalNetworkStats | null>(null);
   const [terminalSelfTest, setTerminalSelfTest] = useState<TerminalSelfTestState | null>(null);
+  const [terminalTransport, setTerminalTransport] = useState<'websocket' | 'compatible' | null>(null);
   const [loginProbe, setLoginProbe] = useState<LoginProbe | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [formDismissed, setFormDismissed] = useState(false);
@@ -202,6 +210,14 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     ? `${formatTerminalRtt(terminalNetworkStats.rttMs)} / ${formatBytesPerSecond(terminalNetworkStats.throughputBytesPerSecond)}`
     : '';
   const terminalNetworkQuality = terminalNetworkStats ? getTerminalNetworkQuality(terminalNetworkStats, t) : null;
+  const terminalQualityInsight = getTerminalQualityInsight(
+    terminalNetworkStats,
+    terminalSelfTest,
+    terminalTransport,
+    Boolean(terminalShellId),
+    sshRunning,
+    t,
+  );
   const terminalSelfTestRunning = terminalSelfTest?.status === 'running';
   const terminalSelfTestLabel = terminalSelfTest ? formatTerminalSelfTestLabel(terminalSelfTest, language) : '';
   const visibleSummary = useMemo(() => {
@@ -906,6 +922,14 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     </div>
                   </div>
                 </div>
+                <div className={`ssh-terminal-quality ${terminalQualityInsight.tone}`} aria-live="polite">
+                  <span className="ssh-terminal-quality-beacon" aria-hidden="true" />
+                  <div>
+                    <strong>{terminalQualityInsight.title}</strong>
+                    <small>{terminalQualityInsight.detail}</small>
+                  </div>
+                  <code>{terminalQualityInsight.metric}</code>
+                </div>
                 <div ref={terminalContainerRef} className="ssh-terminal-screen" aria-label="Interactive SSH terminal" />
               </div>
             </div>
@@ -1132,6 +1156,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     setSshPanelServerId(server.id);
     setLoginProbe(null);
     clearTerminalNetworkStats();
+    setTerminalTransport(null);
     sshConsoleReplayHistoryRef.current = !terminalShellIdRef.current || terminalShellServerIdRef.current !== server.id;
     setSshConsoleOpen(true);
     refreshShellStatus();
@@ -1184,6 +1209,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     setSshPanelServerId('');
     setLoginProbe(null);
     clearTerminalNetworkStats();
+    setTerminalTransport(null);
     setSshRunning(false);
     setSshInterrupting(false);
     if (serverName) {
@@ -1321,6 +1347,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
           terminalShellIdRef.current = event.sessionId;
           setTerminalShellId(event.sessionId);
           terminalShellServerIdRef.current = server.id;
+          terminalShellTransportRef.current = 'websocket';
+          setTerminalTransport('websocket');
           attachTerminalInput(event.sessionId);
           refreshShellStatus();
           if (!settled) {
@@ -1335,6 +1363,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
             window.clearTimeout(timeout);
             terminalShellSocketRef.current = null;
             terminalShellTransportRef.current = null;
+            setTerminalTransport(null);
             socket.close();
             reject(error);
             return;
@@ -1356,6 +1385,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
         settled = true;
         terminalShellSocketRef.current = null;
         terminalShellTransportRef.current = null;
+        setTerminalTransport(null);
         socket.close();
         reject(new Error('SSH WebSocket connection timed out'));
       }, 5000);
@@ -1372,6 +1402,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     setTerminalShellId(shell.sessionId);
     terminalShellServerIdRef.current = server.id;
     terminalShellTransportRef.current = 'compatible';
+    setTerminalTransport('compatible');
     refreshShellStatus();
     attachTerminalInput(shell.sessionId);
     const stream = streamServerShell(
@@ -1416,6 +1447,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       terminalShellStreamRef.current = null;
       terminalShellSocketRef.current = null;
       terminalShellTransportRef.current = null;
+      setTerminalTransport(null);
       clearTerminalNetworkStats();
       refreshShellStatus();
     }
@@ -1946,6 +1978,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     if (syncState) {
       setTerminalShellId(null);
       clearTerminalNetworkStats();
+      setTerminalTransport(null);
     }
     terminalShellServerIdRef.current = null;
     terminalDataSubscriptionRef.current?.dispose();
@@ -2387,6 +2420,99 @@ function getTerminalNetworkQuality(
     label: t('servers.terminalNetworkGood'),
     detail: t('servers.terminalNetworkGoodDetail', detailVars),
   };
+}
+
+function getTerminalQualityInsight(
+  stats: TerminalNetworkStats | null,
+  selfTest: TerminalSelfTestState | null,
+  transport: 'websocket' | 'compatible' | null,
+  connected: boolean,
+  running: boolean,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): TerminalQualityInsight {
+  const transportLabel = getTerminalTransportLabel(transport, t);
+  const metric = stats
+    ? `${formatTerminalRtt(stats.rttMs)} / ${formatBytesPerSecond(stats.throughputBytesPerSecond)}`
+    : transportLabel;
+  const vars = {
+    transport: transportLabel,
+    rtt: stats ? formatTerminalRtt(stats.rttMs) : formatTerminalRtt(null),
+    rate: stats ? formatBytesPerSecond(stats.throughputBytesPerSecond) : formatBytesPerSecond(0),
+  };
+
+  if (!connected) {
+    return {
+      tone: 'pending',
+      title: running ? t('servers.terminalQualityConnectingTitle') : t('servers.terminalQualityIdleTitle'),
+      detail: t('servers.terminalQualityConnectingDetail', vars),
+      metric,
+    };
+  }
+
+  if (transport === 'compatible') {
+    return {
+      tone: 'warn',
+      title: t('servers.terminalQualityCompatibleTitle'),
+      detail: t('servers.terminalQualityCompatibleDetail', vars),
+      metric,
+    };
+  }
+
+  if (!stats || stats.rttMs === null) {
+    return {
+      tone: 'pending',
+      title: t('servers.terminalQualityPendingTitle'),
+      detail: t('servers.terminalQualityPendingDetail', vars),
+      metric,
+    };
+  }
+
+  if (stats.rttMs >= 350) {
+    return {
+      tone: 'slow',
+      title: t('servers.terminalQualityLatencyTitle'),
+      detail: t('servers.terminalQualityLatencyDetail', vars),
+      metric,
+    };
+  }
+
+  if (stats.rttMs >= 120 && stats.throughputBytesPerSecond > 0 && stats.throughputBytesPerSecond < 16 * 1024) {
+    return {
+      tone: 'warn',
+      title: t('servers.terminalQualityThroughputTitle'),
+      detail: t('servers.terminalQualityThroughputDetail', vars),
+      metric,
+    };
+  }
+
+  if (selfTest && selfTest.status !== 'running' && selfTest.status !== 'complete') {
+    return {
+      tone: 'warn',
+      title: t('servers.terminalQualitySelfTestTitle'),
+      detail: t('servers.terminalQualitySelfTestDetail', vars),
+      metric,
+    };
+  }
+
+  return {
+    tone: 'good',
+    title: t('servers.terminalQualityGoodTitle'),
+    detail: t('servers.terminalQualityGoodDetail', vars),
+    metric,
+  };
+}
+
+function getTerminalTransportLabel(
+  transport: 'websocket' | 'compatible' | null,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+) {
+  if (transport === 'websocket') {
+    return t('servers.terminalTransportWebSocket');
+  }
+  if (transport === 'compatible') {
+    return t('servers.terminalTransportCompatible');
+  }
+  return t('servers.terminalTransportPending');
 }
 
 function calculateSelfTestRate(lines: number, durationMs: number) {

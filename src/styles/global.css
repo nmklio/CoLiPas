@@ -4186,7 +4186,7 @@ td span,
   box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.03);
   overflow: hidden;
   display: grid;
-  grid-template-rows: 38px minmax(0, 1fr);
+  grid-template-rows: 38px auto minmax(0, 1fr);
 }
 
 .ssh-terminal-titlebar {
@@ -4315,6 +4315,95 @@ td span,
   border-color: rgba(148, 163, 184, 0.3);
   background: rgba(30, 41, 59, 0.46);
   color: #cbd5e1;
+}
+
+.ssh-terminal-quality {
+  min-height: 42px;
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(126, 161, 166, 0.13);
+  background:
+    radial-gradient(circle at 10% 0, rgba(129, 230, 217, 0.12), transparent 34%),
+    linear-gradient(135deg, rgba(8, 18, 21, 0.94), rgba(4, 9, 11, 0.98));
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.ssh-terminal-quality-beacon {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #94a3b8;
+  box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.12);
+}
+
+.ssh-terminal-quality div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.ssh-terminal-quality strong {
+  color: #e8fff8;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+}
+
+.ssh-terminal-quality small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #8da7ad;
+  font-size: 11px;
+  font-weight: 720;
+}
+
+.ssh-terminal-quality code {
+  border: 1px solid rgba(151, 193, 196, 0.18);
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.055);
+  color: #c8f5eb;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.ssh-terminal-quality.good .ssh-terminal-quality-beacon {
+  background: #5ef08c;
+  box-shadow: 0 0 0 4px rgba(94, 240, 140, 0.14), 0 0 18px rgba(94, 240, 140, 0.24);
+}
+
+.ssh-terminal-quality.warn .ssh-terminal-quality-beacon {
+  background: #facc15;
+  box-shadow: 0 0 0 4px rgba(250, 204, 21, 0.14), 0 0 18px rgba(250, 204, 21, 0.2);
+}
+
+.ssh-terminal-quality.slow .ssh-terminal-quality-beacon {
+  background: #fb7185;
+  box-shadow: 0 0 0 4px rgba(251, 113, 133, 0.13), 0 0 18px rgba(251, 113, 133, 0.24);
+}
+
+.ssh-terminal-quality.good {
+  background:
+    radial-gradient(circle at 10% 0, rgba(94, 240, 140, 0.13), transparent 36%),
+    linear-gradient(135deg, rgba(6, 25, 17, 0.95), rgba(4, 9, 11, 0.98));
+}
+
+.ssh-terminal-quality.warn {
+  background:
+    radial-gradient(circle at 10% 0, rgba(250, 204, 21, 0.13), transparent 36%),
+    linear-gradient(135deg, rgba(31, 22, 6, 0.95), rgba(4, 9, 11, 0.98));
+}
+
+.ssh-terminal-quality.slow {
+  background:
+    radial-gradient(circle at 10% 0, rgba(251, 113, 133, 0.13), transparent 36%),
+    linear-gradient(135deg, rgba(33, 11, 13, 0.95), rgba(4, 9, 11, 0.98));
 }
 
 .ssh-terminal-self-test {
@@ -10369,6 +10458,21 @@ pre {
 
   .ssh-terminal-network {
     max-width: min(100%, 220px);
+  }
+
+  .ssh-terminal-quality {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: flex-start;
+    padding: 9px 12px;
+  }
+
+  .ssh-terminal-quality code {
+    grid-column: 2;
+    justify-self: flex-start;
+  }
+
+  .ssh-terminal-quality small {
+    white-space: normal;
   }
 
   .ssh-terminal-session-count {
