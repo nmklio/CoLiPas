@@ -177,10 +177,38 @@ interface SshLagReportComparison {
   delta: string;
 }
 
+interface SshFlightSegment {
+  type: string;
+  tone: 'input' | 'output' | 'error' | 'close';
+  label: string;
+  width: number;
+}
+
+interface SshFlightRecord {
+  id: string;
+  tone: 'ok' | 'warn' | 'fail';
+  label: string;
+  summary: string;
+  detail: string;
+  meta: string[];
+  segments: SshFlightSegment[];
+}
+
+interface SshFlightRecorderSummary {
+  tone: 'ok' | 'warn' | 'fail';
+  stats: Array<{
+    label: string;
+    value: string;
+    detail: string;
+  }>;
+  records: SshFlightRecord[];
+}
+
 const sshLagReportHistoryStorageKey = 'colipas.sshLagReportHistory.v1';
 const sshLagReportHistoryVisibleLimit = 5;
 
 type SshSelfTestBottleneck = NonNullable<DiagnosticExportResponse['sshTerminal']['lastSelfTest']>['bottleneck'];
+type SshFlightTimelineEvent = DiagnosticExportResponse['sshTerminal']['sessionReplays'][number]['timeline'][number];
 
 export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, onTraceFocused, onTraceFilterChange }: SecurityPanelProps) {
   const { language, t } = useI18n();
@@ -265,6 +293,10 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
   const sshLagReportComparison = useMemo(
     () => buildSshLagReportComparison(sshPerformance, sshLagReportHistory[0] ?? null, sshPerformanceCopy),
     [sshLagReportHistory, sshPerformance, sshPerformanceCopy],
+  );
+  const sshFlightRecorder = useMemo(
+    () => buildSshFlightRecorder(diagnosticBundle, sshPerformanceCopy, locale),
+    [diagnosticBundle, locale, sshPerformanceCopy],
   );
   const expandedSshMetric = useMemo(
     () => sshPerformance.metrics.find((metric) => metric.id === expandedSshMetricId) ?? sshPerformance.metrics[0] ?? null,
@@ -853,6 +885,52 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
             </>
           ) : (
             <p className="security-ssh-lag-history-empty">{sshPerformanceCopy.historyEmpty}</p>
+          )}
+        </div>
+        <div className={`security-ssh-flight-recorder ${sshFlightRecorder.tone}`} data-ssh-flight-recorder="true">
+          <div className="security-ssh-flight-header">
+            <div>
+              <span>{sshPerformanceCopy.flightTitle}</span>
+              <p>{sshPerformanceCopy.flightDescription}</p>
+            </div>
+            <div className="security-ssh-flight-stats">
+              {sshFlightRecorder.stats.map((stat) => (
+                <strong key={stat.label} title={stat.detail}>
+                  <small>{stat.label}</small>
+                  {stat.value}
+                </strong>
+              ))}
+            </div>
+          </div>
+          {sshFlightRecorder.records.length > 0 ? (
+            <div className="security-ssh-flight-list">
+              {sshFlightRecorder.records.map((record) => (
+                <article key={record.id} className={record.tone}>
+                  <div className="security-ssh-flight-record-head">
+                    <span>{record.label}</span>
+                    <strong>{record.summary}</strong>
+                  </div>
+                  <div className="security-ssh-flight-meta">
+                    {record.meta.map((item) => (
+                      <small key={item}>{item}</small>
+                    ))}
+                  </div>
+                  <div className="security-ssh-flight-rail" aria-label={record.detail}>
+                    {record.segments.map((segment, index) => (
+                      <span
+                        key={`${record.id}-${index}-${segment.type}`}
+                        className={segment.tone}
+                        style={{ flexGrow: segment.width }}
+                        title={segment.label}
+                      />
+                    ))}
+                  </div>
+                  <p>{record.detail}</p>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="security-ssh-flight-empty">{sshPerformanceCopy.flightEmpty}</p>
           )}
         </div>
         <p className="security-ssh-performance-next">{sshPerformance.nextAction}</p>
@@ -2044,6 +2122,178 @@ function inferSshSnapshotTone(status: string): SshPerformanceSummary['tone'] | n
   return null;
 }
 
+function buildSshFlightRecorder(
+  diagnostic: DiagnosticExportResponse | null,
+  copy: SshPerformanceCopy,
+  locale: string,
+): SshFlightRecorderSummary {
+  const replays = diagnostic?.sshTerminal?.sessionReplays ?? [];
+  const recentReplays = replays.slice(0, 4);
+  const totalErrors = replays.reduce((count, replay) => count + replay.errorCount, 0);
+  const activeSessions = replays.filter((replay) => replay.active).length;
+  const totalOutputLines = replays.reduce((count, replay) => count + replay.outputLines, 0);
+  const averageDuration = replays.length > 0
+    ? replays.reduce((count, replay) => count + replay.durationMs, 0) / replays.length
+    : 0;
+  const tone: SshFlightRecorderSummary['tone'] = totalErrors > 0
+    ? 'fail'
+    : activeSessions > 4
+      ? 'warn'
+      : recentReplays.length > 0
+        ? 'ok'
+        : 'warn';
+
+  return {
+    tone,
+    stats: [
+      {
+        label: copy.flightStatSessions,
+        value: String(replays.length),
+        detail: copy.flightStatSessionsDetail(activeSessions),
+      },
+      {
+        label: copy.flightStatErrors,
+        value: String(totalErrors),
+        detail: copy.flightStatErrorsDetail(totalErrors),
+      },
+      {
+        label: copy.flightStatOutput,
+        value: new Intl.NumberFormat(locale).format(totalOutputLines),
+        detail: copy.flightStatOutputDetail(totalOutputLines),
+      },
+      {
+        label: copy.flightStatDuration,
+        value: formatSshFlightDuration(averageDuration, locale),
+        detail: copy.flightStatDurationDetail(averageDuration),
+      },
+    ],
+    records: recentReplays.map((replay, index) => buildSshFlightRecord(replay, index, copy, locale)),
+  };
+}
+
+function buildSshFlightRecord(
+  replay: DiagnosticExportResponse['sshTerminal']['sessionReplays'][number],
+  index: number,
+  copy: SshPerformanceCopy,
+  locale: string,
+): SshFlightRecord {
+  const tone: SshFlightRecord['tone'] = replay.errorCount > 0 || replay.timeline.some((event) => event.type === 'error')
+    ? 'fail'
+    : replay.timeline.some((event) => event.type === 'stderr') || replay.active
+      ? 'warn'
+      : 'ok';
+  const safeEvents = replay.timeline
+    .filter((event) => event.type !== 'start')
+    .slice(-12);
+  const weightedEvents: SshFlightTimelineEvent[] = safeEvents.length > 0 ? safeEvents : [
+    {
+      type: replay.outputEvents > 0 ? 'stdout' : 'input',
+      at: replay.lastEventAt,
+      bytes: Math.max(replay.inputBytes, replay.outputBytes, 1),
+      lines: Math.max(replay.outputLines, 1),
+    },
+  ];
+  const maxWeight = Math.max(...weightedEvents.map(getSshFlightEventWeight), 1);
+
+  return {
+    id: `${replay.connectedAt}-${index}`,
+    tone,
+    label: copy.flightSessionLabel(index + 1),
+    summary: copy.flightRecordSummary(replay.inputSubmits, replay.outputLines, replay.durationMs),
+    detail: copy.flightRecordDetail(weightedEvents.length, replay.inputBytes, replay.outputBytes, replay.lastEventAt),
+    meta: [
+      replay.active ? copy.flightActive : copy.flightClosed,
+      copy.flightMode(replay.mode),
+      copy.flightCloseSignal(replay.closeSignal),
+      copy.flightErrors(replay.errorCount),
+    ],
+    segments: weightedEvents.map((event) => ({
+      type: event.type,
+      tone: getSshFlightSegmentTone(event.type),
+      label: copy.flightSegmentLabel(event.type, event.bytes, event.lines),
+      width: Math.max(1, Math.round((getSshFlightEventWeight(event) / maxWeight) * 12)),
+    })),
+  };
+}
+
+function getSshFlightEventWeight(event: DiagnosticExportResponse['sshTerminal']['sessionReplays'][number]['timeline'][number]) {
+  return Math.max(1, event.bytes + event.lines * 96);
+}
+
+function getSshFlightSegmentTone(type: string): SshFlightSegment['tone'] {
+  if (type === 'input') {
+    return 'input';
+  }
+  if (type === 'stderr' || type === 'error') {
+    return 'error';
+  }
+  if (type === 'close') {
+    return 'close';
+  }
+  return 'output';
+}
+
+function formatSshFlightDuration(value: number, locale: string) {
+  if (!Number.isFinite(value) || value <= 0) {
+    return '0ms';
+  }
+  if (value < 1000) {
+    return `${Math.round(value)}ms`;
+  }
+  const seconds = value / 1000;
+  if (seconds < 60) {
+    return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(seconds)}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.round(seconds % 60);
+  return `${new Intl.NumberFormat(locale).format(minutes)}m ${new Intl.NumberFormat(locale).format(remainingSeconds)}s`;
+}
+
+function formatSshFlightBytes(value: number) {
+  if (!Number.isFinite(value) || value <= 0) {
+    return '0 B';
+  }
+  if (value >= 1024 * 1024) {
+    return `${(value / 1024 / 1024).toFixed(1)} MB`;
+  }
+  if (value >= 1024) {
+    return `${Math.round(value / 1024)} KB`;
+  }
+  return `${Math.round(value)} B`;
+}
+
+function formatSshFlightTime(value: string, locale: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function formatSshFlightEventType(type: string, language: string) {
+  const labels: Record<string, Record<string, string>> = {
+    zh: {
+      input: '输入',
+      stdout: '输出',
+      stderr: '错误输出',
+      close: '关闭',
+      error: '错误',
+    },
+    en: {
+      input: 'Input',
+      stdout: 'Output',
+      stderr: 'Error output',
+      close: 'Close',
+      error: 'Error',
+    },
+    ja: {
+      input: '入力',
+      stdout: '出力',
+      stderr: 'エラー出力',
+      close: '終了',
+      error: 'エラー',
+    },
+  };
+  return (labels[language] ?? labels.en)[type] ?? type;
+}
+
 function isSshLagReportSnapshot(value: unknown): value is SshLagReportSnapshot {
   if (!value || typeof value !== 'object') {
     return false;
@@ -2393,6 +2643,26 @@ interface SshPerformanceCopy {
   historyCompareUnknownDelta: string;
   historyCompareDetail: (current: string, baseline: string) => string;
   historyCompareDelta: (findingDelta: number) => string;
+  flightTitle: string;
+  flightDescription: string;
+  flightEmpty: string;
+  flightActive: string;
+  flightClosed: string;
+  flightStatSessions: string;
+  flightStatErrors: string;
+  flightStatOutput: string;
+  flightStatDuration: string;
+  flightStatSessionsDetail: (active: number) => string;
+  flightStatErrorsDetail: (errors: number) => string;
+  flightStatOutputDetail: (lines: number) => string;
+  flightStatDurationDetail: (durationMs: number) => string;
+  flightSessionLabel: (index: number) => string;
+  flightRecordSummary: (submits: number, outputLines: number, durationMs: number) => string;
+  flightRecordDetail: (events: number, inputBytes: number, outputBytes: number, lastEventAt: string) => string;
+  flightMode: (mode: string) => string;
+  flightCloseSignal: (signal: string | null) => string;
+  flightErrors: (errors: number) => string;
+  flightSegmentLabel: (type: string, bytes: number, lines: number) => string;
   copySummary: string;
   copyCopied: string;
   summaryStatus: string;
@@ -2471,6 +2741,26 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     historyCompareUnknownDelta: '旧快照缺少趋势等级，重新保存一次后即可精确比较。',
     historyCompareDetail: (current, baseline) => `当前 ${current} / 基线 ${baseline}`,
     historyCompareDelta: (findingDelta) => findingDelta === 0 ? '关键证据数量持平' : findingDelta > 0 ? `关键证据增加 ${findingDelta} 条` : `关键证据减少 ${Math.abs(findingDelta)} 条`,
+    flightTitle: 'SSH 飞行记录器',
+    flightDescription: '把最近会话压缩成脱敏事件轨道，快速判断卡顿发生在输入、输出、关闭还是错误阶段。',
+    flightEmpty: '暂无可回放的 SSH 会话。打开终端执行一次安全命令后，这里会显示脱敏时间线。',
+    flightActive: '进行中',
+    flightClosed: '已关闭',
+    flightStatSessions: '会话',
+    flightStatErrors: '错误',
+    flightStatOutput: '输出行',
+    flightStatDuration: '均耗时',
+    flightStatSessionsDetail: (active) => `${active} 个会话仍在进行`,
+    flightStatErrorsDetail: (errors) => errors > 0 ? `${errors} 个错误事件需要排查` : '未记录错误事件',
+    flightStatOutputDetail: (lines) => `${lines} 行脱敏输出`,
+    flightStatDurationDetail: (durationMs) => `平均 ${formatSshFlightDuration(durationMs, 'zh-CN')}`,
+    flightSessionLabel: (index) => `会话 #${index}`,
+    flightRecordSummary: (submits, outputLines, durationMs) => `${submits} 次提交 / ${outputLines} 行 / ${formatSshFlightDuration(durationMs, 'zh-CN')}`,
+    flightRecordDetail: (events, inputBytes, outputBytes, lastEventAt) => `${events} 个事件 · 输入 ${formatSshFlightBytes(inputBytes)} · 输出 ${formatSshFlightBytes(outputBytes)} · 最后 ${formatSshFlightTime(lastEventAt, 'zh-CN')}`,
+    flightMode: (mode) => `模式 ${mode}`,
+    flightCloseSignal: (signal) => signal ? `信号 ${signal}` : '未关闭',
+    flightErrors: (errors) => errors > 0 ? `${errors} 个错误` : '无错误',
+    flightSegmentLabel: (type, bytes, lines) => `${formatSshFlightEventType(type, 'zh')} · ${formatSshFlightBytes(bytes)} · ${lines} 行`,
     copySummary: '\u590d\u5236\u6458\u8981',
     copyCopied: 'SSH \u6027\u80fd\u6458\u8981\u5df2\u590d\u5236',
     summaryStatus: '\u72b6\u6001',
@@ -2547,6 +2837,26 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     historyCompareUnknownDelta: 'The older snapshot lacks a trend score. Save one more snapshot for exact comparison.',
     historyCompareDetail: (current, baseline) => `Current ${current} / baseline ${baseline}`,
     historyCompareDelta: (findingDelta) => findingDelta === 0 ? 'Key evidence count unchanged' : findingDelta > 0 ? `Key evidence increased by ${findingDelta}` : `Key evidence decreased by ${Math.abs(findingDelta)}`,
+    flightTitle: 'SSH flight recorder',
+    flightDescription: 'Compresses recent sessions into sanitized event rails so lag can be traced to input, output, close, or error stages.',
+    flightEmpty: 'No SSH replay is available yet. Open a terminal and run one safe command to generate the sanitized timeline.',
+    flightActive: 'Active',
+    flightClosed: 'Closed',
+    flightStatSessions: 'Sessions',
+    flightStatErrors: 'Errors',
+    flightStatOutput: 'Output lines',
+    flightStatDuration: 'Avg duration',
+    flightStatSessionsDetail: (active) => `${active} session(s) still active`,
+    flightStatErrorsDetail: (errors) => errors > 0 ? `${errors} error event(s) need review` : 'No error events recorded',
+    flightStatOutputDetail: (lines) => `${lines} sanitized output line(s)`,
+    flightStatDurationDetail: (durationMs) => `Average ${formatSshFlightDuration(durationMs, 'en-US')}`,
+    flightSessionLabel: (index) => `Session #${index}`,
+    flightRecordSummary: (submits, outputLines, durationMs) => `${submits} submit(s) / ${outputLines} line(s) / ${formatSshFlightDuration(durationMs, 'en-US')}`,
+    flightRecordDetail: (events, inputBytes, outputBytes, lastEventAt) => `${events} event(s) · input ${formatSshFlightBytes(inputBytes)} · output ${formatSshFlightBytes(outputBytes)} · last ${formatSshFlightTime(lastEventAt, 'en-US')}`,
+    flightMode: (mode) => `Mode ${mode}`,
+    flightCloseSignal: (signal) => signal ? `Signal ${signal}` : 'Not closed',
+    flightErrors: (errors) => errors > 0 ? `${errors} error(s)` : 'No errors',
+    flightSegmentLabel: (type, bytes, lines) => `${formatSshFlightEventType(type, 'en')} · ${formatSshFlightBytes(bytes)} · ${lines} line(s)`,
     copySummary: 'Copy summary',
     copyCopied: 'SSH performance summary copied',
     summaryStatus: 'Status',
@@ -2623,6 +2933,26 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     historyCompareUnknownDelta: '古いスナップショットにトレンド評価がありません。もう一度保存すると比較できます。',
     historyCompareDetail: (current, baseline) => `現在 ${current} / 基準 ${baseline}`,
     historyCompareDelta: (findingDelta) => findingDelta === 0 ? '主要証跡数は同じ' : findingDelta > 0 ? `主要証跡が ${findingDelta} 件増加` : `主要証跡が ${Math.abs(findingDelta)} 件減少`,
+    flightTitle: 'SSH フライトレコーダー',
+    flightDescription: '最近のセッションを匿名化イベントレールに圧縮し、入力・出力・終了・エラーのどこで詰まるか確認します。',
+    flightEmpty: '再生できる SSH セッションはまだありません。端末で安全なコマンドを実行すると匿名化タイムラインを表示します。',
+    flightActive: '実行中',
+    flightClosed: '終了',
+    flightStatSessions: 'セッション',
+    flightStatErrors: 'エラー',
+    flightStatOutput: '出力行',
+    flightStatDuration: '平均時間',
+    flightStatSessionsDetail: (active) => `${active} 件が実行中`,
+    flightStatErrorsDetail: (errors) => errors > 0 ? `${errors} 件のエラーを確認` : 'エラー記録なし',
+    flightStatOutputDetail: (lines) => `${lines} 行の匿名化出力`,
+    flightStatDurationDetail: (durationMs) => `平均 ${formatSshFlightDuration(durationMs, 'ja-JP')}`,
+    flightSessionLabel: (index) => `セッション #${index}`,
+    flightRecordSummary: (submits, outputLines, durationMs) => `${submits} 回送信 / ${outputLines} 行 / ${formatSshFlightDuration(durationMs, 'ja-JP')}`,
+    flightRecordDetail: (events, inputBytes, outputBytes, lastEventAt) => `${events} 件 · 入力 ${formatSshFlightBytes(inputBytes)} · 出力 ${formatSshFlightBytes(outputBytes)} · 最終 ${formatSshFlightTime(lastEventAt, 'ja-JP')}`,
+    flightMode: (mode) => `モード ${mode}`,
+    flightCloseSignal: (signal) => signal ? `信号 ${signal}` : '未終了',
+    flightErrors: (errors) => errors > 0 ? `${errors} 件エラー` : 'エラーなし',
+    flightSegmentLabel: (type, bytes, lines) => `${formatSshFlightEventType(type, 'ja')} · ${formatSshFlightBytes(bytes)} · ${lines} 行`,
     copySummary: '\u30b5\u30de\u30ea\u30fc\u3092\u30b3\u30d4\u30fc',
     copyCopied: 'SSH \u30d1\u30d5\u30a9\u30fc\u30de\u30f3\u30b9\u30b5\u30de\u30ea\u30fc\u3092\u30b3\u30d4\u30fc\u3057\u307e\u3057\u305f',
     summaryStatus: '\u72b6\u614b',

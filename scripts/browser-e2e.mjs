@@ -35,6 +35,8 @@ try {
 
   await assertReleaseEvidenceBrief(page);
   await captureVisualEvidence(page, 'desktop-security-trace', ['.security-workbench', '.security-readiness-card', '.security-evidence-brief', '.security-release-playbook', '.security-ssh-performance-card']);
+  await page.locator('[data-ssh-flight-recorder="true"]').scrollIntoViewIfNeeded();
+  await captureVisualEvidence(page, 'desktop-ssh-flight-recorder', ['[data-ssh-flight-recorder="true"]', '.security-ssh-flight-rail']);
   await assertMobileConsoleAndMap();
   await assertMobileModuleLayoutSweep();
 
@@ -206,6 +208,18 @@ async function assertReleaseEvidenceBrief(targetPage) {
   const sshLagCompareText = await targetPage.locator('[data-ssh-lag-history-compare="true"]').innerText();
   if (!/Experience unchanged|Experience improved|Experience degraded/i.test(sshLagCompareText) || !/Current .* baseline/i.test(sshLagCompareText)) {
     throw new Error(`SSH lag diagnosis history did not render a trend comparison: ${sshLagCompareText}`);
+  }
+  await targetPage.locator('[data-ssh-flight-recorder="true"]').waitFor({ timeout: 5000 });
+  const sshFlightText = await targetPage.locator('[data-ssh-flight-recorder="true"]').innerText();
+  if (!/SSH flight recorder/i.test(sshFlightText) || !/Sessions/i.test(sshFlightText) || !/Output lines/i.test(sshFlightText) || !/Session #/i.test(sshFlightText) || !/input/i.test(sshFlightText) || !/output/i.test(sshFlightText)) {
+    throw new Error(`SSH flight recorder did not render sanitized session timeline evidence: ${sshFlightText}`);
+  }
+  const sshFlightSegmentCount = await targetPage.locator('.security-ssh-flight-rail span').count();
+  if (sshFlightSegmentCount < 2) {
+    throw new Error(`SSH flight recorder should expose multiple timeline segments, got ${sshFlightSegmentCount}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(sshFlightText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(sshFlightText)) {
+    throw new Error('SSH flight recorder rendered a raw IP address or API key');
   }
   const storedSshLagHistory = await targetPage.evaluate(() => window.localStorage.getItem('colipas.sshLagReportHistory.v1') ?? '');
   if (!/SSH lag diagnosis report/i.test(storedSshLagHistory) || !/"tone":/i.test(storedSshLagHistory) || /\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(storedSshLagHistory) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(storedSshLagHistory)) {

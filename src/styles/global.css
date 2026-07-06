@@ -7576,6 +7576,175 @@ pre {
   white-space: nowrap;
 }
 
+.security-ssh-flight-recorder {
+  min-width: 0;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 16px;
+  padding: 14px;
+  background:
+    radial-gradient(circle at 14% 18%, rgba(20, 184, 166, 0.12), transparent 26%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(244, 251, 250, 0.82));
+}
+
+.security-ssh-flight-recorder.warn {
+  border-color: rgba(245, 158, 11, 0.2);
+  background:
+    radial-gradient(circle at 14% 18%, rgba(245, 158, 11, 0.14), transparent 26%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(255, 249, 237, 0.82));
+}
+
+.security-ssh-flight-recorder.fail {
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.security-ssh-flight-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+}
+
+.security-ssh-flight-header span {
+  display: block;
+  color: #0f766e;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.security-ssh-flight-header p,
+.security-ssh-flight-empty,
+.security-ssh-flight-list article p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.security-ssh-flight-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(64px, 1fr));
+  gap: 7px;
+}
+
+.security-ssh-flight-stats strong {
+  min-width: 0;
+  border: 1px solid rgba(15, 118, 110, 0.12);
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.1;
+  text-align: right;
+}
+
+.security-ssh-flight-stats small {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.security-ssh-flight-list {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.security-ssh-flight-list article {
+  min-width: 0;
+  border: 1px solid rgba(15, 118, 110, 0.13);
+  border-radius: 14px;
+  padding: 11px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.security-ssh-flight-list article.warn {
+  border-color: rgba(245, 158, 11, 0.2);
+}
+
+.security-ssh-flight-list article.fail {
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.security-ssh-flight-record-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+}
+
+.security-ssh-flight-record-head span {
+  color: #0f766e;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.security-ssh-flight-record-head strong {
+  min-width: 0;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.security-ssh-flight-meta {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.security-ssh-flight-meta small {
+  border: 1px solid rgba(15, 118, 110, 0.12);
+  border-radius: 999px;
+  padding: 3px 7px;
+  color: var(--muted);
+  background: rgba(240, 253, 250, 0.7);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.security-ssh-flight-rail {
+  position: relative;
+  margin-top: 10px;
+  min-width: 0;
+  height: 16px;
+  display: flex;
+  gap: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background:
+    repeating-linear-gradient(90deg, rgba(15, 23, 42, 0.07) 0 1px, transparent 1px 18px),
+    rgba(15, 118, 110, 0.08);
+}
+
+.security-ssh-flight-rail span {
+  min-width: 5px;
+  border-radius: 999px;
+}
+
+.security-ssh-flight-rail span.input {
+  background: linear-gradient(90deg, #2dd4bf, #14b8a6);
+}
+
+.security-ssh-flight-rail span.output {
+  background: linear-gradient(90deg, #38bdf8, #2563eb);
+}
+
+.security-ssh-flight-rail span.error {
+  background: linear-gradient(90deg, #fb7185, #dc2626);
+}
+
+.security-ssh-flight-rail span.close {
+  background: linear-gradient(90deg, #cbd5e1, #64748b);
+}
+
 .security-control-grid {
   display: grid;
   grid-template-columns: minmax(280px, 0.95fr) minmax(300px, 1.1fr) minmax(240px, 0.75fr);
@@ -8469,6 +8638,7 @@ pre {
   .security-release-playbook-grid,
   .security-ssh-lag-report,
   .security-ssh-lag-history-heading,
+  .security-ssh-flight-header,
   .security-ssh-performance-groups,
   .security-ssh-performance-grid,
   .security-kpi-grid,
@@ -8485,6 +8655,10 @@ pre {
 
   .monitor-kpis {
     grid-template-columns: repeat(2, minmax(120px, 1fr));
+  }
+
+  .security-ssh-flight-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .monitor-side {
@@ -9069,6 +9243,7 @@ pre {
   .security-release-playbook-grid,
   .security-ssh-performance-heading,
   .security-ssh-lag-report,
+  .security-ssh-flight-header,
   .security-ssh-performance-groups,
   .security-ssh-performance-grid,
   .security-kpi-grid,
@@ -9081,6 +9256,11 @@ pre {
 
   .security-ssh-performance-actions {
     justify-content: flex-start;
+  }
+
+  .security-ssh-flight-stats,
+  .security-ssh-flight-record-head {
+    grid-template-columns: 1fr;
   }
 
   .security-audit-row {
