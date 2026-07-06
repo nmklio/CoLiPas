@@ -36,7 +36,9 @@ try {
   await assertReleaseEvidenceBrief(page);
   await captureVisualEvidence(page, 'desktop-security-trace', ['.security-workbench', '.security-readiness-card', '.security-evidence-brief', '.security-release-playbook', '.security-ssh-performance-card']);
   await page.locator('[data-ssh-flight-recorder="true"]').scrollIntoViewIfNeeded();
-  await captureVisualEvidence(page, 'desktop-ssh-flight-recorder', ['[data-ssh-flight-recorder="true"]', '.security-ssh-flight-rail', '[data-ssh-latency-curve="true"]', '[data-ssh-interaction-sampler="true"]']);
+  await captureVisualEvidence(page, 'desktop-ssh-flight-recorder', ['[data-ssh-flight-recorder="true"]', '.security-ssh-flight-rail', '[data-ssh-latency-curve="true"]', '[data-ssh-interaction-sampler="true"]', '[data-ssh-bottleneck-trend="true"]']);
+  await page.locator('[data-ssh-bottleneck-trend="true"]').scrollIntoViewIfNeeded();
+  await captureVisualEvidence(page, 'desktop-ssh-bottleneck-trend', ['[data-ssh-bottleneck-trend="true"]']);
   await assertOverviewHealthBaseline(page);
   await assertMobileConsoleAndMap();
   await assertMobileModuleLayoutSweep();
@@ -285,6 +287,25 @@ async function assertReleaseEvidenceBrief(targetPage) {
   }
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshSamplerText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshSamplerText)) {
     throw new Error('SSH interaction sampler copy output leaked a raw IP address or API key');
+  }
+  await targetPage.locator('[data-ssh-bottleneck-trend="true"]').waitFor({ timeout: 5000 });
+  const sshBottleneckTrendText = await targetPage.locator('[data-ssh-bottleneck-trend="true"]').innerText();
+  if (!/SSH bottleneck trend/i.test(sshBottleneckTrendText) || !/Network/i.test(sshBottleneckTrendText) || !/Input/i.test(sshBottleneckTrendText) || !/Output/i.test(sshBottleneckTrendText) || !/Render/i.test(sshBottleneckTrendText)) {
+    throw new Error(`SSH bottleneck trend did not render the four diagnosis lanes: ${sshBottleneckTrendText}`);
+  }
+  if (!/sanitized snapshots|samples/i.test(sshBottleneckTrendText) || !/Trend snapshots only contain sanitized numbers/i.test(sshBottleneckTrendText)) {
+    throw new Error(`SSH bottleneck trend did not explain sanitized local evidence: ${sshBottleneckTrendText}`);
+  }
+  const bottleneckTrendLaneCount = await targetPage.locator('[data-ssh-bottleneck-trend-lane]').count();
+  if (bottleneckTrendLaneCount !== 4) {
+    throw new Error(`SSH bottleneck trend should expose four pressure lanes, got ${bottleneckTrendLaneCount}`);
+  }
+  const bottleneckTrendSampleCount = await targetPage.locator('.security-ssh-bottleneck-trend-timeline article').count();
+  if (bottleneckTrendSampleCount < 1) {
+    throw new Error(`SSH bottleneck trend should show at least one persisted sample, got ${bottleneckTrendSampleCount}: ${sshBottleneckTrendText}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(sshBottleneckTrendText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(sshBottleneckTrendText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(sshBottleneckTrendText)) {
+    throw new Error('SSH bottleneck trend rendered a raw IP address or secret');
   }
   await targetPage.getByRole('button', { name: /copy summary|复制摘要|サマリーをコピー/i }).click();
   const copiedSshPerfText = await targetPage.evaluate(() => window.__colipasCopiedSshPerformanceText ?? '');
@@ -799,6 +820,18 @@ async function assertSshTerminalPanel(targetPage) {
     const disconnectMessage = targetPage.locator('.action-message').filter({ hasText: /disconnected/i });
     await disconnectMessage.waitFor({ timeout: 5000 });
     await disconnectMessage.waitFor({ state: 'hidden', timeout: 7000 });
+    const storedSshBottleneckHistory = await targetPage.evaluate(() => window.localStorage.getItem('colipas.sshBottleneckRadarHistory.v1') ?? '');
+    const parsedSshBottleneckHistory = JSON.parse(storedSshBottleneckHistory || '[]');
+    if (
+      !Array.isArray(parsedSshBottleneckHistory)
+      || parsedSshBottleneckHistory.length < 1
+      || parsedSshBottleneckHistory.some((snapshot) => snapshot.version !== 1 || !['network', 'input', 'output', 'render'].includes(snapshot.primary) || !snapshot.levels || !snapshot.metrics)
+    ) {
+      throw new Error(`SSH bottleneck trend storage is missing sanitized snapshots: ${storedSshBottleneckHistory}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(storedSshBottleneckHistory) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(storedSshBottleneckHistory) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(storedSshBottleneckHistory)) {
+      throw new Error('SSH bottleneck trend storage leaked a raw IP address or secret');
+    }
     await targetPage.waitForFunction(async () => {
       const response = await fetch('/api/servers/shells/status');
       const status = await response.json();
@@ -1168,6 +1201,7 @@ async function assertMobileModuleLayoutSweep() {
       '.security-readiness-card',
       '.security-evidence-brief',
       '.security-release-playbook',
+      '.security-ssh-bottleneck-trend',
       '.security-kpi-grid',
       '.security-control-grid',
       '.security-remediation-card',
@@ -1178,6 +1212,7 @@ async function assertMobileModuleLayoutSweep() {
     await assertSingleColumnStack(mobilePage, '.security-release-playbook-grid', 'mobile release failure playbook');
     await assertElementHorizontallyWithinViewport(mobilePage, '.security-evidence-brief', 'mobile release evidence brief');
     await assertElementHorizontallyWithinViewport(mobilePage, '.security-release-playbook', 'mobile release failure playbook');
+    await assertElementHorizontallyWithinViewport(mobilePage, '.security-ssh-bottleneck-trend', 'mobile SSH bottleneck trend');
     await assertSingleColumnStack(mobilePage, '.security-control-grid', 'mobile security control grid');
     await assertMobileAuditRowLayout(mobilePage);
     await mobilePage.locator('.security-audit-row').first().click();

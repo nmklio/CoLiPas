@@ -9272,6 +9272,272 @@ pre {
   box-shadow: 0 10px 24px rgba(54, 48, 128, 0.05);
 }
 
+.security-ssh-bottleneck-trend {
+  min-width: 0;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 18px;
+  padding: 15px;
+  background:
+    linear-gradient(90deg, rgba(15, 23, 42, 0.045) 1px, transparent 1px) 0 0 / 18px 18px,
+    radial-gradient(circle at 10% 8%, rgba(20, 184, 166, 0.18), transparent 28%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(244, 251, 249, 0.88));
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.055);
+}
+
+.security-ssh-bottleneck-trend.ok {
+  border-color: rgba(20, 184, 166, 0.2);
+}
+
+.security-ssh-bottleneck-trend.warn {
+  border-color: rgba(245, 158, 11, 0.28);
+  background:
+    linear-gradient(90deg, rgba(146, 64, 14, 0.045) 1px, transparent 1px) 0 0 / 18px 18px,
+    radial-gradient(circle at 10% 8%, rgba(245, 158, 11, 0.18), transparent 28%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(255, 249, 237, 0.9));
+}
+
+.security-ssh-bottleneck-trend.fail {
+  border-color: rgba(239, 68, 68, 0.26);
+  background:
+    linear-gradient(90deg, rgba(127, 29, 29, 0.045) 1px, transparent 1px) 0 0 / 18px 18px,
+    radial-gradient(circle at 10% 8%, rgba(239, 68, 68, 0.16), transparent 28%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(255, 244, 244, 0.9));
+}
+
+.security-ssh-bottleneck-trend-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+}
+
+.security-ssh-bottleneck-trend-heading > div {
+  min-width: 0;
+}
+
+.security-ssh-bottleneck-trend-heading span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #0f766e;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.security-ssh-bottleneck-trend.warn .security-ssh-bottleneck-trend-heading span {
+  color: #b65f00;
+}
+
+.security-ssh-bottleneck-trend.fail .security-ssh-bottleneck-trend-heading span {
+  color: var(--red);
+}
+
+.security-ssh-bottleneck-trend-heading strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text);
+  font-size: 17px;
+  line-height: 1.22;
+}
+
+.security-ssh-bottleneck-trend-heading p,
+.security-ssh-bottleneck-trend-heading > div > small {
+  display: block;
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.security-ssh-bottleneck-trend-heading > div > small {
+  color: #0f766e;
+  font-weight: 820;
+}
+
+.security-ssh-bottleneck-trend-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.security-ssh-bottleneck-trend-actions small {
+  border: 1px solid rgba(15, 118, 110, 0.12);
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.security-ssh-bottleneck-trend-body {
+  margin-top: 13px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.52fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.security-ssh-bottleneck-trend-lanes {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  align-content: start;
+}
+
+.security-ssh-bottleneck-trend-lanes article {
+  min-width: 0;
+  align-self: start;
+  border: 1px solid rgba(15, 118, 110, 0.14);
+  border-radius: 14px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.68);
+}
+
+.security-ssh-bottleneck-trend-lanes article.warn {
+  border-color: rgba(245, 158, 11, 0.26);
+  background: rgba(255, 251, 241, 0.88);
+}
+
+.security-ssh-bottleneck-trend-lanes article.fail {
+  border-color: rgba(239, 68, 68, 0.26);
+  background: rgba(255, 247, 247, 0.9);
+}
+
+.security-ssh-bottleneck-trend-lanes article > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.security-ssh-bottleneck-trend-lanes span {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.07em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.security-ssh-bottleneck-trend-lanes strong {
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+.security-ssh-bottleneck-trend-lanes i {
+  display: block;
+  margin: 9px 0 7px;
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.security-ssh-bottleneck-trend-lanes i b {
+  display: block;
+  min-width: 4px;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2dd4bf, #0f766e);
+}
+
+.security-ssh-bottleneck-trend-lanes article.warn i b {
+  background: linear-gradient(90deg, #fbbf24, #d97706);
+}
+
+.security-ssh-bottleneck-trend-lanes article.fail i b {
+  background: linear-gradient(90deg, #fb7185, #dc2626);
+}
+
+.security-ssh-bottleneck-trend-lanes small,
+.security-ssh-bottleneck-trend-timeline small,
+.security-ssh-bottleneck-trend-empty,
+.security-ssh-bottleneck-trend-note {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.security-ssh-bottleneck-trend-timeline {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.security-ssh-bottleneck-trend-timeline article {
+  min-width: 0;
+  border: 1px solid rgba(15, 118, 110, 0.12);
+  border-left-width: 4px;
+  border-radius: 12px;
+  padding: 8px 9px;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.security-ssh-bottleneck-trend-timeline article.warn {
+  border-color: rgba(245, 158, 11, 0.26);
+}
+
+.security-ssh-bottleneck-trend-timeline article.fail {
+  border-color: rgba(239, 68, 68, 0.26);
+}
+
+.security-ssh-bottleneck-trend-timeline span {
+  display: block;
+  color: #0f766e;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.security-ssh-bottleneck-trend-timeline strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.security-ssh-bottleneck-trend-empty {
+  margin: 0;
+  border: 1px dashed rgba(15, 118, 110, 0.22);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.security-ssh-bottleneck-trend > p {
+  margin: 11px 0 0;
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: rgba(15, 118, 110, 0.08);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 760;
+  line-height: 1.45;
+}
+
+.security-ssh-bottleneck-trend.warn > p {
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.security-ssh-bottleneck-trend.fail > p {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.security-ssh-bottleneck-trend-note {
+  display: block;
+  margin-top: 8px;
+}
+
 .security-control-grid {
   display: grid;
   grid-template-columns: minmax(280px, 0.95fr) minmax(300px, 1.1fr) minmax(240px, 0.75fr);
@@ -10169,6 +10435,8 @@ pre {
   .security-ssh-flight-header,
   .security-ssh-latency-heading,
   .security-ssh-sampler-heading,
+  .security-ssh-bottleneck-trend-heading,
+  .security-ssh-bottleneck-trend-body,
   .security-ssh-performance-groups,
   .security-ssh-performance-grid,
   .security-kpi-grid,
@@ -10200,7 +10468,8 @@ pre {
   }
 
   .security-ssh-sampler-stats,
-  .security-ssh-sampler-steps {
+  .security-ssh-sampler-steps,
+  .security-ssh-bottleneck-trend-lanes {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -10808,6 +11077,8 @@ pre {
   .security-ssh-lag-report,
   .security-ssh-flight-header,
   .security-ssh-sampler-heading,
+  .security-ssh-bottleneck-trend-heading,
+  .security-ssh-bottleneck-trend-body,
   .security-ssh-performance-groups,
   .security-ssh-performance-grid,
   .security-kpi-grid,
@@ -10855,9 +11126,14 @@ pre {
     justify-content: flex-start;
   }
 
+  .security-ssh-bottleneck-trend-actions {
+    justify-content: flex-start;
+  }
+
   .security-ssh-flight-stats,
   .security-ssh-sampler-stats,
   .security-ssh-sampler-steps,
+  .security-ssh-bottleneck-trend-lanes,
   .security-ssh-latency-legend,
   .security-ssh-flight-record-head {
     grid-template-columns: 1fr;
@@ -10870,7 +11146,8 @@ pre {
     border-radius: 16px;
   }
 
-  .security-ssh-sampler-heading .tool-button {
+  .security-ssh-sampler-heading .tool-button,
+  .security-ssh-bottleneck-trend-heading .tool-button {
     width: 100%;
     justify-content: center;
   }

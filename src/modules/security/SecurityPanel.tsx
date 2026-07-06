@@ -276,8 +276,56 @@ interface SshInteractionSamplerSummary {
   copyText: string;
 }
 
+type SshBottleneckLaneId = 'network' | 'input' | 'output' | 'render';
+type SshBottleneckSnapshotTone = 'pending' | 'good' | 'warn' | 'slow';
+
+interface SshBottleneckRadarSnapshot {
+  version: 1;
+  id: string;
+  createdAt: string;
+  reason?: 'close' | 'remote-close' | 'disconnect';
+  tone: SshBottleneckSnapshotTone;
+  primary: SshBottleneckLaneId;
+  levels: Record<SshBottleneckLaneId, number>;
+  metrics: {
+    rttMs: number | null;
+    throughputBytesPerSecond: number;
+    inputEvents: number;
+    inputBytes: number;
+    outputLines: number;
+    outputBytes: number;
+    firstOutputMs: number | null;
+    renderLagMs: number;
+    pendingBytes: number;
+    peakPendingBytes: number;
+  };
+}
+
+interface SshBottleneckTrendLane {
+  id: SshBottleneckLaneId;
+  label: string;
+  value: string;
+  detail: string;
+  tone: 'ok' | 'warn' | 'fail';
+  level: number;
+  hits: number;
+}
+
+interface SshBottleneckTrendSummary {
+  tone: 'ok' | 'warn' | 'fail';
+  title: string;
+  detail: string;
+  action: string;
+  samplesLabel: string;
+  latestLabel: string;
+  lanes: SshBottleneckTrendLane[];
+  recent: SshBottleneckRadarSnapshot[];
+}
+
 const sshLagReportHistoryStorageKey = 'colipas.sshLagReportHistory.v1';
 const sshLagReportHistoryVisibleLimit = 5;
+const sshBottleneckRadarHistoryStorageKey = 'colipas.sshBottleneckRadarHistory.v1';
+const sshBottleneckRadarHistoryVisibleLimit = 6;
 
 type SshSelfTestBottleneck = NonNullable<DiagnosticExportResponse['sshTerminal']['lastSelfTest']>['bottleneck'];
 type SshFlightTimelineEvent = DiagnosticExportResponse['sshTerminal']['sessionReplays'][number]['timeline'][number];
@@ -308,6 +356,7 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
   const [exportingDiagnostic, setExportingDiagnostic] = useState(false);
   const [expandedSshMetricId, setExpandedSshMetricId] = useState('');
   const [sshLagReportHistory, setSshLagReportHistory] = useState<SshLagReportSnapshot[]>(() => loadSshLagReportHistory());
+  const [sshBottleneckRadarHistory, setSshBottleneckRadarHistory] = useState<SshBottleneckRadarSnapshot[]>(() => loadSshBottleneckRadarHistory());
 
   const openEvents = useMemo(() => events.filter((event) => event.status === 'open'), [events]);
   const filteredAudits = useMemo(() => {
@@ -378,6 +427,10 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
     () => buildSshInteractionSampler(diagnosticBundle, sshPerformanceCopy, locale),
     [diagnosticBundle, locale, sshPerformanceCopy],
   );
+  const sshBottleneckTrend = useMemo(
+    () => buildSshBottleneckTrend(sshBottleneckRadarHistory, sshPerformanceCopy, locale),
+    [locale, sshBottleneckRadarHistory, sshPerformanceCopy],
+  );
   const expandedSshMetric = useMemo(
     () => sshPerformance.metrics.find((metric) => metric.id === expandedSshMetricId) ?? sshPerformance.metrics[0] ?? null,
     [expandedSshMetricId, sshPerformance.metrics],
@@ -385,6 +438,17 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
 
   useEffect(() => {
     refreshSecurityData().catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    setSshBottleneckRadarHistory(loadSshBottleneckRadarHistory());
+    function syncBottleneckHistory(event: StorageEvent) {
+      if (event.key === sshBottleneckRadarHistoryStorageKey) {
+        setSshBottleneckRadarHistory(loadSshBottleneckRadarHistory());
+      }
+    }
+    window.addEventListener('storage', syncBottleneckHistory);
+    return () => window.removeEventListener('storage', syncBottleneckHistory);
   }, []);
 
   useEffect(() => {
@@ -618,6 +682,13 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
       return next;
     });
     setRemediationMessage(sshPerformanceCopy.historySaved);
+    setRemediationError(false);
+  }
+
+  function refreshSshBottleneckRadarHistory() {
+    const next = loadSshBottleneckRadarHistory();
+    setSshBottleneckRadarHistory(next);
+    setRemediationMessage(sshPerformanceCopy.bottleneckTrendRefreshed);
     setRemediationError(false);
   }
 
@@ -1154,6 +1225,53 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
               </article>
             ))}
           </div>
+        </div>
+        <div className={`security-ssh-bottleneck-trend ${sshBottleneckTrend.tone}`} data-ssh-bottleneck-trend="true">
+          <div className="security-ssh-bottleneck-trend-heading">
+            <div>
+              <span><Activity size={15} /> {sshPerformanceCopy.bottleneckTrendTitle}</span>
+              <strong>{sshBottleneckTrend.title}</strong>
+              <p>{sshPerformanceCopy.bottleneckTrendDescription}</p>
+              <small>{sshBottleneckTrend.detail}</small>
+            </div>
+            <div className="security-ssh-bottleneck-trend-actions">
+              <small>{sshBottleneckTrend.samplesLabel}</small>
+              <small>{sshBottleneckTrend.latestLabel}</small>
+              <button type="button" className="tool-button" onClick={refreshSshBottleneckRadarHistory}>
+                <RefreshCw size={15} />
+                {sshPerformanceCopy.bottleneckTrendRefresh}
+              </button>
+            </div>
+          </div>
+          <div className="security-ssh-bottleneck-trend-body">
+            <div className="security-ssh-bottleneck-trend-lanes">
+              {sshBottleneckTrend.lanes.map((lane) => (
+                <article key={lane.id} className={lane.tone} data-ssh-bottleneck-trend-lane={lane.id}>
+                  <div>
+                    <span>{lane.label}</span>
+                    <strong>{lane.value}</strong>
+                  </div>
+                  <i aria-hidden="true"><b style={{ width: `${lane.level}%` }} /></i>
+                  <small>{lane.detail}</small>
+                </article>
+              ))}
+            </div>
+            {sshBottleneckTrend.recent.length > 0 ? (
+              <div className="security-ssh-bottleneck-trend-timeline">
+                {sshBottleneckTrend.recent.map((snapshot, index) => (
+                  <article key={snapshot.id} className={mapBottleneckSnapshotTone(snapshot.tone)}>
+                    <span>{sshPerformanceCopy.bottleneckTrendSampleLabel(index + 1)}</span>
+                    <strong>{formatSshBottleneckLane(snapshot.primary, sshPerformanceCopy)}</strong>
+                    <small>{formatSshBottleneckSnapshot(snapshot, locale, sshPerformanceCopy)}</small>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="security-ssh-bottleneck-trend-empty">{sshPerformanceCopy.bottleneckTrendEmpty}</p>
+            )}
+          </div>
+          <p>{sshBottleneckTrend.action}</p>
+          <small className="security-ssh-bottleneck-trend-note">{sshPerformanceCopy.bottleneckTrendSanitizedNote}</small>
         </div>
         <p className="security-ssh-performance-next">{sshPerformance.nextAction}</p>
       </article>
@@ -2323,6 +2441,151 @@ function saveSshLagReportHistory(history: SshLagReportSnapshot[]) {
   }
 }
 
+function loadSshBottleneckRadarHistory(): SshBottleneckRadarSnapshot[] {
+  if (typeof window === 'undefined') {
+    return [];
+  }
+
+  try {
+    const raw = window.localStorage.getItem(sshBottleneckRadarHistoryStorageKey);
+    if (!raw || containsSensitiveReportText(raw)) {
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed
+      .filter(isSshBottleneckRadarSnapshot)
+      .slice(0, sshBottleneckRadarHistoryVisibleLimit * 2);
+  } catch {
+    return [];
+  }
+}
+
+function buildSshBottleneckTrend(
+  history: SshBottleneckRadarSnapshot[],
+  copy: SshPerformanceCopy,
+  locale: string,
+): SshBottleneckTrendSummary {
+  const samples = history.slice(0, sshBottleneckRadarHistoryVisibleLimit);
+  const laneIds: SshBottleneckLaneId[] = ['network', 'input', 'output', 'render'];
+  const lanes = laneIds.map((id) => {
+    const averageLevel = samples.length > 0
+      ? samples.reduce((sum, snapshot) => sum + normalizeBottleneckLevel(snapshot.levels[id]), 0) / samples.length
+      : 0;
+    const hits = samples.filter((snapshot) => snapshot.primary === id).length;
+    const level = Math.round(averageLevel);
+    return {
+      id,
+      label: formatSshBottleneckLane(id, copy),
+      value: samples.length > 0 ? `${level}%` : '--',
+      detail: copy.bottleneckTrendLaneDetail(hits, level),
+      tone: mapBottleneckLevelTone(level, samples.length > 0),
+      level,
+      hits,
+    };
+  });
+  const primary = lanes.reduce((best, lane) => (lane.level > best.level ? lane : best), lanes[0]);
+  const tone: SshBottleneckTrendSummary['tone'] = samples.length === 0
+    ? 'warn'
+    : primary.level >= 70
+      ? 'fail'
+      : primary.level >= 45
+        ? 'warn'
+        : 'ok';
+  const latest = samples[0] ?? null;
+  return {
+    tone,
+    title: samples.length === 0
+      ? copy.bottleneckTrendEmptyTitle
+      : tone === 'fail'
+        ? copy.bottleneckTrendFailTitle(primary.label)
+        : tone === 'warn'
+          ? copy.bottleneckTrendWarnTitle(primary.label)
+          : copy.bottleneckTrendGoodTitle,
+    detail: samples.length === 0
+      ? copy.bottleneckTrendEmptyDetail
+      : copy.bottleneckTrendDetail(primary.label, samples.length, primary.level),
+    action: samples.length === 0
+      ? copy.bottleneckTrendActionEmpty
+      : tone === 'fail'
+        ? copy.bottleneckTrendActionFail
+        : tone === 'warn'
+          ? copy.bottleneckTrendActionWarn
+          : copy.bottleneckTrendActionOk,
+    samplesLabel: copy.bottleneckTrendSamples(samples.length),
+    latestLabel: latest ? copy.bottleneckTrendLatest(new Date(latest.createdAt).toLocaleString(locale)) : copy.bottleneckTrendNoLatest,
+    lanes,
+    recent: samples,
+  };
+}
+
+function isSshBottleneckRadarSnapshot(value: unknown): value is SshBottleneckRadarSnapshot {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const snapshot = value as Partial<SshBottleneckRadarSnapshot>;
+  const levels = snapshot.levels as Partial<Record<SshBottleneckLaneId, unknown>> | undefined;
+  const metrics = snapshot.metrics as Partial<Record<keyof SshBottleneckRadarSnapshot['metrics'], unknown>> | undefined;
+  return snapshot.version === 1
+    && typeof snapshot.id === 'string'
+    && typeof snapshot.createdAt === 'string'
+    && ['pending', 'good', 'warn', 'slow'].includes(String(snapshot.tone))
+    && ['network', 'input', 'output', 'render'].includes(String(snapshot.primary))
+    && Boolean(levels)
+    && ['network', 'input', 'output', 'render'].every((key) => Number.isFinite(Number(levels?.[key as SshBottleneckLaneId])))
+    && Boolean(metrics)
+    && ['throughputBytesPerSecond', 'inputEvents', 'inputBytes', 'outputLines', 'outputBytes', 'renderLagMs', 'pendingBytes', 'peakPendingBytes']
+      .every((key) => Number.isFinite(Number(metrics?.[key as keyof SshBottleneckRadarSnapshot['metrics']])));
+}
+
+function normalizeBottleneckLevel(value: number) {
+  return Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
+}
+
+function mapBottleneckLevelTone(level: number, active: boolean): SshBottleneckTrendLane['tone'] {
+  if (!active) {
+    return 'warn';
+  }
+  if (level >= 70) {
+    return 'fail';
+  }
+  if (level >= 45) {
+    return 'warn';
+  }
+  return 'ok';
+}
+
+function mapBottleneckSnapshotTone(tone: SshBottleneckSnapshotTone): SshBottleneckTrendLane['tone'] {
+  if (tone === 'slow') {
+    return 'fail';
+  }
+  if (tone === 'warn' || tone === 'pending') {
+    return 'warn';
+  }
+  return 'ok';
+}
+
+function formatSshBottleneckLane(id: SshBottleneckLaneId, copy: SshPerformanceCopy) {
+  if (id === 'network') {
+    return copy.bottleneckTrendLaneNetwork;
+  }
+  if (id === 'input') {
+    return copy.bottleneckTrendLaneInput;
+  }
+  if (id === 'output') {
+    return copy.bottleneckTrendLaneOutput;
+  }
+  return copy.bottleneckTrendLaneRender;
+}
+
+function formatSshBottleneckSnapshot(snapshot: SshBottleneckRadarSnapshot, locale: string, copy: SshPerformanceCopy) {
+  const time = new Date(snapshot.createdAt).toLocaleTimeString(locale);
+  const level = normalizeBottleneckLevel(snapshot.levels[snapshot.primary]);
+  return copy.bottleneckTrendSampleDetail(time, formatSshBottleneckLane(snapshot.primary, copy), Math.round(level));
+}
+
 function buildSshLagReportComparison(
   current: SshPerformanceSummary,
   baseline: SshLagReportSnapshot | null,
@@ -3423,6 +3686,32 @@ interface SshPerformanceCopy {
   samplerOutputPeakDetail: (lines: number, bytes: number, durationMs: number) => string;
   samplerCloseDetail: (closed: number, total: number, active: number) => string;
   samplerSanitizedNote: string;
+  bottleneckTrendTitle: string;
+  bottleneckTrendDescription: string;
+  bottleneckTrendRefresh: string;
+  bottleneckTrendRefreshed: string;
+  bottleneckTrendEmpty: string;
+  bottleneckTrendEmptyTitle: string;
+  bottleneckTrendGoodTitle: string;
+  bottleneckTrendWarnTitle: (lane: string) => string;
+  bottleneckTrendFailTitle: (lane: string) => string;
+  bottleneckTrendDetail: (lane: string, samples: number, averageLevel: number) => string;
+  bottleneckTrendEmptyDetail: string;
+  bottleneckTrendSamples: (samples: number) => string;
+  bottleneckTrendLatest: (time: string) => string;
+  bottleneckTrendNoLatest: string;
+  bottleneckTrendActionOk: string;
+  bottleneckTrendActionWarn: string;
+  bottleneckTrendActionFail: string;
+  bottleneckTrendActionEmpty: string;
+  bottleneckTrendLaneNetwork: string;
+  bottleneckTrendLaneInput: string;
+  bottleneckTrendLaneOutput: string;
+  bottleneckTrendLaneRender: string;
+  bottleneckTrendLaneDetail: (hits: number, averageLevel: number) => string;
+  bottleneckTrendSampleLabel: (index: number) => string;
+  bottleneckTrendSampleDetail: (time: string, tone: string, level: number) => string;
+  bottleneckTrendSanitizedNote: string;
   copySummary: string;
   copyCopied: string;
   summaryStatus: string;
@@ -3601,6 +3890,32 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     samplerOutputPeakDetail: (lines, bytes, durationMs) => `${lines} 行峰值 / ${formatSshFlightBytes(bytes)} / ${formatSshFlightDuration(durationMs, 'zh-CN')}`,
     samplerCloseDetail: (closed, total, active) => `${closed}/${total} 已关闭，${active} 个仍活跃`,
     samplerSanitizedNote: '采样报告只包含脱敏聚合指标，不包含服务器地址、命令正文、密钥或用户数据。',
+    bottleneckTrendTitle: 'SSH \u5361\u987f\u8d8b\u52bf',
+    bottleneckTrendDescription: '\u4ece\u7ec8\u7aef\u73b0\u573a\u81ea\u52a8\u4fdd\u5b58\u7684\u8131\u654f\u5361\u987f\u96f7\u8fbe\u5feb\u7167\u4e2d\uff0c\u5224\u65ad\u6700\u8fd1\u74f6\u9888\u662f\u5426\u96c6\u4e2d\u5728\u7f51\u7edc\u3001\u8f93\u5165\u3001\u8f93\u51fa\u6216\u6e32\u67d3\u3002',
+    bottleneckTrendRefresh: '\u5237\u65b0\u8d8b\u52bf',
+    bottleneckTrendRefreshed: 'SSH \u5361\u987f\u8d8b\u52bf\u5df2\u4ece\u672c\u5730\u5feb\u7167\u5237\u65b0',
+    bottleneckTrendEmpty: '\u6682\u65e0\u7ec8\u7aef\u5361\u987f\u5feb\u7167\u3002\u6253\u5f00 SSH \u7ec8\u7aef\u6267\u884c\u4e00\u6b21\u5b89\u5168\u547d\u4ee4\u5e76\u5173\u95ed\u9762\u677f\u540e\uff0c\u8fd9\u91cc\u4f1a\u81ea\u52a8\u751f\u6210\u8d8b\u52bf\u3002',
+    bottleneckTrendEmptyTitle: '\u7b49\u5f85\u7ec8\u7aef\u73b0\u573a\u5feb\u7167',
+    bottleneckTrendGoodTitle: '\u6700\u8fd1\u5361\u987f\u538b\u529b\u7a33\u5b9a',
+    bottleneckTrendWarnTitle: (lane) => `${lane} \u9700\u8981\u7ee7\u7eed\u89c2\u5bdf`,
+    bottleneckTrendFailTitle: (lane) => `${lane} \u662f\u8fde\u7eed\u74f6\u9888`,
+    bottleneckTrendDetail: (lane, samples, averageLevel) => `${samples} \u6b21\u8131\u654f\u5feb\u7167\u663e\u793a\uff0c${lane} \u5e73\u5747\u538b\u529b ${averageLevel}%\u3002`,
+    bottleneckTrendEmptyDetail: '\u8d8b\u52bf\u53ea\u8bfb\u53d6\u5f53\u524d\u6d4f\u89c8\u5668\u672c\u5730\u5feb\u7167\uff0c\u4e0d\u4e0a\u4f20\u670d\u52a1\u5668\u4fe1\u606f\u3002',
+    bottleneckTrendSamples: (samples) => `${samples} \u4e2a\u6837\u672c`,
+    bottleneckTrendLatest: (time) => `\u6700\u8fd1 ${time}`,
+    bottleneckTrendNoLatest: '\u6682\u65e0\u6700\u8fd1\u6837\u672c',
+    bottleneckTrendActionOk: '\u4fdd\u6301\u5f53\u524d\u94fe\u8def\uff1b\u8001\u677f\u53cd\u9988\u5361\u987f\u65f6\u76f4\u63a5\u5bf9\u6bd4\u4e0b\u4e00\u6b21\u5feb\u7167\u5373\u53ef\u3002',
+    bottleneckTrendActionWarn: '\u5efa\u8bae\u518d\u8dd1\u4e00\u6b21\u5b89\u5168\u6d4b\u901f\u5e76\u6bd4\u8f83\u7ebf\u8def\u3001\u4ee3\u7406\u548c\u8fdc\u7aef\u8d1f\u8f7d\u3002',
+    bottleneckTrendActionFail: '\u4f18\u5148\u5904\u7406\u8fde\u7eed\u6700\u9ad8\u538b\u529b\u9879\uff0c\u518d\u590d\u6d4b SSH \u957f\u8f93\u51fa\u548c\u4ea4\u4e92\u8f93\u5165\u3002',
+    bottleneckTrendActionEmpty: '\u5148\u5728\u670d\u52a1\u5668\u9762\u677f\u6253\u5f00 SSH \u7ec8\u7aef\uff0c\u6267\u884c whoami \u6216\u5b89\u5168\u6d4b\u901f\u540e\u5173\u95ed\u9762\u677f\u3002',
+    bottleneckTrendLaneNetwork: '\u7f51\u7edc',
+    bottleneckTrendLaneInput: '\u8f93\u5165',
+    bottleneckTrendLaneOutput: '\u8f93\u51fa',
+    bottleneckTrendLaneRender: '\u6e32\u67d3',
+    bottleneckTrendLaneDetail: (hits, averageLevel) => `${hits} \u6b21\u4e3b\u56e0 / \u5e73\u5747 ${averageLevel}%`,
+    bottleneckTrendSampleLabel: (index) => `\u6837\u672c #${index}`,
+    bottleneckTrendSampleDetail: (time, tone, level) => `${time} \u00b7 ${tone} \u00b7 \u538b\u529b ${level}%`,
+    bottleneckTrendSanitizedNote: '\u8d8b\u52bf\u5feb\u7167\u53ea\u5305\u542b\u8131\u654f\u6570\u503c\u3001\u538b\u529b\u7ea7\u522b\u548c\u74f6\u9888\u7c7b\u522b\uff0c\u4e0d\u5305\u542b\u670d\u52a1\u5668\u5730\u5740\u3001\u547d\u4ee4\u6b63\u6587\u3001\u5bc6\u94a5\u6216\u7528\u6237\u6570\u636e\u3002',
     copySummary: '\u590d\u5236\u6458\u8981',
     copyCopied: 'SSH \u6027\u80fd\u6458\u8981\u5df2\u590d\u5236',
     summaryStatus: '\u72b6\u6001',
@@ -3777,6 +4092,32 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     samplerOutputPeakDetail: (lines, bytes, durationMs) => `${lines} peak line(s) / ${formatSshFlightBytes(bytes)} / ${formatSshFlightDuration(durationMs, 'en-US')}`,
     samplerCloseDetail: (closed, total, active) => `${closed}/${total} closed, ${active} still active`,
     samplerSanitizedNote: 'The sampling report only includes sanitized aggregate metrics. It excludes server addresses, command text, keys, and user data.',
+    bottleneckTrendTitle: 'SSH bottleneck trend',
+    bottleneckTrendDescription: 'Use sanitized radar snapshots saved from live terminals to see whether recent lag clusters around network, input, output, or browser rendering.',
+    bottleneckTrendRefresh: 'Refresh trend',
+    bottleneckTrendRefreshed: 'SSH bottleneck trend refreshed from local snapshots',
+    bottleneckTrendEmpty: 'No terminal bottleneck snapshots yet. Open SSH, run a safe command, then close the panel to generate the trend automatically.',
+    bottleneckTrendEmptyTitle: 'Waiting for terminal snapshots',
+    bottleneckTrendGoodTitle: 'Recent lag pressure is stable',
+    bottleneckTrendWarnTitle: (lane) => `${lane} needs more watching`,
+    bottleneckTrendFailTitle: (lane) => `${lane} is the recurring bottleneck`,
+    bottleneckTrendDetail: (lane, samples, averageLevel) => `${samples} sanitized snapshots show ${lane} averaging ${averageLevel}% pressure.`,
+    bottleneckTrendEmptyDetail: 'Trend data is read only from this browser and never uploads server information.',
+    bottleneckTrendSamples: (samples) => `${samples} samples`,
+    bottleneckTrendLatest: (time) => `Latest ${time}`,
+    bottleneckTrendNoLatest: 'No latest sample',
+    bottleneckTrendActionOk: 'Keep the current path; compare the next snapshot when someone reports lag.',
+    bottleneckTrendActionWarn: 'Run the safe speed test again and compare routing, proxy, and remote load.',
+    bottleneckTrendActionFail: 'Fix the repeatedly highest-pressure lane first, then retest long output and interactive input.',
+    bottleneckTrendActionEmpty: 'Open SSH in the server panel, run whoami or the safe speed test, then close the panel.',
+    bottleneckTrendLaneNetwork: 'Network',
+    bottleneckTrendLaneInput: 'Input',
+    bottleneckTrendLaneOutput: 'Output',
+    bottleneckTrendLaneRender: 'Render',
+    bottleneckTrendLaneDetail: (hits, averageLevel) => `${hits} primary hits / ${averageLevel}% avg`,
+    bottleneckTrendSampleLabel: (index) => `Sample #${index}`,
+    bottleneckTrendSampleDetail: (time, tone, level) => `${time} \u00b7 ${tone} \u00b7 ${level}% pressure`,
+    bottleneckTrendSanitizedNote: 'Trend snapshots only contain sanitized numbers, pressure levels, and bottleneck categories. They exclude server addresses, command text, keys, and user data.',
     copySummary: 'Copy summary',
     copyCopied: 'SSH performance summary copied',
     summaryStatus: 'Status',
@@ -3953,6 +4294,32 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     samplerOutputPeakDetail: (lines, bytes, durationMs) => `${lines} 行ピーク / ${formatSshFlightBytes(bytes)} / ${formatSshFlightDuration(durationMs, 'ja-JP')}`,
     samplerCloseDetail: (closed, total, active) => `${closed}/${total} 終了、${active} 件実行中`,
     samplerSanitizedNote: 'サンプリングレポートは匿名化された集計指標のみを含み、サーバーアドレス、コマンド本文、キー、ユーザーデータは含みません。',
+    bottleneckTrendTitle: 'SSH \u30dc\u30c8\u30eb\u30cd\u30c3\u30af\u50be\u5411',
+    bottleneckTrendDescription: '\u30e9\u30a4\u30d6\u7aef\u672b\u304b\u3089\u4fdd\u5b58\u3055\u308c\u305f\u533f\u540d\u5316\u30ec\u30fc\u30c0\u30fc\u30b9\u30ca\u30c3\u30d7\u30b7\u30e7\u30c3\u30c8\u3067\u3001\u6700\u8fd1\u306e\u9045\u5ef6\u304c\u30cd\u30c3\u30c8\u30ef\u30fc\u30af\u3001\u5165\u529b\u3001\u51fa\u529b\u3001\u30d6\u30e9\u30a6\u30b6\u63cf\u753b\u306e\u3069\u3053\u306b\u96c6\u4e2d\u3057\u3066\u3044\u308b\u304b\u78ba\u8a8d\u3057\u307e\u3059\u3002',
+    bottleneckTrendRefresh: '\u50be\u5411\u3092\u66f4\u65b0',
+    bottleneckTrendRefreshed: 'SSH \u30dc\u30c8\u30eb\u30cd\u30c3\u30af\u50be\u5411\u3092\u30ed\u30fc\u30ab\u30eb\u30b9\u30ca\u30c3\u30d7\u30b7\u30e7\u30c3\u30c8\u304b\u3089\u66f4\u65b0\u3057\u307e\u3057\u305f',
+    bottleneckTrendEmpty: '\u7aef\u672b\u30dc\u30c8\u30eb\u30cd\u30c3\u30af\u30b9\u30ca\u30c3\u30d7\u30b7\u30e7\u30c3\u30c8\u306f\u307e\u3060\u3042\u308a\u307e\u305b\u3093\u3002SSH \u3092\u958b\u304d\u3001\u5b89\u5168\u306a\u30b3\u30de\u30f3\u30c9\u3092\u5b9f\u884c\u3057\u3066\u30d1\u30cd\u30eb\u3092\u9589\u3058\u308b\u3068\u81ea\u52d5\u751f\u6210\u3055\u308c\u307e\u3059\u3002',
+    bottleneckTrendEmptyTitle: '\u7aef\u672b\u30b9\u30ca\u30c3\u30d7\u30b7\u30e7\u30c3\u30c8\u5f85\u3061',
+    bottleneckTrendGoodTitle: '\u6700\u8fd1\u306e\u9045\u5ef6\u5727\u529b\u306f\u5b89\u5b9a',
+    bottleneckTrendWarnTitle: (lane) => `${lane} \u306f\u7d99\u7d9a\u89b3\u5bdf\u304c\u5fc5\u8981`,
+    bottleneckTrendFailTitle: (lane) => `${lane} \u304c\u7d99\u7d9a\u7684\u306a\u30dc\u30c8\u30eb\u30cd\u30c3\u30af`,
+    bottleneckTrendDetail: (lane, samples, averageLevel) => `${samples} \u4ef6\u306e\u533f\u540d\u5316\u30b9\u30ca\u30c3\u30d7\u30b7\u30e7\u30c3\u30c8\u3067\u3001${lane} \u306e\u5e73\u5747\u5727\u529b\u306f ${averageLevel}% \u3067\u3059\u3002`,
+    bottleneckTrendEmptyDetail: '\u50be\u5411\u30c7\u30fc\u30bf\u306f\u3053\u306e\u30d6\u30e9\u30a6\u30b6\u5185\u3060\u3051\u3067\u8aad\u307f\u53d6\u308a\u3001\u30b5\u30fc\u30d0\u30fc\u60c5\u5831\u306f\u30a2\u30c3\u30d7\u30ed\u30fc\u30c9\u3057\u307e\u305b\u3093\u3002',
+    bottleneckTrendSamples: (samples) => `${samples} \u4ef6\u306e\u30b5\u30f3\u30d7\u30eb`,
+    bottleneckTrendLatest: (time) => `\u6700\u65b0 ${time}`,
+    bottleneckTrendNoLatest: '\u6700\u65b0\u30b5\u30f3\u30d7\u30eb\u306a\u3057',
+    bottleneckTrendActionOk: '\u73fe\u5728\u306e\u7d4c\u8def\u3092\u7dad\u6301\u3057\u3001\u9045\u5ef6\u5831\u544a\u304c\u3042\u3063\u305f\u3089\u6b21\u306e\u30b9\u30ca\u30c3\u30d7\u30b7\u30e7\u30c3\u30c8\u3068\u6bd4\u8f03\u3057\u3066\u304f\u3060\u3055\u3044\u3002',
+    bottleneckTrendActionWarn: '\u5b89\u5168\u901f\u5ea6\u30c6\u30b9\u30c8\u3092\u518d\u5b9f\u884c\u3057\u3001\u7d4c\u8def\u3001\u30d7\u30ed\u30ad\u30b7\u3001\u30ea\u30e2\u30fc\u30c8\u8ca0\u8377\u3092\u6bd4\u8f03\u3057\u3066\u304f\u3060\u3055\u3044\u3002',
+    bottleneckTrendActionFail: '\u7d99\u7d9a\u3057\u3066\u6700\u3082\u5727\u529b\u304c\u9ad8\u3044\u30ec\u30fc\u30f3\u3092\u5148\u306b\u4fee\u6b63\u3057\u3001\u9577\u3044\u51fa\u529b\u3068\u5bfe\u8a71\u5165\u529b\u3092\u518d\u30c6\u30b9\u30c8\u3057\u3066\u304f\u3060\u3055\u3044\u3002',
+    bottleneckTrendActionEmpty: '\u30b5\u30fc\u30d0\u30fc\u30d1\u30cd\u30eb\u3067 SSH \u3092\u958b\u304d\u3001whoami \u307e\u305f\u306f\u5b89\u5168\u901f\u5ea6\u30c6\u30b9\u30c8\u3092\u5b9f\u884c\u3057\u3066\u304b\u3089\u30d1\u30cd\u30eb\u3092\u9589\u3058\u3066\u304f\u3060\u3055\u3044\u3002',
+    bottleneckTrendLaneNetwork: '\u30cd\u30c3\u30c8\u30ef\u30fc\u30af',
+    bottleneckTrendLaneInput: '\u5165\u529b',
+    bottleneckTrendLaneOutput: '\u51fa\u529b',
+    bottleneckTrendLaneRender: '\u63cf\u753b',
+    bottleneckTrendLaneDetail: (hits, averageLevel) => `\u4e3b\u56e0 ${hits} \u56de / \u5e73\u5747 ${averageLevel}%`,
+    bottleneckTrendSampleLabel: (index) => `\u30b5\u30f3\u30d7\u30eb #${index}`,
+    bottleneckTrendSampleDetail: (time, tone, level) => `${time} \u00b7 ${tone} \u00b7 \u5727\u529b ${level}%`,
+    bottleneckTrendSanitizedNote: '\u50be\u5411\u30b9\u30ca\u30c3\u30d7\u30b7\u30e7\u30c3\u30c8\u306b\u306f\u533f\u540d\u5316\u3055\u308c\u305f\u6570\u5024\u3001\u5727\u529b\u30ec\u30d9\u30eb\u3001\u30dc\u30c8\u30eb\u30cd\u30c3\u30af\u30ab\u30c6\u30b4\u30ea\u306e\u307f\u304c\u542b\u307e\u308c\u3001\u30b5\u30fc\u30d0\u30fc\u30a2\u30c9\u30ec\u30b9\u3001\u30b3\u30de\u30f3\u30c9\u672c\u6587\u3001\u30ad\u30fc\u3001\u30e6\u30fc\u30b6\u30fc\u30c7\u30fc\u30bf\u306f\u542b\u307f\u307e\u305b\u3093\u3002',
     copySummary: '\u30b5\u30de\u30ea\u30fc\u3092\u30b3\u30d4\u30fc',
     copyCopied: 'SSH \u30d1\u30d5\u30a9\u30fc\u30de\u30f3\u30b9\u30b5\u30de\u30ea\u30fc\u3092\u30b3\u30d4\u30fc\u3057\u307e\u3057\u305f',
     summaryStatus: '\u72b6\u614b',

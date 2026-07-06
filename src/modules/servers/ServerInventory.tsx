@@ -53,6 +53,9 @@ const terminalRuntimeIdleTimeoutMs = 4500;
 const terminalNetworkUiRefreshMs = 900;
 const terminalTelemetryUiRefreshMs = 500;
 const terminalTextEncoder = new TextEncoder();
+const terminalBottleneckHistoryStorageKey = 'colipas.sshBottleneckRadarHistory.v1';
+const terminalBottleneckHistoryLimit = 12;
+const terminalBottleneckSnapshotDedupeMs = 6000;
 const terminalSelfTestCommand = `printf 'colipas-ssh-self-test-start\\n'; i=1; while [ "$i" -le 40 ]; do printf 'colipas-ssh-self-test-%02d\\n' "$i"; i=$((i+1)); done; printf 'colipas-ssh-self-test-end\\n'`;
 const terminalSelfTestTimeoutMs = 15000;
 const terminalSelfTestLinePattern = /colipas-ssh-self-test-\d{2}/g;
@@ -137,6 +140,30 @@ interface TerminalBottleneckAdvisor {
   action: string;
   primaryLabel: string;
   items: TerminalBottleneckItem[];
+}
+
+type TerminalBottleneckSnapshotReason = 'close' | 'remote-close' | 'disconnect';
+
+interface TerminalBottleneckSnapshot {
+  version: 1;
+  id: string;
+  createdAt: string;
+  reason: TerminalBottleneckSnapshotReason;
+  tone: TerminalNetworkQuality['tone'];
+  primary: TerminalBottleneckItem['id'];
+  levels: Record<TerminalBottleneckItem['id'], number>;
+  metrics: {
+    rttMs: number | null;
+    throughputBytesPerSecond: number;
+    inputEvents: number;
+    inputBytes: number;
+    outputLines: number;
+    outputBytes: number;
+    firstOutputMs: number | null;
+    renderLagMs: number;
+    pendingBytes: number;
+    peakPendingBytes: number;
+  };
 }
 
 interface TerminalSelfTestState {
@@ -255,6 +282,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const terminalNetworkRenderedAtRef = useRef(0);
   const terminalTelemetryRef = useRef<TerminalTelemetryState>(emptyTerminalTelemetry);
   const terminalTelemetryRenderedAtRef = useRef(0);
+  const terminalLastBottleneckSnapshotRef = useRef<{ signature: string; savedAt: number } | null>(null);
   const terminalSelfTestRef = useRef<TerminalSelfTestTracker | null>(null);
   const terminalCssInjectedRef = useRef(false);
   const actionMessageTimerRef = useRef<number | null>(null);
@@ -1544,6 +1572,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       return;
     }
     if (event.type === 'close') {
+      persistTerminalBottleneckSnapshot('remote-close');
       flushTerminalWriteBuffer(terminal, { drainAll: true });
       terminal.writeln('\r\nConnection closed.');
       terminal.scrollToBottom();
@@ -1658,6 +1687,67 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       pendingBytes,
       peakPendingBytes: Math.max(current.peakPendingBytes, pendingBytes),
     }), { force: renderLagMs >= 24 || pendingBytes === 0 });
+  }
+
+  function persistTerminalBottleneckSnapshot(reason: TerminalBottleneckSnapshotReason) {
+    if (typeof window === 'undefined' || !terminalShellIdRef.current) {
+      return;
+    }
+    const telemetry = terminalTelemetryRef.current;
+    if (telemetry.inputEvents === 0 && telemetry.outputBytes === 0) {
+      return;
+    }
+    const stats = terminalNetworkRenderedRef.current;
+    const advisor = getTerminalBottleneckAdvisor(telemetry, stats, terminalShellTransportRef.current, true, t);
+    const primary = advisor.items.reduce((best, item) => (item.level > best.level ? item : best), advisor.items[0]);
+    const levels = advisor.items.reduce<Record<TerminalBottleneckItem['id'], number>>((current, item) => ({
+      ...current,
+      [item.id]: Math.round(item.level),
+    }), {
+      network: 0,
+      input: 0,
+      output: 0,
+      render: 0,
+    });
+    const metrics: TerminalBottleneckSnapshot['metrics'] = {
+      rttMs: stats?.rttMs ?? null,
+      throughputBytesPerSecond: Math.round(stats?.throughputBytesPerSecond ?? 0),
+      inputEvents: telemetry.inputEvents,
+      inputBytes: telemetry.inputBytes,
+      outputLines: telemetry.outputLines,
+      outputBytes: telemetry.outputBytes,
+      firstOutputMs: telemetry.latestFirstOutputMs === null ? null : Math.round(telemetry.latestFirstOutputMs),
+      renderLagMs: Math.round(telemetry.renderLagMs),
+      pendingBytes: telemetry.pendingBytes,
+      peakPendingBytes: telemetry.peakPendingBytes,
+    };
+    const signature = `${primary.id}|${advisor.tone}|${levels.network}|${levels.input}|${levels.output}|${levels.render}|${metrics.outputLines}|${metrics.inputEvents}`;
+    const now = Date.now();
+    const lastSnapshot = terminalLastBottleneckSnapshotRef.current;
+    if (lastSnapshot?.signature === signature && now - lastSnapshot.savedAt < terminalBottleneckSnapshotDedupeMs) {
+      return;
+    }
+    const createdAt = new Date(now).toISOString();
+    const snapshot: TerminalBottleneckSnapshot = {
+      version: 1,
+      id: `${createdAt}-${Math.random().toString(36).slice(2, 8)}`,
+      createdAt,
+      reason,
+      tone: advisor.tone,
+      primary: primary.id,
+      levels,
+      metrics,
+    };
+    try {
+      const raw = window.localStorage.getItem(terminalBottleneckHistoryStorageKey);
+      const current = raw ? JSON.parse(raw) : [];
+      const history = Array.isArray(current) ? current.filter(isTerminalBottleneckSnapshot) : [];
+      const next = [snapshot, ...history.filter((item) => item.id !== snapshot.id)].slice(0, terminalBottleneckHistoryLimit);
+      window.localStorage.setItem(terminalBottleneckHistoryStorageKey, JSON.stringify(next));
+      terminalLastBottleneckSnapshotRef.current = { signature, savedAt: now };
+    } catch {
+      // Browser storage can be disabled; SSH interaction must continue unaffected.
+    }
   }
 
   function beginTerminalSelfTest(sessionId: string) {
@@ -2148,6 +2238,9 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   function closeActiveShellSession(syncState = true) {
     const sessionId = terminalShellIdRef.current;
     const transport = terminalShellTransportRef.current;
+    if (sessionId) {
+      persistTerminalBottleneckSnapshot('disconnect');
+    }
     terminalShellIdRef.current = null;
     clearTerminalWriteBuffer();
     clearTerminalInputBuffer();
@@ -2928,6 +3021,26 @@ function getBottleneckTone(level: number, active: boolean): TerminalNetworkQuali
     return 'warn';
   }
   return 'good';
+}
+
+function isTerminalBottleneckSnapshot(value: unknown): value is TerminalBottleneckSnapshot {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const snapshot = value as Partial<TerminalBottleneckSnapshot>;
+  const levels = snapshot.levels as Partial<Record<TerminalBottleneckItem['id'], unknown>> | undefined;
+  const metrics = snapshot.metrics as Partial<Record<keyof TerminalBottleneckSnapshot['metrics'], unknown>> | undefined;
+  return snapshot.version === 1
+    && typeof snapshot.id === 'string'
+    && typeof snapshot.createdAt === 'string'
+    && ['close', 'remote-close', 'disconnect'].includes(String(snapshot.reason))
+    && ['pending', 'good', 'warn', 'slow'].includes(String(snapshot.tone))
+    && ['network', 'input', 'output', 'render'].includes(String(snapshot.primary))
+    && Boolean(levels)
+    && ['network', 'input', 'output', 'render'].every((key) => Number.isFinite(Number(levels?.[key as TerminalBottleneckItem['id']])))
+    && Boolean(metrics)
+    && ['throughputBytesPerSecond', 'inputEvents', 'inputBytes', 'outputLines', 'outputBytes', 'renderLagMs', 'pendingBytes', 'peakPendingBytes']
+      .every((key) => Number.isFinite(Number(metrics?.[key as keyof TerminalBottleneckSnapshot['metrics']])));
 }
 
 function getTerminalTransportLabel(

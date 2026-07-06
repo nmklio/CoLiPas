@@ -3862,8 +3862,10 @@ function assertSqlitePersistenceGuards() {
   const sshAccessSource = fs.readFileSync(new URL('../src/server/services/sshAccessService.ts', import.meta.url), 'utf8');
   const apiClientSource = fs.readFileSync(new URL('../src/services/apiClient.ts', import.meta.url), 'utf8');
   const serverInventorySource = fs.readFileSync(new URL('../src/modules/servers/ServerInventory.tsx', import.meta.url), 'utf8');
+  const securityPanelSource = fs.readFileSync(new URL('../src/modules/security/SecurityPanel.tsx', import.meta.url), 'utf8');
   const globalStyleSource = fs.readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
   const i18nSource = fs.readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
+  const browserE2eSource = fs.readFileSync(new URL('../scripts/browser-e2e.mjs', import.meta.url), 'utf8');
   const diagnosticServiceSource = fs.readFileSync(new URL('../src/server/services/diagnosticService.ts', import.meta.url), 'utf8');
   const releaseVerificationSource = fs.readFileSync(new URL('../src/server/services/releaseVerificationService.ts', import.meta.url), 'utf8');
   const combined = [databaseSource, inventoryServiceSource, auditServiceSource, appSource].join('\n');
@@ -3966,6 +3968,29 @@ function assertSqlitePersistenceGuards() {
   const missingSshTerminalQualityFragments = sshTerminalQualityFragments.filter((fragment) => !sshTerminalQualitySource.includes(fragment));
   if (missingSshTerminalQualityFragments.length) {
     throw new Error(`SSH terminal immediate-input and quality badge guard is incomplete: ${missingSshTerminalQualityFragments.join(', ')}`);
+  }
+
+  const sshBottleneckTrendFragments = [
+    'terminalBottleneckHistoryStorageKey',
+    'persistTerminalBottleneckSnapshot',
+    'isTerminalBottleneckSnapshot',
+    'sshBottleneckRadarHistoryStorageKey',
+    'loadSshBottleneckRadarHistory',
+    'buildSshBottleneckTrend',
+    'data-ssh-bottleneck-trend="true"',
+    'data-ssh-bottleneck-trend-lane',
+    'bottleneckTrendTitle',
+    'bottleneckTrendSanitizedNote',
+    '.security-ssh-bottleneck-trend',
+    '.security-ssh-bottleneck-trend-lanes',
+    'colipas.sshBottleneckRadarHistory.v1',
+    'storedSshBottleneckHistory',
+    'SSH bottleneck trend storage leaked a raw IP address or secret',
+  ];
+  const sshBottleneckTrendSource = `${serverInventorySource}\n${securityPanelSource}\n${globalStyleSource}\n${browserE2eSource}`;
+  const missingSshBottleneckTrendFragments = sshBottleneckTrendFragments.filter((fragment) => !sshBottleneckTrendSource.includes(fragment));
+  if (missingSshBottleneckTrendFragments.length) {
+    throw new Error(`SSH bottleneck trend snapshot guard is incomplete: ${missingSshBottleneckTrendFragments.join(', ')}`);
   }
 
   const inventorySummaryFragments = [
