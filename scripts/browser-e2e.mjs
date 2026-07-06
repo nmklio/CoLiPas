@@ -193,6 +193,7 @@ async function assertReleaseEvidenceBrief(targetPage) {
     window.__colipasCopiedSshLagReportText = '';
     window.__colipasCopiedSshFlightText = '';
     window.__colipasCopiedSshSamplerText = '';
+    window.__colipasCopiedSshBottleneckTrendText = '';
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: {
@@ -203,6 +204,8 @@ async function assertReleaseEvidenceBrief(targetPage) {
             window.__colipasCopiedSshFlightText = text;
           } else if (/SSH real interaction sampler/i.test(text)) {
             window.__colipasCopiedSshSamplerText = text;
+          } else if (/SSH bottleneck trend report/i.test(text)) {
+            window.__colipasCopiedSshBottleneckTrendText = text;
           } else {
             window.__colipasCopiedSshPerformanceText = text;
           }
@@ -306,6 +309,14 @@ async function assertReleaseEvidenceBrief(targetPage) {
   }
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(sshBottleneckTrendText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(sshBottleneckTrendText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(sshBottleneckTrendText)) {
     throw new Error('SSH bottleneck trend rendered a raw IP address or secret');
+  }
+  await targetPage.getByRole('button', { name: /copy trend report/i }).click();
+  const copiedSshBottleneckTrendText = await targetPage.evaluate(() => window.__colipasCopiedSshBottleneckTrendText ?? '');
+  if (!/SSH bottleneck trend report/i.test(copiedSshBottleneckTrendText) || !/Primary bottleneck/i.test(copiedSshBottleneckTrendText) || !/Pressure lanes/i.test(copiedSshBottleneckTrendText) || !/Recent samples/i.test(copiedSshBottleneckTrendText) || !/Trend snapshots only contain sanitized numbers/i.test(copiedSshBottleneckTrendText)) {
+    throw new Error(`SSH bottleneck trend report copy output is incomplete: ${copiedSshBottleneckTrendText}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshBottleneckTrendText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshBottleneckTrendText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(copiedSshBottleneckTrendText)) {
+    throw new Error('SSH bottleneck trend report copy output leaked a raw IP address or secret');
   }
   await targetPage.getByRole('button', { name: /copy summary|复制摘要|サマリーをコピー/i }).click();
   const copiedSshPerfText = await targetPage.evaluate(() => window.__colipasCopiedSshPerformanceText ?? '');
