@@ -7440,6 +7440,89 @@ pre {
   white-space: nowrap;
 }
 
+.security-ssh-lag-history {
+  min-width: 0;
+  border: 1px dashed rgba(15, 118, 110, 0.22);
+  border-radius: 12px;
+  padding: 12px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(248, 253, 253, 0.72)),
+    repeating-linear-gradient(90deg, rgba(15, 118, 110, 0.045) 0 1px, transparent 1px 16px);
+}
+
+.security-ssh-lag-history-heading {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.security-ssh-lag-history-heading span {
+  display: block;
+  color: #0f766e;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.security-ssh-lag-history-heading p,
+.security-ssh-lag-history-empty {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.security-ssh-lag-history-list {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 8px;
+}
+
+.security-ssh-lag-history-list article {
+  min-width: 0;
+  border: 1px solid rgba(15, 118, 110, 0.14);
+  border-radius: 10px;
+  padding: 9px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.security-ssh-lag-history-list span,
+.security-ssh-lag-history-list strong,
+.security-ssh-lag-history-list p,
+.security-ssh-lag-history-list small {
+  display: block;
+  min-width: 0;
+}
+
+.security-ssh-lag-history-list span,
+.security-ssh-lag-history-list small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.security-ssh-lag-history-list strong {
+  margin: 3px 0;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.security-ssh-lag-history-list p {
+  margin: 0 0 4px;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.security-ssh-lag-history-list small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .security-control-grid {
   display: grid;
   grid-template-columns: minmax(280px, 0.95fr) minmax(300px, 1.1fr) minmax(240px, 0.75fr);
@@ -8332,6 +8415,7 @@ pre {
   .security-evidence-metrics,
   .security-release-playbook-grid,
   .security-ssh-lag-report,
+  .security-ssh-lag-history-heading,
   .security-ssh-performance-groups,
   .security-ssh-performance-grid,
   .security-kpi-grid,

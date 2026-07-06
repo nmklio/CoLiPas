@@ -159,6 +159,19 @@ interface SshPerformanceSummary {
   groups: SshPerformanceGroup[];
 }
 
+interface SshLagReportSnapshot {
+  id: string;
+  createdAt: string;
+  status: string;
+  headline: string;
+  context: string[];
+  findings: string[];
+  text: string;
+}
+
+const sshLagReportHistoryStorageKey = 'colipas.sshLagReportHistory.v1';
+const sshLagReportHistoryVisibleLimit = 5;
+
 type SshSelfTestBottleneck = NonNullable<DiagnosticExportResponse['sshTerminal']['lastSelfTest']>['bottleneck'];
 
 export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, onTraceFocused, onTraceFilterChange }: SecurityPanelProps) {
@@ -186,6 +199,7 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
   const [exportingReadinessReport, setExportingReadinessReport] = useState(false);
   const [exportingDiagnostic, setExportingDiagnostic] = useState(false);
   const [expandedSshMetricId, setExpandedSshMetricId] = useState('');
+  const [sshLagReportHistory, setSshLagReportHistory] = useState<SshLagReportSnapshot[]>(() => loadSshLagReportHistory());
 
   const openEvents = useMemo(() => events.filter((event) => event.status === 'open'), [events]);
   const filteredAudits = useMemo(() => {
@@ -436,6 +450,17 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
       setRemediationMessage(sshPerformance.reportText);
       setRemediationError(false);
     }
+  }
+
+  function saveSshLagReportSnapshot() {
+    const snapshot = createSshLagReportSnapshot(sshPerformance);
+    setSshLagReportHistory((current) => {
+      const next = [snapshot, ...current.filter((item) => item.text !== snapshot.text)];
+      saveSshLagReportHistory(next);
+      return next;
+    });
+    setRemediationMessage(sshPerformanceCopy.historySaved);
+    setRemediationError(false);
   }
 
   function applyReadinessFilter(check: ReleaseReadinessResponse['checks'][number]) {
@@ -783,6 +808,32 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
             <ClipboardCheck size={15} />
             {sshPerformanceCopy.copyReport}
           </button>
+        </div>
+        <div className="security-ssh-lag-history" data-ssh-lag-history="true">
+          <div className="security-ssh-lag-history-heading">
+            <div>
+              <span>{sshPerformanceCopy.historyTitle}</span>
+              <p>{sshPerformanceCopy.historyDescription}</p>
+            </div>
+            <button type="button" className="tool-button" onClick={saveSshLagReportSnapshot}>
+              <Download size={15} />
+              {sshPerformanceCopy.saveSnapshot}
+            </button>
+          </div>
+          {sshLagReportHistory.length > 0 ? (
+            <div className="security-ssh-lag-history-list">
+              {sshLagReportHistory.slice(0, sshLagReportHistoryVisibleLimit).map((snapshot) => (
+                <article key={snapshot.id}>
+                  <span>{new Date(snapshot.createdAt).toLocaleString(locale)}</span>
+                  <strong>{snapshot.status}</strong>
+                  <p>{snapshot.headline}</p>
+                  <small>{snapshot.findings.slice(0, 2).join(' · ')}</small>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="security-ssh-lag-history-empty">{sshPerformanceCopy.historyEmpty}</p>
+          )}
         </div>
         <p className="security-ssh-performance-next">{sshPerformance.nextAction}</p>
       </article>
@@ -1857,6 +1908,75 @@ function calculateBatchRatio(events: number, flushes: number) {
   return events / flushes;
 }
 
+function createSshLagReportSnapshot(summary: SshPerformanceSummary): SshLagReportSnapshot {
+  const createdAt = new Date().toISOString();
+  return {
+    id: `${createdAt}-${Math.random().toString(36).slice(2, 8)}`,
+    createdAt,
+    status: summary.status,
+    headline: summary.reportHeadline,
+    context: summary.reportContext,
+    findings: summary.reportFindings,
+    text: summary.reportText,
+  };
+}
+
+function loadSshLagReportHistory(): SshLagReportSnapshot[] {
+  if (typeof window === 'undefined') {
+    return [];
+  }
+
+  try {
+    const raw = window.localStorage.getItem(sshLagReportHistoryStorageKey);
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed
+      .filter(isSshLagReportSnapshot)
+      .filter((item) => !containsSensitiveReportText(item.text))
+  } catch {
+    return [];
+  }
+}
+
+function saveSshLagReportHistory(history: SshLagReportSnapshot[]) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(sshLagReportHistoryStorageKey, JSON.stringify(history));
+  } catch {
+    // Keep the UI usable when browser storage is unavailable.
+  }
+}
+
+function isSshLagReportSnapshot(value: unknown): value is SshLagReportSnapshot {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const candidate = value as Partial<SshLagReportSnapshot>;
+  return typeof candidate.id === 'string'
+    && typeof candidate.createdAt === 'string'
+    && typeof candidate.status === 'string'
+    && typeof candidate.headline === 'string'
+    && Array.isArray(candidate.context)
+    && candidate.context.every((item) => typeof item === 'string')
+    && Array.isArray(candidate.findings)
+    && candidate.findings.every((item) => typeof item === 'string')
+    && typeof candidate.text === 'string';
+}
+
+function containsSensitiveReportText(text: string) {
+  return /\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(text)
+    || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(text)
+    || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(text);
+}
+
 function formatBatchRatio(value: number) {
   if (!Number.isFinite(value) || value <= 0) {
     return '0';
@@ -2167,6 +2287,11 @@ interface SshPerformanceCopy {
   reportEvidenceLabel: string;
   reportSanitizedBadge: string;
   reportSanitizedNote: string;
+  historyTitle: string;
+  historyDescription: string;
+  historyEmpty: string;
+  saveSnapshot: string;
+  historySaved: string;
   copySummary: string;
   copyCopied: string;
   summaryStatus: string;
@@ -2229,6 +2354,11 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     reportEvidenceLabel: '关键证据',
     reportSanitizedBadge: '已脱敏',
     reportSanitizedNote: '报告仅包含脱敏聚合指标，不包含服务器地址、命令正文、密钥或用户数据。',
+    historyTitle: '本地诊断快照',
+    historyDescription: '仅保存在当前浏览器，用于对比优化前后的脱敏报告。',
+    historyEmpty: '暂无历史快照，保存一次当前报告后即可对比。',
+    saveSnapshot: '保存快照',
+    historySaved: 'SSH 诊断快照已保存在当前浏览器',
     copySummary: '\u590d\u5236\u6458\u8981',
     copyCopied: 'SSH \u6027\u80fd\u6458\u8981\u5df2\u590d\u5236',
     summaryStatus: '\u72b6\u6001',
@@ -2289,6 +2419,11 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     reportEvidenceLabel: 'Key evidence',
     reportSanitizedBadge: 'Sanitized',
     reportSanitizedNote: 'This report only includes sanitized aggregate metrics. It excludes server addresses, command text, keys, and user data.',
+    historyTitle: 'Local diagnosis snapshots',
+    historyDescription: 'Stored only in this browser so you can compare sanitized reports before and after tuning.',
+    historyEmpty: 'No snapshots yet. Save the current report once to start comparing.',
+    saveSnapshot: 'Save snapshot',
+    historySaved: 'SSH diagnosis snapshot saved in this browser',
     copySummary: 'Copy summary',
     copyCopied: 'SSH performance summary copied',
     summaryStatus: 'Status',
@@ -2349,6 +2484,11 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     reportEvidenceLabel: '主な証跡',
     reportSanitizedBadge: '匿名化済み',
     reportSanitizedNote: 'このレポートは匿名化された集計指標のみを含み、サーバーアドレス、コマンド本文、キー、ユーザーデータは含みません。',
+    historyTitle: 'ローカル診断スナップショット',
+    historyDescription: 'このブラウザだけに保存し、調整前後の匿名化レポートを比較します。',
+    historyEmpty: 'スナップショットはまだありません。現在のレポートを保存すると比較できます。',
+    saveSnapshot: 'スナップショット保存',
+    historySaved: 'SSH 診断スナップショットをこのブラウザに保存しました',
     copySummary: '\u30b5\u30de\u30ea\u30fc\u3092\u30b3\u30d4\u30fc',
     copyCopied: 'SSH \u30d1\u30d5\u30a9\u30fc\u30de\u30f3\u30b9\u30b5\u30de\u30ea\u30fc\u3092\u30b3\u30d4\u30fc\u3057\u307e\u3057\u305f',
     summaryStatus: '\u72b6\u614b',

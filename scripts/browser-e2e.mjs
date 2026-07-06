@@ -54,6 +54,7 @@ async function createE2ePage(options) {
     window.localStorage.setItem('colipas.language', 'en');
     window.localStorage.removeItem('colipas.aiConsoleState');
     window.localStorage.removeItem('colipas.aiResponseCache');
+    window.localStorage.removeItem('colipas.sshLagReportHistory.v1');
   });
   targetPage.on('console', (message) => {
     if (message.type() === 'error' || message.type() === 'warning') {
@@ -168,6 +169,11 @@ async function assertReleaseEvidenceBrief(targetPage) {
   if (sshLagContextCount !== 3) {
     throw new Error(`SSH lag diagnosis report should expose three context badges, got ${sshLagContextCount}`);
   }
+  await targetPage.locator('[data-ssh-lag-history="true"]').waitFor({ timeout: 5000 });
+  let sshLagHistoryText = await targetPage.locator('[data-ssh-lag-history="true"]').innerText();
+  if (!/Local diagnosis snapshots/i.test(sshLagHistoryText) || !/No snapshots yet/i.test(sshLagHistoryText)) {
+    throw new Error(`SSH lag diagnosis history did not render its empty state: ${sshLagHistoryText}`);
+  }
   await targetPage.evaluate(() => {
     window.__colipasCopiedSshPerformanceText = '';
     window.__colipasCopiedSshLagReportText = '';
@@ -191,6 +197,15 @@ async function assertReleaseEvidenceBrief(targetPage) {
   }
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshLagReportText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshLagReportText)) {
     throw new Error('SSH lag diagnosis copy output leaked a raw IP address or API key');
+  }
+  await targetPage.getByRole('button', { name: /save snapshot/i }).click();
+  sshLagHistoryText = await targetPage.locator('[data-ssh-lag-history="true"]').innerText();
+  if (!/Current SSH experience/i.test(sshLagHistoryText) || !/Watch closely|Healthy path|Errors found/i.test(sshLagHistoryText)) {
+    throw new Error(`SSH lag diagnosis history did not save the current snapshot: ${sshLagHistoryText}`);
+  }
+  const storedSshLagHistory = await targetPage.evaluate(() => window.localStorage.getItem('colipas.sshLagReportHistory.v1') ?? '');
+  if (!/SSH lag diagnosis report/i.test(storedSshLagHistory) || /\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(storedSshLagHistory) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(storedSshLagHistory)) {
+    throw new Error(`SSH lag diagnosis history storage is missing or unsafe: ${storedSshLagHistory}`);
   }
   await targetPage.getByRole('button', { name: /copy summary|复制摘要|サマリーをコピー/i }).click();
   const copiedSshPerfText = await targetPage.evaluate(() => window.__colipasCopiedSshPerformanceText ?? '');
