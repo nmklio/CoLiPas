@@ -210,6 +210,29 @@ interface SshFlightRecorderSummary {
   copyText: string;
 }
 
+interface SshLatencyPoint {
+  id: string;
+  label: string;
+  type: 'input' | 'output' | 'close' | 'error';
+  tone: 'ok' | 'warn' | 'fail';
+  offsetPercent: number;
+  heightPercent: number;
+  detail: string;
+}
+
+interface SshLatencyCurveSummary {
+  tone: 'ok' | 'warn' | 'fail';
+  title: string;
+  detail: string;
+  points: SshLatencyPoint[];
+  markers: string[];
+  legend: Array<{
+    label: string;
+    value: string;
+    tone: 'ok' | 'warn' | 'fail';
+  }>;
+}
+
 const sshLagReportHistoryStorageKey = 'colipas.sshLagReportHistory.v1';
 const sshLagReportHistoryVisibleLimit = 5;
 
@@ -302,6 +325,10 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
   );
   const sshFlightRecorder = useMemo(
     () => buildSshFlightRecorder(diagnosticBundle, sshPerformanceCopy, locale),
+    [diagnosticBundle, locale, sshPerformanceCopy],
+  );
+  const sshLatencyCurve = useMemo(
+    () => buildSshLatencyCurve(diagnosticBundle, sshPerformanceCopy, locale),
     [diagnosticBundle, locale, sshPerformanceCopy],
   );
   const expandedSshMetric = useMemo(
@@ -966,6 +993,52 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
             </div>
           ) : (
             <p className="security-ssh-flight-empty">{sshPerformanceCopy.flightEmpty}</p>
+          )}
+        </div>
+        <div className={`security-ssh-latency-curve ${sshLatencyCurve.tone}`} data-ssh-latency-curve="true">
+          <div className="security-ssh-latency-heading">
+            <div>
+              <span>{sshPerformanceCopy.latencyCurveTitle}</span>
+              <strong>{sshLatencyCurve.title}</strong>
+              <p>{sshLatencyCurve.detail}</p>
+            </div>
+            <div className="security-ssh-latency-legend">
+              {sshLatencyCurve.legend.map((item) => (
+                <small key={item.label} className={item.tone}>
+                  <span>{item.label}</span>
+                  {item.value}
+                </small>
+              ))}
+            </div>
+          </div>
+          {sshLatencyCurve.points.length > 0 ? (
+            <>
+              <div className="security-ssh-latency-chart" aria-label={sshPerformanceCopy.latencyCurveTitle}>
+                <div className="security-ssh-latency-grid" />
+                <div className="security-ssh-latency-line" />
+                {sshLatencyCurve.points.map((point) => (
+                  <span
+                    key={point.id}
+                    className={`${point.type} ${point.tone}`}
+                    style={{
+                      left: `${point.offsetPercent}%`,
+                      bottom: `${point.heightPercent}%`,
+                    }}
+                    title={point.detail}
+                    aria-label={point.detail}
+                  >
+                    <small>{point.label}</small>
+                  </span>
+                ))}
+              </div>
+              <div className="security-ssh-latency-markers">
+                {sshLatencyCurve.markers.map((marker) => (
+                  <small key={marker}>{marker}</small>
+                ))}
+              </div>
+            </>
+          ) : (
+            <p className="security-ssh-flight-empty">{sshPerformanceCopy.latencyCurveEmpty}</p>
           )}
         </div>
         <p className="security-ssh-performance-next">{sshPerformance.nextAction}</p>
@@ -2306,6 +2379,115 @@ function buildSshFlightCopyText(
   ].join('\n');
 }
 
+function buildSshLatencyCurve(
+  diagnostic: DiagnosticExportResponse | null,
+  copy: SshPerformanceCopy,
+  locale: string,
+): SshLatencyCurveSummary {
+  const replays = diagnostic?.sshTerminal?.sessionReplays ?? [];
+  const latestReplay = replays[0] ?? null;
+  if (!latestReplay) {
+    return {
+      tone: 'warn',
+      title: copy.latencyCurveNoEvidence,
+      detail: copy.latencyCurveNoEvidenceDetail,
+      points: [],
+      markers: [],
+      legend: [
+        { label: copy.latencyCurveDuration, value: '--', tone: 'warn' },
+        { label: copy.latencyCurveEvents, value: '0', tone: 'warn' },
+        { label: copy.latencyCurvePeak, value: '--', tone: 'warn' },
+      ],
+    };
+  }
+
+  const timeline = latestReplay.timeline.filter((event) => event.type !== 'start');
+  const connectedAt = new Date(latestReplay.connectedAt).getTime();
+  const lastEventAt = new Date(latestReplay.lastEventAt).getTime();
+  const durationMs = Math.max(1, latestReplay.durationMs || (Number.isFinite(lastEventAt - connectedAt) ? lastEventAt - connectedAt : 1));
+  const weights = timeline.map((event) => getSshLatencyEventWeight(event));
+  const maxWeight = Math.max(...weights, 1);
+  const points = timeline.slice(-18).map((event, index) => {
+    const eventAt = new Date(event.at).getTime();
+    const offset = Number.isFinite(eventAt - connectedAt)
+      ? ((eventAt - connectedAt) / durationMs) * 100
+      : (index / Math.max(1, timeline.length - 1)) * 100;
+    const type = getSshLatencyPointType(event.type);
+    const weight = getSshLatencyEventWeight(event);
+    const tone: SshLatencyPoint['tone'] = type === 'error'
+      ? 'fail'
+      : weight >= maxWeight * 0.75 && maxWeight > 2000
+        ? 'warn'
+        : 'ok';
+    return {
+      id: `${event.at}-${index}-${event.type}`,
+      label: copy.latencyCurvePointLabel(index + 1),
+      type,
+      tone,
+      offsetPercent: clampPercent(offset),
+      heightPercent: clampPercent(18 + (weight / maxWeight) * 72),
+      detail: copy.latencyCurvePointDetail(formatSshFlightEventType(event.type, getSshLanguageFromLocale(locale)), event.bytes, event.lines, formatSshFlightTime(event.at, locale)),
+    };
+  });
+  const peak = points.reduce<SshLatencyPoint | null>((current, point) => (!current || point.heightPercent > current.heightPercent ? point : current), null);
+  const tone: SshLatencyCurveSummary['tone'] = latestReplay.errorCount > 0
+    ? 'fail'
+    : points.some((point) => point.tone === 'warn')
+      ? 'warn'
+      : 'ok';
+
+  return {
+    tone,
+    title: copy.latencyCurveStatus(tone),
+    detail: copy.latencyCurveDetail(latestReplay.inputSubmits, latestReplay.outputLines, latestReplay.durationMs),
+    points,
+    markers: [
+      copy.latencyCurveMarkerStart(formatSshFlightTime(latestReplay.connectedAt, locale)),
+      copy.latencyCurveMarkerEnd(formatSshFlightTime(latestReplay.lastEventAt, locale)),
+      copy.latencyCurveMarkerMode(latestReplay.mode),
+    ],
+    legend: [
+      { label: copy.latencyCurveDuration, value: formatSshFlightDuration(latestReplay.durationMs, locale), tone },
+      { label: copy.latencyCurveEvents, value: String(timeline.length), tone: timeline.length > 0 ? 'ok' : 'warn' },
+      { label: copy.latencyCurvePeak, value: peak ? peak.label : '--', tone: peak?.tone ?? 'warn' },
+    ],
+  };
+}
+
+function getSshLatencyEventWeight(event: SshFlightTimelineEvent) {
+  return Math.max(1, event.bytes + event.lines * 128 + (event.type === 'error' || event.type === 'stderr' ? 2048 : 0));
+}
+
+function getSshLatencyPointType(type: string): SshLatencyPoint['type'] {
+  if (type === 'input') {
+    return 'input';
+  }
+  if (type === 'close') {
+    return 'close';
+  }
+  if (type === 'error' || type === 'stderr') {
+    return 'error';
+  }
+  return 'output';
+}
+
+function clampPercent(value: number) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.min(96, Math.max(4, value));
+}
+
+function getSshLanguageFromLocale(locale: string) {
+  if (locale.startsWith('zh')) {
+    return 'zh';
+  }
+  if (locale.startsWith('ja')) {
+    return 'ja';
+  }
+  return 'en';
+}
+
 function buildSshFlightRecord(
   replay: DiagnosticExportResponse['sshTerminal']['sessionReplays'][number],
   index: number,
@@ -2827,6 +3009,20 @@ interface SshPerformanceCopy {
   flightCloseSignal: (signal: string | null) => string;
   flightErrors: (errors: number) => string;
   flightSegmentLabel: (type: string, bytes: number, lines: number) => string;
+  latencyCurveTitle: string;
+  latencyCurveEmpty: string;
+  latencyCurveNoEvidence: string;
+  latencyCurveNoEvidenceDetail: string;
+  latencyCurveDuration: string;
+  latencyCurveEvents: string;
+  latencyCurvePeak: string;
+  latencyCurveStatus: (tone: 'ok' | 'warn' | 'fail') => string;
+  latencyCurveDetail: (submits: number, outputLines: number, durationMs: number) => string;
+  latencyCurvePointLabel: (index: number) => string;
+  latencyCurvePointDetail: (type: string, bytes: number, lines: number, time: string) => string;
+  latencyCurveMarkerStart: (time: string) => string;
+  latencyCurveMarkerEnd: (time: string) => string;
+  latencyCurveMarkerMode: (mode: string) => string;
   copySummary: string;
   copyCopied: string;
   summaryStatus: string;
@@ -2954,6 +3150,20 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     flightCloseSignal: (signal) => signal ? `信号 ${signal}` : '未关闭',
     flightErrors: (errors) => errors > 0 ? `${errors} 个错误` : '无错误',
     flightSegmentLabel: (type, bytes, lines) => `${formatSshFlightEventType(type, 'zh')} · ${formatSshFlightBytes(bytes)} · ${lines} 行`,
+    latencyCurveTitle: 'SSH 实时延迟曲线',
+    latencyCurveEmpty: '暂无可绘制的 SSH 事件。执行一次命令后会显示事件曲线。',
+    latencyCurveNoEvidence: '等待曲线数据',
+    latencyCurveNoEvidenceDetail: '还没有最近 SSH 会话事件，暂时无法绘制曲线。',
+    latencyCurveDuration: '耗时',
+    latencyCurveEvents: '事件',
+    latencyCurvePeak: '峰值',
+    latencyCurveStatus: (tone) => tone === 'fail' ? '曲线存在错误峰值' : tone === 'warn' ? '曲线存在高负载峰值' : '曲线稳定',
+    latencyCurveDetail: (submits, outputLines, durationMs) => `${submits} 次提交 / ${outputLines} 行输出 / ${formatSshFlightDuration(durationMs, 'zh-CN')}`,
+    latencyCurvePointLabel: (index) => `P${index}`,
+    latencyCurvePointDetail: (type, bytes, lines, time) => `${time} · ${type} · ${formatSshFlightBytes(bytes)} · ${lines} 行`,
+    latencyCurveMarkerStart: (time) => `开始 ${time}`,
+    latencyCurveMarkerEnd: (time) => `最后 ${time}`,
+    latencyCurveMarkerMode: (mode) => `模式 ${mode}`,
     copySummary: '\u590d\u5236\u6458\u8981',
     copyCopied: 'SSH \u6027\u80fd\u6458\u8981\u5df2\u590d\u5236',
     summaryStatus: '\u72b6\u6001',
@@ -3079,6 +3289,20 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     flightCloseSignal: (signal) => signal ? `Signal ${signal}` : 'Not closed',
     flightErrors: (errors) => errors > 0 ? `${errors} error(s)` : 'No errors',
     flightSegmentLabel: (type, bytes, lines) => `${formatSshFlightEventType(type, 'en')} · ${formatSshFlightBytes(bytes)} · ${lines} line(s)`,
+    latencyCurveTitle: 'SSH live latency curve',
+    latencyCurveEmpty: 'No SSH events are available for charting yet. Run one command to draw the event curve.',
+    latencyCurveNoEvidence: 'Waiting for curve data',
+    latencyCurveNoEvidenceDetail: 'No recent SSH session events are available yet, so the curve cannot be drawn.',
+    latencyCurveDuration: 'Duration',
+    latencyCurveEvents: 'Events',
+    latencyCurvePeak: 'Peak',
+    latencyCurveStatus: (tone) => tone === 'fail' ? 'Curve has error spikes' : tone === 'warn' ? 'Curve has high-load spikes' : 'Curve is stable',
+    latencyCurveDetail: (submits, outputLines, durationMs) => `${submits} submit(s) / ${outputLines} output line(s) / ${formatSshFlightDuration(durationMs, 'en-US')}`,
+    latencyCurvePointLabel: (index) => `P${index}`,
+    latencyCurvePointDetail: (type, bytes, lines, time) => `${time} · ${type} · ${formatSshFlightBytes(bytes)} · ${lines} line(s)`,
+    latencyCurveMarkerStart: (time) => `Start ${time}`,
+    latencyCurveMarkerEnd: (time) => `Last ${time}`,
+    latencyCurveMarkerMode: (mode) => `Mode ${mode}`,
     copySummary: 'Copy summary',
     copyCopied: 'SSH performance summary copied',
     summaryStatus: 'Status',
@@ -3204,6 +3428,20 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     flightCloseSignal: (signal) => signal ? `信号 ${signal}` : '未終了',
     flightErrors: (errors) => errors > 0 ? `${errors} 件エラー` : 'エラーなし',
     flightSegmentLabel: (type, bytes, lines) => `${formatSshFlightEventType(type, 'ja')} · ${formatSshFlightBytes(bytes)} · ${lines} 行`,
+    latencyCurveTitle: 'SSH ライブ遅延曲線',
+    latencyCurveEmpty: '描画できる SSH イベントはまだありません。コマンドを実行するとイベント曲線を表示します。',
+    latencyCurveNoEvidence: '曲線データ待ち',
+    latencyCurveNoEvidenceDetail: '最近の SSH セッションイベントがないため、まだ曲線を描画できません。',
+    latencyCurveDuration: '時間',
+    latencyCurveEvents: 'イベント',
+    latencyCurvePeak: 'ピーク',
+    latencyCurveStatus: (tone) => tone === 'fail' ? 'エラースパイクあり' : tone === 'warn' ? '高負荷スパイクあり' : '曲線は安定',
+    latencyCurveDetail: (submits, outputLines, durationMs) => `${submits} 回送信 / ${outputLines} 行出力 / ${formatSshFlightDuration(durationMs, 'ja-JP')}`,
+    latencyCurvePointLabel: (index) => `P${index}`,
+    latencyCurvePointDetail: (type, bytes, lines, time) => `${time} · ${type} · ${formatSshFlightBytes(bytes)} · ${lines} 行`,
+    latencyCurveMarkerStart: (time) => `開始 ${time}`,
+    latencyCurveMarkerEnd: (time) => `最終 ${time}`,
+    latencyCurveMarkerMode: (mode) => `モード ${mode}`,
     copySummary: '\u30b5\u30de\u30ea\u30fc\u3092\u30b3\u30d4\u30fc',
     copyCopied: 'SSH \u30d1\u30d5\u30a9\u30fc\u30de\u30f3\u30b9\u30b5\u30de\u30ea\u30fc\u3092\u30b3\u30d4\u30fc\u3057\u307e\u3057\u305f',
     summaryStatus: '\u72b6\u614b',

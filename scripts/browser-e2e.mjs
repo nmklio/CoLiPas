@@ -36,7 +36,7 @@ try {
   await assertReleaseEvidenceBrief(page);
   await captureVisualEvidence(page, 'desktop-security-trace', ['.security-workbench', '.security-readiness-card', '.security-evidence-brief', '.security-release-playbook', '.security-ssh-performance-card']);
   await page.locator('[data-ssh-flight-recorder="true"]').scrollIntoViewIfNeeded();
-  await captureVisualEvidence(page, 'desktop-ssh-flight-recorder', ['[data-ssh-flight-recorder="true"]', '.security-ssh-flight-rail']);
+  await captureVisualEvidence(page, 'desktop-ssh-flight-recorder', ['[data-ssh-flight-recorder="true"]', '.security-ssh-flight-rail', '[data-ssh-latency-curve="true"]']);
   await assertMobileConsoleAndMap();
   await assertMobileModuleLayoutSweep();
 
@@ -234,6 +234,18 @@ async function assertReleaseEvidenceBrief(targetPage) {
   }
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshFlightText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshFlightText)) {
     throw new Error('SSH flight recorder copy output leaked a raw IP address or API key');
+  }
+  await targetPage.locator('[data-ssh-latency-curve="true"]').waitFor({ timeout: 5000 });
+  const sshLatencyCurveText = await targetPage.locator('[data-ssh-latency-curve="true"]').innerText();
+  if (!/SSH live latency curve/i.test(sshLatencyCurveText) || !/Duration/i.test(sshLatencyCurveText) || !/Events/i.test(sshLatencyCurveText) || !/Peak/i.test(sshLatencyCurveText) || !/Start/i.test(sshLatencyCurveText) || !/Last/i.test(sshLatencyCurveText)) {
+    throw new Error(`SSH live latency curve did not render timing markers: ${sshLatencyCurveText}`);
+  }
+  const sshLatencyPointCount = await targetPage.locator('.security-ssh-latency-chart > span').count();
+  if (sshLatencyPointCount < 2) {
+    throw new Error(`SSH live latency curve should expose multiple event points, got ${sshLatencyPointCount}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(sshLatencyCurveText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(sshLatencyCurveText)) {
+    throw new Error('SSH live latency curve rendered a raw IP address or API key');
   }
   const storedSshLagHistory = await targetPage.evaluate(() => window.localStorage.getItem('colipas.sshLagReportHistory.v1') ?? '');
   if (!/SSH lag diagnosis report/i.test(storedSshLagHistory) || !/"tone":/i.test(storedSshLagHistory) || /\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(storedSshLagHistory) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(storedSshLagHistory)) {
