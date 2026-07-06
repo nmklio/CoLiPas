@@ -51,6 +51,19 @@ import type { OperationTaskPreflightResponse, ServerNode } from '../types';
 
 type SectionId = 'overview' | 'servers' | 'operations' | 'ai' | 'api' | 'security';
 
+interface ReleaseFixFocusPayload {
+  id: string;
+  moduleLabel: string;
+  title: string;
+  value: string;
+  action: string;
+  source: string;
+}
+
+interface ReleaseFixFocus extends ReleaseFixFocusPayload {
+  targetSection: SectionId;
+}
+
 const sections: Array<{ id: SectionId; labelKey: string; icon: typeof LayoutDashboard }> = [
   { id: 'overview', labelKey: 'nav.overview', icon: LayoutDashboard },
   { id: 'servers', labelKey: 'nav.servers', icon: Server },
@@ -177,6 +190,7 @@ export function App() {
   const avatarUploadRef = useRef<HTMLInputElement | null>(null);
   const commandSearchRef = useRef<HTMLInputElement | null>(null);
   const [activeSection, setActiveSection] = useState<SectionId>(initialHashRouteRef.current.section);
+  const [releaseFixFocus, setReleaseFixFocus] = useState<ReleaseFixFocus | null>(null);
   const [securityTraceFocusId, setSecurityTraceFocusId] = useState(initialHashRouteRef.current.traceId);
   const [filters, setFilters] = useState<ServerFilters>(defaultFilters);
   const [operationDraft, setOperationDraft] = useState<OperationsDraft | null>(null);
@@ -453,6 +467,7 @@ export function App() {
       `${action.title} ${action.description} ${action.category} ${action.keywords}`.toLowerCase().includes(normalizedCommandPaletteQuery)
     ))
     : commandPaletteActions;
+  const activeReleaseFixFocus = releaseFixFocus?.targetSection === activeSection ? releaseFixFocus : null;
 
   useEffect(() => {
     if (!session?.authenticated) {
@@ -497,6 +512,7 @@ export function App() {
       const route = readHashRoute();
       setActiveSection(route.matched ? route.section : 'overview');
       setSecurityTraceFocusId(route.traceId);
+      setReleaseFixFocus(null);
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : t('login.failed'));
     } finally {
@@ -512,10 +528,12 @@ export function App() {
     setDataSource('fallback');
     setLastRefreshedAt(null);
     setAiCollapsed(true);
+    setReleaseFixFocus(null);
   }
 
-  function navigateToSection(section: SectionId) {
+  function navigateToSection(section: SectionId, focus?: ReleaseFixFocusPayload) {
     setActiveSection(section);
+    setReleaseFixFocus(focus ? { ...focus, targetSection: section } : null);
     if (section !== 'security') {
       setSecurityTraceFocusId('');
     }
@@ -878,6 +896,42 @@ export function App() {
         </header>
 
         <main>
+          {activeReleaseFixFocus && (
+            <article className="release-fix-focus-banner" data-release-fix-focus="true" aria-live="polite">
+              <div className="release-fix-focus-lead">
+                <span className="release-fix-focus-kicker">
+                  <CheckCircle2 size={15} />
+                  {t('app.releaseFixFocusLabel')}
+                </span>
+                <h3>{activeReleaseFixFocus.title}</h3>
+                <p>{t('app.releaseFixFocusSource', { source: activeReleaseFixFocus.source })}</p>
+              </div>
+              <dl className="release-fix-focus-details">
+                <div>
+                  <dt>{t('app.releaseFixFocusModule')}</dt>
+                  <dd>{activeReleaseFixFocus.moduleLabel}</dd>
+                </div>
+                <div>
+                  <dt>{t('app.releaseFixFocusCurrent')}</dt>
+                  <dd>{activeReleaseFixFocus.value}</dd>
+                </div>
+                <div>
+                  <dt>{t('app.releaseFixFocusAction')}</dt>
+                  <dd>{activeReleaseFixFocus.action}</dd>
+                </div>
+              </dl>
+              <button
+                type="button"
+                className="icon-button release-fix-focus-close"
+                aria-label={t('app.releaseFixFocusClose')}
+                data-release-fix-focus-close="true"
+                onClick={() => setReleaseFixFocus(null)}
+              >
+                <X size={16} />
+              </button>
+            </article>
+          )}
+
           {activeSection === 'overview' && (
             <MonitoringOverview
               servers={overview.servers}
@@ -989,8 +1043,8 @@ export function App() {
           {activeSection === 'security' && (
             <SecurityPanel
               events={overview.operationEvents}
-              onNavigate={(section) => {
-                navigateToSection(section);
+              onNavigate={(section, focus) => {
+                navigateToSection(section, focus);
               }}
               onRemediated={refreshOverview}
               focusTraceId={securityTraceFocusId}

@@ -154,6 +154,25 @@ async function assertReleaseEvidenceBrief(targetPage) {
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(releaseFixText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(releaseFixText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(releaseFixText)) {
     throw new Error('Release fix router rendered a raw IP address or secret');
   }
+  const focusStep = targetPage.locator('[data-release-fix-step="ai"], [data-release-fix-step="api"], [data-release-fix-step="servers"], [data-release-fix-step="ssh"], [data-release-fix-step="events"]').first();
+  if (await focusStep.count() === 0) {
+    throw new Error('Release fix router should expose at least one cross-module focus route in the grey test fixture');
+  }
+  await focusStep.click();
+  const focusBanner = targetPage.locator('[data-release-fix-focus="true"]');
+  await focusBanner.waitFor({ timeout: 10000 });
+  const focusText = await focusBanner.innerText();
+  if (!/Fix ticket/i.test(focusText) || !/Release fix router/i.test(focusText) || !/Current value/i.test(focusText) || !/Recommended action/i.test(focusText)) {
+    throw new Error(`Release fix focus banner did not render the routed check context: ${focusText}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(focusText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(focusText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(focusText)) {
+    throw new Error('Release fix focus banner rendered a raw IP address or secret');
+  }
+  await captureVisualEvidence(targetPage, 'desktop-release-fix-focus', ['[data-release-fix-focus="true"]']);
+  await targetPage.locator('[data-release-fix-focus-close="true"]').click();
+  await focusBanner.waitFor({ state: 'detached', timeout: 5000 });
+  await targetPage.locator('.nav-list').getByRole('button', { name: /^Security$/i }).click();
+  await targetPage.locator('[data-release-fix-router="true"]').waitFor({ timeout: 10000 });
   const releaseCockpitLaneCount = await targetPage.locator('[data-release-cockpit-lane]').count();
   if (releaseCockpitLaneCount !== 4) {
     throw new Error(`Release cockpit should expose four health rails, got ${releaseCockpitLaneCount}`);

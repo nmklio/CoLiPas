@@ -3336,6 +3336,27 @@ function assertAccountUiGuards() {
     throw new Error(`Release health cockpit UI guard is incomplete: ${missingReleaseCockpit.join(', ')}`);
   }
 
+  const releaseFixFocusFragments = [
+    'interface ReleaseFixFocusPayload',
+    'const [releaseFixFocus, setReleaseFixFocus]',
+    'data-release-fix-focus="true"',
+    'data-release-fix-focus-close="true"',
+    'activeReleaseFixFocus',
+    'buildReleaseFixFocus',
+    "onNavigate('ai', buildReleaseFixFocus(check, copy))",
+    "onNavigate('api', buildReleaseFixFocus(check, copy))",
+    "onNavigate('servers', buildReleaseFixFocus(check, copy))",
+    "onNavigate('operations', buildReleaseFixFocus(check, copy))",
+    'app.releaseFixFocusLabel',
+    '.release-fix-focus-banner',
+    'Release fix focus banner did not render the routed check context',
+  ];
+  const releaseFixFocusSource = `${appSource}\n${securitySource}\n${globalCss}\n${i18nSource}\n${fs.readFileSync(new URL('../scripts/browser-e2e.mjs', import.meta.url), 'utf8')}`;
+  const missingReleaseFixFocus = releaseFixFocusFragments.filter((fragment) => !releaseFixFocusSource.includes(fragment));
+  if (missingReleaseFixFocus.length) {
+    throw new Error(`Release fix focus handoff guard is incomplete: ${missingReleaseFixFocus.join(', ')}`);
+  }
+
   const avatarFragments = [
     'avatarImage',
     'handleAvatarUpload',
@@ -5980,7 +6001,7 @@ function assertSecurityAuditRelationsAreSpecific() {
     'const initialHashRouteRef = useRef<HashRoute | null>(null)',
     'const [securityTraceFocusId, setSecurityTraceFocusId] = useState(initialHashRouteRef.current.traceId)',
     'window.addEventListener(\'hashchange\', syncRouteFromHash)',
-    'function navigateToSection(section: SectionId)',
+    'function navigateToSection(section: SectionId, focus?: ReleaseFixFocusPayload)',
     'function openSecurityTrace(correlationId: string)',
     'writeHashRoute(\'security\', traceId)',
     'function handleSecurityTraceFilterChange(correlationId: string)',

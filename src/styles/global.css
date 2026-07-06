@@ -3247,6 +3247,100 @@ main {
   box-shadow: 0 16px 38px rgba(18, 35, 41, 0.07);
 }
 
+.release-fix-focus-banner {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(210px, 0.8fr) minmax(0, 1.7fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 16px 18px;
+  border: 1px solid rgba(12, 113, 118, 0.22);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 18px 18px, rgba(30, 164, 168, 0.16), transparent 34%),
+    linear-gradient(135deg, rgba(242, 252, 251, 0.98), rgba(255, 255, 255, 0.96) 58%, rgba(232, 247, 246, 0.9));
+  box-shadow: 0 18px 42px rgba(12, 55, 58, 0.11);
+  overflow: hidden;
+}
+
+.release-fix-focus-banner::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  background: linear-gradient(180deg, #0d9488, #38bdf8);
+}
+
+.release-fix-focus-lead,
+.release-fix-focus-details {
+  min-width: 0;
+}
+
+.release-fix-focus-kicker {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+  color: #0f766e;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.release-fix-focus-lead h3 {
+  margin: 0;
+  color: #0f2f33;
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.release-fix-focus-lead p {
+  margin: 5px 0 0;
+  color: #5f7478;
+  font-size: 0.8rem;
+}
+
+.release-fix-focus-details {
+  display: grid;
+  grid-template-columns: 0.8fr 0.9fr 1.4fr;
+  gap: 10px;
+  margin: 0;
+}
+
+.release-fix-focus-details div {
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid rgba(12, 113, 118, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.release-fix-focus-details dt {
+  margin-bottom: 4px;
+  color: #6b7f84;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.release-fix-focus-details dd {
+  margin: 0;
+  min-width: 0;
+  color: #16393d;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.release-fix-focus-close {
+  align-self: start;
+  background: rgba(255, 255, 255, 0.8);
+}
+
 .section-header {
   display: flex;
   align-items: flex-start;
@@ -11605,6 +11699,17 @@ pre {
 
   main {
     padding: 20px 14px 34px;
+  }
+
+  .release-fix-focus-banner {
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .release-fix-focus-details {
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr;
   }
 
   .content:not(.ai-collapsed) main {

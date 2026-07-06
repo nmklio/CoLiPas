@@ -26,11 +26,23 @@ import type { DiagnosticExportResponse, ReleaseDeploymentEvidence, ReleaseReadin
 
 interface SecurityPanelProps {
   events: OperationEvent[];
-  onNavigate: (section: 'overview' | 'servers' | 'operations' | 'ai' | 'api' | 'security') => void;
+  onNavigate: (
+    section: 'overview' | 'servers' | 'operations' | 'ai' | 'api' | 'security',
+    focus?: ReleaseFixFocusPayload,
+  ) => void;
   onRemediated: () => void | Promise<void>;
   focusTraceId?: string;
   onTraceFocused?: () => void;
   onTraceFilterChange?: (correlationId: string) => void;
+}
+
+interface ReleaseFixFocusPayload {
+  id: string;
+  moduleLabel: string;
+  title: string;
+  value: string;
+  action: string;
+  source: string;
 }
 
 interface ConfigSummary {
@@ -918,22 +930,22 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
 
   function applyReadinessFilter(check: ReleaseReadinessResponse['checks'][number]) {
     if (check.relatedModule === 'ai') {
-      onNavigate('ai');
+      onNavigate('ai', buildReleaseFixFocus(check, copy));
       return;
     }
 
     if (check.relatedModule === 'api') {
-      onNavigate('api');
+      onNavigate('api', buildReleaseFixFocus(check, copy));
       return;
     }
 
     if (check.relatedModule === 'servers' || check.relatedModule === 'ssh') {
-      onNavigate('servers');
+      onNavigate('servers', buildReleaseFixFocus(check, copy));
       return;
     }
 
     if (check.relatedModule === 'events') {
-      onNavigate('operations');
+      onNavigate('operations', buildReleaseFixFocus(check, copy));
       return;
     }
 
@@ -2734,6 +2746,20 @@ function buildReleaseFixRouter(
     emptyDetail: copy.releaseFixEmptyDetail,
     steps,
     copyText,
+  };
+}
+
+function buildReleaseFixFocus(
+  check: ReleaseReadinessResponse['checks'][number],
+  copy: SecurityCopy,
+): ReleaseFixFocusPayload {
+  return {
+    id: check.id,
+    moduleLabel: copy.releaseFixModuleLabel(check.relatedModule),
+    title: sanitizeEvidenceBriefText(check.label),
+    value: sanitizeEvidenceBriefText(check.value),
+    action: sanitizeEvidenceBriefText(check.recommendedAction || check.evidence),
+    source: copy.releaseFixTitle,
   };
 }
 
