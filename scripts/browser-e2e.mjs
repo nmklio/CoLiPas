@@ -37,6 +37,7 @@ try {
   await captureVisualEvidence(page, 'desktop-security-trace', ['.security-workbench', '.security-readiness-card', '.security-evidence-brief', '.security-release-playbook', '.security-ssh-performance-card']);
   await page.locator('[data-ssh-flight-recorder="true"]').scrollIntoViewIfNeeded();
   await captureVisualEvidence(page, 'desktop-ssh-flight-recorder', ['[data-ssh-flight-recorder="true"]', '.security-ssh-flight-rail', '[data-ssh-latency-curve="true"]']);
+  await assertOverviewHealthBaseline(page);
   await assertMobileConsoleAndMap();
   await assertMobileModuleLayoutSweep();
 
@@ -795,6 +796,41 @@ async function assertOperationsResultTraceRoundTrip(targetPage) {
   }
 
   console.log('ok browser e2e links operations result to security trace and preserves reload state');
+}
+
+async function assertOverviewHealthBaseline(targetPage) {
+  await targetPage.goto(`${baseUrl}/admin/#overview`, { waitUntil: 'networkidle', timeout: 30000 });
+  const baseline = targetPage.locator('[data-health-baseline="true"]');
+  await baseline.waitFor({ timeout: 10000 });
+  const baselineText = await baseline.innerText();
+  const requiredPhrases = [
+    /Health baseline alerts/i,
+    /Health score/i,
+    /Resource level/i,
+    /SSH coverage/i,
+    /Event pressure/i,
+    /Next best actions/i,
+  ];
+  for (const phrase of requiredPhrases) {
+    if (!phrase.test(baselineText)) {
+      throw new Error(`Overview health baseline is missing ${phrase}: ${baselineText}`);
+    }
+  }
+  const signalCount = await baseline.locator('.health-baseline-signal').count();
+  if (signalCount !== 3) {
+    throw new Error(`Overview health baseline should render three signals, got ${signalCount}`);
+  }
+  const scoreText = await baseline.locator('.health-baseline-score strong').innerText();
+  const score = Number(scoreText);
+  if (!Number.isFinite(score) || score < 0 || score > 100) {
+    throw new Error(`Overview health baseline score is invalid: ${scoreText}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b|sk-[A-Za-z0-9_-]{12,}|BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(baselineText)) {
+    throw new Error('Overview health baseline leaked a raw IP address or secret');
+  }
+  await assertElementWithinViewport(targetPage, '[data-health-baseline="true"]', 'desktop overview health baseline');
+  await captureVisualEvidence(targetPage, 'desktop-overview-health-baseline', ['[data-health-baseline="true"]', '.monitor-kpis']);
+  console.log('ok browser e2e covers overview health baseline alerts');
 }
 
 async function assertMobileConsoleAndMap() {

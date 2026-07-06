@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { Activity, AlertTriangle, Globe2, LocateFixed, MapPin, Minus, Network, Plus, RotateCcw, Server, ShieldCheck, Wifi } from 'lucide-react';
 import { geoEquirectangular, geoPath } from 'd3-geo';
@@ -50,6 +50,25 @@ interface CountryHover {
   serverNames: string[];
   x: number;
   y: number;
+}
+
+type HealthBaselineTone = 'good' | 'watch' | 'critical';
+
+interface HealthBaselineSignal {
+  id: string;
+  label: string;
+  value: string;
+  detail: string;
+  tone: HealthBaselineTone;
+}
+
+interface HealthBaselineSummary {
+  score: number;
+  tone: HealthBaselineTone;
+  title: string;
+  detail: string;
+  signals: HealthBaselineSignal[];
+  actions: string[];
 }
 
 interface MapCountryShape {
@@ -195,6 +214,7 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, onReg
   const mapRegions = useMemo(() => (regions.length ? regions : []), [regions]);
   const activeCountryIds = useMemo(() => new Set(mapRegions.flatMap((region) => region.countryIds)), [mapRegions]);
   const regionsByCountryId = useMemo(() => buildCountryRegionMap(mapRegions), [mapRegions]);
+  const healthBaseline = useMemo(() => buildHealthBaselineSummary(servers, events, t), [events, servers, t]);
   const selectedRegion = visibleRegions.find((region) => region.region === selectedRegionName) ?? visibleRegions[0];
   const visibleCountryPopup = hoveredCountry ?? pinnedCountry;
   const visibleTooltipAnchor = visibleCountryPopup ? getTooltipViewportAnchor(visibleCountryPopup) : null;
@@ -279,6 +299,36 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, onReg
           </div>
         </div>
       </div>
+
+      <article className={`health-baseline-card ${healthBaseline.tone}`} data-health-baseline="true">
+        <div className="health-baseline-score" aria-label={t('overview.healthBaselineScore', { score: healthBaseline.score })}>
+          <span>{t('overview.healthBaselineScoreLabel')}</span>
+          <strong>{healthBaseline.score}</strong>
+          <i style={{ '--score': `${healthBaseline.score}%` } as CSSProperties} />
+        </div>
+        <div className="health-baseline-main">
+          <div className="panel-title">
+            <span><ShieldCheck size={17} /> {t('overview.healthBaselineTitle')}</span>
+            <small>{healthBaseline.title}</small>
+          </div>
+          <p>{healthBaseline.detail}</p>
+          <div className="health-baseline-signals">
+            {healthBaseline.signals.map((signal) => (
+              <div key={signal.id} className={`health-baseline-signal ${signal.tone}`}>
+                <span>{signal.label}</span>
+                <strong>{signal.value}</strong>
+                <small>{signal.detail}</small>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="health-baseline-actions">
+          <span>{t('overview.healthBaselineNext')}</span>
+          {healthBaseline.actions.map((action) => (
+            <small key={action}>{action}</small>
+          ))}
+        </div>
+      </article>
 
       <div className="monitor-layout">
         <div className="monitor-map-panel">
@@ -800,6 +850,165 @@ function buildOverviewStats(servers: ServerNode[], events: OperationEvent[]) {
     providerCount: providers.size,
     busiestServers: busiestServers.map((item) => item.server),
   };
+}
+
+function maxServerLoad(server: ServerNode) {
+  return Math.max(server.cpu, server.memory, server.disk);
+}
+
+function buildHealthBaselineSummary(
+  servers: ServerNode[],
+  events: OperationEvent[],
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): HealthBaselineSummary {
+  const totalServers = servers.length;
+  const runningServers = servers.filter((server) => server.status === 'running').length;
+  const connectedSsh = servers.filter((server) => server.ssh?.connected).length;
+  const openEvents = events.filter((event) => event.status === 'open');
+  const criticalEvents = openEvents.filter((event) => event.severity === 'critical').length;
+  const warningEvents = openEvents.filter((event) => event.severity === 'warning').length;
+  const resourceAverages = calculateResourceAverages(servers);
+  const overloadedServers = servers.filter((server) => maxServerLoad(server) >= 85);
+  const warmServers = servers.filter((server) => maxServerLoad(server) >= 70 && maxServerLoad(server) < 85);
+  const diskPressureServers = servers.filter((server) => server.disk >= 80);
+  const sshCoverage = totalServers > 0 ? Math.round((connectedSsh / totalServers) * 100) : 100;
+  const runningRatio = totalServers > 0 ? Math.round((runningServers / totalServers) * 100) : 100;
+  const hottestServer = servers.reduce<ServerNode | null>((current, server) => (
+    !current || maxServerLoad(server) > maxServerLoad(current) ? server : current
+  ), null);
+
+  const score = clamp(
+    100
+      - overloadedServers.length * 9
+      - warmServers.length * 4
+      - diskPressureServers.length * 6
+      - Math.max(0, resourceAverages.cpu - 65)
+      - Math.max(0, resourceAverages.memory - 70)
+      - Math.max(0, resourceAverages.disk - 72)
+      - Math.max(0, 75 - sshCoverage) * 0.25
+      - Math.max(0, 80 - runningRatio) * 0.1
+      - criticalEvents * 12
+      - warningEvents * 4,
+    0,
+    100,
+  );
+
+  const tone = criticalEvents > 0 || overloadedServers.length > 0 || diskPressureServers.length > 0
+    ? 'critical'
+    : score < 88 || warningEvents > 0 || sshCoverage < 75 || runningRatio < 80
+      ? 'watch'
+      : 'good';
+
+  const signals: HealthBaselineSignal[] = [
+    {
+      id: 'resources',
+      label: t('overview.healthSignalResources'),
+      value: t('overview.healthSignalResourcesValue', {
+        cpu: resourceAverages.cpu,
+        memory: resourceAverages.memory,
+        disk: resourceAverages.disk,
+      }),
+      detail: hottestServer
+        ? t('overview.healthSignalResourcesDetail', { name: hottestServer.name, load: maxServerLoad(hottestServer) })
+        : t('overview.healthSignalResourcesEmpty'),
+      tone: overloadedServers.length > 0 || resourceAverages.disk >= 80 ? 'critical' : warmServers.length > 0 ? 'watch' : 'good',
+    },
+    {
+      id: 'ssh',
+      label: t('overview.healthSignalSsh'),
+      value: t('overview.healthSignalSshValue', { connected: connectedSsh, total: totalServers, coverage: sshCoverage }),
+      detail: sshCoverage < 75
+        ? t('overview.healthSignalSshWeak')
+        : t('overview.healthSignalSshHealthy'),
+      tone: sshCoverage < 50 ? 'critical' : sshCoverage < 75 ? 'watch' : 'good',
+    },
+    {
+      id: 'events',
+      label: t('overview.healthSignalEvents'),
+      value: t('overview.healthSignalEventsValue', { critical: criticalEvents, warning: warningEvents }),
+      detail: openEvents.length > 0
+        ? t('overview.healthSignalEventsDetail', { count: openEvents.length })
+        : t('overview.healthSignalEventsEmpty'),
+      tone: criticalEvents > 0 ? 'critical' : warningEvents > 0 ? 'watch' : 'good',
+    },
+  ];
+
+  const actions = buildHealthBaselineActions({
+    tone,
+    overloadedServers,
+    diskPressureServers,
+    sshCoverage,
+    criticalEvents,
+    warningEvents,
+    t,
+  });
+
+  return {
+    score: Math.round(score),
+    tone,
+    title: t(`overview.healthBaselineStatus.${tone}`),
+    detail: t(`overview.healthBaselineDetail.${tone}`, {
+      assets: totalServers,
+      ssh: connectedSsh,
+      events: openEvents.length,
+    }),
+    signals,
+    actions,
+  };
+}
+
+function calculateResourceAverages(servers: ServerNode[]) {
+  if (servers.length === 0) {
+    return { cpu: 0, memory: 0, disk: 0 };
+  }
+
+  const total = servers.reduce((sum, server) => ({
+    cpu: sum.cpu + server.cpu,
+    memory: sum.memory + server.memory,
+    disk: sum.disk + server.disk,
+  }), { cpu: 0, memory: 0, disk: 0 });
+
+  return {
+    cpu: Math.round(total.cpu / servers.length),
+    memory: Math.round(total.memory / servers.length),
+    disk: Math.round(total.disk / servers.length),
+  };
+}
+
+function buildHealthBaselineActions({
+  tone,
+  overloadedServers,
+  diskPressureServers,
+  sshCoverage,
+  criticalEvents,
+  warningEvents,
+  t,
+}: {
+  tone: HealthBaselineTone;
+  overloadedServers: ServerNode[];
+  diskPressureServers: ServerNode[];
+  sshCoverage: number;
+  criticalEvents: number;
+  warningEvents: number;
+  t: (key: string, vars?: Record<string, string | number>) => string;
+}) {
+  const actions: string[] = [];
+  if (overloadedServers.length > 0) {
+    actions.push(t('overview.healthActionLoad', { count: overloadedServers.length }));
+  }
+  if (diskPressureServers.length > 0) {
+    actions.push(t('overview.healthActionDisk', { count: diskPressureServers.length }));
+  }
+  if (sshCoverage < 75) {
+    actions.push(t('overview.healthActionSsh', { coverage: sshCoverage }));
+  }
+  if (criticalEvents > 0 || warningEvents > 0) {
+    actions.push(t('overview.healthActionEvents', { count: criticalEvents + warningEvents }));
+  }
+  if (actions.length === 0) {
+    actions.push(t(tone === 'good' ? 'overview.healthActionGood' : 'overview.healthActionWatch'));
+  }
+  return actions.slice(0, 3);
 }
 
 function buildCountryHover(
