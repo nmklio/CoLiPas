@@ -8164,6 +8164,17 @@ pre {
   text-overflow: ellipsis;
 }
 
+.security-ssh-support-bundle-actions {
+  display: grid;
+  gap: 8px;
+  justify-items: stretch;
+}
+
+.security-ssh-support-bundle-actions .tool-button {
+  justify-content: center;
+  white-space: nowrap;
+}
+
 .security-ssh-experience-summary {
   min-width: 0;
   border: 1px solid rgba(15, 118, 110, 0.16);
@@ -11219,6 +11230,11 @@ pre {
   .ops-runner-footer .tool-button {
     width: 100%;
     justify-content: center;
+  }
+
+  .security-ssh-support-bundle-actions {
+    grid-template-columns: 1fr;
+    justify-items: stretch;
   }
 
   .ops-preflight-history-item {

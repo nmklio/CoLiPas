@@ -338,6 +338,7 @@ interface SshSupportBundleSummary {
   sectionsLabel: string;
   sections: SshSupportBundleSection[];
   copyText: string;
+  ticketText: string;
 }
 
 const sshLagReportHistoryStorageKey = 'colipas.sshLagReportHistory.v1';
@@ -648,6 +649,23 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
       setRemediationError(false);
     } catch {
       setRemediationMessage(sshSupportBundle.copyText);
+      setRemediationError(false);
+    }
+  }
+
+  async function copySshSupportTicket() {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) {
+      setRemediationMessage(sshSupportBundle.ticketText);
+      setRemediationError(false);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(sshSupportBundle.ticketText);
+      setRemediationMessage(sshPerformanceCopy.supportTicketCopied);
+      setRemediationError(false);
+    } catch {
+      setRemediationMessage(sshSupportBundle.ticketText);
       setRemediationError(false);
     }
   }
@@ -1065,10 +1083,16 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
               </small>
             ))}
           </div>
-          <button type="button" className="tool-button" onClick={copySshSupportBundle}>
-            <ClipboardCheck size={15} />
-            {sshPerformanceCopy.supportBundleCopy}
-          </button>
+          <div className="security-ssh-support-bundle-actions">
+            <button type="button" className="tool-button" onClick={copySshSupportBundle}>
+              <ClipboardCheck size={15} />
+              {sshPerformanceCopy.supportBundleCopy}
+            </button>
+            <button type="button" className="tool-button" onClick={copySshSupportTicket}>
+              <ClipboardCheck size={15} />
+              {sshPerformanceCopy.supportTicketCopy}
+            </button>
+          </div>
         </section>
         <section className={`security-ssh-experience-summary ${sshPerformance.tone}`} data-ssh-experience-summary="true" aria-label={sshPerformance.experience.title}>
           <div className="security-ssh-experience-lead">
@@ -2716,6 +2740,30 @@ function buildSshSupportBundle({
     '',
     copy.supportBundleSanitizedNote,
   ].join('\n');
+  const ticketText = [
+    `# ${copy.supportTicketTitle}`,
+    `${copy.supportBundleGenerated}: ${generatedAt}`,
+    `${copy.summaryStatus}: ${sshPerformance.status}`,
+    `${copy.supportTicketPriority}: ${copy.supportTicketPriorityValue(tone)}`,
+    '',
+    `[${copy.supportTicketUserImpact}]`,
+    `- ${copy.supportTicketImpactPlaceholder}`,
+    '',
+    `[${copy.supportTicketEvidence}]`,
+    ...sections.map((section) => `- ${section.title}: ${section.detail}`),
+    '',
+    `[${copy.supportTicketNextSteps}]`,
+    `1. ${sshPerformance.nextAction}`,
+    `2. ${sshFlightRecorder.diagnosis.action}`,
+    `3. ${sshBottleneckTrend.action}`,
+    '',
+    `[${copy.supportTicketNeedFromUser}]`,
+    `- ${copy.supportTicketNeedTime}`,
+    `- ${copy.supportTicketNeedAction}`,
+    `- ${copy.supportTicketNeedNetwork}`,
+    '',
+    copy.supportTicketSanitizedNote,
+  ].join('\n');
 
   return {
     tone,
@@ -2725,6 +2773,7 @@ function buildSshSupportBundle({
     sectionsLabel: copy.supportBundleSections,
     sections,
     copyText,
+    ticketText,
   };
 }
 
@@ -3759,6 +3808,20 @@ interface SshPerformanceCopy {
   supportBundleDescription: string;
   supportBundleCopy: string;
   supportBundleCopied: string;
+  supportTicketCopy: string;
+  supportTicketCopied: string;
+  supportTicketTitle: string;
+  supportTicketPriority: string;
+  supportTicketPriorityValue: (tone: 'ok' | 'warn' | 'fail') => string;
+  supportTicketUserImpact: string;
+  supportTicketImpactPlaceholder: string;
+  supportTicketEvidence: string;
+  supportTicketNextSteps: string;
+  supportTicketNeedFromUser: string;
+  supportTicketNeedTime: string;
+  supportTicketNeedAction: string;
+  supportTicketNeedNetwork: string;
+  supportTicketSanitizedNote: string;
   supportBundleGenerated: string;
   supportBundleSections: string;
   supportBundleRecommendedAction: string;
@@ -3989,6 +4052,20 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     supportBundleDescription: '把性能摘要、诊断报告、飞行记录、真实采样和瓶颈趋势合并为一份可转发证据。',
     supportBundleCopy: '复制支持包',
     supportBundleCopied: 'SSH 脱敏支持包已复制',
+    supportTicketCopy: '复制工单模板',
+    supportTicketCopied: 'SSH 工单模板已复制',
+    supportTicketTitle: 'SSH 卡顿工单模板',
+    supportTicketPriority: '优先级',
+    supportTicketPriorityValue: (tone) => tone === 'fail' ? 'P1 / 立即处理' : tone === 'warn' ? 'P2 / 继续定位' : 'P3 / 基线观察',
+    supportTicketUserImpact: '用户影响',
+    supportTicketImpactPlaceholder: '请补充用户看到的现象，例如输入延迟、输出卡住、连接中断或页面卡死。',
+    supportTicketEvidence: '已收集证据',
+    supportTicketNextSteps: '建议处理步骤',
+    supportTicketNeedFromUser: '还需要用户补充',
+    supportTicketNeedTime: '发生时间和持续时长。',
+    supportTicketNeedAction: '触发卡顿前执行的操作或命令类型，不需要填写敏感命令正文。',
+    supportTicketNeedNetwork: '用户网络环境，例如办公网、移动热点、跨境线路或代理。',
+    supportTicketSanitizedNote: '此工单模板只包含脱敏证据和待补充项，不包含服务器地址、命令正文、密钥、API Key 或用户数据。',
     supportBundleGenerated: '生成时间',
     supportBundleSections: '支持包内容',
     supportBundleRecommendedAction: '建议动作',
@@ -4217,6 +4294,20 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     supportBundleDescription: 'Combines performance, lag diagnosis, flight records, real interaction sampling, and bottleneck trends into one shareable evidence pack.',
     supportBundleCopy: 'Copy support bundle',
     supportBundleCopied: 'SSH sanitized support bundle copied',
+    supportTicketCopy: 'Copy ticket template',
+    supportTicketCopied: 'SSH ticket template copied',
+    supportTicketTitle: 'SSH lag ticket template',
+    supportTicketPriority: 'Priority',
+    supportTicketPriorityValue: (tone) => tone === 'fail' ? 'P1 / handle now' : tone === 'warn' ? 'P2 / keep triaging' : 'P3 / baseline watch',
+    supportTicketUserImpact: 'User impact',
+    supportTicketImpactPlaceholder: 'Add what the user saw, such as input delay, stalled output, disconnects, or a frozen page.',
+    supportTicketEvidence: 'Collected evidence',
+    supportTicketNextSteps: 'Suggested next steps',
+    supportTicketNeedFromUser: 'Need from user',
+    supportTicketNeedTime: 'Approximate time and duration.',
+    supportTicketNeedAction: 'Action or command type before lag; do not include sensitive command text.',
+    supportTicketNeedNetwork: 'Network context, such as office Wi-Fi, mobile hotspot, cross-region route, or proxy.',
+    supportTicketSanitizedNote: 'This ticket template only includes sanitized evidence and requested context. It excludes server addresses, command text, keys, API keys, and user data.',
     supportBundleGenerated: 'Generated at',
     supportBundleSections: 'Bundle contents',
     supportBundleRecommendedAction: 'Recommended action',
@@ -4445,6 +4536,20 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     supportBundleDescription: '性能サマリー、遅延診断、フライト記録、実操作サンプル、ボトルネック傾向を 1 つの共有用証跡にまとめます。',
     supportBundleCopy: 'サポートパックをコピー',
     supportBundleCopied: 'SSH 匿名化サポートパックをコピーしました',
+    supportTicketCopy: 'チケットテンプレートをコピー',
+    supportTicketCopied: 'SSH チケットテンプレートをコピーしました',
+    supportTicketTitle: 'SSH 遅延チケットテンプレート',
+    supportTicketPriority: '優先度',
+    supportTicketPriorityValue: (tone) => tone === 'fail' ? 'P1 / すぐ対応' : tone === 'warn' ? 'P2 / 調査継続' : 'P3 / 基準観察',
+    supportTicketUserImpact: 'ユーザー影響',
+    supportTicketImpactPlaceholder: '入力遅延、出力停止、切断、ページ停止など、ユーザーが見た現象を追記してください。',
+    supportTicketEvidence: '収集済み証跡',
+    supportTicketNextSteps: '推奨手順',
+    supportTicketNeedFromUser: 'ユーザーから必要な情報',
+    supportTicketNeedTime: '発生時刻と継続時間。',
+    supportTicketNeedAction: '遅延前の操作またはコマンド種別。機密コマンド本文は不要です。',
+    supportTicketNeedNetwork: '社内 Wi-Fi、モバイル回線、リージョン跨ぎ、プロキシなどのネットワーク状況。',
+    supportTicketSanitizedNote: 'このチケットテンプレートには匿名化された証跡と確認項目のみが含まれ、サーバーアドレス、コマンド本文、キー、API Key、ユーザーデータは含みません。',
     supportBundleGenerated: '生成日時',
     supportBundleSections: 'パック内容',
     supportBundleRecommendedAction: '推奨アクション',

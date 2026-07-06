@@ -4003,15 +4003,22 @@ function assertSqlitePersistenceGuards() {
     'SshSupportBundleSummary',
     'buildSshSupportBundle',
     'copySshSupportBundle',
+    'copySshSupportTicket',
     'data-ssh-support-bundle="true"',
     'supportBundleTitle',
     'supportBundleCopy',
+    'supportTicketCopy',
+    'supportTicketSanitizedNote',
     'supportBundleSanitizedNote',
     'SSH sanitized support bundle',
+    'SSH lag ticket template',
     '__colipasCopiedSshSupportBundleText',
+    '__colipasCopiedSshSupportTicketText',
     '.security-ssh-support-bundle',
+    '.security-ssh-support-bundle-actions',
     '.security-ssh-support-bundle-sections',
     'SSH support bundle copy output leaked a raw IP address or secret',
+    'SSH support ticket copy output leaked a raw IP address or secret',
   ];
   const missingSshSupportBundleFragments = sshSupportBundleFragments.filter((fragment) => !sshBottleneckTrendSource.includes(fragment));
   if (missingSshSupportBundleFragments.length) {

@@ -195,11 +195,14 @@ async function assertReleaseEvidenceBrief(targetPage) {
     window.__colipasCopiedSshSamplerText = '';
     window.__colipasCopiedSshBottleneckTrendText = '';
     window.__colipasCopiedSshSupportBundleText = '';
+    window.__colipasCopiedSshSupportTicketText = '';
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: {
         writeText: async (text) => {
-          if (/SSH sanitized support bundle/i.test(text)) {
+          if (/SSH lag ticket template/i.test(text)) {
+            window.__colipasCopiedSshSupportTicketText = text;
+          } else if (/SSH sanitized support bundle/i.test(text)) {
             window.__colipasCopiedSshSupportBundleText = text;
           } else if (/SSH lag diagnosis report/i.test(text)) {
             window.__colipasCopiedSshLagReportText = text;
@@ -228,6 +231,14 @@ async function assertReleaseEvidenceBrief(targetPage) {
   }
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshSupportBundleText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshSupportBundleText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(copiedSshSupportBundleText)) {
     throw new Error('SSH support bundle copy output leaked a raw IP address or secret');
+  }
+  await targetPage.getByRole('button', { name: /copy ticket template/i }).click();
+  const copiedSshSupportTicketText = await targetPage.evaluate(() => window.__colipasCopiedSshSupportTicketText ?? '');
+  if (!/SSH lag ticket template/i.test(copiedSshSupportTicketText) || !/Priority/i.test(copiedSshSupportTicketText) || !/User impact/i.test(copiedSshSupportTicketText) || !/Collected evidence/i.test(copiedSshSupportTicketText) || !/Need from user/i.test(copiedSshSupportTicketText) || !/This ticket template only includes sanitized evidence/i.test(copiedSshSupportTicketText)) {
+    throw new Error(`SSH support ticket copy output is incomplete: ${copiedSshSupportTicketText}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshSupportTicketText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshSupportTicketText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(copiedSshSupportTicketText)) {
+    throw new Error('SSH support ticket copy output leaked a raw IP address or secret');
   }
   await targetPage.getByRole('button', { name: /copy diagnosis report/i }).click();
   const copiedSshLagReportText = await targetPage.evaluate(() => window.__colipasCopiedSshLagReportText ?? '');
