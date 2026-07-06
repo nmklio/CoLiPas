@@ -5370,7 +5370,7 @@ function assertSshTerminalRealtimeGuards() {
   if (missingToolLabels.length) {
     throw new Error(`SSH terminal tool i18n or UI wiring is incomplete: ${missingToolLabels.join(', ')}`);
   }
-  const closeSshConsoleMatch = inventorySource.match(/function closeSshConsole\(\)\s*\{(?<body>[\s\S]+?)\n  \}\n\n  async function startTerminalLogin/);
+  const closeSshConsoleMatch = inventorySource.match(/function closeSshConsole\(\)\s*\{(?<body>[\s\S]+?)\r?\n  \}\r?\n\r?\n  async function startTerminalLogin/);
   if (!closeSshConsoleMatch?.groups?.body?.includes('setSshConsoleOpen(false)')) {
     throw new Error('SSH terminal close handler must hide the modal');
   }
@@ -5535,8 +5535,10 @@ function assertSshConnectionDoctorGuards() {
     'runServerDiagnostic(server.id)',
     'SshConnectionDoctorReport',
     'SshConnectionDoctorHistoryEntry',
+    'SshTroubleshootingReport',
     'function runSshConnectionDoctor(server: ServerNode)',
     'function buildSshConnectionDoctorReport(',
+    'function buildSshTroubleshootingReport(',
     'function rememberSshDoctorReport(',
     'function buildSshDoctorTrend(',
     'function readSshDoctorHistory()',
@@ -5549,11 +5551,16 @@ function assertSshConnectionDoctorGuards() {
     'data-ssh-connection-doctor-step={step.id}',
     'data-ssh-connection-doctor-trend="true"',
     'data-ssh-connection-doctor-trend-lane={lane.id}',
+    'data-ssh-troubleshooting-report="true"',
+    'data-ssh-troubleshooting-report-copy="true"',
+    'data-ssh-troubleshooting-report-item={item.id}',
     'copySshDoctorSummary',
+    'copySshTroubleshootingReport',
     "openSshConsole(sshDoctorServer)",
     'stepTones: Record<SshConnectionDoctorStepId',
     "replace(/\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b/g, '[redacted-host]')",
     "replace(/\\bsk-[A-Za-z0-9_-]{12,}\\b/g, '[redacted-api-key]')",
+    "replace(/\\b(?:password|passphrase|api[_-]?key|token|secret)\\s*[:=]\\s*\\S+/gi",
     "sshAccess.authType === 'password' ? t('servers.passwordAuth') : t('servers.keyAuth')",
     "getTerminalBottleneckAdvisor(terminalTelemetry, terminalNetworkStats, terminalTransport, true, t)",
   ];
@@ -5581,6 +5588,12 @@ function assertSshConnectionDoctorGuards() {
     'servers.sshDoctorTrendLaneCompare',
     'servers.sshDoctorToneGood',
     'servers.sshDoctorToneSlow',
+    'servers.sshTroubleshootingReportTitle',
+    'servers.sshTroubleshootingReportCopy',
+    'servers.sshTroubleshootingReportCopied',
+    'servers.sshTroubleshootingReportIncludes',
+    'servers.sshTroubleshootingReportSafeNote',
+    'servers.sshTroubleshootingReportRecommendedAction',
   ];
   const missingI18n = requiredI18nKeys.filter((key) => (i18nSource.match(new RegExp(key.replaceAll('.', '\\.'), 'g')) ?? []).length < 3);
   if (missingI18n.length) {
@@ -5594,6 +5607,8 @@ function assertSshConnectionDoctorGuards() {
     '.ssh-connection-doctor-steps',
     '.ssh-connection-doctor-trend',
     '.ssh-connection-doctor-trend-lanes',
+    '.ssh-troubleshooting-report',
+    '.ssh-troubleshooting-report-items',
     '.ssh-connection-doctor-steps article.good',
     '.ssh-connection-doctor-steps article.warn',
     '.ssh-connection-doctor-steps article.slow',

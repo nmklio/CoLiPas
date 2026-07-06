@@ -1,7 +1,7 @@
 import { FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import type { Terminal as XTerm, IDisposable } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
-import { ChevronUp, Copy, Cpu, Database, Edit3, Eraser, FileKey2, Globe2, KeyRound, Plus, Power, PowerOff, RotateCcw, Search, Server, ShieldCheck, Terminal, Trash2, X } from 'lucide-react';
+import { ChevronUp, Copy, Cpu, Database, Edit3, Eraser, FileKey2, FileText, Globe2, KeyRound, Plus, Power, PowerOff, RotateCcw, Search, Server, ShieldCheck, Terminal, Trash2, X } from 'lucide-react';
 import { Language, useI18n } from '../../i18n';
 import {
   closeServerShell,
@@ -198,6 +198,23 @@ interface SshConnectionDoctorTrend {
   lanes: SshConnectionDoctorTrendLane[];
 }
 
+interface SshTroubleshootingReportItem {
+  id: 'doctor' | 'trend' | 'channel' | 'telemetry' | 'action';
+  label: string;
+  value: string;
+  detail: string;
+  tone: TerminalNetworkQuality['tone'];
+}
+
+interface SshTroubleshootingReport {
+  generatedAt: string;
+  tone: TerminalNetworkQuality['tone'];
+  title: string;
+  detail: string;
+  items: SshTroubleshootingReportItem[];
+  text: string;
+}
+
 type TerminalBottleneckSnapshotReason = 'close' | 'remote-close' | 'disconnect';
 
 interface TerminalBottleneckSnapshot {
@@ -361,6 +378,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const activeSshServer = useMemo(() => allServersById.get(sshPanelServerId) ?? null, [allServersById, sshPanelServerId]);
   const sshDoctorServer = useMemo(() => (sshDoctorReport ? allServersById.get(sshDoctorReport.serverId) ?? null : null), [allServersById, sshDoctorReport]);
   const sshDoctorTrend = useMemo(() => (sshDoctorReport ? buildSshDoctorTrend(sshDoctorReport, sshDoctorHistory, t) : null), [sshDoctorReport, sshDoctorHistory, t]);
+  const sshDoctorTerminalActive = Boolean(sshDoctorReport && terminalShellId && terminalShellServerIdRef.current === sshDoctorReport.serverId);
   const terminalNetworkLabel = terminalNetworkStats
     ? `${formatTerminalRtt(terminalNetworkStats.rttMs)} / ${formatBytesPerSecond(terminalNetworkStats.throughputBytesPerSecond)}`
     : '';
@@ -375,6 +393,19 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   );
   const terminalTelemetryInsight = getTerminalTelemetryInsight(terminalTelemetry, terminalNetworkStats, terminalTransport, Boolean(terminalShellId), t);
   const terminalBottleneckAdvisor = getTerminalBottleneckAdvisor(terminalTelemetry, terminalNetworkStats, terminalTransport, Boolean(terminalShellId), t);
+  const sshTroubleshootingReport = useMemo(() => (sshDoctorReport
+    ? buildSshTroubleshootingReport({
+        report: sshDoctorReport,
+        trend: sshDoctorTrend,
+        terminalActive: sshDoctorTerminalActive,
+        terminalTelemetry: sshDoctorTerminalActive ? terminalTelemetry : emptyTerminalTelemetry,
+        terminalNetworkStats: sshDoctorTerminalActive ? terminalNetworkStats : null,
+        terminalTransport: sshDoctorTerminalActive ? terminalTransport : null,
+        terminalSelfTest: sshDoctorTerminalActive ? terminalSelfTest : null,
+        terminalBottleneckAdvisor: sshDoctorTerminalActive ? terminalBottleneckAdvisor : null,
+        t,
+      })
+    : null), [sshDoctorReport, sshDoctorTrend, sshDoctorTerminalActive, terminalTelemetry, terminalNetworkStats, terminalTransport, terminalSelfTest, terminalBottleneckAdvisor, t]);
   const terminalSelfTestRunning = terminalSelfTest?.status === 'running';
   const terminalSelfTestLabel = terminalSelfTest ? formatTerminalSelfTestLabel(terminalSelfTest, language) : '';
   const visibleSummary = useMemo(() => {
@@ -917,6 +948,10 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                 <Copy size={14} />
                 {t('servers.sshDoctorCopy')}
               </button>
+              <button type="button" data-ssh-troubleshooting-report-copy="true" onClick={copySshTroubleshootingReport} disabled={!sshTroubleshootingReport}>
+                <FileText size={14} />
+                {t('servers.sshTroubleshootingReportCopy')}
+              </button>
               <button type="button" disabled={!sshDoctorServer?.ssh?.connected} onClick={() => sshDoctorServer && openSshConsole(sshDoctorServer)}>
                 <Terminal size={14} />
                 {t('servers.sshDoctorOpenTerminal')}
@@ -948,6 +983,24 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     <span>{lane.label}</span>
                     <strong>{lane.value}</strong>
                     <small>{lane.detail}</small>
+                  </article>
+                ))}
+              </div>
+            </div>
+          )}
+          {sshTroubleshootingReport && (
+            <div className={`ssh-troubleshooting-report ${sshTroubleshootingReport.tone}`} data-ssh-troubleshooting-report="true">
+              <div className="ssh-troubleshooting-report-summary">
+                <span>{t('servers.sshTroubleshootingReportGenerated', { time: sshTroubleshootingReport.generatedAt })}</span>
+                <strong>{sshTroubleshootingReport.title}</strong>
+                <small>{sshTroubleshootingReport.detail}</small>
+              </div>
+              <div className="ssh-troubleshooting-report-items">
+                {sshTroubleshootingReport.items.map((item) => (
+                  <article key={item.id} className={item.tone} data-ssh-troubleshooting-report-item={item.id}>
+                    <span>{item.label}</span>
+                    <strong>{item.value}</strong>
+                    <small>{item.detail}</small>
                   </article>
                 ))}
               </div>
@@ -2379,6 +2432,19 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     }
   }
 
+  async function copySshTroubleshootingReport() {
+    if (!sshTroubleshootingReport) {
+      return;
+    }
+
+    try {
+      await writeClipboardText(sshTroubleshootingReport.text);
+      showActionMessage(t('servers.sshTroubleshootingReportCopied'));
+    } catch {
+      showActionMessage(t('servers.terminalCopyFailed'));
+    }
+  }
+
   function clearTerminalOutput() {
     const terminal = xtermRef.current;
     if (!terminal) {
@@ -3602,6 +3668,128 @@ function buildSshDoctorTrend(
   };
 }
 
+function buildSshTroubleshootingReport({
+  report,
+  trend,
+  terminalActive,
+  terminalTelemetry,
+  terminalNetworkStats,
+  terminalTransport,
+  terminalSelfTest,
+  terminalBottleneckAdvisor,
+  t,
+}: {
+  report: SshConnectionDoctorReport;
+  trend: SshConnectionDoctorTrend | null;
+  terminalActive: boolean;
+  terminalTelemetry: TerminalTelemetryState;
+  terminalNetworkStats: TerminalNetworkStats | null;
+  terminalTransport: 'websocket' | 'compatible' | null;
+  terminalSelfTest: TerminalSelfTestState | null;
+  terminalBottleneckAdvisor: TerminalBottleneckAdvisor | null;
+  t: (key: string, vars?: Record<string, string | number>) => string;
+}): SshTroubleshootingReport {
+  const generatedAt = new Date().toISOString();
+  const telemetryInsight = getTerminalTelemetryInsight(terminalTelemetry, terminalNetworkStats, terminalTransport, terminalActive, t);
+  const channelValue = getTerminalTransportLabel(terminalTransport, t);
+  const networkValue = terminalNetworkStats
+    ? `${formatTerminalRtt(terminalNetworkStats.rttMs)} / ${formatBytesPerSecond(terminalNetworkStats.throughputBytesPerSecond)}`
+    : t('servers.sshTroubleshootingReportNoLiveTerminal');
+  const selfTestValue = terminalSelfTest
+    ? `${terminalSelfTest.status} / ${terminalSelfTest.lines} ${t('servers.sshTroubleshootingReportLines')} / ${Math.round(terminalSelfTest.durationMs)}ms`
+    : t('servers.sshTroubleshootingReportNoSelfTest');
+  const primaryStep = report.steps.find((step) => step.id === getSshDoctorPrimaryStep(report.steps)) ?? report.steps[0];
+  const actionValue = terminalBottleneckAdvisor?.primaryLabel ?? primaryStep?.label ?? t('servers.sshTroubleshootingReportRecommendedAction');
+  const actionDetail = terminalBottleneckAdvisor?.action ?? primaryStep?.detail ?? report.detail;
+
+  const rawItems: SshTroubleshootingReportItem[] = [
+    {
+      id: 'doctor',
+      label: t('servers.sshTroubleshootingReportDoctorLabel'),
+      value: formatSshDoctorTone(report.tone, t),
+      detail: report.detail,
+      tone: report.tone,
+    },
+    {
+      id: 'trend',
+      label: t('servers.sshTroubleshootingReportTrendLabel'),
+      value: trend?.title ?? t('servers.sshDoctorTrendNewTitle'),
+      detail: trend?.detail ?? t('servers.sshDoctorTrendNewDetail', { samples: 1, primary: primaryStep?.label ?? t('servers.sshDoctorStepTerminal') }),
+      tone: trend?.tone ?? report.tone,
+    },
+    {
+      id: 'channel',
+      label: t('servers.sshTroubleshootingReportChannelLabel'),
+      value: channelValue,
+      detail: `${networkValue} / ${selfTestValue}`,
+      tone: terminalActive ? (terminalNetworkStats ? getTerminalNetworkQuality(terminalNetworkStats, t).tone : 'pending') : 'pending',
+    },
+    {
+      id: 'telemetry',
+      label: t('servers.sshTroubleshootingReportTelemetryLabel'),
+      value: telemetryInsight.title,
+      detail: telemetryInsight.cards.map((card) => `${card.label}: ${card.value}`).join(' / '),
+      tone: telemetryInsight.tone,
+    },
+    {
+      id: 'action',
+      label: t('servers.sshTroubleshootingReportActionLabel'),
+      value: actionValue,
+      detail: actionDetail,
+      tone: terminalBottleneckAdvisor?.tone ?? report.tone,
+    },
+  ];
+  const items: SshTroubleshootingReportItem[] = rawItems.map((item) => ({
+    ...item,
+    value: sanitizeSshDoctorText(item.value),
+    detail: sanitizeSshDoctorText(item.detail),
+  }));
+
+  const text = sanitizeSshDoctorText([
+    `[${t('servers.sshTroubleshootingReportTitle')}]`,
+    `${t('servers.sshTroubleshootingReportGenerated', { time: generatedAt })}`,
+    `${t('servers.sshTroubleshootingReportDoctorLabel')}: ${formatSshDoctorTone(report.tone, t)}`,
+    `${t('servers.sshTroubleshootingReportIncludes')}: ${t('servers.sshTroubleshootingReportIncludesValue')}`,
+    '',
+    `[${t('servers.sshDoctorEyebrow')}]`,
+    ...report.steps.map((step) => `- ${step.label}: ${step.value} - ${step.detail}`),
+    '',
+    `[${t('servers.sshDoctorTrendEyebrow')}]`,
+    `${trend?.title ?? t('servers.sshDoctorTrendNewTitle')} - ${trend?.detail ?? ''}`,
+    '',
+    `[${t('servers.sshTroubleshootingReportChannelLabel')}]`,
+    `- ${channelValue}`,
+    `- ${networkValue}`,
+    `- ${selfTestValue}`,
+    '',
+    `[${t('servers.telemetryTitle')}]`,
+    ...telemetryInsight.cards.map((card) => `- ${card.label}: ${card.value} (${card.detail})`),
+    '',
+    `[${t('servers.sshTroubleshootingReportRecommendedAction')}]`,
+    `${actionValue}: ${actionDetail}`,
+    '',
+    `[${t('servers.sshTroubleshootingReportSafeNote')}]`,
+    t('servers.sshTroubleshootingReportSafeNoteDetail'),
+  ].join('\n'));
+
+  const tone: TerminalNetworkQuality['tone'] = items.some((item) => item.tone === 'slow')
+    ? 'slow'
+    : items.some((item) => item.tone === 'warn')
+      ? 'warn'
+      : items.some((item) => item.tone === 'pending')
+        ? 'pending'
+        : 'good';
+
+  return {
+    generatedAt,
+    tone,
+    title: t('servers.sshTroubleshootingReportTitle'),
+    detail: t('servers.sshTroubleshootingReportDetail'),
+    items,
+    text,
+  };
+}
+
 function readSshDoctorHistory(): SshConnectionDoctorHistoryEntry[] {
   if (typeof window === 'undefined') {
     return [];
@@ -3703,7 +3891,10 @@ function sanitizeSshDoctorText(text: string) {
     .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, '[redacted-host]')
     .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, '[redacted-private-key]')
     .replace(/\bsk-[A-Za-z0-9_-]{12,}\b/g, '[redacted-api-key]')
-    .replace(/\b(?:password|passphrase|api[_-]?key|token|secret)=\S+/gi, (match) => `${match.split('=')[0]}=[redacted]`);
+    .replace(/\b(?:password|passphrase|api[_-]?key|token|secret)\s*[:=]\s*\S+/gi, (match) => {
+      const separator = match.includes(':') ? ':' : '=';
+      return `${match.split(separator)[0]}${separator} [redacted]`;
+    });
 }
 
 function ActionButton({ label, icon, disabled, onClick }: { label: string; icon: ReactNode; disabled?: boolean; onClick: () => void }) {

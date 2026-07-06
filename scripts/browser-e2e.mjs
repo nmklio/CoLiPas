@@ -818,6 +818,33 @@ async function assertSshTerminalPanel(targetPage) {
     if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(sshDoctorHistory) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(sshDoctorHistory) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(sshDoctorHistory)) {
       throw new Error('SSH connection doctor history leaked raw IP or secret material');
     }
+    await targetPage.locator('[data-ssh-troubleshooting-report="true"]').waitFor({ timeout: 5000 });
+    const sshTroubleshootingReportText = await targetPage.locator('[data-ssh-troubleshooting-report="true"]').innerText();
+    if (!/SSH troubleshooting report|Terminal channel|Live telemetry|Recommended action/i.test(sshTroubleshootingReportText)) {
+      throw new Error(`SSH troubleshooting report card did not render the handoff summary: ${sshTroubleshootingReportText}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(sshTroubleshootingReportText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(sshTroubleshootingReportText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(sshTroubleshootingReportText)) {
+      throw new Error('SSH troubleshooting report card rendered raw IP or secret material');
+    }
+    await targetPage.evaluate(() => {
+      window.__colipasCopiedSshTroubleshootingReport = '';
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: async (text) => {
+            window.__colipasCopiedSshTroubleshootingReport = text;
+          },
+        },
+      });
+    });
+    await targetPage.locator('[data-ssh-troubleshooting-report-copy="true"]').click();
+    const copiedSshTroubleshootingReport = await targetPage.evaluate(() => window.__colipasCopiedSshTroubleshootingReport ?? '');
+    if (!/SSH troubleshooting report|Generated|Recommended action|SSH connection doctor|History trend/i.test(copiedSshTroubleshootingReport)) {
+      throw new Error(`SSH troubleshooting report copy output is incomplete: ${copiedSshTroubleshootingReport}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshTroubleshootingReport) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshTroubleshootingReport) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY|test-browser-e2e-value|password=|passphrase=|simulated\$ whoami/i.test(copiedSshTroubleshootingReport)) {
+      throw new Error('SSH troubleshooting report copy output leaked raw host, secret, or command text');
+    }
     await captureVisualEvidence(targetPage, 'desktop-ssh-connection-doctor', ['[data-ssh-connection-doctor="true"]']);
     await targetPage.getByRole('button', { name: /open ssh terminal/i }).click();
     await targetPage.locator('.ssh-console').waitFor({ timeout: 10000 });
