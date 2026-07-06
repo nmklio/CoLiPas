@@ -139,12 +139,19 @@ interface SshPerformanceMetric {
   tone: 'ok' | 'warn' | 'fail';
 }
 
+interface SshPerformanceGroup {
+  id: 'track' | 'latency' | 'audit';
+  title: string;
+  metrics: SshPerformanceMetric[];
+}
+
 interface SshPerformanceSummary {
   tone: 'ok' | 'warn' | 'fail';
   status: string;
   nextAction: string;
   copyText: string;
   metrics: SshPerformanceMetric[];
+  groups: SshPerformanceGroup[];
 }
 
 type SshSelfTestBottleneck = NonNullable<DiagnosticExportResponse['sshTerminal']['lastSelfTest']>['bottleneck'];
@@ -697,13 +704,23 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
             </button>
           </div>
         </div>
-        <div className="security-ssh-performance-grid">
-          {sshPerformance.metrics.map((metric) => (
-            <div key={metric.label} className={`security-ssh-performance-metric ${metric.tone}`}>
-              <span>{metric.label}</span>
-              <strong>{metric.value}</strong>
-              <small>{metric.detail}</small>
-            </div>
+        <div className="security-ssh-performance-groups">
+          {sshPerformance.groups.map((group) => (
+            <section key={group.id} className={`security-ssh-performance-group ${group.id}`} aria-label={group.title}>
+              <div className="security-ssh-performance-group-title">
+                <span>{group.title}</span>
+                <small>{group.metrics.length}</small>
+              </div>
+              <div className="security-ssh-performance-grid">
+                {group.metrics.map((metric) => (
+                  <div key={metric.label} className={`security-ssh-performance-metric ${metric.tone}`}>
+                    <span>{metric.label}</span>
+                    <strong>{metric.value}</strong>
+                    <small>{metric.detail}</small>
+                  </div>
+                ))}
+              </div>
+            </section>
           ))}
         </div>
         <p className="security-ssh-performance-next">{sshPerformance.nextAction}</p>
@@ -1691,12 +1708,32 @@ function buildSshPerformanceSummary(
       tone: errors > 0 ? 'fail' : 'ok',
     },
   ];
+  const groups: SshPerformanceGroup[] = [
+    {
+      id: 'track',
+      title: copy.groupTrack,
+      metrics: metrics.slice(0, 3),
+    },
+    {
+      id: 'latency',
+      title: copy.groupLatency,
+      metrics: metrics.slice(3, 7),
+    },
+    {
+      id: 'audit',
+      title: copy.groupAudit,
+      metrics: metrics.slice(7),
+    },
+  ];
   const status = tone === 'fail' ? copy.statusFail : tone === 'warn' ? copy.statusWarn : copy.statusOk;
   const nextAction = !hasEvidence ? copy.nextActionNoEvidence : tone === 'fail' ? copy.nextActionFail : tone === 'warn' ? copy.nextActionWarn : copy.nextActionOk;
   const copyText = [
     `# ${copy.title}`,
     `${copy.summaryStatus}: ${status}`,
-    ...metrics.map((metric) => `${metric.label}: ${metric.value} (${metric.detail})`),
+    ...groups.flatMap((group) => [
+      `[${group.title}]`,
+      ...group.metrics.map((metric) => `${metric.label}: ${metric.value} (${metric.detail})`),
+    ]),
     `${copy.summaryNextAction}: ${nextAction}`,
   ].join('\n');
 
@@ -1706,6 +1743,7 @@ function buildSshPerformanceSummary(
     nextAction,
     copyText,
     metrics,
+    groups,
   };
 }
 
@@ -2013,6 +2051,9 @@ interface SshPerformanceCopy {
   likelyBottleneck: string;
   sessionReplay: string;
   websocketErrors: string;
+  groupTrack: string;
+  groupLatency: string;
+  groupAudit: string;
   copySummary: string;
   copyCopied: string;
   summaryStatus: string;
@@ -2056,6 +2097,9 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     likelyBottleneck: '\u7591\u4f3c\u74f6\u9888',
     sessionReplay: '会话回放',
     websocketErrors: '连接错误',
+    groupTrack: '链路追踪',
+    groupLatency: '延迟定位',
+    groupAudit: '审计证据',
     copySummary: '\u590d\u5236\u6458\u8981',
     copyCopied: 'SSH \u6027\u80fd\u6458\u8981\u5df2\u590d\u5236',
     summaryStatus: '\u72b6\u6001',
@@ -2097,6 +2141,9 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     likelyBottleneck: 'Likely bottleneck',
     sessionReplay: 'Session replay',
     websocketErrors: 'Socket errors',
+    groupTrack: 'Track',
+    groupLatency: 'Latency',
+    groupAudit: 'Audit',
     copySummary: 'Copy summary',
     copyCopied: 'SSH performance summary copied',
     summaryStatus: 'Status',
@@ -2138,6 +2185,9 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     likelyBottleneck: '\u63a8\u5b9a\u30dc\u30c8\u30eb\u30cd\u30c3\u30af',
     sessionReplay: 'セッション再生',
     websocketErrors: '接続エラー',
+    groupTrack: '追跡',
+    groupLatency: '遅延',
+    groupAudit: '監査',
     copySummary: '\u30b5\u30de\u30ea\u30fc\u3092\u30b3\u30d4\u30fc',
     copyCopied: 'SSH \u30d1\u30d5\u30a9\u30fc\u30de\u30f3\u30b9\u30b5\u30de\u30ea\u30fc\u3092\u30b3\u30d4\u30fc\u3057\u307e\u3057\u305f',
     summaryStatus: '\u72b6\u614b',
