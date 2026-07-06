@@ -615,13 +615,40 @@ const runbookSecondDeleteResponse = await fetch(`${baseUrl}/api/servers/ssh-runb
 if (!runbookSecondDeleteResponse.ok) {
   throw new Error(`/api/servers/ssh-runbook/:id second delete returned HTTP ${runbookSecondDeleteResponse.status}`);
 }
+const runbookImportResponse = await fetch(`${baseUrl}/api/servers/ssh-runbook/import`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    commands: [
+      { title: `${runbookSmokeTitle} pack system`, command: 'printf colipas-runbook-pack-system' },
+      { title: `${runbookSmokeTitle} pack logs`, command: 'journalctl -p warning -n 5 --no-pager' },
+      { title: `${runbookSmokeTitle} pack system`, command: 'printf colipas-runbook-pack-duplicate' },
+    ],
+  }),
+});
+if (runbookImportResponse.status !== 201) {
+  throw new Error(`/api/servers/ssh-runbook/import expected 201, got ${runbookImportResponse.status}: ${await runbookImportResponse.text()}`);
+}
+const runbookImported = await runbookImportResponse.json();
+if (runbookImported.imported?.length !== 2 || runbookImported.skipped?.length !== 1 || runbookImported.commands?.[0]?.title !== `${runbookSmokeTitle} pack system`) {
+  throw new Error(`/api/servers/ssh-runbook/import returned unexpected payload: ${JSON.stringify(runbookImported)}`);
+}
+for (const importedCommand of runbookImported.imported) {
+  const cleanupResponse = await fetch(`${baseUrl}/api/servers/ssh-runbook/${encodeURIComponent(importedCommand.id)}`, {
+    method: 'DELETE',
+    headers: authHeaders,
+  });
+  if (!cleanupResponse.ok) {
+    throw new Error(`/api/servers/ssh-runbook/:id imported cleanup returned HTTP ${cleanupResponse.status}`);
+  }
+}
 const runbookAuditResponse = await fetch(`${baseUrl}/api/audit/events`, { headers: authHeaders });
 const runbookAuditBody = await runbookAuditResponse.json();
 const runbookAuditText = JSON.stringify(runbookAuditBody.items?.filter((item) => String(item.action).startsWith('SSH_RUNBOOK')) ?? []);
-if (!/SSH_RUNBOOK_CREATE/.test(runbookAuditText) || !/SSH_RUNBOOK_REORDER/.test(runbookAuditText) || /printf colipas-runbook|token=secret-value/.test(runbookAuditText)) {
+if (!/SSH_RUNBOOK_CREATE/.test(runbookAuditText) || !/SSH_RUNBOOK_REORDER/.test(runbookAuditText) || !/SSH_RUNBOOK_IMPORT/.test(runbookAuditText) || /printf colipas-runbook|journalctl -p warning|token=secret-value/.test(runbookAuditText)) {
   throw new Error(`SSH runbook audit events are missing or leaked command bodies: ${runbookAuditText}`);
 }
-console.log('ok /api/servers/ssh-runbook persists custom commands without leaking command bodies to audit');
+console.log('ok /api/servers/ssh-runbook persists, imports, reorders, and audits custom commands without leaking command bodies');
 
 async function readSseUntil(response, predicate, timeoutMs = 2500) {
   if (!response.body) {
@@ -5438,10 +5465,13 @@ function assertSshTerminalRealtimeGuards() {
     'fetchSshRunbookCommands',
     'createSshRunbookCommand',
     'updateSshRunbookCommand',
+    'importSshRunbookCommands',
     'reorderSshRunbookCommands',
     'deleteSshRunbookCommand',
     'sshRunbookCommands',
     'setSshRunbookCommands',
+    'const sshRunbookPacks = [',
+    'const [importingSshRunbookPackId, setImportingSshRunbookPackId]',
     'const [sshRunbookSearch, setSshRunbookSearch]',
     'const [sshRunbookCategory, setSshRunbookCategory]',
     'const visibleSshRunbookCommands = useMemo',
@@ -5451,6 +5481,7 @@ function assertSshTerminalRealtimeGuards() {
     'function saveSshRunbookCommand(',
     'function startEditSshRunbookCommand(',
     'function cancelSshRunbookEdit(',
+    'function importSshRunbookPack(',
     'function moveSshRunbookCommand(',
     'function removeSshRunbookCommand(',
     'data-ssh-runbook-form="true"',
@@ -5458,6 +5489,9 @@ function assertSshTerminalRealtimeGuards() {
     'data-ssh-runbook-search="true"',
     'data-ssh-runbook-category={category}',
     'data-ssh-runbook-clear-filter="true"',
+    'data-ssh-runbook-pack-dock="true"',
+    'data-ssh-runbook-pack={pack.id}',
+    'data-ssh-runbook-pack-import={pack.id}',
     'data-ssh-runbook-command={item.id}',
     'data-ssh-runbook-command-edit={item.id}',
     'data-ssh-runbook-command-run={item.id}',
@@ -5559,6 +5593,9 @@ function assertSshTerminalRealtimeGuards() {
     'servers.quickCommandFilterClear',
     'servers.quickCommandFilterEmptyTitle',
     'servers.quickCommandFilterEmptyDetail',
+    'servers.quickCommandPackTitle',
+    'servers.quickCommandPackImport',
+    'servers.quickCommandPackImported',
     'servers.quickCommandCategory.',
     'servers.quickCommandEdit',
     'servers.quickCommandEditing',
@@ -5599,6 +5636,33 @@ function assertSshTerminalRealtimeGuards() {
     'servers.quickCommandFilterClear',
     'servers.quickCommandFilterEmptyTitle',
     'servers.quickCommandFilterEmptyDetail',
+    'servers.quickCommandPackEyebrow',
+    'servers.quickCommandPackTitle',
+    'servers.quickCommandPackDetail',
+    'servers.quickCommandPackCommandCount',
+    'servers.quickCommandPackImport',
+    'servers.quickCommandPackImported',
+    'servers.quickCommandPackImportFailed',
+    'servers.quickCommandPack.system.title',
+    'servers.quickCommandPack.system.detail',
+    'servers.quickCommandPack.system.load.title',
+    'servers.quickCommandPack.system.processes.title',
+    'servers.quickCommandPack.system.services.title',
+    'servers.quickCommandPack.docker.title',
+    'servers.quickCommandPack.docker.detail',
+    'servers.quickCommandPack.docker.containers.title',
+    'servers.quickCommandPack.docker.disk.title',
+    'servers.quickCommandPack.docker.logs.title',
+    'servers.quickCommandPack.network.title',
+    'servers.quickCommandPack.network.detail',
+    'servers.quickCommandPack.network.addresses.title',
+    'servers.quickCommandPack.network.ports.title',
+    'servers.quickCommandPack.network.dns.title',
+    'servers.quickCommandPack.security.title',
+    'servers.quickCommandPack.security.detail',
+    'servers.quickCommandPack.security.auth.title',
+    'servers.quickCommandPack.security.sessions.title',
+    'servers.quickCommandPack.security.firewall.title',
     'servers.quickCommandCategory.all',
     'servers.quickCommandCategory.system',
     'servers.quickCommandCategory.network',
@@ -5671,6 +5735,8 @@ function assertSshTerminalRealtimeGuards() {
     'SSH_RUNBOOK_COMMAND_SENSITIVE',
     'export function createSshRunbookCommand',
     'export function updateSshRunbookCommand',
+    'export function importSshRunbookCommands',
+    'function normalizeImportCommands',
     'export function reorderSshRunbookCommands',
     'function normalizeCommandIds',
     'export function deleteSshRunbookCommand',
@@ -5690,12 +5756,15 @@ function assertSshTerminalRealtimeGuards() {
     "app.delete('/api/servers/shells/:sessionId'",
     "app.get('/api/servers/ssh-runbook'",
     "app.post('/api/servers/ssh-runbook'",
+    "app.post('/api/servers/ssh-runbook/import'",
     "app.post('/api/servers/ssh-runbook/reorder'",
     "app.patch('/api/servers/ssh-runbook/:commandId'",
     "app.delete('/api/servers/ssh-runbook/:commandId'",
     'createSshRunbookCommand(request.body)',
+    'importSshRunbookCommands(request.body)',
     'reorderSshRunbookCommands(request.body)',
     'SSH_RUNBOOK_CREATE',
+    'SSH_RUNBOOK_IMPORT',
     'SSH_RUNBOOK_REORDER',
     'flushSse(response)',
     'X-Accel-Buffering',
@@ -5715,6 +5784,7 @@ function assertSshTerminalRealtimeGuards() {
     'export async function fetchSshRunbookCommands',
     'export async function createSshRunbookCommand',
     'export async function updateSshRunbookCommand',
+    'export async function importSshRunbookCommands',
     'export async function reorderSshRunbookCommands',
     'export async function deleteSshRunbookCommand',
     'const shellSocketInputFlushMs = 2',
@@ -5796,7 +5866,7 @@ function assertSshTerminalRealtimeGuards() {
   if (!globalCssSource.includes('.ssh-terminal-self-test') || !globalCssSource.includes('.ssh-terminal-self-test.complete')) {
     throw new Error('SSH terminal self-test result chip styles are missing');
   }
-  if (!globalCssSource.includes('.ssh-quick-command-deck') || !globalCssSource.includes('.ssh-runbook-workspace') || !globalCssSource.includes('.ssh-runbook-form') || !globalCssSource.includes('.ssh-runbook-form.editing') || !globalCssSource.includes('.ssh-runbook-lens') || !globalCssSource.includes('.ssh-runbook-categories button.active') || !globalCssSource.includes('.ssh-runbook-clear-filter') || !globalCssSource.includes('.ssh-quick-command-grid') || !globalCssSource.includes('.ssh-quick-command-grid button.sort') || !globalCssSource.includes('grid-template-rows: 38px auto auto auto auto minmax(0, 1fr)')) {
+  if (!globalCssSource.includes('.ssh-quick-command-deck') || !globalCssSource.includes('.ssh-runbook-workspace') || !globalCssSource.includes('.ssh-runbook-form') || !globalCssSource.includes('.ssh-runbook-form.editing') || !globalCssSource.includes('.ssh-runbook-lens') || !globalCssSource.includes('.ssh-runbook-categories button.active') || !globalCssSource.includes('.ssh-runbook-clear-filter') || !globalCssSource.includes('.ssh-runbook-pack-dock') || !globalCssSource.includes('.ssh-runbook-pack-grid') || !globalCssSource.includes('.ssh-quick-command-grid') || !globalCssSource.includes('.ssh-quick-command-grid button.sort') || !globalCssSource.includes('grid-template-rows: 38px auto auto auto minmax(0, 250px) minmax(160px, 1fr)')) {
     throw new Error('SSH terminal quick command deck styles are missing or the terminal grid does not reserve space for it');
   }
 

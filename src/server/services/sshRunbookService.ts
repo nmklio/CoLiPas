@@ -18,6 +18,16 @@ export interface SshRunbookReorderPayload {
   commandIds?: unknown;
 }
 
+export interface SshRunbookImportPayload {
+  commands?: unknown;
+}
+
+export interface SshRunbookImportResult {
+  commands: SshRunbookCommand[];
+  imported: SshRunbookCommand[];
+  skipped: string[];
+}
+
 export function listSshRunbookCommands() {
   return readRunbookCommands();
 }
@@ -71,6 +81,46 @@ export function deleteSshRunbookCommand(commandId: string) {
   return { ok: true, id: commandId };
 }
 
+export function importSshRunbookCommands(payload: SshRunbookImportPayload): SshRunbookImportResult {
+  const inputCommands = normalizeImportCommands(payload?.commands);
+  const commands = readRunbookCommands();
+  const usedTitles = new Set(commands.map((item) => item.title.toLowerCase()));
+  const batchTitles = new Set<string>();
+  const skipped: string[] = [];
+  const candidates: Array<{ title: string; command: string }> = [];
+
+  for (const input of inputCommands) {
+    const titleKey = input.title.toLowerCase();
+    if (usedTitles.has(titleKey) || batchTitles.has(titleKey)) {
+      skipped.push(input.title);
+      continue;
+    }
+    batchTitles.add(titleKey);
+    candidates.push(input);
+  }
+
+  const available = maxCommands - commands.length;
+  if (available <= 0 && candidates.length > 0) {
+    throw new HttpError(400, `SSH runbook command limit reached (${maxCommands})`, 'SSH_RUNBOOK_LIMIT_REACHED');
+  }
+
+  const selected = candidates.slice(0, Math.max(available, 0));
+  skipped.push(...candidates.slice(selected.length).map((item) => item.title));
+  const now = new Date().toISOString();
+  const imported = selected.map((input): SshRunbookCommand => ({
+    id: randomUUID(),
+    title: input.title,
+    command: input.command,
+    createdAt: now,
+    updatedAt: now,
+  }));
+  const next = [...imported, ...commands].slice(0, maxCommands);
+  if (imported.length > 0) {
+    writeRunbookCommands(next);
+  }
+  return { commands: next, imported, skipped };
+}
+
 export function reorderSshRunbookCommands(payload: SshRunbookReorderPayload) {
   const requestedIds = normalizeCommandIds(payload?.commandIds);
   const commands = readRunbookCommands();
@@ -118,6 +168,13 @@ function normalizeCommandIds(value: unknown) {
     throw new HttpError(400, 'Command order must contain unique command ids', 'SSH_RUNBOOK_ORDER_INVALID');
   }
   return commandIds;
+}
+
+function normalizeImportCommands(value: unknown) {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 8) {
+    throw new HttpError(400, 'Runbook import must include 1-8 commands', 'SSH_RUNBOOK_IMPORT_INVALID');
+  }
+  return value.map((item) => normalizePayload(item as SshRunbookCommandPayload));
 }
 
 function ensureUniqueTitle(commands: SshRunbookCommand[], title: string) {

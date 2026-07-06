@@ -180,6 +180,11 @@ export interface SshRunbookResponse {
   commands: SshRunbookCommand[];
 }
 
+export interface SshRunbookImportResponse extends SshRunbookResponse {
+  imported: SshRunbookCommand[];
+  skipped: string[];
+}
+
 export interface ServerShellStreamEvent {
   type: 'start' | 'stdout' | 'stderr' | 'close' | 'error';
   content?: string;
@@ -910,6 +915,23 @@ export async function updateSshRunbookCommand(
   }
 
   return (await response.json()) as SshRunbookCommand;
+}
+
+export async function importSshRunbookCommands(
+  commands: Array<Pick<SshRunbookCommand, 'title' | 'command'>>,
+  fetcher: typeof fetch = fetch,
+) {
+  const response = await fetcher('/api/servers/ssh-runbook/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ commands }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as SshRunbookImportResponse;
 }
 
 export async function reorderSshRunbookCommands(commandIds: string[], fetcher: typeof fetch = fetch) {

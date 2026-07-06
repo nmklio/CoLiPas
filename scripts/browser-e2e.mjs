@@ -1105,6 +1105,28 @@ async function assertSshTerminalPanel(targetPage) {
         await targetPage.evaluate((staleId) => fetch(`/api/servers/ssh-runbook/${encodeURIComponent(staleId)}`, { method: 'DELETE' }).catch(() => undefined), customRunbookId);
       }
     }
+    const importedPackIds = [];
+    try {
+      await targetPage.locator('[data-ssh-runbook-pack-import="system"]').click();
+      await targetPage.locator('.action-message').filter({ hasText: /Imported 3/i }).waitFor({ timeout: 5000 });
+      await targetPage.locator('[data-ssh-runbook-command]').filter({ hasText: 'System load snapshot' }).waitFor({ timeout: 5000 });
+      const packImportState = await targetPage.evaluate(async () => {
+        const response = await fetch('/api/servers/ssh-runbook');
+        const body = await response.json();
+        const imported = Array.isArray(body.commands)
+          ? body.commands.filter((item) => ['System load snapshot', 'Top CPU processes', 'Failed services check'].includes(item.title))
+          : [];
+        return { status: response.status, imported };
+      });
+      if (packImportState.status !== 200 || packImportState.imported.length !== 3) {
+        throw new Error(`SSH runbook pack import did not persist expected commands: ${JSON.stringify(packImportState)}`);
+      }
+      importedPackIds.push(...packImportState.imported.map((item) => item.id));
+    } finally {
+      if (importedPackIds.length) {
+        await targetPage.evaluate((ids) => Promise.all(ids.map((id) => fetch(`/api/servers/ssh-runbook/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => undefined))), importedPackIds);
+      }
+    }
     await targetPage.locator('[data-ssh-quick-command-insert="identity"]').click();
     await targetPage.locator('.action-message').filter({ hasText: /Inserted System and uptime/i }).waitFor({ timeout: 5000 });
     await targetPage.keyboard.press('Enter');

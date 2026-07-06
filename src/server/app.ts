@@ -19,7 +19,7 @@ import { buildDiagnosticExport } from './services/diagnosticService.js';
 import { createOperationTask, preflightOperationTask } from './services/operationsService.js';
 import { buildReleaseReadiness, buildReleaseReadinessReport, recordReleaseReadinessSnapshot } from './services/releaseReadinessService.js';
 import { buildReleaseVerification, isReleaseVerificationAuthorized, isReleaseVerificationEnabled } from './services/releaseVerificationService.js';
-import { createSshRunbookCommand, deleteSshRunbookCommand, listSshRunbookCommands, reorderSshRunbookCommands, updateSshRunbookCommand } from './services/sshRunbookService.js';
+import { createSshRunbookCommand, deleteSshRunbookCommand, importSshRunbookCommands, listSshRunbookCommands, reorderSshRunbookCommands, updateSshRunbookCommand } from './services/sshRunbookService.js';
 import {
   buildServerInventorySnapshot,
   closeServerShell,
@@ -561,6 +561,23 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
         detail: `SSH runbook command saved: ${command.title}`,
       });
       response.status(201).json(command);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post('/api/servers/ssh-runbook/import', (request, response, next) => {
+    try {
+      const session = requireSession(request, config);
+      const result = importSshRunbookCommands(request.body);
+      recordAudit({
+        action: 'SSH_RUNBOOK_IMPORT',
+        actor: session.user.username,
+        target: 'ssh-runbook',
+        status: 'success',
+        detail: `SSH runbook pack imported: ${result.imported.length} added, ${result.skipped.length} skipped`,
+      });
+      response.status(201).json(result);
     } catch (error) {
       next(error);
     }

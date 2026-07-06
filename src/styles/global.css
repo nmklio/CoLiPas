@@ -4892,7 +4892,7 @@ td span,
   box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.03);
   overflow: hidden;
   display: grid;
-  grid-template-rows: 38px auto auto auto auto minmax(0, 1fr);
+  grid-template-rows: 38px auto auto auto minmax(0, 250px) minmax(160px, 1fr);
 }
 
 .ssh-terminal-titlebar {
@@ -5451,8 +5451,9 @@ td span,
 }
 
 .ssh-quick-command-deck {
-  min-height: 136px;
+  min-height: 0;
   padding: 10px 14px 11px;
+  overflow-y: auto;
   border-bottom: 1px solid rgba(126, 161, 166, 0.12);
   background:
     radial-gradient(circle at 7% 20%, rgba(56, 189, 248, 0.12), transparent 28%),
@@ -5466,7 +5467,7 @@ td span,
 .ssh-runbook-workspace {
   min-width: 0;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   gap: 7px;
 }
 
@@ -5617,6 +5618,134 @@ td span,
 .ssh-runbook-clear-filter:hover {
   border-color: rgba(165, 243, 252, 0.48);
   transform: translateY(-1px);
+}
+
+.ssh-runbook-pack-dock {
+  min-width: 0;
+  border: 1px solid rgba(125, 211, 252, 0.12);
+  border-radius: 16px;
+  padding: 7px;
+  background:
+    linear-gradient(135deg, rgba(8, 47, 73, 0.28), rgba(24, 24, 27, 0.16)),
+    rgba(2, 6, 23, 0.34);
+  display: grid;
+  grid-template-columns: minmax(118px, 0.28fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.ssh-runbook-pack-heading {
+  min-width: 0;
+  border-right: 1px solid rgba(125, 211, 252, 0.12);
+  padding: 2px 8px 2px 2px;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+}
+
+.ssh-runbook-pack-heading span {
+  color: #67e8f9;
+  font-size: 9px;
+  font-weight: 950;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.ssh-runbook-pack-heading strong {
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.ssh-runbook-pack-heading small {
+  color: #9fb7bd;
+  font-size: 10px;
+  font-weight: 720;
+  line-height: 1.32;
+}
+
+.ssh-runbook-pack-grid {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.ssh-runbook-pack-grid article {
+  min-width: 0;
+  border: 1px solid rgba(125, 211, 252, 0.14);
+  border-radius: 13px;
+  padding: 7px;
+  background: rgba(255, 255, 255, 0.04);
+  display: grid;
+  gap: 4px;
+}
+
+.ssh-runbook-pack-grid article.accent-cyan {
+  border-color: rgba(34, 211, 238, 0.24);
+  background: linear-gradient(135deg, rgba(8, 145, 178, 0.16), rgba(15, 23, 42, 0.16));
+}
+
+.ssh-runbook-pack-grid article.accent-violet {
+  border-color: rgba(168, 85, 247, 0.25);
+  background: linear-gradient(135deg, rgba(88, 28, 135, 0.18), rgba(15, 23, 42, 0.14));
+}
+
+.ssh-runbook-pack-grid article.accent-blue {
+  border-color: rgba(96, 165, 250, 0.25);
+  background: linear-gradient(135deg, rgba(30, 64, 175, 0.18), rgba(15, 23, 42, 0.14));
+}
+
+.ssh-runbook-pack-grid article.accent-amber {
+  border-color: rgba(251, 191, 36, 0.25);
+  background: linear-gradient(135deg, rgba(146, 64, 14, 0.18), rgba(15, 23, 42, 0.14));
+}
+
+.ssh-runbook-pack-grid article > span {
+  color: #a5f3fc;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ssh-runbook-pack-grid article > strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #f8fafc;
+  font-size: 11px;
+  font-weight: 940;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ssh-runbook-pack-grid article > small {
+  min-height: 26px;
+  color: #b6cdd3;
+  font-size: 9px;
+  font-weight: 720;
+  line-height: 1.32;
+}
+
+.ssh-runbook-pack-grid button {
+  min-height: 24px;
+  border: 1px solid rgba(94, 234, 212, 0.3);
+  border-radius: 999px;
+  color: #ecfeff;
+  background: rgba(14, 116, 144, 0.28);
+  font-size: 10px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.ssh-runbook-pack-grid button:hover:not(:disabled) {
+  border-color: rgba(165, 243, 252, 0.58);
+  background: rgba(8, 145, 178, 0.38);
+  transform: translateY(-1px);
+}
+
+.ssh-runbook-pack-grid button:disabled {
+  opacity: 0.55;
+  cursor: wait;
 }
 
 .ssh-quick-command-heading {
@@ -13607,6 +13736,20 @@ pre {
 
   .ssh-runbook-clear-filter {
     justify-content: center;
+  }
+
+  .ssh-runbook-pack-dock {
+    grid-template-columns: 1fr;
+  }
+
+  .ssh-runbook-pack-heading {
+    border-right: 0;
+    border-bottom: 1px solid rgba(125, 211, 252, 0.12);
+    padding: 0 0 6px;
+  }
+
+  .ssh-runbook-pack-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .ssh-quick-command-grid {

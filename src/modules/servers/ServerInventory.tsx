@@ -14,6 +14,7 @@ import {
   executeServerAction,
   fetchServerShellStatus,
   fetchSshRunbookCommands,
+  importSshRunbookCommands,
   inspectServerIdentity,
   openServerShell,
   recordServerShellSelfTest,
@@ -80,6 +81,44 @@ const sshQuickCommands = [
 ] as const;
 const sshRunbookCategories = ['all', 'system', 'network', 'storage', 'logs', 'other'] as const;
 type SshRunbookCategory = (typeof sshRunbookCategories)[number];
+const sshRunbookPacks = [
+  {
+    id: 'system',
+    accent: 'cyan',
+    commands: [
+      { id: 'load', command: 'uname -a && uptime && free -h' },
+      { id: 'processes', command: 'ps -eo pid,ppid,stat,pcpu,pmem,comm --sort=-pcpu | head -12' },
+      { id: 'services', command: 'systemctl --failed --no-pager' },
+    ],
+  },
+  {
+    id: 'docker',
+    accent: 'violet',
+    commands: [
+      { id: 'containers', command: 'docker ps --format "table {{.Names}}\\t{{.Status}}\\t{{.Ports}}"' },
+      { id: 'disk', command: 'docker system df' },
+      { id: 'logs', command: 'docker ps --format "{{.Names}}" | head -5 | xargs -r -I{} sh -c \'echo === {}; docker logs --tail=40 {}\'' },
+    ],
+  },
+  {
+    id: 'network',
+    accent: 'blue',
+    commands: [
+      { id: 'addresses', command: 'ip -br addr && ip route' },
+      { id: 'ports', command: 'ss -tulpen' },
+      { id: 'dns', command: 'getent hosts github.com || nslookup github.com' },
+    ],
+  },
+  {
+    id: 'security',
+    accent: 'amber',
+    commands: [
+      { id: 'auth', command: 'journalctl -u ssh -u sshd -p warning -n 80 --no-pager' },
+      { id: 'sessions', command: 'who && last -n 10' },
+      { id: 'firewall', command: 'command -v ufw >/dev/null && ufw status || command -v firewall-cmd >/dev/null && firewall-cmd --state || iptables -S | head -40' },
+    ],
+  },
+] as const;
 
 const actionCommands: Record<'powerOn' | 'shutdown' | 'reboot', string> = {
   powerOn: 'printf "server reachable via SSH\\n"; uptime',
@@ -387,6 +426,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const [sshRunbookSaving, setSshRunbookSaving] = useState(false);
   const [deletingSshRunbookId, setDeletingSshRunbookId] = useState('');
   const [movingSshRunbookId, setMovingSshRunbookId] = useState('');
+  const [importingSshRunbookPackId, setImportingSshRunbookPackId] = useState('');
   const [diagnosingServerId, setDiagnosingServerId] = useState('');
   const [sshDoctorReport, setSshDoctorReport] = useState<SshConnectionDoctorReport | null>(null);
   const [sshDoctorHistory, setSshDoctorHistory] = useState<SshConnectionDoctorHistoryEntry[]>(() => readSshDoctorHistory());
@@ -1553,6 +1593,30 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                           {t('servers.quickCommandFilterClear')}
                         </button>
                       )}
+                    </div>
+                    <div className="ssh-runbook-pack-dock" data-ssh-runbook-pack-dock="true" aria-label={t('servers.quickCommandPackTitle')}>
+                      <div className="ssh-runbook-pack-heading">
+                        <span>{t('servers.quickCommandPackEyebrow')}</span>
+                        <strong>{t('servers.quickCommandPackTitle')}</strong>
+                        <small>{t('servers.quickCommandPackDetail')}</small>
+                      </div>
+                      <div className="ssh-runbook-pack-grid">
+                        {sshRunbookPacks.map((pack) => (
+                          <article key={pack.id} className={`accent-${pack.accent}`} data-ssh-runbook-pack={pack.id}>
+                            <span>{pack.commands.length} {t('servers.quickCommandPackCommandCount')}</span>
+                            <strong>{t(`servers.quickCommandPack.${pack.id}.title`)}</strong>
+                            <small>{t(`servers.quickCommandPack.${pack.id}.detail`)}</small>
+                            <button
+                              type="button"
+                              data-ssh-runbook-pack-import={pack.id}
+                              onClick={() => importSshRunbookPack(pack)}
+                              disabled={Boolean(importingSshRunbookPackId)}
+                            >
+                              {importingSshRunbookPackId === pack.id ? t('common.processing') : t('servers.quickCommandPackImport')}
+                            </button>
+                          </article>
+                        ))}
+                      </div>
                     </div>
                     <div className="ssh-quick-command-grid" role="list" aria-label={t('servers.quickCommandTitle')}>
                       {sshQuickCommands.map((item) => {
@@ -2905,6 +2969,27 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       showActionMessage(error instanceof Error ? error.message : t('servers.quickCommandReorderFailed'));
     } finally {
       setMovingSshRunbookId('');
+    }
+  }
+
+  async function importSshRunbookPack(pack: (typeof sshRunbookPacks)[number]) {
+    setImportingSshRunbookPackId(pack.id);
+    try {
+      const result = await importSshRunbookCommands(pack.commands.map((command) => ({
+        title: t(`servers.quickCommandPack.${pack.id}.${command.id}.title`),
+        command: command.command,
+      })));
+      setSshRunbookCommands(result.commands);
+      setSshRunbookSearch('');
+      setSshRunbookCategory('all');
+      showActionMessage(t('servers.quickCommandPackImported', {
+        imported: result.imported.length,
+        skipped: result.skipped.length,
+      }));
+    } catch (error) {
+      showActionMessage(error instanceof Error ? error.message : t('servers.quickCommandPackImportFailed'));
+    } finally {
+      setImportingSshRunbookPackId('');
     }
   }
 
