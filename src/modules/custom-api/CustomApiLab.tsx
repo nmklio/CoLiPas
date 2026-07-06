@@ -61,7 +61,11 @@ const initialConfig: CustomApiConfig = {
   authToken: '',
 };
 
-export function CustomApiLab() {
+interface CustomApiLabProps {
+  releaseFocusAnchor?: string;
+}
+
+export function CustomApiLab({ releaseFocusAnchor }: CustomApiLabProps) {
   const { language, t } = useI18n();
   const copy = apiCopyByLanguage[language] ?? apiCopyByLanguage.zh;
   const templates = useMemo(() => buildTemplates(copy), [copy]);
@@ -89,6 +93,7 @@ export function CustomApiLab() {
     : false;
   const resultOk = result ? !isExecutionError(result) && result.ok : false;
   const resultFailed = result ? isExecutionError(result) || !result.ok : false;
+  const apiRequestReleaseFocusActive = releaseFocusAnchor === 'api-request';
   const activeIntegration = integrations.find((item) => item.name === config.name);
 
   useEffect(() => {
@@ -239,7 +244,13 @@ export function CustomApiLab() {
       </div>
 
       <div className="api-layout api-workbench-layout">
-        <form className="api-form api-config-panel" autoComplete="off" onSubmit={(event) => event.preventDefault()}>
+        <form
+          className={apiRequestReleaseFocusActive ? 'api-form api-config-panel release-focus-anchor active' : 'api-form api-config-panel'}
+          data-release-focus-anchor="api-request"
+          tabIndex={-1}
+          autoComplete="off"
+          onSubmit={(event) => event.preventDefault()}
+        >
           <div className="api-panel-title">
             <strong><KeyRound size={17} /> {copy.requestConfig}</strong>
             <span>{requestState.ok ? requestState.request.method : copy.invalid}</span>

@@ -58,6 +58,7 @@ interface ReleaseFixFocusPayload {
   value: string;
   action: string;
   source: string;
+  anchor: string;
 }
 
 interface ReleaseFixFocus extends ReleaseFixFocusPayload {
@@ -468,6 +469,19 @@ export function App() {
     ))
     : commandPaletteActions;
   const activeReleaseFixFocus = releaseFixFocus?.targetSection === activeSection ? releaseFixFocus : null;
+  const activeReleaseFixAnchor = activeReleaseFixFocus?.anchor ?? '';
+
+  function scrollReleaseFocusAnchor(anchor = activeReleaseFixAnchor) {
+    if (!anchor || typeof document === 'undefined') {
+      return;
+    }
+    const safeAnchor = anchor.replace(/["\\]/g, '');
+    const target = document.querySelector(`[data-release-focus-anchor="${safeAnchor}"]`);
+    if (target instanceof HTMLElement) {
+      target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      target.focus({ preventScroll: true });
+    }
+  }
 
   useEffect(() => {
     if (!session?.authenticated) {
@@ -499,6 +513,14 @@ export function App() {
     const timer = window.setTimeout(() => commandSearchRef.current?.focus(), 30);
     return () => window.clearTimeout(timer);
   }, [commandPaletteOpen]);
+
+  useEffect(() => {
+    if (!activeReleaseFixAnchor) {
+      return undefined;
+    }
+    const timers = [90, 260].map((delay) => window.setTimeout(() => scrollReleaseFocusAnchor(activeReleaseFixAnchor), delay));
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, [activeReleaseFixAnchor, activeSection, releaseFixFocus?.id]);
 
   async function handleLogin(username: string, password: string) {
     setLoginLoading(true);
@@ -534,6 +556,9 @@ export function App() {
   function navigateToSection(section: SectionId, focus?: ReleaseFixFocusPayload) {
     setActiveSection(section);
     setReleaseFixFocus(focus ? { ...focus, targetSection: section } : null);
+    if (focus?.anchor === 'ai-provider') {
+      setAiCollapsed(false);
+    }
     if (section !== 'security') {
       setSecurityTraceFocusId('');
     }
@@ -920,15 +945,25 @@ export function App() {
                   <dd>{activeReleaseFixFocus.action}</dd>
                 </div>
               </dl>
-              <button
-                type="button"
-                className="icon-button release-fix-focus-close"
-                aria-label={t('app.releaseFixFocusClose')}
-                data-release-fix-focus-close="true"
-                onClick={() => setReleaseFixFocus(null)}
-              >
-                <X size={16} />
-              </button>
+              <div className="release-fix-focus-actions">
+                <button
+                  type="button"
+                  className="tool-button release-fix-focus-jump"
+                  data-release-fix-anchor-action="true"
+                  onClick={() => scrollReleaseFocusAnchor(activeReleaseFixFocus.anchor)}
+                >
+                  {t('app.releaseFixFocusJump')}
+                </button>
+                <button
+                  type="button"
+                  className="icon-button release-fix-focus-close"
+                  aria-label={t('app.releaseFixFocusClose')}
+                  data-release-fix-focus-close="true"
+                  onClick={() => setReleaseFixFocus(null)}
+                >
+                  <X size={16} />
+                </button>
+              </div>
             </article>
           )}
 
@@ -951,6 +986,7 @@ export function App() {
               onFiltersChange={setFilters}
               onServerConnected={refreshOverview}
               onAuditTraceOpen={openSecurityTrace}
+              releaseFocusAnchor={activeReleaseFixAnchor === 'server-ssh' ? activeReleaseFixAnchor : undefined}
               allServers={overview.servers}
               servers={filteredServers}
             />
@@ -964,6 +1000,7 @@ export function App() {
               onDraftPreflight={recordOverviewDraftPreflight}
               onTaskFinished={refreshOverview}
               onAuditTraceOpen={openSecurityTrace}
+              releaseFocusAnchor={activeReleaseFixAnchor === 'operations-builder' ? activeReleaseFixAnchor : undefined}
             />
           )}
 
@@ -1038,7 +1075,7 @@ export function App() {
             </section>
           )}
 
-          {activeSection === 'api' && <CustomApiLab />}
+          {activeSection === 'api' && <CustomApiLab releaseFocusAnchor={activeReleaseFixAnchor === 'api-request' ? activeReleaseFixAnchor : undefined} />}
 
           {activeSection === 'security' && (
             <SecurityPanel
@@ -1063,6 +1100,7 @@ export function App() {
           onExpand={() => setAiCollapsed(false)}
           onSeedQuestionConsumed={() => setAiSeedQuestion('')}
           onTaskFinished={refreshOverview}
+          releaseFocusAnchor={releaseFixFocus?.targetSection === 'ai' ? releaseFixFocus.anchor : undefined}
         />
 
         {commandPaletteOpen && (

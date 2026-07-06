@@ -158,6 +158,7 @@ async function assertReleaseEvidenceBrief(targetPage) {
   if (await focusStep.count() === 0) {
     throw new Error('Release fix router should expose at least one cross-module focus route in the grey test fixture');
   }
+  const focusModule = await focusStep.getAttribute('data-release-fix-step');
   await focusStep.click();
   const focusBanner = targetPage.locator('[data-release-fix-focus="true"]');
   await focusBanner.waitFor({ timeout: 10000 });
@@ -168,9 +169,21 @@ async function assertReleaseEvidenceBrief(targetPage) {
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(focusText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(focusText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(focusText)) {
     throw new Error('Release fix focus banner rendered a raw IP address or secret');
   }
+  const expectedAnchor = releaseFixAnchorForModule(focusModule);
+  const targetAnchor = targetPage.locator(`[data-release-focus-anchor="${expectedAnchor}"]`).first();
+  await targetPage.locator('[data-release-fix-anchor-action="true"]').click();
+  await targetAnchor.waitFor({ timeout: 10000 });
+  const targetAnchorClass = await targetAnchor.getAttribute('class');
+  if (!targetAnchorClass?.includes('release-focus-anchor') || !targetAnchorClass.includes('active')) {
+    throw new Error(`Release fix target anchor ${expectedAnchor} was not visibly highlighted: ${targetAnchorClass}`);
+  }
   await captureVisualEvidence(targetPage, 'desktop-release-fix-focus', ['[data-release-fix-focus="true"]']);
   await targetPage.locator('[data-release-fix-focus-close="true"]').click();
   await focusBanner.waitFor({ state: 'detached', timeout: 5000 });
+  const aiHideButton = targetPage.getByRole('button', { name: /hide ai assistant/i });
+  if (focusModule === 'ai' && await aiHideButton.count() > 0) {
+    await aiHideButton.click();
+  }
   await targetPage.locator('.nav-list').getByRole('button', { name: /^Security$/i }).click();
   await targetPage.locator('[data-release-fix-router="true"]').waitFor({ timeout: 10000 });
   const releaseCockpitLaneCount = await targetPage.locator('[data-release-cockpit-lane]').count();
@@ -472,6 +485,22 @@ async function assertReleaseEvidenceBrief(targetPage) {
   await assertElementHorizontallyWithinViewport(targetPage, '.security-evidence-brief', 'desktop release evidence brief');
   await assertElementHorizontallyWithinViewport(targetPage, '.security-release-playbook', 'desktop release failure playbook');
   await assertElementHorizontallyWithinViewport(targetPage, '.security-ssh-performance-card', 'desktop SSH performance card');
+}
+
+function releaseFixAnchorForModule(module) {
+  if (module === 'ai') {
+    return 'ai-provider';
+  }
+  if (module === 'api') {
+    return 'api-request';
+  }
+  if (module === 'ssh' || module === 'servers') {
+    return 'server-ssh';
+  }
+  if (module === 'events') {
+    return 'operations-builder';
+  }
+  throw new Error(`Unexpected release fix module for anchor routing: ${module}`);
 }
 
 async function assertCommandPalette(targetPage) {

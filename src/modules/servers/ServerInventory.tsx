@@ -35,6 +35,7 @@ interface ServerInventoryProps {
   onFiltersChange: (filters: ServerFilters) => void;
   onServerConnected: () => Promise<void> | void;
   onAuditTraceOpen?: (correlationId: string) => void;
+  releaseFocusAnchor?: string;
 }
 
 const statuses: Array<Extract<ServerStatus, 'running' | 'stopped' | 'unconnected'> | 'all'> = ['all', 'running', 'stopped', 'unconnected'];
@@ -222,7 +223,7 @@ const initialForm: ConnectServerPayload = {
   },
 };
 
-export function ServerInventory({ allServers, servers, filters, onFiltersChange, onServerConnected, onAuditTraceOpen }: ServerInventoryProps) {
+export function ServerInventory({ allServers, servers, filters, onFiltersChange, onServerConnected, onAuditTraceOpen, releaseFocusAnchor }: ServerInventoryProps) {
   const { language, t } = useI18n();
   const regions = useMemo(() => buildSortedRegions(allServers), [allServers]);
   const scopedRegions = useMemo(() => normalizeScopedRegions(filters.regionScope), [filters.regionScope]);
@@ -347,12 +348,21 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const visibleRegionCount = visibleSummary.regionCount;
   const visibleAvgLoad = visibleSummary.avgLoad;
   const regionScopeKey = scopedRegions.join('|');
+  const sshReleaseFocusActive = releaseFocusAnchor === 'server-ssh';
 
   useEffect(() => () => {
     closeActiveShellSession(false);
     disposeXterm();
   }, []);
   const formVisible = formOpen || Boolean(editingServerId) || (allServers.length === 0 && !formDismissed);
+
+  useEffect(() => {
+    if (releaseFocusAnchor !== 'server-ssh') {
+      return;
+    }
+    setFormDismissed(false);
+    setFormOpen(true);
+  }, [releaseFocusAnchor]);
 
   useEffect(() => {
     if (visibleConnectedServerCount === 0 || terminalRuntimeRef.current) {
@@ -592,7 +602,12 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       </div>
 
       {formVisible && (
-      <form className="connect-form open" onSubmit={handleConnect}>
+      <form
+        className={sshReleaseFocusActive ? 'connect-form open release-focus-anchor active' : 'connect-form open'}
+        data-release-focus-anchor="server-ssh"
+        tabIndex={-1}
+        onSubmit={handleConnect}
+      >
         <div className="connect-form-title">
           <div>
             {editingServerId ? <Edit3 size={18} /> : <KeyRound size={18} />}

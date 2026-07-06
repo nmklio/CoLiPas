@@ -49,6 +49,7 @@ interface AIConsoleProps {
   onExpand: () => void;
   onSeedQuestionConsumed: () => void;
   onTaskFinished?: () => Promise<void> | void;
+  releaseFocusAnchor?: string;
 }
 
 type AiChatRole = 'user' | 'assistant';
@@ -209,7 +210,7 @@ const aiExecutionCopyByLanguage: Record<string, {
   },
 };
 
-export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse, onExpand, onSeedQuestionConsumed, onTaskFinished }: AIConsoleProps) {
+export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse, onExpand, onSeedQuestionConsumed, onTaskFinished, releaseFocusAnchor }: AIConsoleProps) {
   const { language, t } = useI18n();
   const [initialState] = useState(() => loadStoredConsoleState(t('ai.newChatTitle')));
   const [initialProvider] = useState(() => loadStoredProvider());
@@ -272,6 +273,7 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
   const running = runningSessionId === activeSession.id;
   const externalAiAvailable = Boolean(provider.apiKey.trim() || serverAiConfigured);
   const showSessionList = sessionsOpen && (sessions.length > 1 || activeSession.messages.length > 0);
+  const aiProviderReleaseFocusActive = releaseFocusAnchor === 'ai-provider';
   const lastUserQuestion = useMemo(() => findLastUserQuestion(activeSession.messages), [activeSession.messages]);
   const executionPlan = activeSession.analysis?.executionPlan ?? null;
   const executionPlanKey = executionPlan
@@ -286,6 +288,15 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
       : uniqueModels([provider.model, ...modelOptions])),
     [modelOptions, modelSource, provider.model],
   );
+
+  useEffect(() => {
+    if (releaseFocusAnchor !== 'ai-provider') {
+      return;
+    }
+    onExpand();
+    setSessionsOpen(false);
+    setSettingsOpen(true);
+  }, [releaseFocusAnchor]);
 
   useEffect(() => {
     persistStoredProvider(provider);
@@ -795,7 +806,12 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
 
       <div className={settingsOpen ? 'ai-dock-body settings-mode' : 'ai-dock-body chat-mode'}>
         {settingsOpen ? (
-          <form className="config-panel ai-dock-settings" onSubmit={(event) => event.preventDefault()}>
+          <form
+            className={aiProviderReleaseFocusActive ? 'config-panel ai-dock-settings release-focus-anchor active' : 'config-panel ai-dock-settings'}
+            data-release-focus-anchor="ai-provider"
+            tabIndex={-1}
+            onSubmit={(event) => event.preventDefault()}
+          >
             <h3><Settings2 size={18} /> {t('ai.llmSettings')}</h3>
             <div className={providerCustody.managedBy === 'none' ? 'ai-provider-custody empty' : 'ai-provider-custody ok'}>
               <ShieldCheck size={16} />

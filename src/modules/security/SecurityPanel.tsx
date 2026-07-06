@@ -43,6 +43,7 @@ interface ReleaseFixFocusPayload {
   value: string;
   action: string;
   source: string;
+  anchor: string;
 }
 
 interface ConfigSummary {
@@ -2760,7 +2761,24 @@ function buildReleaseFixFocus(
     value: sanitizeEvidenceBriefText(check.value),
     action: sanitizeEvidenceBriefText(check.recommendedAction || check.evidence),
     source: copy.releaseFixTitle,
+    anchor: getReleaseFixAnchor(check.relatedModule),
   };
+}
+
+function getReleaseFixAnchor(module: ReleaseReadinessResponse['checks'][number]['relatedModule']) {
+  if (module === 'ai') {
+    return 'ai-provider';
+  }
+  if (module === 'api') {
+    return 'api-request';
+  }
+  if (module === 'ssh' || module === 'servers') {
+    return 'server-ssh';
+  }
+  if (module === 'events') {
+    return 'operations-builder';
+  }
+  return 'security-remediation';
 }
 
 function getReleaseFixTone(check: ReleaseReadinessResponse['checks'][number]): ReleaseFixRouteStep['tone'] {

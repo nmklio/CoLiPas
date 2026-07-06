@@ -3336,9 +3336,43 @@ main {
   overflow-wrap: anywhere;
 }
 
+.release-fix-focus-actions {
+  display: inline-flex;
+  gap: 8px;
+  align-self: start;
+  align-items: center;
+}
+
+.release-fix-focus-jump {
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.88);
+}
+
 .release-fix-focus-close {
   align-self: start;
   background: rgba(255, 255, 255, 0.8);
+}
+
+.release-focus-anchor {
+  position: relative;
+  outline: none;
+  scroll-margin: 112px;
+}
+
+.release-focus-anchor.active {
+  border-color: rgba(13, 148, 136, 0.46) !important;
+  box-shadow:
+    0 0 0 2px rgba(45, 212, 191, 0.22),
+    0 18px 42px rgba(13, 148, 136, 0.14) !important;
+}
+
+.release-focus-anchor.active::after {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  border: 1px solid rgba(20, 184, 166, 0.32);
+  border-radius: inherit;
+  pointer-events: none;
 }
 
 .section-header {
@@ -11710,6 +11744,12 @@ pre {
   .release-fix-focus-details {
     grid-column: 1 / -1;
     grid-template-columns: 1fr;
+  }
+
+  .release-fix-focus-actions {
+    grid-column: 1 / -1;
+    width: 100%;
+    justify-content: space-between;
   }
 
   .content:not(.ai-collapsed) main {

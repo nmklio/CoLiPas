@@ -38,6 +38,7 @@ interface OperationsCenterProps {
   onDraftPreflight?: (draft: OperationsDraft, preflight: OperationTaskPreflightResponse) => void;
   onTaskFinished?: () => Promise<void> | void;
   onAuditTraceOpen?: (correlationId: string) => void;
+  releaseFocusAnchor?: string;
 }
 
 export interface OperationsDraft {
@@ -362,7 +363,7 @@ const preflightCopyByLanguage: Record<string, {
   },
 };
 
-export function OperationsCenter({ events, servers, draft, onDraftPreflight, onTaskFinished, onAuditTraceOpen }: OperationsCenterProps) {
+export function OperationsCenter({ events, servers, draft, onDraftPreflight, onTaskFinished, onAuditTraceOpen, releaseFocusAnchor }: OperationsCenterProps) {
   const { language, t } = useI18n();
   const copy = copyByLanguage[language] ?? copyByLanguage.zh;
   const preflightCopy = preflightCopyByLanguage[language] ?? preflightCopyByLanguage.zh;
@@ -386,6 +387,7 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
   const [activeTaskId, setActiveTaskId] = useState('');
   const [appliedDraftId, setAppliedDraftId] = useState('');
   const [draftNotice, setDraftNotice] = useState<OperationsDraft | null>(null);
+  const operationsReleaseFocusActive = releaseFocusAnchor === 'operations-builder';
 
   const taskMeta = useMemo(() => buildTaskMeta(language), [language]);
   const activeTask = tasks.find((task) => task.id === activeTaskId) ?? tasks[0] ?? null;
@@ -415,6 +417,13 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
       setTargetMode('allConnected');
     }
   }, [sshRequiredTask, targetMode]);
+
+  useEffect(() => {
+    if (releaseFocusAnchor !== 'operations-builder') {
+      return;
+    }
+    setBuilderOpen(true);
+  }, [releaseFocusAnchor]);
 
   useEffect(() => {
     setSelectedServerIds((current) => current.filter((id) => eligibleServerIds.has(id)));
@@ -621,7 +630,11 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
           <h3><Workflow size={18} /> {copy.dashboard}</h3>
 
           {builderOpen && (
-            <div className="ops-builder">
+            <div
+              className={operationsReleaseFocusActive ? 'ops-builder release-focus-anchor active' : 'ops-builder'}
+              data-release-focus-anchor="operations-builder"
+              tabIndex={-1}
+            >
               {draftNotice && (
                 <div className="ops-draft-banner" data-ops-draft-banner="true">
                   <div>
