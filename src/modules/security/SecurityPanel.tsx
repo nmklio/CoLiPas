@@ -134,6 +134,26 @@ interface ReleaseFailurePlaybookItem {
   action: string;
 }
 
+interface ReleaseCockpitLane {
+  id: 'version' | 'readiness' | 'audit' | 'ssh';
+  label: string;
+  value: string;
+  detail: string;
+  tone: 'ok' | 'warn' | 'fail';
+}
+
+interface ReleaseCockpitSummary {
+  tone: 'ok' | 'warn' | 'fail';
+  title: string;
+  lead: string;
+  status: string;
+  commitLabel: string;
+  generatedLabel: string;
+  lanes: ReleaseCockpitLane[];
+  nextAction: string;
+  copyText: string;
+}
+
 interface SshPerformanceMetric {
   id: string;
   label: string;
@@ -426,6 +446,18 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
     }),
     [activeAuditIssues.blocked, activeAuditIssues.failed, activeAuditIssues.total, auditEntries.length, copy, lastRefreshedAt, locale, openEvents.length, readiness, successRate],
   );
+  const releaseCockpit = useMemo(
+    () => buildReleaseCockpitSummary({
+      readiness,
+      diagnostic: diagnosticBundle,
+      evidenceBrief,
+      activeAuditIssues,
+      successRate,
+      copy,
+      locale,
+    }),
+    [activeAuditIssues.blocked, activeAuditIssues.failed, copy, diagnosticBundle, evidenceBrief, locale, readiness, successRate],
+  );
   const sshPerformance = useMemo(
     () => buildSshPerformanceSummary(diagnosticBundle, sshPerformanceCopy, locale),
     [diagnosticBundle, locale, sshPerformanceCopy],
@@ -632,6 +664,23 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
       setRemediationError(false);
     } catch {
       setRemediationMessage(evidenceBrief.text);
+      setRemediationError(false);
+    }
+  }
+
+  async function copyReleaseCockpit() {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) {
+      setRemediationMessage(releaseCockpit.copyText);
+      setRemediationError(false);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(releaseCockpit.copyText);
+      setRemediationMessage(copy.releaseCockpitCopied);
+      setRemediationError(false);
+    } catch {
+      setRemediationMessage(releaseCockpit.copyText);
       setRemediationError(false);
     }
   }
@@ -989,6 +1038,47 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
               {exportingDiagnostic ? diagnosticCopy.exporting : diagnosticCopy.export}
             </button>
           </div>
+        </div>
+      </article>
+
+      <article className={`security-release-cockpit ${releaseCockpit.tone}`} data-release-cockpit="true" aria-labelledby="security-release-cockpit-title">
+        <div className="security-release-cockpit-hero">
+          <div>
+            <span className="security-release-cockpit-kicker">{copy.releaseCockpitKicker}</span>
+            <h3 id="security-release-cockpit-title"><Rocket size={18} /> {releaseCockpit.title}</h3>
+            <p>{releaseCockpit.lead}</p>
+          </div>
+          <div className="security-release-cockpit-status">
+            <small>{copy.releaseCockpitStatusLabel}</small>
+            <strong>{releaseCockpit.status}</strong>
+            <span>{releaseCockpit.commitLabel}</span>
+          </div>
+        </div>
+        <div className="security-release-cockpit-radar" aria-label={copy.releaseCockpitRailLabel}>
+          {releaseCockpit.lanes.map((lane, index) => (
+            <div key={lane.id} className={`security-release-cockpit-lane ${lane.tone}`} data-release-cockpit-lane={lane.id}>
+              <span className="security-release-cockpit-node" aria-hidden="true">{index + 1}</span>
+              <div>
+                <small>{lane.label}</small>
+                <strong>{lane.value}</strong>
+                <p>{lane.detail}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="security-release-cockpit-footer">
+          <div>
+            <span>{copy.releaseCockpitNextAction}</span>
+            <p>{releaseCockpit.nextAction}</p>
+          </div>
+          <div>
+            <span>{copy.releaseCockpitEvidenceAge}</span>
+            <p>{releaseCockpit.generatedLabel}</p>
+          </div>
+          <button type="button" className="tool-button" onClick={copyReleaseCockpit} disabled={!releaseCockpit.copyText}>
+            <ClipboardCheck size={15} />
+            {copy.releaseCockpitCopy}
+          </button>
         </div>
       </article>
 
@@ -2271,6 +2361,126 @@ function buildReleaseEvidenceBrief(input: {
     nextAction,
     text: textLines.join('\n'),
   };
+}
+
+function buildReleaseCockpitSummary(input: {
+  readiness: ReleaseReadinessResponse | null;
+  diagnostic: DiagnosticExportResponse | null;
+  evidenceBrief: ReleaseEvidenceBrief;
+  activeAuditIssues: ReturnType<typeof getActiveAuditIssues>;
+  successRate: number;
+  copy: SecurityCopy;
+  locale: string;
+}): ReleaseCockpitSummary {
+  const { readiness, diagnostic, evidenceBrief, activeAuditIssues, successRate, copy, locale } = input;
+  const deployment = evidenceBrief.deployment;
+  const lastSelfTest = diagnostic?.sshTerminal?.lastSelfTest ?? null;
+  const websocket = diagnostic?.sshTerminal?.websocket ?? null;
+  const commit = sanitizeEvidenceBriefText(deployment?.gitCommit || '--');
+  const deploymentTone: ReleaseCockpitLane['tone'] = deployment?.configured ? 'ok' : 'warn';
+  const readinessTone: ReleaseCockpitLane['tone'] = readiness?.status === 'ready' ? 'ok' : readiness?.status === 'blocked' ? 'fail' : 'warn';
+  const auditTone: ReleaseCockpitLane['tone'] = activeAuditIssues.failed > 0 ? 'fail' : activeAuditIssues.blocked > 0 ? 'warn' : 'ok';
+  const sshTone: ReleaseCockpitLane['tone'] = getReleaseCockpitSshTone(lastSelfTest, websocket);
+  const lanes: ReleaseCockpitLane[] = [
+    {
+      id: 'version',
+      label: copy.releaseCockpitLaneVersion,
+      value: commit,
+      detail: deployment
+        ? copy.releaseCockpitVersionDetail(deployment.targetName, deployment.deploymentMode)
+        : copy.releaseCockpitVersionMissing,
+      tone: deploymentTone,
+    },
+    {
+      id: 'readiness',
+      label: copy.releaseCockpitLaneReadiness,
+      value: readiness ? `${readiness.score}/100` : '--',
+      detail: readiness ? copy.readinessChecks(readiness.summary.passed, readiness.summary.totalChecks) : copy.readinessCalculating,
+      tone: readinessTone,
+    },
+    {
+      id: 'audit',
+      label: copy.releaseCockpitLaneAudit,
+      value: String(activeAuditIssues.blocked + activeAuditIssues.failed),
+      detail: copy.releaseCockpitAuditDetail(activeAuditIssues.blocked, activeAuditIssues.failed, successRate),
+      tone: auditTone,
+    },
+    {
+      id: 'ssh',
+      label: copy.releaseCockpitLaneSsh,
+      value: lastSelfTest ? copy.releaseCockpitSshStatus(lastSelfTest.status) : String(diagnostic?.sshTerminal.activeSessions ?? 0),
+      detail: buildReleaseCockpitSshDetail(diagnostic, copy),
+      tone: sshTone,
+    },
+  ];
+  const tone: ReleaseCockpitSummary['tone'] = lanes.some((lane) => lane.tone === 'fail')
+    ? 'fail'
+    : lanes.some((lane) => lane.tone === 'warn')
+      ? 'warn'
+      : 'ok';
+  const status = tone === 'ok' ? copy.releaseCockpitStatusOk : tone === 'fail' ? copy.releaseCockpitStatusFail : copy.releaseCockpitStatusWarn;
+  const generatedLabel = diagnostic?.generatedAt
+    ? new Date(diagnostic.generatedAt).toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' })
+    : evidenceBrief.generatedLabel;
+  const nextAction = sanitizeEvidenceBriefText(readiness?.nextBestAction || evidenceBrief.nextAction);
+  const copyText = [
+    `# ${copy.releaseCockpitTitle}`,
+    `${copy.releaseCockpitStatusLabel}: ${status}`,
+    `${copy.evidenceBriefGenerated(generatedLabel)}`,
+    `${copy.releaseCockpitLaneVersion}: ${lanes[0].value} (${lanes[0].detail})`,
+    `${copy.releaseCockpitLaneReadiness}: ${lanes[1].value} (${lanes[1].detail})`,
+    `${copy.releaseCockpitLaneAudit}: ${lanes[2].value} (${lanes[2].detail})`,
+    `${copy.releaseCockpitLaneSsh}: ${lanes[3].value} (${lanes[3].detail})`,
+    `${copy.releaseCockpitNextAction}: ${nextAction}`,
+    copy.releaseCockpitSanitizedNote,
+  ].map(sanitizeEvidenceBriefText).join('\n');
+
+  return {
+    tone,
+    title: copy.releaseCockpitTitle,
+    lead: copy.releaseCockpitLead,
+    status,
+    commitLabel: copy.releaseCockpitCommit(commit),
+    generatedLabel,
+    lanes,
+    nextAction,
+    copyText,
+  };
+}
+
+function getReleaseCockpitSshTone(
+  lastSelfTest: DiagnosticExportResponse['sshTerminal']['lastSelfTest'],
+  websocket: DiagnosticExportResponse['sshTerminal']['websocket'] | null,
+): ReleaseCockpitLane['tone'] {
+  if (websocket && websocket.errors > 0) {
+    return 'warn';
+  }
+  if (!lastSelfTest) {
+    return 'warn';
+  }
+  if (lastSelfTest.status !== 'complete' || ['connection', 'terminal'].includes(lastSelfTest.bottleneck)) {
+    return 'fail';
+  }
+  if (lastSelfTest.bottleneck !== 'healthy') {
+    return 'warn';
+  }
+  return 'ok';
+}
+
+function buildReleaseCockpitSshDetail(diagnostic: DiagnosticExportResponse | null, copy: SecurityCopy) {
+  const lastSelfTest = diagnostic?.sshTerminal.lastSelfTest ?? null;
+  const websocket = diagnostic?.sshTerminal.websocket ?? null;
+  if (lastSelfTest) {
+    return copy.releaseCockpitSshDetail(
+      lastSelfTest.lines,
+      Math.round(lastSelfTest.durationMs),
+      lastSelfTest.bottleneck,
+    );
+  }
+  if (websocket) {
+    return copy.releaseCockpitSshSocketDetail(websocket.openedShells, websocket.errors);
+  }
+  return copy.releaseCockpitSshMissing;
 }
 
 function buildSshPerformanceSummary(
@@ -3748,6 +3958,31 @@ interface SecurityCopy {
   evidenceMetricAudit: string;
   evidenceMetricQueue: string;
   evidenceDeploymentTitle: string;
+  releaseCockpitTitle: string;
+  releaseCockpitLead: string;
+  releaseCockpitKicker: string;
+  releaseCockpitStatusLabel: string;
+  releaseCockpitStatusOk: string;
+  releaseCockpitStatusWarn: string;
+  releaseCockpitStatusFail: string;
+  releaseCockpitCommit: (commit: string) => string;
+  releaseCockpitRailLabel: string;
+  releaseCockpitLaneVersion: string;
+  releaseCockpitLaneReadiness: string;
+  releaseCockpitLaneAudit: string;
+  releaseCockpitLaneSsh: string;
+  releaseCockpitVersionDetail: (target: string, mode: string) => string;
+  releaseCockpitVersionMissing: string;
+  releaseCockpitAuditDetail: (blocked: number, failed: number, successRate: number) => string;
+  releaseCockpitSshStatus: (status: 'complete' | 'timeout' | 'failed') => string;
+  releaseCockpitSshDetail: (lines: number, durationMs: number, bottleneck: string) => string;
+  releaseCockpitSshSocketDetail: (openedShells: number, errors: number) => string;
+  releaseCockpitSshMissing: string;
+  releaseCockpitNextAction: string;
+  releaseCockpitEvidenceAge: string;
+  releaseCockpitCopy: string;
+  releaseCockpitCopied: string;
+  releaseCockpitSanitizedNote: string;
   releasePlaybookTitle: string;
   releasePlaybookDescription: string;
   releasePlaybookSignalLabel: string;
@@ -4901,6 +5136,31 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     evidenceMetricAudit: '活跃审计问题',
     evidenceMetricQueue: '事件队列',
     evidenceDeploymentTitle: '部署证据',
+    releaseCockpitTitle: '发布健康驾驶舱',
+    releaseCockpitLead: '把版本、就绪评分、审计风险和 SSH 现场证据压缩成一张上线塔台图。',
+    releaseCockpitKicker: '上线塔台',
+    releaseCockpitStatusLabel: '发布状态',
+    releaseCockpitStatusOk: '可以发布',
+    releaseCockpitStatusWarn: '需要观察',
+    releaseCockpitStatusFail: '暂缓发布',
+    releaseCockpitCommit: (commit) => `版本 ${commit}`,
+    releaseCockpitRailLabel: '发布健康轨道',
+    releaseCockpitLaneVersion: '版本轨道',
+    releaseCockpitLaneReadiness: '就绪轨道',
+    releaseCockpitLaneAudit: '审计轨道',
+    releaseCockpitLaneSsh: 'SSH 轨道',
+    releaseCockpitVersionDetail: (target, mode) => `${target} / ${mode}`,
+    releaseCockpitVersionMissing: '缺少发布版本证据',
+    releaseCockpitAuditDetail: (blocked, failed, successRate) => `${blocked} 阻断 / ${failed} 失败 / ${successRate}% 成功率`,
+    releaseCockpitSshStatus: (status) => ({ complete: '测速完成', timeout: '测速超时', failed: '测速失败' })[status],
+    releaseCockpitSshDetail: (lines, durationMs, bottleneck) => `${lines} 行 / ${durationMs}ms / ${bottleneck}`,
+    releaseCockpitSshSocketDetail: (openedShells, errors) => `${openedShells} 个 shell / ${errors} 个错误`,
+    releaseCockpitSshMissing: '等待 SSH 现场证据',
+    releaseCockpitNextAction: '下一步动作',
+    releaseCockpitEvidenceAge: '证据时间',
+    releaseCockpitCopy: '复制驾驶舱',
+    releaseCockpitCopied: '发布健康驾驶舱已复制',
+    releaseCockpitSanitizedNote: '驾驶舱只包含脱敏后的版本、聚合评分、计数和建议，不包含服务器地址、命令正文、密钥或用户数据。',
     releasePlaybookTitle: '发布失败诊断词典',
     releasePlaybookDescription: '把发布日志中的典型信号映射为下一步处理动作，便于上线前快速判断是网络、认证还是远端脚本问题。',
     releasePlaybookSignalLabel: '信号：',
@@ -5090,6 +5350,31 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     evidenceMetricAudit: 'Active audit issues',
     evidenceMetricQueue: 'Event queue',
     evidenceDeploymentTitle: 'Deployment evidence',
+    releaseCockpitTitle: 'Release cockpit',
+    releaseCockpitLead: 'Compresses version, readiness, audit risk, and SSH field evidence into one publish-control view.',
+    releaseCockpitKicker: 'Publish tower',
+    releaseCockpitStatusLabel: 'Release state',
+    releaseCockpitStatusOk: 'Ready to publish',
+    releaseCockpitStatusWarn: 'Watch before publish',
+    releaseCockpitStatusFail: 'Hold release',
+    releaseCockpitCommit: (commit) => `Commit ${commit}`,
+    releaseCockpitRailLabel: 'Release health rails',
+    releaseCockpitLaneVersion: 'Version rail',
+    releaseCockpitLaneReadiness: 'Readiness rail',
+    releaseCockpitLaneAudit: 'Audit rail',
+    releaseCockpitLaneSsh: 'SSH rail',
+    releaseCockpitVersionDetail: (target, mode) => `${target} / ${mode}`,
+    releaseCockpitVersionMissing: 'Deployment version evidence is missing',
+    releaseCockpitAuditDetail: (blocked, failed, successRate) => `${blocked} blocked / ${failed} failed / ${successRate}% success`,
+    releaseCockpitSshStatus: (status) => ({ complete: 'Test complete', timeout: 'Test timeout', failed: 'Test failed' })[status],
+    releaseCockpitSshDetail: (lines, durationMs, bottleneck) => `${lines} lines / ${durationMs}ms / ${bottleneck}`,
+    releaseCockpitSshSocketDetail: (openedShells, errors) => `${openedShells} shell(s) / ${errors} error(s)`,
+    releaseCockpitSshMissing: 'Waiting for SSH field evidence',
+    releaseCockpitNextAction: 'Next publish move',
+    releaseCockpitEvidenceAge: 'Evidence time',
+    releaseCockpitCopy: 'Copy cockpit',
+    releaseCockpitCopied: 'Release cockpit copied',
+    releaseCockpitSanitizedNote: 'The cockpit only includes sanitized version, aggregate scores, counts, and recommendations; no server addresses, command text, keys, or user data.',
     releasePlaybookTitle: 'Release failure playbook',
     releasePlaybookDescription: 'Maps common release log signals to the next safe action so operators can tell network, authentication, and remote-script failures apart before retrying.',
     releasePlaybookSignalLabel: 'Signal: ',
@@ -5279,6 +5564,31 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     evidenceMetricAudit: '有効な監査課題',
     evidenceMetricQueue: 'イベントキュー',
     evidenceDeploymentTitle: 'デプロイ証跡',
+    releaseCockpitTitle: 'リリース健康コックピット',
+    releaseCockpitLead: 'バージョン、準備状況、監査リスク、SSH 現場証跡を 1 つの公開判断ビューに集約します。',
+    releaseCockpitKicker: '公開タワー',
+    releaseCockpitStatusLabel: 'リリース状態',
+    releaseCockpitStatusOk: '公開可能',
+    releaseCockpitStatusWarn: '公開前に確認',
+    releaseCockpitStatusFail: '公開保留',
+    releaseCockpitCommit: (commit) => `コミット ${commit}`,
+    releaseCockpitRailLabel: 'リリース健康レール',
+    releaseCockpitLaneVersion: 'バージョンレール',
+    releaseCockpitLaneReadiness: '準備レール',
+    releaseCockpitLaneAudit: '監査レール',
+    releaseCockpitLaneSsh: 'SSH レール',
+    releaseCockpitVersionDetail: (target, mode) => `${target} / ${mode}`,
+    releaseCockpitVersionMissing: 'デプロイ版の証跡が不足しています',
+    releaseCockpitAuditDetail: (blocked, failed, successRate) => `${blocked} 件ブロック / ${failed} 件失敗 / 成功率 ${successRate}%`,
+    releaseCockpitSshStatus: (status) => ({ complete: 'テスト完了', timeout: 'テストタイムアウト', failed: 'テスト失敗' })[status],
+    releaseCockpitSshDetail: (lines, durationMs, bottleneck) => `${lines} 行 / ${durationMs}ms / ${bottleneck}`,
+    releaseCockpitSshSocketDetail: (openedShells, errors) => `${openedShells} shell / ${errors} エラー`,
+    releaseCockpitSshMissing: 'SSH 現場証跡待ち',
+    releaseCockpitNextAction: '次の公開アクション',
+    releaseCockpitEvidenceAge: '証跡時刻',
+    releaseCockpitCopy: 'コックピットをコピー',
+    releaseCockpitCopied: 'リリース健康コックピットをコピーしました',
+    releaseCockpitSanitizedNote: 'コックピットには脱敏済みのバージョン、集計スコア、件数、推奨のみが含まれ、サーバーアドレス、コマンド本文、鍵、ユーザーデータは含みません。',
     releasePlaybookTitle: 'リリース失敗診断プレイブック',
     releasePlaybookDescription: 'リリースログの代表的なシグナルを次の安全な対応に対応付け、ネットワーク、認証、リモートスクリプトの失敗を切り分けます。',
     releasePlaybookSignalLabel: 'シグナル: ',

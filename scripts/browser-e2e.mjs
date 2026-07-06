@@ -34,7 +34,7 @@ try {
   temporaryServerId = '';
 
   await assertReleaseEvidenceBrief(page);
-  await captureVisualEvidence(page, 'desktop-security-trace', ['.security-workbench', '.security-readiness-card', '.security-evidence-brief', '.security-release-playbook', '.security-ssh-performance-card']);
+  await captureVisualEvidence(page, 'desktop-security-trace', ['.security-workbench', '.security-readiness-card', '[data-release-cockpit="true"]', '.security-evidence-brief', '.security-release-playbook', '.security-ssh-performance-card']);
   await page.locator('[data-ssh-flight-recorder="true"]').scrollIntoViewIfNeeded();
   await captureVisualEvidence(page, 'desktop-ssh-flight-recorder', ['[data-ssh-flight-recorder="true"]', '.security-ssh-flight-rail', '[data-ssh-latency-curve="true"]', '[data-ssh-interaction-sampler="true"]', '[data-ssh-bottleneck-trend="true"]']);
   await page.locator('[data-ssh-bottleneck-trend="true"]').scrollIntoViewIfNeeded();
@@ -132,9 +132,22 @@ async function assertSyntheticTraceDeepLink(targetPage, expectedTraceId) {
 
 async function assertReleaseEvidenceBrief(targetPage) {
   await targetPage.locator('.security-evidence-brief').waitFor({ timeout: 10000 });
+  await targetPage.locator('[data-release-cockpit="true"]').waitFor({ timeout: 10000 });
   await targetPage.locator('.security-release-playbook').waitFor({ timeout: 10000 });
   await targetPage.locator('.security-ssh-performance-card').waitFor({ timeout: 10000 });
   await targetPage.getByRole('button', { name: /copy evidence brief/i }).waitFor({ timeout: 5000 });
+  await targetPage.getByRole('button', { name: /copy cockpit/i }).waitFor({ timeout: 5000 });
+  const releaseCockpitLaneCount = await targetPage.locator('[data-release-cockpit-lane]').count();
+  if (releaseCockpitLaneCount !== 4) {
+    throw new Error(`Release cockpit should expose four health rails, got ${releaseCockpitLaneCount}`);
+  }
+  const releaseCockpitText = await targetPage.locator('[data-release-cockpit="true"]').innerText();
+  if (!/Release cockpit/i.test(releaseCockpitText) || !/Version rail/i.test(releaseCockpitText) || !/Readiness rail/i.test(releaseCockpitText) || !/Audit rail/i.test(releaseCockpitText) || !/SSH rail/i.test(releaseCockpitText) || !/Next publish move/i.test(releaseCockpitText)) {
+    throw new Error(`Release cockpit did not render publish-control rails: ${releaseCockpitText}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(releaseCockpitText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(releaseCockpitText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(releaseCockpitText)) {
+    throw new Error('Release cockpit rendered a raw IP address or secret');
+  }
   const metricCount = await targetPage.locator('.security-evidence-metric').count();
   if (metricCount !== 4) {
     throw new Error(`Release evidence brief should expose four aggregate metrics, got ${metricCount}`);
@@ -189,6 +202,7 @@ async function assertReleaseEvidenceBrief(targetPage) {
     throw new Error(`SSH lag diagnosis history did not render its empty state: ${sshLagHistoryText}`);
   }
   await targetPage.evaluate(() => {
+    window.__colipasCopiedReleaseCockpitText = '';
     window.__colipasCopiedSshPerformanceText = '';
     window.__colipasCopiedSshLagReportText = '';
     window.__colipasCopiedSshFlightText = '';
@@ -200,7 +214,9 @@ async function assertReleaseEvidenceBrief(targetPage) {
       configurable: true,
       value: {
         writeText: async (text) => {
-          if (/SSH lag ticket template/i.test(text)) {
+          if (/Release cockpit/i.test(text)) {
+            window.__colipasCopiedReleaseCockpitText = text;
+          } else if (/SSH lag ticket template/i.test(text)) {
             window.__colipasCopiedSshSupportTicketText = text;
           } else if (/SSH sanitized support bundle/i.test(text)) {
             window.__colipasCopiedSshSupportBundleText = text;
@@ -219,6 +235,14 @@ async function assertReleaseEvidenceBrief(targetPage) {
       },
     });
   });
+  await targetPage.getByRole('button', { name: /copy cockpit/i }).click();
+  const copiedReleaseCockpitText = await targetPage.evaluate(() => window.__colipasCopiedReleaseCockpitText ?? '');
+  if (!/Release cockpit/i.test(copiedReleaseCockpitText) || !/Release state/i.test(copiedReleaseCockpitText) || !/Version rail/i.test(copiedReleaseCockpitText) || !/Readiness rail/i.test(copiedReleaseCockpitText) || !/Audit rail/i.test(copiedReleaseCockpitText) || !/SSH rail/i.test(copiedReleaseCockpitText) || !/The cockpit only includes sanitized version/i.test(copiedReleaseCockpitText)) {
+    throw new Error(`Release cockpit copy output is incomplete: ${copiedReleaseCockpitText}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedReleaseCockpitText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedReleaseCockpitText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(copiedReleaseCockpitText)) {
+    throw new Error('Release cockpit copy output leaked a raw IP address or secret');
+  }
   await targetPage.locator('[data-ssh-support-bundle="true"]').waitFor({ timeout: 5000 });
   const sshSupportBundleText = await targetPage.locator('[data-ssh-support-bundle="true"]').innerText();
   if (!/SSH sanitized support bundle/i.test(sshSupportBundleText) || !/Bundle contents/i.test(sshSupportBundleText) || !/Performance summary/i.test(sshSupportBundleText) || !/Bottleneck trend/i.test(sshSupportBundleText)) {
@@ -369,10 +393,11 @@ async function assertReleaseEvidenceBrief(targetPage) {
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshPerfText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshPerfText)) {
     throw new Error('SSH performance copy output leaked a raw IP address or API key');
   }
-  const text = `${await targetPage.locator('.security-evidence-brief').innerText()}\n${await targetPage.locator('.security-release-playbook').innerText()}\n${sshPerfText}`;
+  const text = `${releaseCockpitText}\n${await targetPage.locator('.security-evidence-brief').innerText()}\n${await targetPage.locator('.security-release-playbook').innerText()}\n${sshPerfText}`;
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(text) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(text)) {
-    throw new Error('Release evidence, failure playbook, or SSH performance card rendered a raw IP address or API key');
+    throw new Error('Release cockpit, evidence, failure playbook, or SSH performance card rendered a raw IP address or API key');
   }
+  await assertElementHorizontallyWithinViewport(targetPage, '[data-release-cockpit="true"]', 'desktop release cockpit');
   await assertElementHorizontallyWithinViewport(targetPage, '.security-evidence-brief', 'desktop release evidence brief');
   await assertElementHorizontallyWithinViewport(targetPage, '.security-release-playbook', 'desktop release failure playbook');
   await assertElementHorizontallyWithinViewport(targetPage, '.security-ssh-performance-card', 'desktop SSH performance card');

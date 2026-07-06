@@ -3077,6 +3077,7 @@ function assertAccountUiGuards() {
   const serverUpdateSource = fs.readFileSync(new URL('../deploy/server-update.sh', import.meta.url), 'utf8');
   const authSource = fs.readFileSync(new URL('../src/server/services/authService.ts', import.meta.url), 'utf8');
   const inventorySource = fs.readFileSync(new URL('../src/modules/servers/ServerInventory.tsx', import.meta.url), 'utf8');
+  const securitySource = fs.readFileSync(new URL('../src/modules/security/SecurityPanel.tsx', import.meta.url), 'utf8');
   const globalCss = fs.readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
   const i18nSource = fs.readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
   const verifyProductionSource = fs.readFileSync(new URL('../scripts/verify-production.mjs', import.meta.url), 'utf8');
@@ -3309,6 +3310,20 @@ function assertAccountUiGuards() {
   const missingDeploymentEvidenceGuard = deploymentEvidenceGuardFragments.filter((fragment) => !deploymentEvidenceGuardSource.includes(fragment));
   if (missingDeploymentEvidenceGuard.length) {
     throw new Error(`Deployment evidence environment propagation is incomplete: ${missingDeploymentEvidenceGuard.join(', ')}`);
+  }
+
+  const releaseCockpitFragments = [
+    'data-release-cockpit="true"',
+    'data-release-cockpit-lane={lane.id}',
+    'buildReleaseCockpitSummary',
+    'releaseCockpitSanitizedNote',
+    'security-release-cockpit-radar',
+    'security-release-cockpit-footer',
+  ];
+  const releaseCockpitSource = `${securitySource}\n${globalCss}`;
+  const missingReleaseCockpit = releaseCockpitFragments.filter((fragment) => !releaseCockpitSource.includes(fragment));
+  if (missingReleaseCockpit.length) {
+    throw new Error(`Release health cockpit UI guard is incomplete: ${missingReleaseCockpit.join(', ')}`);
   }
 
   const avatarFragments = [
