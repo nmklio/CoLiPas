@@ -24,7 +24,7 @@ import { AIConsole } from '../modules/ai/AIConsole';
 import { LoginPage } from './LoginPage';
 import { CustomApiLab } from '../modules/custom-api/CustomApiLab';
 import { OperationsCenter, type OperationsDraft } from '../modules/operations/OperationsCenter';
-import { MonitoringOverview } from '../modules/overview/MonitoringOverview';
+import { MonitoringOverview, type OverviewPreflightSnapshot } from '../modules/overview/MonitoringOverview';
 import { SecurityPanel } from '../modules/security/SecurityPanel';
 import { ServerInventory } from '../modules/servers/ServerInventory';
 import { BrandIcon } from './BrandIcon';
@@ -47,7 +47,7 @@ import {
   logout,
   updateAccountProfile,
 } from '../services/apiClient';
-import type { ServerNode } from '../types';
+import type { OperationTaskPreflightResponse, ServerNode } from '../types';
 
 type SectionId = 'overview' | 'servers' | 'operations' | 'ai' | 'api' | 'security';
 
@@ -180,6 +180,7 @@ export function App() {
   const [securityTraceFocusId, setSecurityTraceFocusId] = useState(initialHashRouteRef.current.traceId);
   const [filters, setFilters] = useState<ServerFilters>(defaultFilters);
   const [operationDraft, setOperationDraft] = useState<OperationsDraft | null>(null);
+  const [overviewPreflightSnapshot, setOverviewPreflightSnapshot] = useState<OverviewPreflightSnapshot | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [aiCollapsed, setAiCollapsed] = useState(true);
   const [aiSeedQuestion, setAiSeedQuestion] = useState('');
@@ -584,6 +585,18 @@ export function App() {
     navigateToSection('operations');
   }
 
+  function recordOverviewDraftPreflight(draft: OperationsDraft, preflight: OperationTaskPreflightResponse) {
+    setOverviewPreflightSnapshot({
+      id: `${draft.id}-${preflight.correlationId}`,
+      title: draft.title,
+      status: preflight.ok ? (preflight.requiresConfirmation ? 'warn' : 'ready') : 'blocked',
+      runnableTargets: preflight.summary.runnableTargets,
+      totalTargets: preflight.summary.totalTargets,
+      issueCount: preflight.issues.length,
+      generatedAt: preflight.generatedAt,
+    });
+  }
+
   function openAiWithQuestion(question: string) {
     setAiSeedQuestion(question);
     setAiCollapsed(false);
@@ -865,6 +878,7 @@ export function App() {
               events={overview.operationEvents}
               onlineCount={onlineCount}
               avgCpu={avgCpu}
+              opsPreflightSnapshot={overviewPreflightSnapshot}
               onRegionServersOpen={openServersForRegion}
               onHealthSignalOpen={openHealthSignal}
               onOperationsDraftOpen={openOverviewOperationsDraft}
@@ -887,6 +901,7 @@ export function App() {
               events={overview.operationEvents}
               servers={overview.servers}
               draft={operationDraft}
+              onDraftPreflight={recordOverviewDraftPreflight}
               onTaskFinished={refreshOverview}
               onAuditTraceOpen={openSecurityTrace}
             />

@@ -876,11 +876,33 @@ async function assertOverviewHealthBaseline(targetPage) {
   if (!/#operations/.test(targetPage.url())) {
     throw new Error(`Overview operations draft should route to operations, got ${targetPage.url()}`);
   }
+  const preflightOnlyButton = targetPage.locator('[data-ops-draft-preflight-button="true"]');
+  await preflightOnlyButton.waitFor({ timeout: 10000 });
+  const tasksBeforePreflight = await targetPage.locator('.ops-task-item').count();
+  await preflightOnlyButton.click();
+  await targetPage.waitForFunction(
+    () => {
+      const preflightCard = document.querySelector('.ops-preflight-card');
+      return preflightCard && !/Preflight not run/i.test(preflightCard.textContent || '');
+    },
+    null,
+    { timeout: 10000 },
+  );
+  const tasksAfterPreflight = await targetPage.locator('.ops-task-item').count();
+  if (tasksAfterPreflight !== tasksBeforePreflight) {
+    throw new Error(`Preflight-only should not create a task, before=${tasksBeforePreflight}, after=${tasksAfterPreflight}`);
+  }
   await captureVisualEvidence(targetPage, 'desktop-ops-health-draft', ['[data-ops-draft-banner="true"]', '.ops-builder']);
 
-  await targetPage.goto(`${baseUrl}/admin/#overview`, { waitUntil: 'networkidle', timeout: 30000 });
+  await targetPage.locator('button.nav-item', { hasText: /Overview/i }).click();
   const rerenderedBaseline = targetPage.locator('[data-health-baseline="true"]');
   await rerenderedBaseline.waitFor({ timeout: 10000 });
+  const overviewPreflightSnapshot = targetPage.locator('[data-overview-preflight-snapshot="true"]');
+  await overviewPreflightSnapshot.waitFor({ timeout: 10000 });
+  const overviewPreflightText = await overviewPreflightSnapshot.innerText();
+  if (!/Latest preflight|Ready to run|Blocked|targets runnable/i.test(overviewPreflightText)) {
+    throw new Error(`Overview should show the latest operations preflight summary, got ${overviewPreflightText}`);
+  }
   await rerenderedBaseline.locator('[data-health-signal="ssh"]').click();
   await targetPage.locator('#servers-title').waitFor({ timeout: 10000 });
   const healthScopeChip = targetPage.locator('[data-health-scope-chip="true"]');

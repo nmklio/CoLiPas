@@ -14,9 +14,20 @@ interface MonitoringOverviewProps {
   events: OperationEvent[];
   onlineCount: number;
   avgCpu: number;
+  opsPreflightSnapshot?: OverviewPreflightSnapshot | null;
   onRegionServersOpen?: (region: string | string[]) => void;
   onHealthSignalOpen?: (signal: HealthBaselineSignalId) => void;
   onOperationsDraftOpen?: () => void;
+}
+
+export interface OverviewPreflightSnapshot {
+  id: string;
+  title: string;
+  status: 'ready' | 'warn' | 'blocked';
+  runnableTargets: number;
+  totalTargets: number;
+  issueCount: number;
+  generatedAt: string;
 }
 
 interface RegionNode {
@@ -217,7 +228,7 @@ const normalizedRegionLocations = regionLocations.map(({ aliases, location }) =>
 
 const fallbackLocation: RegionLocation = { lat: 18, lng: 0, countryId: '', matched: false };
 
-export function MonitoringOverview({ servers, events, onlineCount, avgCpu, onRegionServersOpen, onHealthSignalOpen, onOperationsDraftOpen }: MonitoringOverviewProps) {
+export function MonitoringOverview({ servers, events, onlineCount, avgCpu, opsPreflightSnapshot, onRegionServersOpen, onHealthSignalOpen, onOperationsDraftOpen }: MonitoringOverviewProps) {
   const { language, t } = useI18n();
   const providerName = (provider: string) => formatProviderName(provider, t);
   const regionName = (region: string) => formatRegionName(region, language);
@@ -371,6 +382,17 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, onReg
           <button type="button" className="health-baseline-draft-button" onClick={onOperationsDraftOpen}>
             {t('overview.opsDraftButton')}
           </button>
+          {opsPreflightSnapshot && (
+            <div className={`health-preflight-snapshot ${opsPreflightSnapshot.status}`} data-overview-preflight-snapshot="true">
+              <span>{t('overview.opsPreflightTitle')}</span>
+              <strong>{t(`overview.opsPreflightStatus.${opsPreflightSnapshot.status}`)}</strong>
+              <small>{t('overview.opsPreflightDetail', {
+                runnable: opsPreflightSnapshot.runnableTargets,
+                total: opsPreflightSnapshot.totalTargets,
+                issues: opsPreflightSnapshot.issueCount,
+              })}</small>
+            </div>
+          )}
         </div>
       </article>
 

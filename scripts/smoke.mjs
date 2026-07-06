@@ -4488,11 +4488,14 @@ function assertOverviewMapInteractionGuards() {
     'colipas.overview.healthTrend.v1',
     "onHealthSignalOpen?: (signal: HealthBaselineSignalId) => void",
     'onOperationsDraftOpen?: () => void',
+    'opsPreflightSnapshot?: OverviewPreflightSnapshot | null',
+    'data-overview-preflight-snapshot="true"',
     'data-health-signal={signal.id}',
     'health-baseline-draft-button',
     'overview.healthBaselineTitle',
     'overview.healthTrendTitle',
     'overview.opsDraftButton',
+    'overview.opsPreflightTitle',
     'overview.healthSignalOpen',
     'overview.healthSignalResources',
     'overview.healthSignalSsh',
@@ -4591,18 +4594,27 @@ function assertOverviewMapInteractionGuards() {
     'onHealthSignalOpen={openHealthSignal}',
     'const overviewTriageCommand',
     'const [operationDraft, setOperationDraft] = useState<OperationsDraft | null>(null)',
+    'const [overviewPreflightSnapshot, setOverviewPreflightSnapshot] = useState<OverviewPreflightSnapshot | null>(null)',
     'function openOverviewOperationsDraft()',
+    'function recordOverviewDraftPreflight(draft: OperationsDraft, preflight: OperationTaskPreflightResponse)',
     'onOperationsDraftOpen={openOverviewOperationsDraft}',
+    'opsPreflightSnapshot={overviewPreflightSnapshot}',
     'draft={operationDraft}',
+    'onDraftPreflight={recordOverviewDraftPreflight}',
   ], 'overview health signal routing');
 
   assertFileContains('src/modules/operations/OperationsCenter.tsx', [
     'export interface OperationsDraft',
     'draft?: OperationsDraft | null',
+    'onDraftPreflight?: (draft: OperationsDraft, preflight: OperationTaskPreflightResponse) => void',
     'data-ops-draft-banner="true"',
+    'data-ops-draft-preflight-button="true"',
+    'async function executePreflightOnly()',
     'setBuilderOpen(true)',
     'setDraftNotice(draft)',
+    'onDraftPreflight?.(draftNotice, preflightResult)',
     'draftHint',
+    'preflightOnlyHint',
   ], 'overview operations draft');
 
   assertFileContains('src/modules/servers/ServerInventory.tsx', [

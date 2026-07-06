@@ -35,6 +35,7 @@ interface OperationsCenterProps {
   events: OperationEvent[];
   servers: ServerNode[];
   draft?: OperationsDraft | null;
+  onDraftPreflight?: (draft: OperationsDraft, preflight: OperationTaskPreflightResponse) => void;
   onTaskFinished?: () => Promise<void> | void;
   onAuditTraceOpen?: (correlationId: string) => void;
 }
@@ -105,6 +106,8 @@ type Copy = {
   draftApplied: string;
   draftHint: string;
   dismissDraft: string;
+  runPreflight: string;
+  preflightOnlyHint: string;
   truncatedOutputs?: string;
 };
 
@@ -162,6 +165,8 @@ const copyByLanguage: Record<string, Copy> = {
     draftApplied: '健康草案已生成',
     draftHint: '草案只预填任务；点击执行编排后仍会先预检并要求确认。',
     dismissDraft: '收起草案提示',
+    runPreflight: '只预检',
+    preflightOnlyHint: '只验证目标和风险，不执行命令。',
   },
   en: {
     running: 'Running',
@@ -211,6 +216,8 @@ const copyByLanguage: Record<string, Copy> = {
     draftApplied: 'Health draft generated',
     draftHint: 'The draft only fills the task. Running it still performs preflight and confirmation first.',
     dismissDraft: 'Dismiss draft note',
+    runPreflight: 'Preflight only',
+    preflightOnlyHint: 'Validate targets and risk without running commands.',
   },
   ja: {
     running: '実行中',
@@ -260,6 +267,8 @@ const copyByLanguage: Record<string, Copy> = {
     draftApplied: 'ヘルス草案を生成しました',
     draftHint: '草案はタスクを入力するだけです。実行時は先にチェックと確認を行います。',
     dismissDraft: '草案メモを閉じる',
+    runPreflight: 'チェックのみ',
+    preflightOnlyHint: 'コマンドを実行せず、対象とリスクだけ確認します。',
   },
 };
 
@@ -321,7 +330,7 @@ const preflightCopyByLanguage: Record<string, {
   },
 };
 
-export function OperationsCenter({ events, servers, draft, onTaskFinished, onAuditTraceOpen }: OperationsCenterProps) {
+export function OperationsCenter({ events, servers, draft, onDraftPreflight, onTaskFinished, onAuditTraceOpen }: OperationsCenterProps) {
   const { language, t } = useI18n();
   const copy = copyByLanguage[language] ?? copyByLanguage.zh;
   const preflightCopy = preflightCopyByLanguage[language] ?? preflightCopyByLanguage.zh;
@@ -410,26 +419,37 @@ export function OperationsCenter({ events, servers, draft, onTaskFinished, onAud
     setAppliedDraftId(draft.id);
   }, [appliedDraftId, draft]);
 
-  async function runTask() {
+  async function executePreflightOnly() {
     const validation = validateTask();
     if (validation) {
       setMessage(validation);
-      return;
+      return null;
     }
 
     const preflightPayload = buildTaskPayload(false);
     setPreflighting(true);
     setMessage('');
-    let preflightResult: OperationTaskPreflightResponse;
     try {
-      preflightResult = await preflightOperationTask(preflightPayload);
+      const preflightResult = await preflightOperationTask(preflightPayload);
       setPreflight(preflightResult);
+      setMessage(preflightResult.ok ? preflightStatusText(preflightResult, preflightCopy) : preflightResult.issues[0]?.message ?? preflightCopy.blocked);
+      if (draftNotice) {
+        onDraftPreflight?.(draftNotice, preflightResult);
+      }
+      return preflightResult;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : preflightCopy.unavailable);
+      return null;
+    } finally {
       setPreflighting(false);
+    }
+  }
+
+  async function runTask() {
+    const preflightResult = await executePreflightOnly();
+    if (!preflightResult) {
       return;
     }
-    setPreflighting(false);
 
     if (!preflightResult.ok) {
       setMessage(preflightResult.issues[0]?.message ?? preflightCopy.blocked);
@@ -651,14 +671,25 @@ export function OperationsCenter({ events, servers, draft, onTaskFinished, onAud
                 </div>
               )}
 
-              <div className="ops-runner-footer">
-                <div>
-                  <span>{copy.preview}</span>
-                  <strong>{previewCount} {t('common.servers')}</strong>
-                </div>
-                <button type="button" className="tool-button primary" disabled={running || preflighting || previewCount === 0} onClick={runTask}>
-                  <PlayCircle size={16} />
-                  {running ? copy.runningTask : preflighting ? preflightCopy.title : copy.run}
+                <div className="ops-runner-footer">
+                  <div>
+                    <span>{copy.preview}</span>
+                    <strong>{previewCount} {t('common.servers')}</strong>
+                    <small>{copy.preflightOnlyHint}</small>
+                  </div>
+                  <button
+                    type="button"
+                    className="tool-button"
+                    data-ops-draft-preflight-button="true"
+                    disabled={running || preflighting || previewCount === 0}
+                    onClick={executePreflightOnly}
+                  >
+                    <ShieldCheck size={16} />
+                    {preflighting ? preflightCopy.title : copy.runPreflight}
+                  </button>
+                  <button type="button" className="tool-button primary" disabled={running || preflighting || previewCount === 0} onClick={runTask}>
+                    <PlayCircle size={16} />
+                    {running ? copy.runningTask : preflighting ? preflightCopy.title : copy.run}
                 </button>
               </div>
 
