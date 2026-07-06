@@ -7604,6 +7604,11 @@ pre {
   align-items: start;
 }
 
+.security-ssh-flight-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .security-ssh-flight-header span {
   display: block;
   color: #0f766e;
@@ -7622,7 +7627,62 @@ pre {
   line-height: 1.45;
 }
 
+.security-ssh-flight-diagnosis {
+  margin-top: 12px;
+  border: 1px solid rgba(15, 118, 110, 0.14);
+  border-radius: 14px;
+  padding: 11px 12px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: inset 4px 0 0 rgba(15, 118, 110, 0.58);
+}
+
+.security-ssh-flight-diagnosis.warn {
+  border-color: rgba(245, 158, 11, 0.2);
+  box-shadow: inset 4px 0 0 rgba(245, 158, 11, 0.62);
+}
+
+.security-ssh-flight-diagnosis.fail {
+  border-color: rgba(239, 68, 68, 0.2);
+  box-shadow: inset 4px 0 0 rgba(239, 68, 68, 0.62);
+}
+
+.security-ssh-flight-diagnosis span,
+.security-ssh-flight-diagnosis strong,
+.security-ssh-flight-diagnosis p,
+.security-ssh-flight-diagnosis small {
+  display: block;
+  min-width: 0;
+}
+
+.security-ssh-flight-diagnosis span {
+  color: #0f766e;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.security-ssh-flight-diagnosis strong {
+  margin-top: 4px;
+  color: var(--text);
+  font-size: 15px;
+}
+
+.security-ssh-flight-diagnosis p {
+  margin: 4px 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.security-ssh-flight-diagnosis small {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .security-ssh-flight-stats {
+  margin-top: 10px;
   display: grid;
   grid-template-columns: repeat(4, minmax(64px, 1fr));
   gap: 7px;
@@ -9255,6 +9315,10 @@ pre {
   }
 
   .security-ssh-performance-actions {
+    justify-content: flex-start;
+  }
+
+  .security-ssh-flight-actions {
     justify-content: flex-start;
   }
 

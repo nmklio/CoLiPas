@@ -179,12 +179,15 @@ async function assertReleaseEvidenceBrief(targetPage) {
   await targetPage.evaluate(() => {
     window.__colipasCopiedSshPerformanceText = '';
     window.__colipasCopiedSshLagReportText = '';
+    window.__colipasCopiedSshFlightText = '';
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: {
         writeText: async (text) => {
           if (/SSH lag diagnosis report/i.test(text)) {
             window.__colipasCopiedSshLagReportText = text;
+          } else if (/SSH flight recorder/i.test(text)) {
+            window.__colipasCopiedSshFlightText = text;
           } else {
             window.__colipasCopiedSshPerformanceText = text;
           }
@@ -214,12 +217,23 @@ async function assertReleaseEvidenceBrief(targetPage) {
   if (!/SSH flight recorder/i.test(sshFlightText) || !/Sessions/i.test(sshFlightText) || !/Output lines/i.test(sshFlightText) || !/Session #/i.test(sshFlightText) || !/input/i.test(sshFlightText) || !/output/i.test(sshFlightText)) {
     throw new Error(`SSH flight recorder did not render sanitized session timeline evidence: ${sshFlightText}`);
   }
+  if (!/Automatic bottleneck hint/i.test(sshFlightText) || !/Suggested action/i.test(sshFlightText) && !/Keep the screenshot|Focus on|Check WebSocket|Retest/i.test(sshFlightText)) {
+    throw new Error(`SSH flight recorder did not render automatic bottleneck guidance: ${sshFlightText}`);
+  }
   const sshFlightSegmentCount = await targetPage.locator('.security-ssh-flight-rail span').count();
   if (sshFlightSegmentCount < 2) {
     throw new Error(`SSH flight recorder should expose multiple timeline segments, got ${sshFlightSegmentCount}`);
   }
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(sshFlightText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(sshFlightText)) {
     throw new Error('SSH flight recorder rendered a raw IP address or API key');
+  }
+  await targetPage.getByRole('button', { name: /copy flight summary/i }).click();
+  const copiedSshFlightText = await targetPage.evaluate(() => window.__colipasCopiedSshFlightText ?? '');
+  if (!/SSH flight recorder/i.test(copiedSshFlightText) || !/Automatic bottleneck hint/i.test(copiedSshFlightText) || !/Evidence/i.test(copiedSshFlightText) || !/Suggested action/i.test(copiedSshFlightText) || !/This summary only includes sanitized aggregate metrics/i.test(copiedSshFlightText)) {
+    throw new Error(`SSH flight recorder copy output is incomplete: ${copiedSshFlightText}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshFlightText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshFlightText)) {
+    throw new Error('SSH flight recorder copy output leaked a raw IP address or API key');
   }
   const storedSshLagHistory = await targetPage.evaluate(() => window.localStorage.getItem('colipas.sshLagReportHistory.v1') ?? '');
   if (!/SSH lag diagnosis report/i.test(storedSshLagHistory) || !/"tone":/i.test(storedSshLagHistory) || /\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(storedSshLagHistory) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(storedSshLagHistory)) {

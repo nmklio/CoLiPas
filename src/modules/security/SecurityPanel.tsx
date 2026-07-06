@@ -196,12 +196,18 @@ interface SshFlightRecord {
 
 interface SshFlightRecorderSummary {
   tone: 'ok' | 'warn' | 'fail';
+  diagnosis: {
+    title: string;
+    detail: string;
+    action: string;
+  };
   stats: Array<{
     label: string;
     value: string;
     detail: string;
   }>;
   records: SshFlightRecord[];
+  copyText: string;
 }
 
 const sshLagReportHistoryStorageKey = 'colipas.sshLagReportHistory.v1';
@@ -492,6 +498,23 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
       setRemediationError(false);
     } catch {
       setRemediationMessage(sshPerformance.reportText);
+      setRemediationError(false);
+    }
+  }
+
+  async function copySshFlightReport() {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) {
+      setRemediationMessage(sshFlightRecorder.copyText);
+      setRemediationError(false);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(sshFlightRecorder.copyText);
+      setRemediationMessage(sshPerformanceCopy.flightCopied);
+      setRemediationError(false);
+    } catch {
+      setRemediationMessage(sshFlightRecorder.copyText);
       setRemediationError(false);
     }
   }
@@ -893,14 +916,26 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
               <span>{sshPerformanceCopy.flightTitle}</span>
               <p>{sshPerformanceCopy.flightDescription}</p>
             </div>
-            <div className="security-ssh-flight-stats">
-              {sshFlightRecorder.stats.map((stat) => (
-                <strong key={stat.label} title={stat.detail}>
-                  <small>{stat.label}</small>
-                  {stat.value}
-                </strong>
-              ))}
+            <div className="security-ssh-flight-actions">
+              <button type="button" className="tool-button" onClick={copySshFlightReport}>
+                <ClipboardCheck size={15} />
+                {sshPerformanceCopy.flightCopy}
+              </button>
             </div>
+          </div>
+          <div className={`security-ssh-flight-diagnosis ${sshFlightRecorder.tone}`} data-ssh-flight-diagnosis="true">
+            <span>{sshPerformanceCopy.flightDiagnosisTitle}</span>
+            <strong>{sshFlightRecorder.diagnosis.title}</strong>
+            <p>{sshFlightRecorder.diagnosis.detail}</p>
+            <small>{sshFlightRecorder.diagnosis.action}</small>
+          </div>
+          <div className="security-ssh-flight-stats">
+            {sshFlightRecorder.stats.map((stat) => (
+              <strong key={stat.label} title={stat.detail}>
+                <small>{stat.label}</small>
+                {stat.value}
+              </strong>
+            ))}
           </div>
           {sshFlightRecorder.records.length > 0 ? (
             <div className="security-ssh-flight-list">
@@ -2127,11 +2162,14 @@ function buildSshFlightRecorder(
   copy: SshPerformanceCopy,
   locale: string,
 ): SshFlightRecorderSummary {
+  const websocket = diagnostic?.sshTerminal?.websocket;
   const replays = diagnostic?.sshTerminal?.sessionReplays ?? [];
   const recentReplays = replays.slice(0, 4);
   const totalErrors = replays.reduce((count, replay) => count + replay.errorCount, 0);
   const activeSessions = replays.filter((replay) => replay.active).length;
   const totalOutputLines = replays.reduce((count, replay) => count + replay.outputLines, 0);
+  const inputRatio = calculateBatchRatio(websocket?.inputEvents ?? 0, websocket?.inputFlushes ?? 0);
+  const outputRatio = calculateBatchRatio(websocket?.outputEvents ?? 0, websocket?.outputFlushes ?? 0);
   const averageDuration = replays.length > 0
     ? replays.reduce((count, replay) => count + replay.durationMs, 0) / replays.length
     : 0;
@@ -2142,33 +2180,130 @@ function buildSshFlightRecorder(
       : recentReplays.length > 0
         ? 'ok'
         : 'warn';
+  const records = recentReplays.map((replay, index) => buildSshFlightRecord(replay, index, copy, locale));
+  const diagnosis = buildSshFlightDiagnosis({
+    tone,
+    replays: replays.length,
+    activeSessions,
+    totalErrors,
+    totalOutputLines,
+    averageDuration,
+    inputRatio,
+    outputRatio,
+    copy,
+  });
+  const stats = [
+    {
+      label: copy.flightStatSessions,
+      value: String(replays.length),
+      detail: copy.flightStatSessionsDetail(activeSessions),
+    },
+    {
+      label: copy.flightStatErrors,
+      value: String(totalErrors),
+      detail: copy.flightStatErrorsDetail(totalErrors),
+    },
+    {
+      label: copy.flightStatOutput,
+      value: new Intl.NumberFormat(locale).format(totalOutputLines),
+      detail: copy.flightStatOutputDetail(totalOutputLines),
+    },
+    {
+      label: copy.flightStatDuration,
+      value: formatSshFlightDuration(averageDuration, locale),
+      detail: copy.flightStatDurationDetail(averageDuration),
+    },
+  ];
 
   return {
     tone,
-    stats: [
-      {
-        label: copy.flightStatSessions,
-        value: String(replays.length),
-        detail: copy.flightStatSessionsDetail(activeSessions),
-      },
-      {
-        label: copy.flightStatErrors,
-        value: String(totalErrors),
-        detail: copy.flightStatErrorsDetail(totalErrors),
-      },
-      {
-        label: copy.flightStatOutput,
-        value: new Intl.NumberFormat(locale).format(totalOutputLines),
-        detail: copy.flightStatOutputDetail(totalOutputLines),
-      },
-      {
-        label: copy.flightStatDuration,
-        value: formatSshFlightDuration(averageDuration, locale),
-        detail: copy.flightStatDurationDetail(averageDuration),
-      },
-    ],
-    records: recentReplays.map((replay, index) => buildSshFlightRecord(replay, index, copy, locale)),
+    diagnosis,
+    stats,
+    records,
+    copyText: buildSshFlightCopyText(copy, diagnosis, stats, records),
   };
+}
+
+function buildSshFlightDiagnosis(input: {
+  tone: SshFlightRecorderSummary['tone'];
+  replays: number;
+  activeSessions: number;
+  totalErrors: number;
+  totalOutputLines: number;
+  averageDuration: number;
+  inputRatio: number;
+  outputRatio: number;
+  copy: SshPerformanceCopy;
+}): SshFlightRecorderSummary['diagnosis'] {
+  const { tone, replays, activeSessions, totalErrors, totalOutputLines, averageDuration, inputRatio, outputRatio, copy } = input;
+  if (replays === 0) {
+    return {
+      title: copy.flightDiagnosisNoEvidence,
+      detail: copy.flightDiagnosisNoEvidenceDetail,
+      action: copy.flightDiagnosisNoEvidenceAction,
+    };
+  }
+  if (totalErrors > 0) {
+    return {
+      title: copy.flightDiagnosisError,
+      detail: copy.flightDiagnosisErrorDetail(totalErrors),
+      action: copy.flightDiagnosisErrorAction,
+    };
+  }
+  if (activeSessions > 4) {
+    return {
+      title: copy.flightDiagnosisActive,
+      detail: copy.flightDiagnosisActiveDetail(activeSessions),
+      action: copy.flightDiagnosisActiveAction,
+    };
+  }
+  if (inputRatio > 0 && inputRatio < 1.25) {
+    return {
+      title: copy.flightDiagnosisInput,
+      detail: copy.flightDiagnosisInputDetail(inputRatio),
+      action: copy.flightDiagnosisInputAction,
+    };
+  }
+  if (totalOutputLines >= 1000 || outputRatio >= 80) {
+    return {
+      title: copy.flightDiagnosisOutput,
+      detail: copy.flightDiagnosisOutputDetail(totalOutputLines, outputRatio),
+      action: copy.flightDiagnosisOutputAction,
+    };
+  }
+  if (averageDuration >= 5000) {
+    return {
+      title: copy.flightDiagnosisDuration,
+      detail: copy.flightDiagnosisDurationDetail(averageDuration),
+      action: copy.flightDiagnosisDurationAction,
+    };
+  }
+  return {
+    title: tone === 'ok' ? copy.flightDiagnosisHealthy : copy.flightDiagnosisWatch,
+    detail: copy.flightDiagnosisHealthyDetail,
+    action: copy.flightDiagnosisHealthyAction,
+  };
+}
+
+function buildSshFlightCopyText(
+  copy: SshPerformanceCopy,
+  diagnosis: SshFlightRecorderSummary['diagnosis'],
+  stats: SshFlightRecorderSummary['stats'],
+  records: SshFlightRecord[],
+) {
+  return [
+    `# ${copy.flightTitle}`,
+    `${copy.flightDiagnosisTitle}: ${diagnosis.title}`,
+    `${copy.flightDiagnosisDetailLabel}: ${diagnosis.detail}`,
+    `${copy.flightDiagnosisActionLabel}: ${diagnosis.action}`,
+    '',
+    ...stats.map((stat) => `${stat.label}: ${stat.value} (${stat.detail})`),
+    '',
+    copy.flightRecentSessionsLabel,
+    ...records.map((record) => `- ${record.label}: ${record.summary}; ${record.detail}; ${record.meta.join(' / ')}`),
+    '',
+    copy.flightSanitizedNote,
+  ].join('\n');
 }
 
 function buildSshFlightRecord(
@@ -2646,6 +2781,35 @@ interface SshPerformanceCopy {
   flightTitle: string;
   flightDescription: string;
   flightEmpty: string;
+  flightCopy: string;
+  flightCopied: string;
+  flightDiagnosisTitle: string;
+  flightDiagnosisDetailLabel: string;
+  flightDiagnosisActionLabel: string;
+  flightRecentSessionsLabel: string;
+  flightSanitizedNote: string;
+  flightDiagnosisNoEvidence: string;
+  flightDiagnosisNoEvidenceDetail: string;
+  flightDiagnosisNoEvidenceAction: string;
+  flightDiagnosisError: string;
+  flightDiagnosisErrorDetail: (errors: number) => string;
+  flightDiagnosisErrorAction: string;
+  flightDiagnosisActive: string;
+  flightDiagnosisActiveDetail: (active: number) => string;
+  flightDiagnosisActiveAction: string;
+  flightDiagnosisInput: string;
+  flightDiagnosisInputDetail: (ratio: number) => string;
+  flightDiagnosisInputAction: string;
+  flightDiagnosisOutput: string;
+  flightDiagnosisOutputDetail: (lines: number, ratio: number) => string;
+  flightDiagnosisOutputAction: string;
+  flightDiagnosisDuration: string;
+  flightDiagnosisDurationDetail: (durationMs: number) => string;
+  flightDiagnosisDurationAction: string;
+  flightDiagnosisHealthy: string;
+  flightDiagnosisWatch: string;
+  flightDiagnosisHealthyDetail: string;
+  flightDiagnosisHealthyAction: string;
   flightActive: string;
   flightClosed: string;
   flightStatSessions: string;
@@ -2744,6 +2908,35 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     flightTitle: 'SSH 飞行记录器',
     flightDescription: '把最近会话压缩成脱敏事件轨道，快速判断卡顿发生在输入、输出、关闭还是错误阶段。',
     flightEmpty: '暂无可回放的 SSH 会话。打开终端执行一次安全命令后，这里会显示脱敏时间线。',
+    flightCopy: '复制飞行摘要',
+    flightCopied: 'SSH 飞行记录摘要已复制',
+    flightDiagnosisTitle: '自动瓶颈提示',
+    flightDiagnosisDetailLabel: '证据',
+    flightDiagnosisActionLabel: '建议动作',
+    flightRecentSessionsLabel: '最近会话',
+    flightSanitizedNote: '此摘要仅包含脱敏聚合指标和事件类型，不包含服务器地址、命令正文、密钥或用户数据。',
+    flightDiagnosisNoEvidence: '等待会话证据',
+    flightDiagnosisNoEvidenceDetail: '当前还没有可回放的 SSH 会话轨道。',
+    flightDiagnosisNoEvidenceAction: '打开 SSH 终端并执行一次安全命令后刷新安全页。',
+    flightDiagnosisError: '优先检查连接错误',
+    flightDiagnosisErrorDetail: (errors) => `最近会话记录到 ${errors} 个错误事件。`,
+    flightDiagnosisErrorAction: '先检查 WebSocket 升级、代理超时、SSH 会话关闭链路和后端日志。',
+    flightDiagnosisActive: '活跃会话偏多',
+    flightDiagnosisActiveDetail: (active) => `${active} 个 SSH 会话仍处于进行中。`,
+    flightDiagnosisActiveAction: '关闭闲置终端，确认页面关闭和中断按钮都会释放后端 shell。',
+    flightDiagnosisInput: '输入链路需要观察',
+    flightDiagnosisInputDetail: (ratio) => `输入合并率 ${formatBatchRatio(ratio)}x，接近逐键写入。`,
+    flightDiagnosisInputAction: '重点测试粘贴、大段输入和弱网场景，必要时继续增大输入合并窗口。',
+    flightDiagnosisOutput: '输出吞吐是主要观察点',
+    flightDiagnosisOutputDetail: (lines, ratio) => `${lines} 行脱敏输出，输出批次约 ${ratio > 0 ? formatBatchRatio(ratio) : '--'}x。`,
+    flightDiagnosisOutputAction: '重点测试长输出渲染、xterm scrollback 和 WebSocket flush 批次。',
+    flightDiagnosisDuration: '单次会话耗时偏长',
+    flightDiagnosisDurationDetail: (durationMs) => `平均会话耗时 ${formatSshFlightDuration(durationMs, 'zh-CN')}。`,
+    flightDiagnosisDurationAction: '对比远端命令耗时、首包时间和本地渲染长任务。',
+    flightDiagnosisHealthy: '飞行记录稳定',
+    flightDiagnosisWatch: '继续观察',
+    flightDiagnosisHealthyDetail: '最近会话未记录错误，输入/输出轨道可用于后续对比。',
+    flightDiagnosisHealthyAction: '继续保留飞行记录截图和摘要，等待真实用户卡顿反馈时对比。',
     flightActive: '进行中',
     flightClosed: '已关闭',
     flightStatSessions: '会话',
@@ -2840,6 +3033,35 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     flightTitle: 'SSH flight recorder',
     flightDescription: 'Compresses recent sessions into sanitized event rails so lag can be traced to input, output, close, or error stages.',
     flightEmpty: 'No SSH replay is available yet. Open a terminal and run one safe command to generate the sanitized timeline.',
+    flightCopy: 'Copy flight summary',
+    flightCopied: 'SSH flight recorder summary copied',
+    flightDiagnosisTitle: 'Automatic bottleneck hint',
+    flightDiagnosisDetailLabel: 'Evidence',
+    flightDiagnosisActionLabel: 'Suggested action',
+    flightRecentSessionsLabel: 'Recent sessions',
+    flightSanitizedNote: 'This summary only includes sanitized aggregate metrics and event types. It excludes server addresses, command text, keys, and user data.',
+    flightDiagnosisNoEvidence: 'Waiting for session evidence',
+    flightDiagnosisNoEvidenceDetail: 'There is no replayable SSH session rail yet.',
+    flightDiagnosisNoEvidenceAction: 'Open an SSH terminal, run one safe command, then refresh Security.',
+    flightDiagnosisError: 'Check connection errors first',
+    flightDiagnosisErrorDetail: (errors) => `${errors} error event(s) were recorded in recent sessions.`,
+    flightDiagnosisErrorAction: 'Check WebSocket upgrade headers, proxy timeouts, SSH shell cleanup, and backend logs first.',
+    flightDiagnosisActive: 'Many sessions are still active',
+    flightDiagnosisActiveDetail: (active) => `${active} SSH session(s) are still active.`,
+    flightDiagnosisActiveAction: 'Close idle terminals and verify close/disconnect/interrupt all release backend shells.',
+    flightDiagnosisInput: 'Input path needs attention',
+    flightDiagnosisInputDetail: (ratio) => `Input batching is ${formatBatchRatio(ratio)}x, close to per-key writes.`,
+    flightDiagnosisInputAction: 'Retest paste bursts, long input, and weak networks; widen the input batching window if needed.',
+    flightDiagnosisOutput: 'Output throughput is the main watchpoint',
+    flightDiagnosisOutputDetail: (lines, ratio) => `${lines} sanitized output line(s), output batching about ${ratio > 0 ? formatBatchRatio(ratio) : '--'}x.`,
+    flightDiagnosisOutputAction: 'Focus on long-output rendering, xterm scrollback, and WebSocket flush batches.',
+    flightDiagnosisDuration: 'Session duration is high',
+    flightDiagnosisDurationDetail: (durationMs) => `Average session duration is ${formatSshFlightDuration(durationMs, 'en-US')}.`,
+    flightDiagnosisDurationAction: 'Compare remote command duration, first response time, and local rendering long tasks.',
+    flightDiagnosisHealthy: 'Flight records look stable',
+    flightDiagnosisWatch: 'Keep watching',
+    flightDiagnosisHealthyDetail: 'Recent sessions recorded no errors and the rails can be used as a comparison baseline.',
+    flightDiagnosisHealthyAction: 'Keep the screenshot and copied summary so real user lag reports can be compared later.',
     flightActive: 'Active',
     flightClosed: 'Closed',
     flightStatSessions: 'Sessions',
@@ -2936,6 +3158,35 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     flightTitle: 'SSH フライトレコーダー',
     flightDescription: '最近のセッションを匿名化イベントレールに圧縮し、入力・出力・終了・エラーのどこで詰まるか確認します。',
     flightEmpty: '再生できる SSH セッションはまだありません。端末で安全なコマンドを実行すると匿名化タイムラインを表示します。',
+    flightCopy: 'サマリーをコピー',
+    flightCopied: 'SSH フライトサマリーをコピーしました',
+    flightDiagnosisTitle: '自動ボトルネック判定',
+    flightDiagnosisDetailLabel: '証跡',
+    flightDiagnosisActionLabel: '推奨アクション',
+    flightRecentSessionsLabel: '最近のセッション',
+    flightSanitizedNote: 'このサマリーは匿名化された集計指標とイベント種別のみを含み、サーバーアドレス、コマンド本文、キー、ユーザーデータは含みません。',
+    flightDiagnosisNoEvidence: 'セッション証跡待ち',
+    flightDiagnosisNoEvidenceDetail: '再生できる SSH セッションレールがまだありません。',
+    flightDiagnosisNoEvidenceAction: 'SSH 端末で安全なコマンドを 1 回実行してから Security を更新します。',
+    flightDiagnosisError: '接続エラーを優先確認',
+    flightDiagnosisErrorDetail: (errors) => `最近のセッションに ${errors} 件のエラーがあります。`,
+    flightDiagnosisErrorAction: 'WebSocket アップグレード、プロキシタイムアウト、shell 解放、バックエンドログを確認します。',
+    flightDiagnosisActive: 'アクティブセッションが多い',
+    flightDiagnosisActiveDetail: (active) => `${active} 件の SSH セッションが実行中です。`,
+    flightDiagnosisActiveAction: '不要な端末を閉じ、close/disconnect/interrupt が shell を解放することを確認します。',
+    flightDiagnosisInput: '入力経路を観察',
+    flightDiagnosisInputDetail: (ratio) => `入力バッチは ${formatBatchRatio(ratio)}x で逐次書き込みに近い状態です。`,
+    flightDiagnosisInputAction: '貼り付け、大量入力、弱いネットワークで再テストします。',
+    flightDiagnosisOutput: '出力スループットを重点確認',
+    flightDiagnosisOutputDetail: (lines, ratio) => `${lines} 行の匿名化出力、出力バッチは約 ${ratio > 0 ? formatBatchRatio(ratio) : '--'}x。`,
+    flightDiagnosisOutputAction: '長い出力、xterm scrollback、WebSocket flush を重点確認します。',
+    flightDiagnosisDuration: 'セッション時間が長い',
+    flightDiagnosisDurationDetail: (durationMs) => `平均セッション時間は ${formatSshFlightDuration(durationMs, 'ja-JP')} です。`,
+    flightDiagnosisDurationAction: 'リモートコマンド時間、初回応答、本地レンダリング長時間タスクを比較します。',
+    flightDiagnosisHealthy: 'フライト記録は安定',
+    flightDiagnosisWatch: '継続監視',
+    flightDiagnosisHealthyDetail: '最近のセッションにエラーはなく、レールを比較基準として使えます。',
+    flightDiagnosisHealthyAction: 'スクリーンショットとコピー済みサマリーを残し、実際の遅延報告と比較します。',
     flightActive: '実行中',
     flightClosed: '終了',
     flightStatSessions: 'セッション',
