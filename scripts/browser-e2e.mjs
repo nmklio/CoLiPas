@@ -36,7 +36,7 @@ try {
   await assertReleaseEvidenceBrief(page);
   await captureVisualEvidence(page, 'desktop-security-trace', ['.security-workbench', '.security-readiness-card', '.security-evidence-brief', '.security-release-playbook', '.security-ssh-performance-card']);
   await page.locator('[data-ssh-flight-recorder="true"]').scrollIntoViewIfNeeded();
-  await captureVisualEvidence(page, 'desktop-ssh-flight-recorder', ['[data-ssh-flight-recorder="true"]', '.security-ssh-flight-rail', '[data-ssh-latency-curve="true"]']);
+  await captureVisualEvidence(page, 'desktop-ssh-flight-recorder', ['[data-ssh-flight-recorder="true"]', '.security-ssh-flight-rail', '[data-ssh-latency-curve="true"]', '[data-ssh-interaction-sampler="true"]']);
   await assertOverviewHealthBaseline(page);
   await assertMobileConsoleAndMap();
   await assertMobileModuleLayoutSweep();
@@ -190,6 +190,7 @@ async function assertReleaseEvidenceBrief(targetPage) {
     window.__colipasCopiedSshPerformanceText = '';
     window.__colipasCopiedSshLagReportText = '';
     window.__colipasCopiedSshFlightText = '';
+    window.__colipasCopiedSshSamplerText = '';
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: {
@@ -198,6 +199,8 @@ async function assertReleaseEvidenceBrief(targetPage) {
             window.__colipasCopiedSshLagReportText = text;
           } else if (/SSH flight recorder/i.test(text)) {
             window.__colipasCopiedSshFlightText = text;
+          } else if (/SSH real interaction sampler/i.test(text)) {
+            window.__colipasCopiedSshSamplerText = text;
           } else {
             window.__colipasCopiedSshPerformanceText = text;
           }
@@ -257,9 +260,31 @@ async function assertReleaseEvidenceBrief(targetPage) {
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(sshLatencyCurveText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(sshLatencyCurveText)) {
     throw new Error('SSH live latency curve rendered a raw IP address or API key');
   }
+  await targetPage.locator('[data-ssh-interaction-sampler="true"]').waitFor({ timeout: 5000 });
+  const sshSamplerText = await targetPage.locator('[data-ssh-interaction-sampler="true"]').innerText();
+  if (!/SSH real interaction sampler/i.test(sshSamplerText) || !/Sampling score/i.test(sshSamplerText) || !/Sampled sessions/i.test(sshSamplerText) || !/Avg first output/i.test(sshSamplerText) || !/Output peak/i.test(sshSamplerText) || !/Close cleanup/i.test(sshSamplerText)) {
+    throw new Error(`SSH interaction sampler did not render real-experience metrics: ${sshSamplerText}`);
+  }
+  const sshSamplerStatCount = await targetPage.locator('.security-ssh-sampler-stats article').count();
+  const sshSamplerStepCount = await targetPage.locator('.security-ssh-sampler-steps article').count();
+  if (sshSamplerStatCount !== 4 || sshSamplerStepCount !== 4) {
+    throw new Error(`SSH interaction sampler should expose four stats and four path steps, got ${sshSamplerStatCount}/${sshSamplerStepCount}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(sshSamplerText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(sshSamplerText)) {
+    throw new Error('SSH interaction sampler rendered a raw IP address or API key');
+  }
   const storedSshLagHistory = await targetPage.evaluate(() => window.localStorage.getItem('colipas.sshLagReportHistory.v1') ?? '');
   if (!/SSH lag diagnosis report/i.test(storedSshLagHistory) || !/"tone":/i.test(storedSshLagHistory) || /\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(storedSshLagHistory) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(storedSshLagHistory)) {
     throw new Error(`SSH lag diagnosis history storage is missing or unsafe: ${storedSshLagHistory}`);
+  }
+  await targetPage.evaluate(() => { window.__colipasCopiedSshSamplerText = ''; });
+  await targetPage.getByRole('button', { name: /copy sampling report/i }).click();
+  const copiedSshSamplerText = await targetPage.evaluate(() => window.__colipasCopiedSshSamplerText ?? window.__colipasCopiedSshPerformanceText ?? '');
+  if (!/SSH real interaction sampler/i.test(copiedSshSamplerText) || !/Sampling score/i.test(copiedSshSamplerText) || !/Sampled sessions/i.test(copiedSshSamplerText) || !/Avg first output/i.test(copiedSshSamplerText) || !/The sampling report only includes sanitized aggregate metrics/i.test(copiedSshSamplerText)) {
+    throw new Error(`SSH interaction sampler copy output is incomplete: ${copiedSshSamplerText}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshSamplerText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshSamplerText)) {
+    throw new Error('SSH interaction sampler copy output leaked a raw IP address or API key');
   }
   await targetPage.getByRole('button', { name: /copy summary|复制摘要|サマリーをコピー/i }).click();
   const copiedSshPerfText = await targetPage.evaluate(() => window.__colipasCopiedSshPerformanceText ?? '');

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  Activity,
   AlertTriangle,
   CheckCircle2,
   ClipboardCheck,
@@ -249,6 +250,32 @@ interface SshLatencyCurveSummary {
   }>;
 }
 
+interface SshInteractionSamplerStat {
+  label: string;
+  value: string;
+  detail: string;
+  tone: 'ok' | 'warn' | 'fail';
+}
+
+interface SshInteractionSamplerStep {
+  id: 'sample' | 'first-output' | 'output-load' | 'close';
+  label: string;
+  value: string;
+  detail: string;
+  tone: 'ok' | 'warn' | 'fail';
+}
+
+interface SshInteractionSamplerSummary {
+  tone: 'ok' | 'warn' | 'fail';
+  title: string;
+  detail: string;
+  score: number;
+  scoreLabel: string;
+  stats: SshInteractionSamplerStat[];
+  steps: SshInteractionSamplerStep[];
+  copyText: string;
+}
+
 const sshLagReportHistoryStorageKey = 'colipas.sshLagReportHistory.v1';
 const sshLagReportHistoryVisibleLimit = 5;
 
@@ -345,6 +372,10 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
   );
   const sshLatencyCurve = useMemo(
     () => buildSshLatencyCurve(diagnosticBundle, sshPerformanceCopy, locale),
+    [diagnosticBundle, locale, sshPerformanceCopy],
+  );
+  const sshInteractionSampler = useMemo(
+    () => buildSshInteractionSampler(diagnosticBundle, sshPerformanceCopy, locale),
     [diagnosticBundle, locale, sshPerformanceCopy],
   );
   const expandedSshMetric = useMemo(
@@ -558,6 +589,23 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
       setRemediationError(false);
     } catch {
       setRemediationMessage(sshFlightRecorder.copyText);
+      setRemediationError(false);
+    }
+  }
+
+  async function copySshSamplerReport() {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) {
+      setRemediationMessage(sshInteractionSampler.copyText);
+      setRemediationError(false);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(sshInteractionSampler.copyText);
+      setRemediationMessage(sshPerformanceCopy.samplerCopied);
+      setRemediationError(false);
+    } catch {
+      setRemediationMessage(sshInteractionSampler.copyText);
       setRemediationError(false);
     }
   }
@@ -1071,6 +1119,41 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
           ) : (
             <p className="security-ssh-flight-empty">{sshPerformanceCopy.latencyCurveEmpty}</p>
           )}
+        </div>
+        <div className={`security-ssh-sampler ${sshInteractionSampler.tone}`} data-ssh-interaction-sampler="true">
+          <div className="security-ssh-sampler-heading">
+            <div>
+              <span><Activity size={15} /> {sshPerformanceCopy.samplerTitle}</span>
+              <strong>{sshInteractionSampler.title}</strong>
+              <p>{sshInteractionSampler.detail}</p>
+            </div>
+            <div className="security-ssh-sampler-score" aria-label={sshInteractionSampler.scoreLabel}>
+              <small>{sshInteractionSampler.scoreLabel}</small>
+              <b>{sshInteractionSampler.score}</b>
+            </div>
+            <button type="button" className="tool-button" onClick={copySshSamplerReport}>
+              <ClipboardCheck size={15} />
+              {sshPerformanceCopy.samplerCopy}
+            </button>
+          </div>
+          <div className="security-ssh-sampler-stats">
+            {sshInteractionSampler.stats.map((stat) => (
+              <article key={stat.label} className={stat.tone}>
+                <span>{stat.label}</span>
+                <strong>{stat.value}</strong>
+                <small>{stat.detail}</small>
+              </article>
+            ))}
+          </div>
+          <div className="security-ssh-sampler-steps" aria-label={sshPerformanceCopy.samplerDescription}>
+            {sshInteractionSampler.steps.map((step) => (
+              <article key={step.id} className={step.tone}>
+                <span>{step.label}</span>
+                <strong>{step.value}</strong>
+                <small>{step.detail}</small>
+              </article>
+            ))}
+          </div>
         </div>
         <p className="security-ssh-performance-next">{sshPerformance.nextAction}</p>
       </article>
@@ -2532,6 +2615,208 @@ function buildSshLatencyCurve(
   };
 }
 
+function buildSshInteractionSampler(
+  diagnostic: DiagnosticExportResponse | null,
+  copy: SshPerformanceCopy,
+  locale: string,
+): SshInteractionSamplerSummary {
+  const replays = diagnostic?.sshTerminal?.sessionReplays ?? [];
+  const totalSessions = replays.length;
+  const totalErrors = replays.reduce((count, replay) => count + replay.errorCount, 0);
+  const activeSessions = replays.filter((replay) => replay.active).length;
+  const totalInputSubmits = replays.reduce((count, replay) => count + replay.inputSubmits, 0);
+  const closedSessions = replays.filter((replay) => !replay.active && (Boolean(replay.closedAt) || replay.timeline.some((event) => event.type === 'close'))).length;
+  const outputPeak = replays.reduce<DiagnosticExportResponse['sshTerminal']['sessionReplays'][number] | null>(
+    (current, replay) => {
+      if (!current) {
+        return replay;
+      }
+      if (replay.outputLines > current.outputLines) {
+        return replay;
+      }
+      if (replay.outputLines === current.outputLines && replay.outputBytes > current.outputBytes) {
+        return replay;
+      }
+      return current;
+    },
+    null,
+  );
+  const firstOutputDurations = replays
+    .map((replay) => getSshFirstOutputMs(replay))
+    .filter((value): value is number => Number.isFinite(value));
+  const averageFirstOutputMs = firstOutputDurations.length > 0
+    ? firstOutputDurations.reduce((sum, value) => sum + value, 0) / firstOutputDurations.length
+    : null;
+  const closeRatio = totalSessions > 0 ? closedSessions / totalSessions : 0;
+  const peakLines = outputPeak?.outputLines ?? 0;
+  const peakBytes = outputPeak?.outputBytes ?? 0;
+  const peakDurationMs = outputPeak?.durationMs ?? 0;
+  const peakDensity = peakDurationMs > 0 ? peakLines / Math.max(1, peakDurationMs / 1000) : 0;
+
+  let score = totalSessions > 0 ? 100 : 0;
+  if (totalSessions > 0) {
+    score -= Math.min(40, totalErrors * 20);
+    score -= Math.min(20, activeSessions * 5);
+    if (averageFirstOutputMs === null) {
+      score -= 15;
+    } else if (averageFirstOutputMs > 2000) {
+      score -= 30;
+    } else if (averageFirstOutputMs > 800) {
+      score -= 15;
+    }
+    if (closeRatio < 0.65) {
+      score -= 20;
+    } else if (closeRatio < 0.9) {
+      score -= 8;
+    }
+    if (peakLines >= 1500 && peakDurationMs >= 5000) {
+      score -= 10;
+    }
+    if (peakDensity >= 2500) {
+      score -= 8;
+    }
+  }
+  score = Math.max(0, Math.min(100, Math.round(score)));
+  const tone: SshInteractionSamplerSummary['tone'] = totalErrors > 0 || score < 60
+    ? 'fail'
+    : totalSessions === 0 || score < 85 || activeSessions > 0
+      ? 'warn'
+      : 'ok';
+  const title = totalSessions === 0
+    ? copy.samplerNoEvidenceTitle
+    : tone === 'fail'
+      ? copy.samplerFailTitle
+      : tone === 'warn'
+        ? copy.samplerWarnTitle
+        : copy.samplerHealthyTitle;
+  const detail = totalSessions === 0
+    ? copy.samplerNoEvidenceDetail
+    : tone === 'fail'
+      ? copy.samplerFailAction
+      : tone === 'warn'
+        ? copy.samplerWarnAction
+        : copy.samplerHealthyAction;
+  const firstOutputTone: SshInteractionSamplerStat['tone'] = averageFirstOutputMs === null
+    ? 'warn'
+    : averageFirstOutputMs > 2000
+      ? 'fail'
+      : averageFirstOutputMs > 800
+        ? 'warn'
+        : 'ok';
+  const outputTone: SshInteractionSamplerStat['tone'] = peakLines >= 1500 && peakDurationMs >= 5000
+    ? 'warn'
+    : peakDensity >= 2500
+      ? 'warn'
+      : 'ok';
+  const closeTone: SshInteractionSamplerStat['tone'] = totalSessions === 0
+    ? 'warn'
+    : closeRatio < 0.65 || activeSessions > 4
+      ? 'fail'
+      : closeRatio < 0.9 || activeSessions > 0
+        ? 'warn'
+        : 'ok';
+  const sampleTone: SshInteractionSamplerStat['tone'] = totalSessions === 0
+    ? 'warn'
+    : totalInputSubmits === 0
+      ? 'warn'
+      : 'ok';
+  const stats: SshInteractionSamplerStat[] = [
+    {
+      label: copy.samplerStatSessions,
+      value: new Intl.NumberFormat(locale).format(totalSessions),
+      detail: copy.samplerSessionsDetail(totalSessions, totalInputSubmits),
+      tone: sampleTone,
+    },
+    {
+      label: copy.samplerStatFirstOutput,
+      value: averageFirstOutputMs === null ? '--' : formatSshFlightDuration(averageFirstOutputMs, locale),
+      detail: copy.samplerFirstOutputDetail(averageFirstOutputMs, firstOutputDurations.length),
+      tone: firstOutputTone,
+    },
+    {
+      label: copy.samplerStatOutputPeak,
+      value: peakLines > 0 ? new Intl.NumberFormat(locale).format(peakLines) : '--',
+      detail: copy.samplerOutputPeakDetail(peakLines, peakBytes, peakDurationMs),
+      tone: outputTone,
+    },
+    {
+      label: copy.samplerStatClose,
+      value: totalSessions > 0 ? `${closedSessions}/${totalSessions}` : '--',
+      detail: copy.samplerCloseDetail(closedSessions, totalSessions, activeSessions),
+      tone: closeTone,
+    },
+  ];
+  const steps: SshInteractionSamplerStep[] = [
+    {
+      id: 'sample',
+      label: copy.samplerStepSample,
+      value: stats[0].value,
+      detail: stats[0].detail,
+      tone: sampleTone,
+    },
+    {
+      id: 'first-output',
+      label: copy.samplerStepFirstOutput,
+      value: stats[1].value,
+      detail: stats[1].detail,
+      tone: firstOutputTone,
+    },
+    {
+      id: 'output-load',
+      label: copy.samplerStepOutputLoad,
+      value: stats[2].value,
+      detail: stats[2].detail,
+      tone: outputTone,
+    },
+    {
+      id: 'close',
+      label: copy.samplerStepClose,
+      value: stats[3].value,
+      detail: stats[3].detail,
+      tone: closeTone,
+    },
+  ];
+  const copyText = [
+    `# ${copy.samplerTitle}`,
+    `${copy.samplerScoreLabel}: ${score}`,
+    `${title}: ${detail}`,
+    '',
+    ...stats.map((stat) => `${stat.label}: ${stat.value} (${stat.detail})`),
+    '',
+    ...steps.map((step) => `- ${step.label}: ${step.value} (${step.detail})`),
+    '',
+    copy.samplerSanitizedNote,
+  ].join('\n');
+
+  return {
+    tone,
+    title,
+    detail,
+    score,
+    scoreLabel: copy.samplerScoreLabel,
+    stats,
+    steps,
+    copyText,
+  };
+}
+
+function getSshFirstOutputMs(replay: DiagnosticExportResponse['sshTerminal']['sessionReplays'][number]) {
+  const connectedAt = getSshEventTime(replay.connectedAt);
+  const firstInputAt = replay.timeline.find((event) => event.type === 'input')?.at;
+  const firstOutputAt = replay.timeline.find((event) => event.type === 'stdout' || event.type === 'stderr')?.at;
+  const base = firstInputAt ? getSshEventTime(firstInputAt) : connectedAt;
+  const output = firstOutputAt ? getSshEventTime(firstOutputAt) : null;
+  if (base === null || output === null || output < base) {
+    return Number.NaN;
+  }
+  return output - base;
+}
+
+function getSshEventTime(value: string) {
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
 function getSshLatencyEventWeight(event: SshFlightTimelineEvent) {
   return Math.max(1, event.bytes + event.lines * 128 + (event.type === 'error' || event.type === 'stderr' ? 2048 : 0));
 }
@@ -3112,6 +3397,32 @@ interface SshPerformanceCopy {
   latencyCurveMarkerStart: (time: string) => string;
   latencyCurveMarkerEnd: (time: string) => string;
   latencyCurveMarkerMode: (mode: string) => string;
+  samplerTitle: string;
+  samplerDescription: string;
+  samplerCopy: string;
+  samplerCopied: string;
+  samplerScoreLabel: string;
+  samplerNoEvidenceTitle: string;
+  samplerNoEvidenceDetail: string;
+  samplerHealthyTitle: string;
+  samplerWarnTitle: string;
+  samplerFailTitle: string;
+  samplerHealthyAction: string;
+  samplerWarnAction: string;
+  samplerFailAction: string;
+  samplerStatSessions: string;
+  samplerStatFirstOutput: string;
+  samplerStatOutputPeak: string;
+  samplerStatClose: string;
+  samplerStepSample: string;
+  samplerStepFirstOutput: string;
+  samplerStepOutputLoad: string;
+  samplerStepClose: string;
+  samplerSessionsDetail: (sessions: number, inputSubmits: number) => string;
+  samplerFirstOutputDetail: (averageMs: number | null, samples: number) => string;
+  samplerOutputPeakDetail: (lines: number, bytes: number, durationMs: number) => string;
+  samplerCloseDetail: (closed: number, total: number, active: number) => string;
+  samplerSanitizedNote: string;
   copySummary: string;
   copyCopied: string;
   summaryStatus: string;
@@ -3264,6 +3575,32 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     latencyCurveMarkerStart: (time) => `开始 ${time}`,
     latencyCurveMarkerEnd: (time) => `最后 ${time}`,
     latencyCurveMarkerMode: (mode) => `模式 ${mode}`,
+    samplerTitle: 'SSH 真实交互采样器',
+    samplerDescription: '用脱敏会话回放衡量真实输入、首包、输出峰值和关闭清理，判断卡顿发生在哪一段。',
+    samplerCopy: '复制采样报告',
+    samplerCopied: 'SSH 交互采样报告已复制',
+    samplerScoreLabel: '采样评分',
+    samplerNoEvidenceTitle: '等待真实交互样本',
+    samplerNoEvidenceDetail: '打开 SSH 终端执行一次安全命令后，这里会生成真实体验采样。',
+    samplerHealthyTitle: '真实交互样本稳定',
+    samplerWarnTitle: '真实交互需要继续观察',
+    samplerFailTitle: '真实交互存在异常',
+    samplerHealthyAction: '继续保留当前采样作为基线，后续用户反馈卡顿时对比首包、输出峰值和关闭比例。',
+    samplerWarnAction: '建议补充粘贴、大输出、关闭终端三类真实操作样本后再判断是否已解决。',
+    samplerFailAction: '优先排查连接错误、后端 shell 清理和首包延迟，再复测真实命令交互。',
+    samplerStatSessions: '样本会话',
+    samplerStatFirstOutput: '平均首包',
+    samplerStatOutputPeak: '输出峰值',
+    samplerStatClose: '关闭清理',
+    samplerStepSample: '采样深度',
+    samplerStepFirstOutput: '首包路径',
+    samplerStepOutputLoad: '输出负载',
+    samplerStepClose: '关闭释放',
+    samplerSessionsDetail: (sessions, inputSubmits) => `${sessions} 段会话 / ${inputSubmits} 次命令提交`,
+    samplerFirstOutputDetail: (averageMs, samples) => averageMs === null ? `暂无首包样本 / ${samples} 段可用` : `${samples} 段样本平均 ${Math.round(averageMs)}ms`,
+    samplerOutputPeakDetail: (lines, bytes, durationMs) => `${lines} 行峰值 / ${formatSshFlightBytes(bytes)} / ${formatSshFlightDuration(durationMs, 'zh-CN')}`,
+    samplerCloseDetail: (closed, total, active) => `${closed}/${total} 已关闭，${active} 个仍活跃`,
+    samplerSanitizedNote: '采样报告只包含脱敏聚合指标，不包含服务器地址、命令正文、密钥或用户数据。',
     copySummary: '\u590d\u5236\u6458\u8981',
     copyCopied: 'SSH \u6027\u80fd\u6458\u8981\u5df2\u590d\u5236',
     summaryStatus: '\u72b6\u6001',
@@ -3414,6 +3751,32 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     latencyCurveMarkerStart: (time) => `Start ${time}`,
     latencyCurveMarkerEnd: (time) => `Last ${time}`,
     latencyCurveMarkerMode: (mode) => `Mode ${mode}`,
+    samplerTitle: 'SSH real interaction sampler',
+    samplerDescription: 'Uses sanitized session replays to measure real input, first output, output peaks, and close cleanup.',
+    samplerCopy: 'Copy sampling report',
+    samplerCopied: 'SSH interaction sampling report copied',
+    samplerScoreLabel: 'Sampling score',
+    samplerNoEvidenceTitle: 'Waiting for real interaction samples',
+    samplerNoEvidenceDetail: 'Open an SSH terminal and run one safe command to generate a real-experience sample.',
+    samplerHealthyTitle: 'Real interaction samples look stable',
+    samplerWarnTitle: 'Real interaction needs more sampling',
+    samplerFailTitle: 'Real interaction has anomalies',
+    samplerHealthyAction: 'Keep this sample as a baseline; compare first output, output peak, and close ratio when users report lag.',
+    samplerWarnAction: 'Add samples for paste bursts, large output, and terminal close before declaring the issue fixed.',
+    samplerFailAction: 'Check connection errors, backend shell cleanup, and first-output delay before retesting real commands.',
+    samplerStatSessions: 'Sampled sessions',
+    samplerStatFirstOutput: 'Avg first output',
+    samplerStatOutputPeak: 'Output peak',
+    samplerStatClose: 'Close cleanup',
+    samplerStepSample: 'Sample depth',
+    samplerStepFirstOutput: 'First-output path',
+    samplerStepOutputLoad: 'Output load',
+    samplerStepClose: 'Close release',
+    samplerSessionsDetail: (sessions, inputSubmits) => `${sessions} session(s) / ${inputSubmits} command submit(s)`,
+    samplerFirstOutputDetail: (averageMs, samples) => averageMs === null ? `No first-output sample / ${samples} usable trace(s)` : `${samples} sample(s), average ${Math.round(averageMs)}ms`,
+    samplerOutputPeakDetail: (lines, bytes, durationMs) => `${lines} peak line(s) / ${formatSshFlightBytes(bytes)} / ${formatSshFlightDuration(durationMs, 'en-US')}`,
+    samplerCloseDetail: (closed, total, active) => `${closed}/${total} closed, ${active} still active`,
+    samplerSanitizedNote: 'The sampling report only includes sanitized aggregate metrics. It excludes server addresses, command text, keys, and user data.',
     copySummary: 'Copy summary',
     copyCopied: 'SSH performance summary copied',
     summaryStatus: 'Status',
@@ -3564,6 +3927,32 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     latencyCurveMarkerStart: (time) => `開始 ${time}`,
     latencyCurveMarkerEnd: (time) => `最終 ${time}`,
     latencyCurveMarkerMode: (mode) => `モード ${mode}`,
+    samplerTitle: 'SSH 実操作サンプラー',
+    samplerDescription: '匿名化セッション再生から実入力、初回出力、出力ピーク、終了解放を測定します。',
+    samplerCopy: 'サンプリングレポートをコピー',
+    samplerCopied: 'SSH 実操作サンプリングレポートをコピーしました',
+    samplerScoreLabel: 'サンプル評価',
+    samplerNoEvidenceTitle: '実操作サンプル待ち',
+    samplerNoEvidenceDetail: 'SSH 端末で安全なコマンドを 1 回実行すると実体験サンプルを生成します。',
+    samplerHealthyTitle: '実操作サンプルは安定',
+    samplerWarnTitle: '実操作は追加観察が必要',
+    samplerFailTitle: '実操作に異常があります',
+    samplerHealthyAction: 'このサンプルを基準として残し、遅延報告時に初回出力、出力ピーク、終了比率を比較します。',
+    samplerWarnAction: '貼り付け、大量出力、端末終了のサンプルを追加してから解決判断します。',
+    samplerFailAction: '接続エラー、バックエンド shell 解放、初回出力遅延を確認してから実コマンドを再テストします。',
+    samplerStatSessions: 'サンプルセッション',
+    samplerStatFirstOutput: '平均初回出力',
+    samplerStatOutputPeak: '出力ピーク',
+    samplerStatClose: '終了解放',
+    samplerStepSample: 'サンプル深度',
+    samplerStepFirstOutput: '初回出力経路',
+    samplerStepOutputLoad: '出力負荷',
+    samplerStepClose: '終了解放',
+    samplerSessionsDetail: (sessions, inputSubmits) => `${sessions} 件セッション / ${inputSubmits} 回コマンド送信`,
+    samplerFirstOutputDetail: (averageMs, samples) => averageMs === null ? `初回出力サンプルなし / ${samples} 件利用可` : `${samples} 件平均 ${Math.round(averageMs)}ms`,
+    samplerOutputPeakDetail: (lines, bytes, durationMs) => `${lines} 行ピーク / ${formatSshFlightBytes(bytes)} / ${formatSshFlightDuration(durationMs, 'ja-JP')}`,
+    samplerCloseDetail: (closed, total, active) => `${closed}/${total} 終了、${active} 件実行中`,
+    samplerSanitizedNote: 'サンプリングレポートは匿名化された集計指標のみを含み、サーバーアドレス、コマンド本文、キー、ユーザーデータは含みません。',
     copySummary: '\u30b5\u30de\u30ea\u30fc\u3092\u30b3\u30d4\u30fc',
     copyCopied: 'SSH \u30d1\u30d5\u30a9\u30fc\u30de\u30f3\u30b9\u30b5\u30de\u30ea\u30fc\u3092\u30b3\u30d4\u30fc\u3057\u307e\u3057\u305f',
     summaryStatus: '\u72b6\u614b',

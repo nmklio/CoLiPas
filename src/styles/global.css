@@ -8744,6 +8744,196 @@ pre {
   font-weight: 800;
 }
 
+.security-ssh-sampler {
+  min-width: 0;
+  border: 1px solid rgba(88, 80, 236, 0.16);
+  border-radius: 16px;
+  padding: 14px;
+  background:
+    radial-gradient(circle at 9% 12%, rgba(88, 80, 236, 0.13), transparent 28%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(247, 247, 255, 0.86));
+  box-shadow: 0 18px 40px rgba(54, 48, 128, 0.055);
+}
+
+.security-ssh-sampler.warn {
+  border-color: rgba(245, 158, 11, 0.24);
+  background:
+    radial-gradient(circle at 9% 12%, rgba(245, 158, 11, 0.14), transparent 28%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(255, 249, 237, 0.84));
+}
+
+.security-ssh-sampler.fail {
+  border-color: rgba(239, 68, 68, 0.24);
+  background:
+    radial-gradient(circle at 9% 12%, rgba(239, 68, 68, 0.13), transparent 28%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(255, 244, 244, 0.84));
+}
+
+.security-ssh-sampler-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.security-ssh-sampler-heading > div {
+  min-width: 0;
+}
+
+.security-ssh-sampler-heading span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #4f46e5;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.security-ssh-sampler.warn .security-ssh-sampler-heading span {
+  color: #b65f00;
+}
+
+.security-ssh-sampler.fail .security-ssh-sampler-heading span {
+  color: var(--red);
+}
+
+.security-ssh-sampler-heading strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.security-ssh-sampler-heading p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.security-ssh-sampler-score {
+  width: 82px;
+  height: 82px;
+  border: 1px solid rgba(79, 70, 229, 0.18);
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  background:
+    conic-gradient(from 210deg, rgba(79, 70, 229, 0.22), rgba(20, 184, 166, 0.2), rgba(79, 70, 229, 0.22)),
+    rgba(255, 255, 255, 0.86);
+  box-shadow: inset 0 0 0 7px rgba(255, 255, 255, 0.74);
+}
+
+.security-ssh-sampler-score small,
+.security-ssh-sampler-score b {
+  display: block;
+  line-height: 1;
+  text-align: center;
+}
+
+.security-ssh-sampler-score small {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 950;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.security-ssh-sampler-score b {
+  margin-top: 5px;
+  color: var(--text);
+  font-size: 26px;
+  font-weight: 950;
+}
+
+.security-ssh-sampler-stats {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.security-ssh-sampler-stats article,
+.security-ssh-sampler-steps article {
+  min-width: 0;
+  border: 1px solid rgba(79, 70, 229, 0.12);
+  border-radius: 13px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.security-ssh-sampler-stats article.warn,
+.security-ssh-sampler-steps article.warn {
+  border-color: rgba(245, 158, 11, 0.24);
+  background: rgba(255, 252, 245, 0.82);
+}
+
+.security-ssh-sampler-stats article.fail,
+.security-ssh-sampler-steps article.fail {
+  border-color: rgba(239, 68, 68, 0.24);
+  background: rgba(255, 248, 248, 0.84);
+}
+
+.security-ssh-sampler-stats span,
+.security-ssh-sampler-steps span {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.07em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.security-ssh-sampler-stats strong,
+.security-ssh-sampler-steps strong {
+  display: block;
+  margin: 5px 0 3px;
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+}
+
+.security-ssh-sampler-stats small,
+.security-ssh-sampler-steps small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.security-ssh-sampler-steps {
+  position: relative;
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.security-ssh-sampler-steps::before {
+  content: '';
+  position: absolute;
+  left: 5%;
+  right: 5%;
+  top: 50%;
+  height: 2px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(20, 184, 166, 0.35), rgba(79, 70, 229, 0.45), rgba(37, 99, 235, 0.35));
+  pointer-events: none;
+}
+
+.security-ssh-sampler-steps article {
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 10px 24px rgba(54, 48, 128, 0.05);
+}
+
 .security-control-grid {
   display: grid;
   grid-template-columns: minmax(280px, 0.95fr) minmax(300px, 1.1fr) minmax(240px, 0.75fr);
@@ -9640,6 +9830,7 @@ pre {
   .security-ssh-lag-history-heading,
   .security-ssh-flight-header,
   .security-ssh-latency-heading,
+  .security-ssh-sampler-heading,
   .security-ssh-performance-groups,
   .security-ssh-performance-grid,
   .security-kpi-grid,
@@ -9667,6 +9858,11 @@ pre {
   }
 
   .security-ssh-flight-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .security-ssh-sampler-stats,
+  .security-ssh-sampler-steps {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -10273,6 +10469,7 @@ pre {
   .security-ssh-experience-grid,
   .security-ssh-lag-report,
   .security-ssh-flight-header,
+  .security-ssh-sampler-heading,
   .security-ssh-performance-groups,
   .security-ssh-performance-grid,
   .security-kpi-grid,
@@ -10321,9 +10518,27 @@ pre {
   }
 
   .security-ssh-flight-stats,
+  .security-ssh-sampler-stats,
+  .security-ssh-sampler-steps,
   .security-ssh-latency-legend,
   .security-ssh-flight-record-head {
     grid-template-columns: 1fr;
+  }
+
+  .security-ssh-sampler-score {
+    width: 100%;
+    height: auto;
+    min-height: 62px;
+    border-radius: 16px;
+  }
+
+  .security-ssh-sampler-heading .tool-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .security-ssh-sampler-steps::before {
+    display: none;
   }
 
   .security-ssh-latency-chart {
