@@ -12,6 +12,14 @@ const releaseVerifyToken = process.env.SMOKE_RELEASE_VERIFY_TOKEN ?? process.env
 let currentSmokePassword = initialSmokePassword;
 let temporarySimulatedSshServerSequence = 1;
 
+function assertFileContains(relativePath, requiredFragments, label) {
+  const source = fs.readFileSync(new URL(`../${relativePath}`, import.meta.url), 'utf8');
+  const missing = requiredFragments.filter((fragment) => !source.includes(fragment));
+  if (missing.length) {
+    throw new Error(`${label} guard is incomplete: ${missing.join(', ')}`);
+  }
+}
+
 assertAiProviderSecretNotPersisted();
 assertAccountUiGuards();
 assertCommandPaletteGuards();
@@ -4478,8 +4486,11 @@ function assertOverviewMapInteractionGuards() {
     'function useHealthBaselineTrend',
     'function buildHealthBaselineTrend',
     'colipas.overview.healthTrend.v1',
+    "onHealthSignalOpen?: (signal: HealthBaselineSignalId) => void",
+    'data-health-signal={signal.id}',
     'overview.healthBaselineTitle',
     'overview.healthTrendTitle',
+    'overview.healthSignalOpen',
     'overview.healthSignalResources',
     'overview.healthSignalSsh',
     'overview.healthSignalEvents',
@@ -4563,6 +4574,25 @@ function assertOverviewMapInteractionGuards() {
   if (overviewSource.includes('serverNames: items.map((server) => server.name)') || overviewSource.includes('regions.flatMap((region) => region.serverNames)')) {
     throw new Error('Overview map tooltip must not retain every server name for large inventories');
   }
+
+
+  assertFileContains('src/shared/serverFilters.ts', [
+    "health?: 'resourcePressure' | 'sshMissing'",
+    "healthFilter === 'resourcePressure'",
+    "healthFilter === 'sshMissing'",
+  ], 'server health filters');
+
+  assertFileContains('src/app/App.tsx', [
+    "function openHealthSignal(signal: 'resources' | 'ssh' | 'events')",
+    "health: signal === 'resources' ? 'resourcePressure' : 'sshMissing'",
+    'onHealthSignalOpen={openHealthSignal}',
+  ], 'overview health signal routing');
+
+  assertFileContains('src/modules/servers/ServerInventory.tsx', [
+    'data-health-scope-chip="true"',
+    'servers.healthScopeLabel',
+    'servers.clearHealthScope',
+  ], 'server health filter chip');
   if (overviewSource.includes('new Set(servers.map((server) => server.provider)).size')) {
     throw new Error('Overview provider count must reuse single-pass stats instead of rescanning during render');
   }

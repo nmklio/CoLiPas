@@ -15,6 +15,7 @@ interface MonitoringOverviewProps {
   onlineCount: number;
   avgCpu: number;
   onRegionServersOpen?: (region: string | string[]) => void;
+  onHealthSignalOpen?: (signal: HealthBaselineSignalId) => void;
 }
 
 interface RegionNode {
@@ -53,9 +54,10 @@ interface CountryHover {
 }
 
 type HealthBaselineTone = 'good' | 'watch' | 'critical';
+type HealthBaselineSignalId = 'resources' | 'ssh' | 'events';
 
 interface HealthBaselineSignal {
-  id: string;
+  id: HealthBaselineSignalId;
   label: string;
   value: string;
   detail: string;
@@ -214,7 +216,7 @@ const normalizedRegionLocations = regionLocations.map(({ aliases, location }) =>
 
 const fallbackLocation: RegionLocation = { lat: 18, lng: 0, countryId: '', matched: false };
 
-export function MonitoringOverview({ servers, events, onlineCount, avgCpu, onRegionServersOpen }: MonitoringOverviewProps) {
+export function MonitoringOverview({ servers, events, onlineCount, avgCpu, onRegionServersOpen, onHealthSignalOpen }: MonitoringOverviewProps) {
   const { language, t } = useI18n();
   const providerName = (provider: string) => formatProviderName(provider, t);
   const regionName = (region: string) => formatRegionName(region, language);
@@ -345,11 +347,18 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, onReg
           <p>{healthBaseline.detail}</p>
           <div className="health-baseline-signals">
             {healthBaseline.signals.map((signal) => (
-              <div key={signal.id} className={`health-baseline-signal ${signal.tone}`}>
+              <button
+                key={signal.id}
+                type="button"
+                className={`health-baseline-signal ${signal.tone}`}
+                data-health-signal={signal.id}
+                onClick={() => onHealthSignalOpen?.(signal.id)}
+                aria-label={t('overview.healthSignalOpen', { label: signal.label })}
+              >
                 <span>{signal.label}</span>
                 <strong>{signal.value}</strong>
                 <small>{signal.detail}</small>
-              </div>
+              </button>
             ))}
           </div>
         </div>

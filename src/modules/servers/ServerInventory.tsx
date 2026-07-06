@@ -130,6 +130,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const regions = useMemo(() => buildSortedRegions(allServers), [allServers]);
   const scopedRegions = useMemo(() => normalizeScopedRegions(filters.regionScope), [filters.regionScope]);
   const providerFilters = useMemo(() => buildProviderOptions(allServers.map((server) => server.provider)), [allServers]);
+  const healthScopeLabel = filters.health ? t(`servers.healthScope.${filters.health}`) : '';
   const providerDisplayName = (provider: string) => formatProviderName(provider, t);
   const providerFilterName = (provider: string) => formatProviderFilterName(provider, t);
   const regionDisplayName = (region: string) => formatRegionName(region, language);
@@ -463,6 +464,16 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
             <strong>{scopedRegions.slice(0, 3).map(regionDisplayName).join(' / ')}{scopedRegions.length > 3 ? ` +${scopedRegions.length - 3}` : ''}</strong>
             <button type="button" onClick={() => onFiltersChange({ ...filters, regionScope: undefined })}>
               {t('servers.clearRegionScope')}
+            </button>
+          </div>
+        )}
+        {filters.health && (
+          <div className="region-scope-chip health-scope-chip" data-health-scope-chip="true">
+            <ShieldCheck size={15} />
+            <span>{t('servers.healthScopeLabel')}</span>
+            <strong>{healthScopeLabel}</strong>
+            <button type="button" onClick={() => onFiltersChange({ ...filters, health: undefined })}>
+              {t('servers.clearHealthScope')}
             </button>
           </div>
         )}

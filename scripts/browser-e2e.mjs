@@ -857,7 +857,29 @@ async function assertOverviewHealthBaseline(targetPage) {
   }
   await assertElementWithinViewport(targetPage, '[data-health-baseline="true"]', 'desktop overview health baseline');
   await captureVisualEvidence(targetPage, 'desktop-overview-health-baseline', ['[data-health-baseline="true"]', '.monitor-kpis']);
-  console.log('ok browser e2e covers overview health baseline alerts and trend snapshots');
+
+  await baseline.locator('[data-health-signal="ssh"]').click();
+  await targetPage.locator('#servers-title').waitFor({ timeout: 10000 });
+  const healthScopeChip = targetPage.locator('[data-health-scope-chip="true"]');
+  await healthScopeChip.waitFor({ timeout: 10000 });
+  const healthScopeText = await healthScopeChip.innerText();
+  if (!/Assets missing SSH|SSH/i.test(healthScopeText)) {
+    throw new Error(`Servers page should show the SSH health filter chip, got ${healthScopeText}`);
+  }
+  if (!/#servers/.test(targetPage.url())) {
+    throw new Error(`SSH health signal should route to servers, got ${targetPage.url()}`);
+  }
+
+  await targetPage.goto(`${baseUrl}/admin/#overview`, { waitUntil: 'networkidle', timeout: 30000 });
+  const eventSignal = targetPage.locator('[data-health-baseline="true"] [data-health-signal="events"]');
+  await eventSignal.waitFor({ timeout: 10000 });
+  await eventSignal.click();
+  await targetPage.locator('#security-title').waitFor({ timeout: 10000 });
+  if (!/#security/.test(targetPage.url())) {
+    throw new Error(`Event health signal should route to security, got ${targetPage.url()}`);
+  }
+
+  console.log('ok browser e2e covers overview health baseline alerts, trend snapshots, and action routing');
 }
 
 async function assertMobileConsoleAndMap() {

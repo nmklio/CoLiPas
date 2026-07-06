@@ -11,6 +11,7 @@ export interface ServerFilters {
   status: ServerStatus | 'all';
   region: string | 'all';
   regionScope?: string[];
+  health?: 'resourcePressure' | 'sshMissing';
 }
 
 const serverSearchTextCache = new WeakMap<ServerNode, { signature: string; searchText: string }>();
@@ -42,6 +43,7 @@ export function buildServerFilterMatcher(filters: ServerFilters) {
   const hasStatusFilter = filters.status !== 'all';
   const hasScopedRegionFilter = scopedRegions.size > 0;
   const hasSelectedRegionFilter = !hasScopedRegionFilter && filters.region !== 'all';
+  const healthFilter = filters.health;
 
   return (server: ServerNode) => {
     if (
@@ -70,6 +72,14 @@ export function buildServerFilterMatcher(filters: ServerFilters) {
       if (hasScopedRegionFilter ? !scopedRegions.has(serverRegion) : serverRegion !== selectedRegion) {
         return false;
       }
+    }
+
+    if (healthFilter === 'resourcePressure' && Math.max(server.cpu, server.memory, server.disk) < 70) {
+      return false;
+    }
+
+    if (healthFilter === 'sshMissing' && server.ssh?.connected) {
+      return false;
     }
 
     return true;

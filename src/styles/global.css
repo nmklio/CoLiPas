@@ -2631,8 +2631,21 @@ main {
   border-radius: 8px;
   padding: 9px 10px;
   background: rgba(255, 255, 255, 0.8);
+  color: inherit;
+  cursor: pointer;
   display: grid;
   gap: 4px;
+  font: inherit;
+  text-align: left;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.health-baseline-signal:hover,
+.health-baseline-signal:focus-visible {
+  border-color: rgba(15, 118, 110, 0.34);
+  box-shadow: 0 12px 28px rgba(15, 118, 110, 0.13);
+  outline: none;
+  transform: translateY(-1px);
 }
 
 .health-baseline-signal strong {
@@ -3462,6 +3475,12 @@ main {
   color: #0f766e;
   font-weight: 900;
   cursor: pointer;
+}
+
+.health-scope-chip {
+  border-color: rgba(217, 119, 6, 0.28);
+  background:
+    linear-gradient(90deg, rgba(255, 251, 235, 0.92), rgba(240, 253, 250, 0.9));
 }
 
 .filters-row label,

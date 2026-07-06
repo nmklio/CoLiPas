@@ -528,6 +528,19 @@ export function App() {
     navigateToSection('servers');
   }
 
+  function openHealthSignal(signal: 'resources' | 'ssh' | 'events') {
+    if (signal === 'events') {
+      navigateToSection('security');
+      return;
+    }
+
+    setFilters({
+      ...defaultFilters,
+      health: signal === 'resources' ? 'resourcePressure' : 'sshMissing',
+    });
+    navigateToSection('servers');
+  }
+
   function openAiWithQuestion(question: string) {
     setAiSeedQuestion(question);
     setAiCollapsed(false);
@@ -810,6 +823,7 @@ export function App() {
               onlineCount={onlineCount}
               avgCpu={avgCpu}
               onRegionServersOpen={openServersForRegion}
+              onHealthSignalOpen={openHealthSignal}
             />
           )}
 
