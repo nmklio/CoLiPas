@@ -212,6 +212,11 @@ export interface ServerShellSelfTestPayload {
   networkLabel: string;
 }
 
+export interface SshSupportTicketCopyAuditPayload {
+  sections: number;
+  tone: 'ok' | 'warn' | 'fail';
+}
+
 export interface ServerActionResponse extends ServerCommandResponse {
   id: string;
   action: 'powerOn' | 'shutdown' | 'reboot';
@@ -910,6 +915,30 @@ export async function closeServerShell(sessionId: string, fetcher: typeof fetch 
   if (!response.ok && response.status !== 404) {
     throw new Error(await readApiError(response));
   }
+}
+
+export async function recordSshSupportTicketCopy(
+  payload: SshSupportTicketCopyAuditPayload,
+  fetcher: typeof fetch = fetch,
+) {
+  const response = await fetcher('/api/audit/ssh-support-ticket-copy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as {
+    ok: true;
+    audit: {
+      action: 'SSH_SUPPORT_TICKET_COPY';
+      target: 'ssh-support-ticket';
+      detail: string;
+    };
+  };
 }
 
 export function streamServerShell(

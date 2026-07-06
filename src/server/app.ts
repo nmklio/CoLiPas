@@ -667,6 +667,24 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
     }
   });
 
+  app.post('/api/audit/ssh-support-ticket-copy', (request, response, next) => {
+    try {
+      const session = requireSession(request, config);
+      const sections = clampSupportTicketSections(request.body?.sections);
+      const severity = normalizeSupportTicketSeverity(request.body?.tone);
+      const audit = recordAudit({
+        action: 'SSH_SUPPORT_TICKET_COPY',
+        actor: session.user.username,
+        target: 'ssh-support-ticket',
+        status: 'success',
+        detail: `SSH lag ticket template copied with ${sections} sanitized evidence section(s); severity ${severity}.`,
+      });
+      response.status(201).json({ ok: true, audit });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   const distDir = path.resolve(process.cwd(), 'dist');
   const iconPath = path.join(distDir, 'colipas-icon.svg');
   if (fs.existsSync(path.join(distDir, 'index.html'))) {
@@ -770,6 +788,18 @@ function getBearerToken(value: unknown) {
 
   const match = value.match(/^Bearer\s+(.+)$/i);
   return match?.[1]?.trim();
+}
+
+function clampSupportTicketSections(value: unknown) {
+  const number = typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : Number(value);
+  if (!Number.isFinite(number)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(20, Math.round(number)));
+}
+
+function normalizeSupportTicketSeverity(value: unknown) {
+  return value === 'ok' || value === 'warn' || value === 'fail' ? value : 'unknown';
 }
 
 function isJsonParseError(error: unknown) {

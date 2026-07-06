@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { getLocale, useI18n } from '../../i18n';
 import { OperationEvent } from '../../types';
-import { fetchDiagnosticExport, fetchReleaseReadiness, fetchReleaseReadinessReport, recordReleaseReadinessSnapshot, remediateSecurityRisk } from '../../services/apiClient';
+import { fetchDiagnosticExport, fetchReleaseReadiness, fetchReleaseReadinessReport, recordReleaseReadinessSnapshot, recordSshSupportTicketCopy, remediateSecurityRisk } from '../../services/apiClient';
 import type { SecurityRemediationResponse } from '../../services/apiClient';
 import type { DiagnosticExportResponse, ReleaseDeploymentEvidence, ReleaseReadinessResponse } from '../../types';
 
@@ -662,6 +662,10 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
 
     try {
       await navigator.clipboard.writeText(sshSupportBundle.ticketText);
+      await recordSshSupportTicketCopy({
+        sections: sshSupportBundle.sections.length,
+        tone: sshSupportBundle.tone,
+      }).catch(() => undefined);
       setRemediationMessage(sshPerformanceCopy.supportTicketCopied);
       setRemediationError(false);
     } catch {

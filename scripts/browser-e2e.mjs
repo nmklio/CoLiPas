@@ -240,6 +240,22 @@ async function assertReleaseEvidenceBrief(targetPage) {
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshSupportTicketText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshSupportTicketText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(copiedSshSupportTicketText)) {
     throw new Error('SSH support ticket copy output leaked a raw IP address or secret');
   }
+  await targetPage.waitForFunction(async () => {
+    const response = await fetch('/api/audit/events');
+    if (!response.ok) {
+      return false;
+    }
+    const body = await response.json();
+    return Array.isArray(body.items) && body.items.some((item) => item.action === 'SSH_SUPPORT_TICKET_COPY' && item.target === 'ssh-support-ticket');
+  }, undefined, { timeout: 5000 });
+  const sshSupportTicketAudit = await targetPage.evaluate(async () => {
+    const response = await fetch('/api/audit/events');
+    const body = await response.json();
+    return JSON.stringify(body.items.find((item) => item.action === 'SSH_SUPPORT_TICKET_COPY' && item.target === 'ssh-support-ticket') ?? {});
+  });
+  if (!/sanitized evidence section/i.test(sshSupportTicketAudit) || /\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(sshSupportTicketAudit) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(sshSupportTicketAudit) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(sshSupportTicketAudit)) {
+    throw new Error(`SSH support ticket audit event is missing or unsafe: ${sshSupportTicketAudit}`);
+  }
   await targetPage.getByRole('button', { name: /copy diagnosis report/i }).click();
   const copiedSshLagReportText = await targetPage.evaluate(() => window.__colipasCopiedSshLagReportText ?? '');
   if (!/SSH lag diagnosis report/i.test(copiedSshLagReportText) || !/Report context/i.test(copiedSshLagReportText) || !/Generated/i.test(copiedSshLagReportText) || !/Sanitized/i.test(copiedSshLagReportText) || !/Key evidence/i.test(copiedSshLagReportText) || !/Input path/i.test(copiedSshLagReportText) || !/sanitized aggregate metrics/i.test(copiedSshLagReportText)) {

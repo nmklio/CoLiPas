@@ -2629,6 +2629,32 @@ if (deleteConnectedServerBody.deleted !== true || deleteConnectedServerBody.id !
 }
 console.log('ok /api/servers/:serverId DELETE connected smoke server');
 
+const sshSupportTicketAuditResponse = await fetch(`${baseUrl}/api/audit/ssh-support-ticket-copy`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    sections: 5,
+    tone: 'warn',
+    ignoredRawContext: `198.51.100.77 sk-${'x'.repeat(16)} BEGIN OPENSSH PRIVATE KEY`,
+  }),
+});
+if (sshSupportTicketAuditResponse.status !== 201) {
+  throw new Error(`/api/audit/ssh-support-ticket-copy returned HTTP ${sshSupportTicketAuditResponse.status}`);
+}
+const sshSupportTicketAuditBody = await sshSupportTicketAuditResponse.json();
+const sshSupportTicketAuditPayload = JSON.stringify(sshSupportTicketAuditBody);
+if (
+  sshSupportTicketAuditBody.audit?.action !== 'SSH_SUPPORT_TICKET_COPY'
+  || sshSupportTicketAuditBody.audit?.target !== 'ssh-support-ticket'
+  || !sshSupportTicketAuditBody.audit?.detail?.includes('sanitized evidence section')
+  || /\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(sshSupportTicketAuditPayload)
+  || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(sshSupportTicketAuditPayload)
+  || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(sshSupportTicketAuditPayload)
+) {
+  throw new Error('/api/audit/ssh-support-ticket-copy did not return a sanitized audit event');
+}
+console.log('ok /api/audit/ssh-support-ticket-copy records sanitized ticket copy evidence');
+
 const auditResponse = await fetch(`${baseUrl}/api/audit/events`, { headers: authHeaders });
 if (!auditResponse.ok) {
   throw new Error(`/api/audit/events returned HTTP ${auditResponse.status}`);
@@ -2636,6 +2662,9 @@ if (!auditResponse.ok) {
 const auditBody = await auditResponse.json();
 if (!Array.isArray(auditBody.items) || !auditBody.items.some((item) => item.action === 'OPERATIONS_TASK')) {
   throw new Error('/api/audit/events returned unexpected payload');
+}
+if (!auditBody.items.some((item) => item.action === 'SSH_SUPPORT_TICKET_COPY' && item.target === 'ssh-support-ticket' && item.detail?.includes('sanitized evidence section'))) {
+  throw new Error('/api/audit/events did not include sanitized SSH support ticket copy evidence');
 }
 if (!auditBody.items.some((item) => item.action === 'OPERATIONS_PREFLIGHT' && item.status === 'success' && item.detail?.includes('Plan:'))) {
   throw new Error('/api/audit/events did not include successful operations preflight plan evidence');
@@ -3993,7 +4022,7 @@ function assertSqlitePersistenceGuards() {
     '__colipasCopiedSshBottleneckTrendText',
     'SSH bottleneck trend storage leaked a raw IP address or secret',
   ];
-  const sshBottleneckTrendSource = `${serverInventorySource}\n${securityPanelSource}\n${globalStyleSource}\n${browserE2eSource}`;
+  const sshBottleneckTrendSource = `${serverInventorySource}\n${securityPanelSource}\n${globalStyleSource}\n${browserE2eSource}\n${appSource}\n${apiClientSource}\n${auditServiceSource}`;
   const missingSshBottleneckTrendFragments = sshBottleneckTrendFragments.filter((fragment) => !sshBottleneckTrendSource.includes(fragment));
   if (missingSshBottleneckTrendFragments.length) {
     throw new Error(`SSH bottleneck trend snapshot guard is incomplete: ${missingSshBottleneckTrendFragments.join(', ')}`);
@@ -4004,6 +4033,10 @@ function assertSqlitePersistenceGuards() {
     'buildSshSupportBundle',
     'copySshSupportBundle',
     'copySshSupportTicket',
+    'recordSshSupportTicketCopy',
+    'SSH_SUPPORT_TICKET_COPY',
+    '/api/audit/ssh-support-ticket-copy',
+    'ssh-support-ticket',
     'data-ssh-support-bundle="true"',
     'supportBundleTitle',
     'supportBundleCopy',
@@ -4019,6 +4052,7 @@ function assertSqlitePersistenceGuards() {
     '.security-ssh-support-bundle-sections',
     'SSH support bundle copy output leaked a raw IP address or secret',
     'SSH support ticket copy output leaked a raw IP address or secret',
+    'SSH support ticket audit event is missing or unsafe',
   ];
   const missingSshSupportBundleFragments = sshSupportBundleFragments.filter((fragment) => !sshBottleneckTrendSource.includes(fragment));
   if (missingSshSupportBundleFragments.length) {
