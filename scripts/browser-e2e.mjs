@@ -1101,15 +1101,24 @@ async function assertSshTerminalPanel(targetPage) {
         return command?.useCount === 1 && command?.lastUsedMode === 'run' && typeof command?.lastUsedAt === 'string';
       }, customRunbookId, { timeout: 5000 });
       await targetPage.locator(`[data-ssh-runbook-usage="${customRunbookId}"]`).filter({ hasText: /Used 1x/i }).waitFor({ timeout: 5000 });
+      for (const view of ['recent', 'frequent']) {
+        await targetPage.locator(`[data-ssh-runbook-view="${view}"]`).click();
+        await targetPage.locator('[data-ssh-runbook-view-hint="true"]').waitFor({ timeout: 5000 });
+        await targetPage.waitForFunction((expectedId) => {
+          const firstCard = document.querySelector('[data-ssh-runbook-command]');
+          return firstCard?.getAttribute('data-ssh-runbook-command') === expectedId;
+        }, customRunbookId, { timeout: 5000 });
+      }
+      await targetPage.locator('[data-ssh-runbook-view="manual"]').click();
 
       const deletedRunbookIds = [customRunbookId, customRunbookSecondId];
-      await customRunbookSecondCard.locator('[data-ssh-runbook-command-delete]').click();
+      await targetPage.locator(`[data-ssh-runbook-command="${customRunbookSecondId}"] [data-ssh-runbook-command-delete]`).click();
       await targetPage.locator('.action-message').filter({ hasText: /runbook command deleted/i }).waitFor({ timeout: 5000 });
-      await customRunbookSecondCard.waitFor({ state: 'detached', timeout: 5000 });
+      await targetPage.locator(`[data-ssh-runbook-command="${customRunbookSecondId}"]`).waitFor({ state: 'detached', timeout: 5000 });
       customRunbookSecondId = '';
-      await customRunbookCard.locator('[data-ssh-runbook-command-delete]').click();
+      await targetPage.locator(`[data-ssh-runbook-command="${customRunbookId}"] [data-ssh-runbook-command-delete]`).click();
       await targetPage.locator('.action-message').filter({ hasText: /runbook command deleted/i }).waitFor({ timeout: 5000 });
-      await customRunbookCard.waitFor({ state: 'detached', timeout: 5000 });
+      await targetPage.locator(`[data-ssh-runbook-command="${customRunbookId}"]`).waitFor({ state: 'detached', timeout: 5000 });
       const runbookApiAfterDelete = await targetPage.evaluate(async (ids) => {
         const response = await fetch('/api/servers/ssh-runbook');
         return response.json().then((body) => ({ status: response.status, body, ids }));

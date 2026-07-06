@@ -5574,6 +5574,7 @@ td span,
 }
 
 .ssh-runbook-categories button,
+.ssh-runbook-views button,
 .ssh-runbook-clear-filter {
   min-height: 30px;
   border: 1px solid rgba(125, 211, 252, 0.14);
@@ -5599,7 +5600,36 @@ td span,
   font: 900 9px "Cascadia Code", Consolas, monospace;
 }
 
-.ssh-runbook-categories button.active {
+.ssh-runbook-views {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.ssh-runbook-views button {
+  border-color: rgba(251, 191, 36, 0.16);
+  color: #fde68a;
+  background: rgba(113, 63, 18, 0.18);
+}
+
+.ssh-runbook-views button.active {
+  border-color: rgba(251, 191, 36, 0.46);
+  background:
+    radial-gradient(circle at 18% 18%, rgba(251, 191, 36, 0.28), transparent 38%),
+    rgba(113, 63, 18, 0.36);
+  box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.1);
+}
+
+.ssh-runbook-view-hint {
+  color: #cbd5e1;
+  font-size: 10px;
+  font-weight: 760;
+  line-height: 1.35;
+}
+
+.ssh-runbook-categories button.active,
+.ssh-runbook-views button.active {
   border-color: rgba(94, 234, 212, 0.42);
   color: #ecfeff;
   background:
@@ -5615,6 +5645,7 @@ td span,
 }
 
 .ssh-runbook-categories button:hover,
+.ssh-runbook-views button:hover,
 .ssh-runbook-clear-filter:hover {
   border-color: rgba(165, 243, 252, 0.48);
   transform: translateY(-1px);
@@ -13778,8 +13809,13 @@ pre {
     grid-template-columns: 1fr;
   }
 
-  .ssh-runbook-categories {
+  .ssh-runbook-categories,
+  .ssh-runbook-views {
     padding-bottom: 2px;
+  }
+
+  .ssh-runbook-view-hint {
+    text-align: center;
   }
 
   .ssh-runbook-clear-filter {

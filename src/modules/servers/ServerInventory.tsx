@@ -83,6 +83,8 @@ const sshQuickCommands = [
 ] as const;
 const sshRunbookCategories = ['all', 'system', 'network', 'storage', 'logs', 'other'] as const;
 type SshRunbookCategory = (typeof sshRunbookCategories)[number];
+const sshRunbookViews = ['manual', 'recent', 'frequent'] as const;
+type SshRunbookView = (typeof sshRunbookViews)[number];
 const sshRunbookPacks = [
   {
     id: 'system',
@@ -424,6 +426,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const [editingSshRunbookId, setEditingSshRunbookId] = useState('');
   const [sshRunbookSearch, setSshRunbookSearch] = useState('');
   const [sshRunbookCategory, setSshRunbookCategory] = useState<SshRunbookCategory>('all');
+  const [sshRunbookView, setSshRunbookView] = useState<SshRunbookView>('manual');
   const [sshRunbookLoading, setSshRunbookLoading] = useState(false);
   const [sshRunbookSaving, setSshRunbookSaving] = useState(false);
   const [deletingSshRunbookId, setDeletingSshRunbookId] = useState('');
@@ -500,10 +503,11 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   );
   const sshRunbookCategoryCounts = useMemo(() => countSshRunbookCategories(sshRunbookCommands), [sshRunbookCommands]);
   const visibleSshRunbookCommands = useMemo(
-    () => filterSshRunbookCommands(sshRunbookCommands, sshRunbookSearch, sshRunbookCategory),
-    [sshRunbookCommands, sshRunbookSearch, sshRunbookCategory],
+    () => filterSshRunbookCommands(sshRunbookCommands, sshRunbookSearch, sshRunbookCategory, sshRunbookView),
+    [sshRunbookCommands, sshRunbookSearch, sshRunbookCategory, sshRunbookView],
   );
-  const sshRunbookHasFilters = sshRunbookSearch.trim().length > 0 || sshRunbookCategory !== 'all';
+  const sshRunbookHasFilters = sshRunbookSearch.trim().length > 0 || sshRunbookCategory !== 'all' || sshRunbookView !== 'manual';
+  const sshRunbookManualView = sshRunbookView === 'manual';
   const terminalTelemetryInsight = getTerminalTelemetryInsight(terminalTelemetry, terminalNetworkStats, terminalTransport, Boolean(terminalShellId), t);
   const terminalBottleneckAdvisor = getTerminalBottleneckAdvisor(terminalTelemetry, terminalNetworkStats, terminalTransport, Boolean(terminalShellId), t);
   const sshTroubleshootingReport = useMemo(() => (sshDoctorReport
@@ -1583,6 +1587,25 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                           </button>
                         ))}
                       </div>
+                      <div className="ssh-runbook-views" aria-label={t('servers.quickCommandViewLabel')} data-ssh-runbook-views="true">
+                        {sshRunbookViews.map((view) => (
+                          <button
+                            key={view}
+                            type="button"
+                            className={sshRunbookView === view ? 'active' : undefined}
+                            data-ssh-runbook-view={view}
+                            aria-pressed={sshRunbookView === view}
+                            onClick={() => setSshRunbookView(view)}
+                          >
+                            <span>{t(`servers.quickCommandView.${view}`)}</span>
+                          </button>
+                        ))}
+                      </div>
+                      {sshRunbookView !== 'manual' && (
+                        <small className="ssh-runbook-view-hint" data-ssh-runbook-view-hint="true">
+                          {t(`servers.quickCommandViewHint.${sshRunbookView}`)}
+                        </small>
+                      )}
                       {sshRunbookHasFilters && (
                         <button
                           type="button"
@@ -1591,6 +1614,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                           onClick={() => {
                             setSshRunbookSearch('');
                             setSshRunbookCategory('all');
+                            setSshRunbookView('manual');
                           }}
                         >
                           {t('servers.quickCommandFilterClear')}
@@ -1709,7 +1733,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                                 data-ssh-runbook-command-move-up={item.id}
                                 aria-label={t('servers.quickCommandMoveUpAria', { title: item.title })}
                                 onClick={() => moveSshRunbookCommand(item.id, -1)}
-                                disabled={orderIndex <= 0 || movingSshRunbookId === item.id}
+                                disabled={!sshRunbookManualView || orderIndex <= 0 || movingSshRunbookId === item.id}
                               >
                                 <ChevronUp size={12} />
                               </button>
@@ -1719,7 +1743,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                                 data-ssh-runbook-command-move-down={item.id}
                                 aria-label={t('servers.quickCommandMoveDownAria', { title: item.title })}
                                 onClick={() => moveSshRunbookCommand(item.id, 1)}
-                                disabled={orderIndex === -1 || orderIndex === sshRunbookCommands.length - 1 || movingSshRunbookId === item.id}
+                                disabled={!sshRunbookManualView || orderIndex === -1 || orderIndex === sshRunbookCommands.length - 1 || movingSshRunbookId === item.id}
                               >
                                 <ChevronDown size={12} />
                               </button>
@@ -4802,9 +4826,9 @@ function countSshRunbookCategories(commands: SshRunbookCommand[]): Record<SshRun
   return counts;
 }
 
-function filterSshRunbookCommands(commands: SshRunbookCommand[], query: string, category: SshRunbookCategory) {
+function filterSshRunbookCommands(commands: SshRunbookCommand[], query: string, category: SshRunbookCategory, view: SshRunbookView) {
   const normalizedQuery = normalizeRunbookSearchText(query);
-  return commands.filter((command) => {
+  const filtered = commands.filter((command) => {
     if (category !== 'all' && classifySshRunbookCommand(command) !== category) {
       return false;
     }
@@ -4813,6 +4837,39 @@ function filterSshRunbookCommands(commands: SshRunbookCommand[], query: string, 
     }
     return normalizeRunbookSearchText(`${command.title} ${command.command}`).includes(normalizedQuery);
   });
+
+  if (view === 'manual') {
+    return filtered;
+  }
+
+  const manualIndex = new Map(commands.map((command, index) => [command.id, index]));
+  return filtered.slice().sort((left, right) => compareSshRunbookCommands(left, right, view, manualIndex));
+}
+
+function compareSshRunbookCommands(left: SshRunbookCommand, right: SshRunbookCommand, view: Exclude<SshRunbookView, 'manual'>, manualIndex: Map<string, number>) {
+  const pinnedDelta = Number(Boolean(right.pinned)) - Number(Boolean(left.pinned));
+  if (pinnedDelta !== 0) {
+    return pinnedDelta;
+  }
+
+  if (view === 'recent') {
+    return compareRunbookMetric(getRunbookLastUsedMs(right), getRunbookLastUsedMs(left))
+      || compareRunbookMetric(right.useCount ?? 0, left.useCount ?? 0)
+      || compareRunbookMetric(manualIndex.get(left.id) ?? 0, manualIndex.get(right.id) ?? 0);
+  }
+
+  return compareRunbookMetric(right.useCount ?? 0, left.useCount ?? 0)
+    || compareRunbookMetric(getRunbookLastUsedMs(right), getRunbookLastUsedMs(left))
+    || compareRunbookMetric(manualIndex.get(left.id) ?? 0, manualIndex.get(right.id) ?? 0);
+}
+
+function compareRunbookMetric(left: number, right: number) {
+  return left === right ? 0 : left > right ? 1 : -1;
+}
+
+function getRunbookLastUsedMs(command: SshRunbookCommand) {
+  const value = command.lastUsedAt ? Date.parse(command.lastUsedAt) : 0;
+  return Number.isFinite(value) ? value : 0;
 }
 
 function normalizeRunbookSearchText(value: string) {
