@@ -943,6 +943,8 @@ export function connectServerShellSocket(
 ) {
   const shellSocketInputFlushMs = 2;
   const shellSocketInputChunkSize = 8000;
+  const shellSocketImmediateInputSize = 8;
+  const shellSocketBackpressureBytes = 64 * 1024;
   const shellSocketPingIntervalMs = 4000;
   const shellSocketMetricsIntervalMs = 1000;
   const socket = new WebSocket(buildServerShellSocketUrl());
@@ -982,6 +984,16 @@ export function connectServerShellSocket(
     if (!input || socket.readyState !== WebSocket.OPEN) {
       return;
     }
+
+    if (
+      !pendingInput
+      && input.length <= shellSocketImmediateInputSize
+      && socket.bufferedAmount < shellSocketBackpressureBytes
+    ) {
+      sendInputChunk(input);
+      return;
+    }
+
     pendingInput += input;
     if (
       input.includes('\r')

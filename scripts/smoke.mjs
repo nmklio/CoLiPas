@@ -3851,6 +3851,10 @@ function assertSqlitePersistenceGuards() {
   const auditServiceSource = fs.readFileSync(new URL('../src/server/services/auditService.ts', import.meta.url), 'utf8');
   const appSource = fs.readFileSync(new URL('../src/server/app.ts', import.meta.url), 'utf8');
   const sshAccessSource = fs.readFileSync(new URL('../src/server/services/sshAccessService.ts', import.meta.url), 'utf8');
+  const apiClientSource = fs.readFileSync(new URL('../src/services/apiClient.ts', import.meta.url), 'utf8');
+  const serverInventorySource = fs.readFileSync(new URL('../src/modules/servers/ServerInventory.tsx', import.meta.url), 'utf8');
+  const globalStyleSource = fs.readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
+  const i18nSource = fs.readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
   const diagnosticServiceSource = fs.readFileSync(new URL('../src/server/services/diagnosticService.ts', import.meta.url), 'utf8');
   const releaseVerificationSource = fs.readFileSync(new URL('../src/server/services/releaseVerificationService.ts', import.meta.url), 'utf8');
   const combined = [databaseSource, inventoryServiceSource, auditServiceSource, appSource].join('\n');
@@ -3918,6 +3922,23 @@ function assertSqlitePersistenceGuards() {
   const missingSshMetricFragments = sshMetricFragments.filter((fragment) => !sshAccessSource.includes(fragment));
   if (missingSshMetricFragments.length) {
     throw new Error(`SSH live CPU metric guard is incomplete: ${missingSshMetricFragments.join(', ')}`);
+  }
+  const sshTerminalQualityFragments = [
+    'shellSocketImmediateInputSize',
+    'shellSocketBackpressureBytes',
+    'socket.bufferedAmount < shellSocketBackpressureBytes',
+    'getTerminalNetworkQuality',
+    'servers.terminalNetworkGood',
+    'servers.terminalNetworkThroughputLow',
+    'servers.terminalNetworkSlow',
+    '.ssh-terminal-network.good',
+    '.ssh-terminal-network.warn',
+    '.ssh-terminal-network.slow',
+  ];
+  const sshTerminalQualitySource = `${apiClientSource}\n${serverInventorySource}\n${globalStyleSource}\n${i18nSource}`;
+  const missingSshTerminalQualityFragments = sshTerminalQualityFragments.filter((fragment) => !sshTerminalQualitySource.includes(fragment));
+  if (missingSshTerminalQualityFragments.length) {
+    throw new Error(`SSH terminal immediate-input and quality badge guard is incomplete: ${missingSshTerminalQualityFragments.join(', ')}`);
   }
 
   const inventorySummaryFragments = [

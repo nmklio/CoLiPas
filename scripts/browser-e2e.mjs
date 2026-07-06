@@ -694,8 +694,16 @@ async function assertSshTerminalPanel(targetPage) {
     if (!/RTT\s+\d+ms\s+\/\s+(?:\d+\s+KB\/s|\d+(?:\.\d)?\s+MB\/s)/i.test(terminalNetworkText)) {
       throw new Error(`SSH terminal network diagnostics did not render latency and throughput: ${terminalNetworkText}`);
     }
+    if (!/(Smooth|High latency|Low throughput|Measuring)/i.test(terminalNetworkText)) {
+      throw new Error(`SSH terminal network diagnostics did not classify interactive quality: ${terminalNetworkText}`);
+    }
+    const terminalNetworkClass = await targetPage.locator('.ssh-terminal-network').getAttribute('class');
+    if (!/\b(good|warn|slow|pending)\b/.test(terminalNetworkClass ?? '')) {
+      throw new Error(`SSH terminal network diagnostics did not expose a quality tone: ${terminalNetworkClass}`);
+    }
     console.log(`ok browser e2e SSH burst output rendered in ${burstOutputDurationMs}ms with max long task ${maxBurstLongTaskMs}ms`);
     await assertElementWithinViewport(targetPage, '.ssh-console', 'desktop SSH console');
+    await captureVisualEvidence(targetPage, 'desktop-ssh-terminal-network', ['.ssh-console', '.ssh-terminal-network']);
     await targetPage.getByRole('button', { name: /disconnect/i }).click();
     await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });
     const disconnectMessage = targetPage.locator('.action-message').filter({ hasText: /disconnected/i });

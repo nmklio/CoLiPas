@@ -3971,9 +3971,10 @@ td span,
 
 .ssh-terminal-network {
   min-height: 24px;
+  max-width: 250px;
   border: 1px solid rgba(129, 230, 217, 0.24);
   border-radius: 999px;
-  padding: 4px 8px;
+  padding: 3px 9px;
   background: rgba(17, 94, 89, 0.18);
   color: #9ff3e7;
   font-family: "Cascadia Code", Consolas, monospace;
@@ -3981,6 +3982,52 @@ td span,
   font-weight: 820;
   line-height: 1.2;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.18);
+}
+
+.ssh-terminal-network b {
+  color: #d8fff7;
+  font-family: Inter, "Segoe UI", sans-serif;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ssh-terminal-network small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: currentColor;
+  font-size: 11px;
+  font-weight: 820;
+}
+
+.ssh-terminal-network.good {
+  border-color: rgba(74, 222, 128, 0.32);
+  background: linear-gradient(135deg, rgba(20, 83, 45, 0.3), rgba(13, 148, 136, 0.2));
+  color: #bbf7d0;
+}
+
+.ssh-terminal-network.warn {
+  border-color: rgba(250, 204, 21, 0.34);
+  background: linear-gradient(135deg, rgba(113, 63, 18, 0.34), rgba(17, 94, 89, 0.16));
+  color: #fde68a;
+}
+
+.ssh-terminal-network.slow {
+  border-color: rgba(248, 113, 113, 0.36);
+  background: linear-gradient(135deg, rgba(127, 29, 29, 0.34), rgba(124, 45, 18, 0.18));
+  color: #fecaca;
+}
+
+.ssh-terminal-network.pending {
+  border-color: rgba(148, 163, 184, 0.3);
+  background: rgba(30, 41, 59, 0.46);
+  color: #cbd5e1;
 }
 
 .ssh-terminal-self-test {
@@ -9798,7 +9845,12 @@ pre {
   .ssh-terminal-controls {
     width: 100%;
     justify-content: space-between;
+    flex-wrap: wrap;
     gap: 8px;
+  }
+
+  .ssh-terminal-network {
+    max-width: min(100%, 220px);
   }
 
   .ssh-terminal-session-count {

@@ -77,6 +77,12 @@ interface TerminalNetworkStats {
   rttMs: number | null;
 }
 
+interface TerminalNetworkQuality {
+  tone: 'pending' | 'good' | 'warn' | 'slow';
+  label: string;
+  detail: string;
+}
+
 interface TerminalSelfTestState {
   status: 'running' | 'complete' | 'timeout' | 'failed';
   lines: number;
@@ -194,6 +200,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const terminalNetworkLabel = terminalNetworkStats
     ? `${formatTerminalRtt(terminalNetworkStats.rttMs)} / ${formatBytesPerSecond(terminalNetworkStats.throughputBytesPerSecond)}`
     : '';
+  const terminalNetworkQuality = terminalNetworkStats ? getTerminalNetworkQuality(terminalNetworkStats, t) : null;
   const terminalSelfTestRunning = terminalSelfTest?.status === 'running';
   const terminalSelfTestLabel = terminalSelfTest ? formatTerminalSelfTestLabel(terminalSelfTest, language) : '';
   const visibleSummary = useMemo(() => {
@@ -862,8 +869,12 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                       {t('servers.activeShellSessionsShort', { count: activeShellCount })}
                     </span>
                     {terminalShellId && terminalNetworkLabel && (
-                      <span className="ssh-terminal-network" title={t('servers.terminalNetworkStats')}>
-                        {terminalNetworkLabel}
+                      <span
+                        className={`ssh-terminal-network ${terminalNetworkQuality?.tone ?? 'pending'}`}
+                        title={terminalNetworkQuality?.detail ?? t('servers.terminalNetworkStats')}
+                      >
+                        <b>{terminalNetworkQuality?.label ?? t('servers.terminalNetworkPending')}</b>
+                        <small>{terminalNetworkLabel}</small>
                       </span>
                     )}
                     {terminalSelfTest && (
@@ -2326,6 +2337,45 @@ function shouldRenderTerminalNetworkStats(
 
 function terminalNetworkDisplayKey(stats: TerminalNetworkStats) {
   return `${formatTerminalRtt(stats.rttMs)}|${formatBytesPerSecond(stats.throughputBytesPerSecond)}`;
+}
+
+function getTerminalNetworkQuality(
+  stats: TerminalNetworkStats,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): TerminalNetworkQuality {
+  const rttLabel = formatTerminalRtt(stats.rttMs);
+  const rateLabel = formatBytesPerSecond(stats.throughputBytesPerSecond);
+  const detailVars = { rtt: rttLabel, rate: rateLabel };
+
+  if (stats.rttMs === null) {
+    return {
+      tone: 'pending',
+      label: t('servers.terminalNetworkPending'),
+      detail: t('servers.terminalNetworkPendingDetail', detailVars),
+    };
+  }
+
+  if (stats.rttMs >= 350) {
+    return {
+      tone: 'slow',
+      label: t('servers.terminalNetworkSlow'),
+      detail: t('servers.terminalNetworkSlowDetail', detailVars),
+    };
+  }
+
+  if (stats.rttMs >= 120 && stats.throughputBytesPerSecond > 0 && stats.throughputBytesPerSecond < 16 * 1024) {
+    return {
+      tone: 'warn',
+      label: t('servers.terminalNetworkThroughputLow'),
+      detail: t('servers.terminalNetworkThroughputLowDetail', detailVars),
+    };
+  }
+
+  return {
+    tone: 'good',
+    label: t('servers.terminalNetworkGood'),
+    detail: t('servers.terminalNetworkGoodDetail', detailVars),
+  };
 }
 
 function calculateSelfTestRate(lines: number, durationMs: number) {
