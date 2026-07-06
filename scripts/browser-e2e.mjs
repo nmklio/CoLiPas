@@ -845,6 +845,24 @@ async function assertSshTerminalPanel(targetPage) {
     if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshTroubleshootingReport) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshTroubleshootingReport) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY|test-browser-e2e-value|password=|passphrase=|simulated\$ whoami/i.test(copiedSshTroubleshootingReport)) {
       throw new Error('SSH troubleshooting report copy output leaked raw host, secret, or command text');
     }
+    await targetPage.locator('[data-ssh-channel-check-run="true"]').click();
+    await targetPage.locator('[data-ssh-channel-check="true"]').waitFor({ timeout: 20000 });
+    const sshChannelCheckText = await targetPage.locator('[data-ssh-channel-check="true"]').innerText();
+    if (!/SSH channel check|WebSocket|Compatible channel|Session cleanup|Round trip OK/i.test(sshChannelCheckText)) {
+      throw new Error(`SSH channel self-check did not render all channel stages: ${sshChannelCheckText}`);
+    }
+    const sshChannelStageCount = await targetPage.locator('[data-ssh-channel-check-stage]').count();
+    if (sshChannelStageCount !== 4) {
+      throw new Error(`SSH channel self-check should render four stages, got ${sshChannelStageCount}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(sshChannelCheckText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(sshChannelCheckText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY|test-browser-e2e-value|password=|passphrase=/i.test(sshChannelCheckText)) {
+      throw new Error('SSH channel self-check rendered raw host or secret material');
+    }
+    await targetPage.waitForFunction(async () => {
+      const response = await fetch('/api/servers/shells/status');
+      const status = await response.json();
+      return status.activeCount === 0;
+    }, undefined, { timeout: 7000 });
     await captureVisualEvidence(targetPage, 'desktop-ssh-connection-doctor', ['[data-ssh-connection-doctor="true"]']);
     await targetPage.getByRole('button', { name: /open ssh terminal/i }).click();
     await targetPage.locator('.ssh-console').waitFor({ timeout: 10000 });

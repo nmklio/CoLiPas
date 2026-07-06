@@ -1,7 +1,7 @@
 import { FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import type { Terminal as XTerm, IDisposable } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
-import { ChevronUp, Copy, Cpu, Database, Edit3, Eraser, FileKey2, FileText, Globe2, KeyRound, Plus, Power, PowerOff, RotateCcw, Search, Server, ShieldCheck, Terminal, Trash2, X } from 'lucide-react';
+import { ChevronUp, Copy, Cpu, Database, Edit3, Eraser, FileKey2, FileText, Globe2, KeyRound, Network, Plus, Power, PowerOff, RotateCcw, Search, Server, ShieldCheck, Terminal, Trash2, X } from 'lucide-react';
 import { Language, useI18n } from '../../i18n';
 import {
   closeServerShell,
@@ -215,6 +215,27 @@ interface SshTroubleshootingReport {
   text: string;
 }
 
+type SshChannelCheckStageId = 'browser' | 'websocket' | 'compatible' | 'cleanup';
+
+interface SshChannelCheckStage {
+  id: SshChannelCheckStageId;
+  label: string;
+  value: string;
+  detail: string;
+  tone: TerminalNetworkQuality['tone'];
+  durationMs?: number;
+}
+
+interface SshChannelCheckReport {
+  serverId: string;
+  checkedAt: string;
+  tone: TerminalNetworkQuality['tone'];
+  title: string;
+  detail: string;
+  summary: string;
+  stages: SshChannelCheckStage[];
+}
+
 type TerminalBottleneckSnapshotReason = 'close' | 'remote-close' | 'disconnect';
 
 interface TerminalBottleneckSnapshot {
@@ -328,6 +349,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const [diagnosingServerId, setDiagnosingServerId] = useState('');
   const [sshDoctorReport, setSshDoctorReport] = useState<SshConnectionDoctorReport | null>(null);
   const [sshDoctorHistory, setSshDoctorHistory] = useState<SshConnectionDoctorHistoryEntry[]>(() => readSshDoctorHistory());
+  const [sshChannelCheckReport, setSshChannelCheckReport] = useState<SshChannelCheckReport | null>(null);
+  const [checkingSshChannelServerId, setCheckingSshChannelServerId] = useState('');
   const [loginProbe, setLoginProbe] = useState<LoginProbe | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [formDismissed, setFormDismissed] = useState(false);
@@ -521,6 +544,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   async function runSshConnectionDoctor(server: ServerNode) {
     setDiagnosingServerId(server.id);
     clearActionMessage();
+    setSshChannelCheckReport(null);
 
     try {
       const diagnostic = server.ssh?.connected ? await runServerDiagnostic(server.id) : null;
@@ -554,6 +578,59 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     } finally {
       setDiagnosingServerId('');
     }
+  }
+
+  async function runSshChannelSelfCheck(server: ServerNode) {
+    if (!server.ssh?.connected) {
+      showActionMessage(t('servers.selectVerifiedFirst'));
+      return;
+    }
+
+    setCheckingSshChannelServerId(server.id);
+    clearActionMessage();
+    setSshChannelCheckReport(null);
+
+    const stages: SshChannelCheckStage[] = [];
+    let beforeActiveCount = 0;
+    try {
+      const status = await fetchServerShellStatus();
+      beforeActiveCount = status.activeCount;
+    } catch {
+      beforeActiveCount = activeShellCount;
+    }
+
+    const browserStage = buildSshChannelBrowserStage(t);
+    stages.push(browserStage);
+
+    try {
+      stages.push(await probeWebSocketSshChannel(server, getTerminalDimensions, t));
+    } catch (error) {
+      stages.push(buildSshChannelFailureStage('websocket', error, t));
+    }
+
+    try {
+      stages.push(await probeCompatibleSshChannel(server, getTerminalDimensions, t));
+    } catch (error) {
+      stages.push(buildSshChannelFailureStage('compatible', error, t));
+    }
+
+    try {
+      const status = await fetchServerShellStatus();
+      stages.push(buildSshChannelCleanupStage(beforeActiveCount, status.activeCount, t));
+      setActiveShellCount(status.activeCount);
+    } catch (error) {
+      stages.push(buildSshChannelFailureStage('cleanup', error, t));
+    }
+
+    const report = buildSshChannelCheckReport(server, stages, t);
+    setSshChannelCheckReport(report);
+    showActionMessage(
+      report.tone === 'slow'
+        ? t('servers.sshChannelCheckIssueFound', { name: sanitizeSshDoctorText(server.name) })
+        : t('servers.sshChannelCheckComplete', { name: sanitizeSshDoctorText(server.name) }),
+      { autoDismissMs: 7000 },
+    );
+    setCheckingSshChannelServerId('');
   }
 
   async function handleDelete(server: ServerNode) {
@@ -952,6 +1029,10 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                 <FileText size={14} />
                 {t('servers.sshTroubleshootingReportCopy')}
               </button>
+              <button type="button" data-ssh-channel-check-run="true" disabled={!sshDoctorServer?.ssh?.connected || checkingSshChannelServerId === sshDoctorServer?.id} onClick={() => sshDoctorServer && runSshChannelSelfCheck(sshDoctorServer)}>
+                <Network size={14} />
+                {checkingSshChannelServerId === sshDoctorServer?.id ? t('servers.sshChannelCheckRunning') : t('servers.sshChannelCheckRun')}
+              </button>
               <button type="button" disabled={!sshDoctorServer?.ssh?.connected} onClick={() => sshDoctorServer && openSshConsole(sshDoctorServer)}>
                 <Terminal size={14} />
                 {t('servers.sshDoctorOpenTerminal')}
@@ -1001,6 +1082,24 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     <span>{item.label}</span>
                     <strong>{item.value}</strong>
                     <small>{item.detail}</small>
+                  </article>
+                ))}
+              </div>
+            </div>
+          )}
+          {sshChannelCheckReport && (
+            <div className={`ssh-channel-check ${sshChannelCheckReport.tone}`} data-ssh-channel-check="true">
+              <div className="ssh-channel-check-summary">
+                <span>{t('servers.sshChannelCheckEyebrow')}</span>
+                <strong>{sshChannelCheckReport.title}</strong>
+                <small>{sshChannelCheckReport.detail}</small>
+              </div>
+              <div className="ssh-channel-check-stages">
+                {sshChannelCheckReport.stages.map((stage) => (
+                  <article key={stage.id} className={stage.tone} data-ssh-channel-check-stage={stage.id}>
+                    <span>{stage.label}</span>
+                    <strong>{stage.value}</strong>
+                    <small>{stage.detail}</small>
                   </article>
                 ))}
               </div>
@@ -3788,6 +3887,267 @@ function buildSshTroubleshootingReport({
     items,
     text,
   };
+}
+
+function buildSshChannelBrowserStage(t: (key: string, vars?: Record<string, string | number>) => string): SshChannelCheckStage {
+  const websocketReady = typeof WebSocket !== 'undefined';
+  const eventSourceReady = typeof EventSource !== 'undefined';
+  const fetchReady = typeof fetch !== 'undefined';
+  const ok = websocketReady && eventSourceReady && fetchReady;
+  return {
+    id: 'browser',
+    label: t('servers.sshChannelCheckBrowser'),
+    value: ok ? t('servers.sshChannelCheckReady') : t('servers.sshChannelCheckBlocked'),
+    detail: t('servers.sshChannelCheckBrowserDetail', {
+      websocket: websocketReady ? 'ok' : 'missing',
+      eventsource: eventSourceReady ? 'ok' : 'missing',
+      fetch: fetchReady ? 'ok' : 'missing',
+    }),
+    tone: ok ? 'good' : 'slow',
+  };
+}
+
+function probeWebSocketSshChannel(
+  server: ServerNode,
+  getDimensions: () => { cols: number; rows: number },
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): Promise<SshChannelCheckStage> {
+  const startedAt = performance.now();
+  const marker = buildSshChannelCheckMarker('ws');
+  return new Promise((resolve) => {
+    let settled = false;
+    let sessionId = '';
+    let output = '';
+    let latestMetric = '';
+    let socket: ReturnType<typeof connectServerShellSocket> | null = null;
+
+    const finish = (tone: TerminalNetworkQuality['tone'], value: string, detail: string) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      window.clearTimeout(timeoutId);
+      socket?.close();
+      if (sessionId) {
+        closeServerShell(sessionId).catch(() => undefined);
+      }
+      resolve({
+        id: 'websocket',
+        label: t('servers.sshChannelCheckWebSocket'),
+        value,
+        detail: sanitizeSshDoctorText(detail),
+        tone,
+        durationMs: Math.round(performance.now() - startedAt),
+      });
+    };
+
+    const timeoutId = window.setTimeout(() => {
+      finish('slow', t('servers.sshChannelCheckTimeout'), t('servers.sshChannelCheckWebSocketTimeout'));
+    }, 8000);
+
+    try {
+      socket = connectServerShellSocket(
+        server.id,
+        getDimensions(),
+        (event) => {
+          if ((event.type === 'stdout' || event.type === 'stderr') && event.content) {
+            output += event.content;
+            if (output.includes(marker)) {
+              finish('good', t('servers.sshChannelCheckRoundTripOk'), latestMetric || t('servers.sshChannelCheckWebSocketReady'));
+            }
+          }
+          if (event.type === 'error') {
+            finish('slow', t('servers.sshChannelCheckFailed'), event.message ?? t('servers.sshChannelCheckWebSocketFailed'));
+          }
+        },
+        (event) => {
+          sessionId = event.sessionId;
+          socket?.sendInput(`printf '${marker}\\n'\r`);
+        },
+        (error) => {
+          finish('slow', t('servers.sshChannelCheckFailed'), error.message);
+        },
+        (metrics) => {
+          latestMetric = `${formatTerminalRtt(metrics.rttMs)} / ${formatBytesPerSecond(metrics.throughputBytesPerSecond)}`;
+        },
+        (event) => {
+          if (!settled && event.ready) {
+            finish('warn', t('servers.sshChannelCheckClosed'), t('servers.sshChannelCheckClosedDetail', { code: event.code || 'closed' }));
+          }
+        },
+      );
+    } catch (error) {
+      finish('slow', t('servers.sshChannelCheckFailed'), error instanceof Error ? error.message : String(error));
+    }
+  });
+}
+
+async function probeCompatibleSshChannel(
+  server: ServerNode,
+  getDimensions: () => { cols: number; rows: number },
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): Promise<SshChannelCheckStage> {
+  const startedAt = performance.now();
+  const marker = buildSshChannelCheckMarker('sse');
+  let sessionId = '';
+  let stream: EventSource | null = null;
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let output = '';
+    const finish = (tone: TerminalNetworkQuality['tone'], value: string, detail: string) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      window.clearTimeout(timeoutId);
+      stream?.close();
+      if (sessionId) {
+        closeServerShell(sessionId).catch(() => undefined);
+      }
+      resolve({
+        id: 'compatible',
+        label: t('servers.sshChannelCheckCompatible'),
+        value,
+        detail: sanitizeSshDoctorText(detail),
+        tone,
+        durationMs: Math.round(performance.now() - startedAt),
+      });
+    };
+
+    const timeoutId = window.setTimeout(() => {
+      finish('slow', t('servers.sshChannelCheckTimeout'), t('servers.sshChannelCheckCompatibleTimeout'));
+    }, 9000);
+
+    openServerShell(server.id, getDimensions())
+      .then((shell) => {
+        sessionId = shell.sessionId;
+        stream = streamServerShell(
+          shell.sessionId,
+          (event) => {
+            if ((event.type === 'stdout' || event.type === 'stderr') && event.content) {
+              output += event.content;
+              if (output.includes(marker)) {
+                finish('good', t('servers.sshChannelCheckRoundTripOk'), t('servers.sshChannelCheckCompatibleReady'));
+              }
+            }
+            if (event.type === 'error') {
+              finish('slow', t('servers.sshChannelCheckFailed'), event.message ?? t('servers.sshChannelCheckCompatibleFailed'));
+            }
+          },
+          (error) => {
+            if (!settled) {
+              finish('slow', t('servers.sshChannelCheckFailed'), error.message);
+            }
+          },
+          { replayHistory: true },
+        );
+        window.setTimeout(() => {
+          writeServerShell(shell.sessionId, `printf '${marker}\\n'\r`).catch((error) => {
+            finish('slow', t('servers.sshChannelCheckFailed'), error instanceof Error ? error.message : String(error));
+          });
+        }, 80);
+      })
+      .catch((error) => {
+        finish('slow', t('servers.sshChannelCheckFailed'), error instanceof Error ? error.message : String(error));
+      });
+  });
+}
+
+function buildSshChannelCleanupStage(
+  beforeActiveCount: number,
+  afterActiveCount: number,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): SshChannelCheckStage {
+  const ok = afterActiveCount <= beforeActiveCount;
+  return {
+    id: 'cleanup',
+    label: t('servers.sshChannelCheckCleanup'),
+    value: ok ? t('servers.sshChannelCheckCleanupOk') : t('servers.sshChannelCheckCleanupWarn'),
+    detail: t('servers.sshChannelCheckCleanupDetail', { before: beforeActiveCount, after: afterActiveCount }),
+    tone: ok ? 'good' : 'warn',
+  };
+}
+
+function buildSshChannelFailureStage(
+  id: SshChannelCheckStageId,
+  error: unknown,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): SshChannelCheckStage {
+  return {
+    id,
+    label: formatSshChannelStageLabel(id, t),
+    value: t('servers.sshChannelCheckFailed'),
+    detail: sanitizeSshDoctorText(error instanceof Error ? error.message : String(error || 'SSH channel check failed')),
+    tone: 'slow',
+  };
+}
+
+function buildSshChannelCheckReport(
+  server: ServerNode,
+  stages: SshChannelCheckStage[],
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): SshChannelCheckReport {
+  const checkedAt = new Date().toISOString();
+  const serverName = sanitizeSshDoctorText(server.name || t('common.server'));
+  const tone = stages.some((stage) => stage.tone === 'slow')
+    ? 'slow'
+    : stages.some((stage) => stage.tone === 'warn')
+      ? 'warn'
+      : stages.some((stage) => stage.tone === 'pending')
+        ? 'pending'
+        : 'good';
+  const title = tone === 'slow'
+    ? t('servers.sshChannelCheckTitleSlow', { name: serverName })
+    : tone === 'warn'
+      ? t('servers.sshChannelCheckTitleWarn', { name: serverName })
+      : t('servers.sshChannelCheckTitleGood', { name: serverName });
+  const detail = tone === 'slow'
+    ? t('servers.sshChannelCheckDetailSlow')
+    : tone === 'warn'
+      ? t('servers.sshChannelCheckDetailWarn')
+      : t('servers.sshChannelCheckDetailGood');
+  const safeStages = stages.map((stage) => ({
+    ...stage,
+    value: sanitizeSshDoctorText(stage.value),
+    detail: sanitizeSshDoctorText(stage.durationMs ? `${stage.detail} / ${stage.durationMs}ms` : stage.detail),
+  }));
+  const summary = sanitizeSshDoctorText([
+    title,
+    detail,
+    `${t('servers.sshDoctorCheckedAt')}: ${checkedAt}`,
+    ...safeStages.map((stage) => `${stage.label}: ${stage.value} - ${stage.detail}`),
+  ].join('\n'));
+
+  return {
+    serverId: server.id,
+    checkedAt,
+    tone,
+    title,
+    detail,
+    summary,
+    stages: safeStages,
+  };
+}
+
+function buildSshChannelCheckMarker(prefix: 'ws' | 'sse') {
+  return `__colipas_${prefix}_channel_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}__`;
+}
+
+function formatSshChannelStageLabel(
+  id: SshChannelCheckStageId,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+) {
+  if (id === 'browser') {
+    return t('servers.sshChannelCheckBrowser');
+  }
+  if (id === 'websocket') {
+    return t('servers.sshChannelCheckWebSocket');
+  }
+  if (id === 'compatible') {
+    return t('servers.sshChannelCheckCompatible');
+  }
+  return t('servers.sshChannelCheckCleanup');
 }
 
 function readSshDoctorHistory(): SshConnectionDoctorHistoryEntry[] {
