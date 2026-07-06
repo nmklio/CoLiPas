@@ -51,6 +51,8 @@ const terminalCompatibleInputFlushMs = 4;
 const terminalRuntimePrefetchDelayMs = 1500;
 const terminalRuntimeIdleTimeoutMs = 4500;
 const terminalNetworkUiRefreshMs = 900;
+const terminalTelemetryUiRefreshMs = 500;
+const terminalTextEncoder = new TextEncoder();
 const terminalSelfTestCommand = `printf 'colipas-ssh-self-test-start\\n'; i=1; while [ "$i" -le 40 ]; do printf 'colipas-ssh-self-test-%02d\\n' "$i"; i=$((i+1)); done; printf 'colipas-ssh-self-test-end\\n'`;
 const terminalSelfTestTimeoutMs = 15000;
 const terminalSelfTestLinePattern = /colipas-ssh-self-test-\d{2}/g;
@@ -90,6 +92,35 @@ interface TerminalQualityInsight {
   metric: string;
 }
 
+interface TerminalTelemetryState {
+  inputEvents: number;
+  inputBytes: number;
+  outputBytes: number;
+  outputLines: number;
+  latestFirstOutputMs: number | null;
+  renderLagMs: number;
+  pendingBytes: number;
+  peakPendingBytes: number;
+  lastInputAt: number | null;
+  lastOutputAt: number | null;
+  commandSubmittedAt: number | null;
+}
+
+interface TerminalTelemetryCard {
+  id: 'input' | 'first-output' | 'output' | 'render';
+  label: string;
+  value: string;
+  detail: string;
+  tone: 'good' | 'warn' | 'slow' | 'pending';
+}
+
+interface TerminalTelemetryInsight {
+  tone: TerminalNetworkQuality['tone'];
+  title: string;
+  detail: string;
+  cards: TerminalTelemetryCard[];
+}
+
 interface TerminalSelfTestState {
   status: 'running' | 'complete' | 'timeout' | 'failed';
   lines: number;
@@ -111,6 +142,20 @@ interface TerminalSelfTestTracker {
   lastLineAt: number | null;
   timeoutId: number | null;
 }
+
+const emptyTerminalTelemetry: TerminalTelemetryState = {
+  inputEvents: 0,
+  inputBytes: 0,
+  outputBytes: 0,
+  outputLines: 0,
+  latestFirstOutputMs: null,
+  renderLagMs: 0,
+  pendingBytes: 0,
+  peakPendingBytes: 0,
+  lastInputAt: null,
+  lastOutputAt: null,
+  commandSubmittedAt: null,
+};
 
 const initialForm: ConnectServerPayload = {
   name: '',
@@ -159,6 +204,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const [terminalShellId, setTerminalShellId] = useState<string | null>(null);
   const [activeShellCount, setActiveShellCount] = useState(0);
   const [terminalNetworkStats, setTerminalNetworkStats] = useState<TerminalNetworkStats | null>(null);
+  const [terminalTelemetry, setTerminalTelemetry] = useState<TerminalTelemetryState>(emptyTerminalTelemetry);
   const [terminalSelfTest, setTerminalSelfTest] = useState<TerminalSelfTestState | null>(null);
   const [terminalTransport, setTerminalTransport] = useState<'websocket' | 'compatible' | null>(null);
   const [loginProbe, setLoginProbe] = useState<LoginProbe | null>(null);
@@ -189,6 +235,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const terminalInputFlushAgainRef = useRef(false);
   const terminalNetworkRenderedRef = useRef<TerminalNetworkStats | null>(null);
   const terminalNetworkRenderedAtRef = useRef(0);
+  const terminalTelemetryRef = useRef<TerminalTelemetryState>(emptyTerminalTelemetry);
+  const terminalTelemetryRenderedAtRef = useRef(0);
   const terminalSelfTestRef = useRef<TerminalSelfTestTracker | null>(null);
   const terminalCssInjectedRef = useRef(false);
   const actionMessageTimerRef = useRef<number | null>(null);
@@ -218,6 +266,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     sshRunning,
     t,
   );
+  const terminalTelemetryInsight = getTerminalTelemetryInsight(terminalTelemetry, terminalNetworkStats, terminalTransport, Boolean(terminalShellId), t);
   const terminalSelfTestRunning = terminalSelfTest?.status === 'running';
   const terminalSelfTestLabel = terminalSelfTest ? formatTerminalSelfTestLabel(terminalSelfTest, language) : '';
   const visibleSummary = useMemo(() => {
@@ -930,6 +979,22 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                   </div>
                   <code>{terminalQualityInsight.metric}</code>
                 </div>
+                <div className={`ssh-terminal-telemetry ${terminalTelemetryInsight.tone}`} data-ssh-terminal-telemetry="true" aria-live="polite">
+                  <div className="ssh-terminal-telemetry-heading">
+                    <span>{t('servers.telemetryTitle')}</span>
+                    <strong>{terminalTelemetryInsight.title}</strong>
+                    <small>{terminalTelemetryInsight.detail}</small>
+                  </div>
+                  <div className="ssh-terminal-telemetry-grid">
+                    {terminalTelemetryInsight.cards.map((card) => (
+                      <article key={card.id} className={card.tone} data-ssh-terminal-telemetry-card={card.id} aria-label={`${card.label}: ${card.value}`}>
+                        <span>{card.label}</span>
+                        <strong>{card.value}</strong>
+                        <small>{card.detail}</small>
+                      </article>
+                    ))}
+                  </div>
+                </div>
                 <div ref={terminalContainerRef} className="ssh-terminal-screen" aria-label="Interactive SSH terminal" />
               </div>
             </div>
@@ -1156,6 +1221,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     setSshPanelServerId(server.id);
     setLoginProbe(null);
     clearTerminalNetworkStats();
+    resetTerminalTelemetry();
     setTerminalTransport(null);
     sshConsoleReplayHistoryRef.current = !terminalShellIdRef.current || terminalShellServerIdRef.current !== server.id;
     setSshConsoleOpen(true);
@@ -1209,6 +1275,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     setSshPanelServerId('');
     setLoginProbe(null);
     clearTerminalNetworkStats();
+    resetTerminalTelemetry();
     setTerminalTransport(null);
     setSshRunning(false);
     setSshInterrupting(false);
@@ -1231,6 +1298,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     }
     setSshRunning(true);
     clearTerminalNetworkStats();
+    resetTerminalTelemetry();
     closeActiveShellSession();
     terminalShellServerIdRef.current = server.id;
     terminal.reset();
@@ -1262,6 +1330,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       closeActiveShellSession();
       refreshShellStatus();
       clearTerminalNetworkStats();
+      resetTerminalTelemetry();
       setLoginProbe({
         host: server.ssh?.host || server.publicIp,
         user: server.ssh?.username || 'root',
@@ -1430,6 +1499,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       return;
     }
     if ((event.type === 'stdout' || event.type === 'stderr') && event.content) {
+      recordTerminalOutput(event.content);
       queueTerminalWrite(terminal, event.content);
       captureTerminalSelfTestOutput(terminal, event.content);
       return;
@@ -1449,6 +1519,11 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       terminalShellTransportRef.current = null;
       setTerminalTransport(null);
       clearTerminalNetworkStats();
+      updateTerminalTelemetry((current) => ({
+        ...current,
+        pendingBytes: 0,
+        commandSubmittedAt: null,
+      }), { force: true });
       refreshShellStatus();
     }
     if (event.type === 'error' && sshConsoleOpenRef.current) {
@@ -1482,6 +1557,68 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     terminalNetworkRenderedRef.current = null;
     terminalNetworkRenderedAtRef.current = 0;
     setTerminalNetworkStats(null);
+  }
+
+  function updateTerminalTelemetry(
+    updater: (current: TerminalTelemetryState) => TerminalTelemetryState,
+    options: { force?: boolean } = {},
+  ) {
+    const next = updater(terminalTelemetryRef.current);
+    terminalTelemetryRef.current = next;
+    const now = performance.now();
+    if (options.force || now - terminalTelemetryRenderedAtRef.current >= terminalTelemetryUiRefreshMs) {
+      terminalTelemetryRenderedAtRef.current = now;
+      setTerminalTelemetry(next);
+    }
+  }
+
+  function resetTerminalTelemetry() {
+    const next = { ...emptyTerminalTelemetry };
+    terminalTelemetryRef.current = next;
+    terminalTelemetryRenderedAtRef.current = 0;
+    setTerminalTelemetry(next);
+  }
+
+  function recordTerminalInput(data: string) {
+    const now = performance.now();
+    const bytes = measureTerminalTextBytes(data);
+    const submitted = data.includes('\r') || data.includes('\n') || data.includes('\u0003');
+    updateTerminalTelemetry((current) => ({
+      ...current,
+      inputEvents: current.inputEvents + 1,
+      inputBytes: current.inputBytes + bytes,
+      lastInputAt: now,
+      commandSubmittedAt: submitted ? now : current.commandSubmittedAt,
+      latestFirstOutputMs: submitted ? null : current.latestFirstOutputMs,
+    }), { force: submitted });
+  }
+
+  function recordTerminalOutput(content: string) {
+    const now = performance.now();
+    const bytes = measureTerminalTextBytes(content);
+    const lines = countTerminalOutputLines(content);
+    updateTerminalTelemetry((current) => {
+      const latestFirstOutputMs = current.commandSubmittedAt !== null
+        ? Math.max(0, now - current.commandSubmittedAt)
+        : current.latestFirstOutputMs;
+      return {
+        ...current,
+        outputBytes: current.outputBytes + bytes,
+        outputLines: current.outputLines + lines,
+        latestFirstOutputMs,
+        lastOutputAt: now,
+        commandSubmittedAt: null,
+      };
+    }, { force: terminalTelemetryRef.current.commandSubmittedAt !== null });
+  }
+
+  function recordTerminalRender(renderLagMs: number, pendingBytes: number) {
+    updateTerminalTelemetry((current) => ({
+      ...current,
+      renderLagMs: Math.max(0, renderLagMs),
+      pendingBytes,
+      peakPendingBytes: Math.max(current.peakPendingBytes, pendingBytes),
+    }), { force: renderLagMs >= 24 || pendingBytes === 0 });
   }
 
   function beginTerminalSelfTest(sessionId: string) {
@@ -1742,6 +1879,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   }
 
   function queueTerminalInput(sessionId: string, data: string) {
+    recordTerminalInput(data);
     if (terminalShellTransportRef.current === 'websocket' && terminalShellSocketRef.current) {
       terminalShellSocketRef.current.sendInput(data);
       return;
@@ -1978,6 +2116,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     if (syncState) {
       setTerminalShellId(null);
       clearTerminalNetworkStats();
+      resetTerminalTelemetry();
       setTerminalTransport(null);
     }
     terminalShellServerIdRef.current = null;
@@ -2091,7 +2230,14 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     const chunkSize = getTerminalWriteChunkSize(content.length);
     const chunk = !options.drainAll && content.length > chunkSize ? content.slice(0, chunkSize) : content;
     terminalWriteBufferRef.current = content.slice(chunk.length);
+    const renderStartedAt = performance.now();
+    updateTerminalTelemetry((current) => ({
+      ...current,
+      pendingBytes: terminalWriteBufferRef.current.length,
+      peakPendingBytes: Math.max(current.peakPendingBytes, content.length),
+    }));
     terminal.write(chunk, () => {
+      recordTerminalRender(performance.now() - renderStartedAt, terminalWriteBufferRef.current.length);
       terminal.scrollToBottom();
       if (terminalWriteBufferRef.current) {
         scheduleTerminalWriteFlush(terminal);
@@ -2298,6 +2444,31 @@ function formatBytesPerSecond(bytesPerSecond: number) {
   return `${Math.max(0, Math.round(bytesPerSecond / 1024))} KB/s`;
 }
 
+function formatCompactBytes(value: number) {
+  if (!Number.isFinite(value) || value <= 0) {
+    return '0 B';
+  }
+  if (value >= 1024 * 1024) {
+    return `${(value / 1024 / 1024).toFixed(1)} MB`;
+  }
+  if (value >= 1024) {
+    return `${Math.round(value / 1024)} KB`;
+  }
+  return `${Math.round(value)} B`;
+}
+
+function measureTerminalTextBytes(value: string) {
+  return terminalTextEncoder.encode(value).length;
+}
+
+function countTerminalOutputLines(content: string) {
+  if (!content) {
+    return 0;
+  }
+  const newlines = content.match(/\n/g)?.length ?? 0;
+  return Math.max(newlines, content.trim() ? 1 : 0);
+}
+
 function actionLabel(action: 'powerOn' | 'shutdown' | 'reboot') {
   return {
     powerOn: 'power on',
@@ -2500,6 +2671,110 @@ function getTerminalQualityInsight(
     detail: t('servers.terminalQualityGoodDetail', vars),
     metric,
   };
+}
+
+function getTerminalTelemetryInsight(
+  telemetry: TerminalTelemetryState,
+  stats: TerminalNetworkStats | null,
+  transport: 'websocket' | 'compatible' | null,
+  connected: boolean,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): TerminalTelemetryInsight {
+  const inputTone: TerminalTelemetryCard['tone'] = telemetry.inputEvents === 0
+    ? 'pending'
+    : telemetry.inputEvents >= 40 && telemetry.inputBytes / Math.max(1, telemetry.inputEvents) <= 2
+      ? 'warn'
+      : 'good';
+  const firstOutputTone: TerminalTelemetryCard['tone'] = telemetry.latestFirstOutputMs === null
+    ? 'pending'
+    : telemetry.latestFirstOutputMs >= 1800
+      ? 'slow'
+      : telemetry.latestFirstOutputMs >= 700
+        ? 'warn'
+        : 'good';
+  const outputTone: TerminalTelemetryCard['tone'] = telemetry.outputBytes === 0
+    ? 'pending'
+    : stats && stats.throughputBytesPerSecond > 0 && stats.throughputBytesPerSecond < 16 * 1024 && telemetry.outputBytes > 16 * 1024
+      ? 'warn'
+      : 'good';
+  const renderTone: TerminalTelemetryCard['tone'] = telemetry.renderLagMs >= 64 || telemetry.pendingBytes >= terminalWriteLargeBacklogThreshold
+    ? 'slow'
+    : telemetry.renderLagMs >= 24 || telemetry.pendingBytes > 0
+      ? 'warn'
+      : connected ? 'good' : 'pending';
+  const tone: TerminalTelemetryInsight['tone'] = [inputTone, firstOutputTone, outputTone, renderTone].includes('slow')
+    ? 'slow'
+    : [inputTone, firstOutputTone, outputTone, renderTone].includes('warn')
+      ? 'warn'
+      : connected && telemetry.outputBytes > 0
+        ? 'good'
+        : 'pending';
+  const cards: TerminalTelemetryCard[] = [
+    {
+      id: 'input',
+      label: t('servers.telemetryInputLabel'),
+      value: telemetry.inputEvents > 0 ? t('servers.telemetryInputValue', { count: telemetry.inputEvents }) : '--',
+      detail: t('servers.telemetryInputDetail', { bytes: formatCompactBytes(telemetry.inputBytes) }),
+      tone: inputTone,
+    },
+    {
+      id: 'first-output',
+      label: t('servers.telemetryFirstOutputLabel'),
+      value: telemetry.latestFirstOutputMs === null ? '--' : `${Math.round(telemetry.latestFirstOutputMs)}ms`,
+      detail: telemetry.latestFirstOutputMs === null
+        ? t('servers.telemetryFirstOutputPending')
+        : t('servers.telemetryFirstOutputDetail', { value: Math.round(telemetry.latestFirstOutputMs) }),
+      tone: firstOutputTone,
+    },
+    {
+      id: 'output',
+      label: t('servers.telemetryOutputLabel'),
+      value: telemetry.outputLines > 0 ? t('servers.telemetryOutputValue', { count: telemetry.outputLines }) : formatCompactBytes(telemetry.outputBytes),
+      detail: t('servers.telemetryOutputDetail', { bytes: formatCompactBytes(telemetry.outputBytes), rate: formatBytesPerSecond(stats?.throughputBytesPerSecond ?? 0) }),
+      tone: outputTone,
+    },
+    {
+      id: 'render',
+      label: t('servers.telemetryRenderLabel'),
+      value: `${Math.round(telemetry.renderLagMs)}ms`,
+      detail: t('servers.telemetryRenderDetail', { pending: formatCompactBytes(telemetry.pendingBytes), peak: formatCompactBytes(telemetry.peakPendingBytes) }),
+      tone: renderTone,
+    },
+  ];
+  return {
+    tone,
+    title: connected
+      ? tone === 'slow'
+        ? t('servers.telemetrySlowTitle')
+        : tone === 'warn'
+          ? t('servers.telemetryWarnTitle')
+          : tone === 'good'
+            ? t('servers.telemetryGoodTitle')
+            : t('servers.telemetryPendingTitle')
+      : t('servers.telemetryIdleTitle'),
+    detail: connected
+      ? getTerminalTelemetryDetail(tone, transport, t)
+      : t('servers.telemetryIdleDetail'),
+    cards,
+  };
+}
+
+function getTerminalTelemetryDetail(
+  tone: TerminalTelemetryInsight['tone'],
+  transport: 'websocket' | 'compatible' | null,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+) {
+  const transportLabel = getTerminalTransportLabel(transport, t);
+  if (tone === 'slow') {
+    return t('servers.telemetrySlowDetail', { transport: transportLabel });
+  }
+  if (tone === 'warn') {
+    return t('servers.telemetryWarnDetail', { transport: transportLabel });
+  }
+  if (tone === 'good') {
+    return t('servers.telemetryGoodDetail', { transport: transportLabel });
+  }
+  return t('servers.telemetryPendingDetail', { transport: transportLabel });
 }
 
 function getTerminalTransportLabel(

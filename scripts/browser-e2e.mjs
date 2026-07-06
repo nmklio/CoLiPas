@@ -743,9 +743,34 @@ async function assertSshTerminalPanel(targetPage) {
     if (!/(WebSocket live channel|Compatible stream|RTT\s+\d+ms)/i.test(terminalQualityText)) {
       throw new Error(`SSH terminal quality insight did not expose transport or metric evidence: ${terminalQualityText}`);
     }
+    await targetPage.locator('[data-ssh-terminal-telemetry="true"]').waitFor({ timeout: 5000 });
+    await targetPage.waitForFunction(() => {
+      const inputValue = document.querySelector('[data-ssh-terminal-telemetry-card="input"] strong')?.textContent ?? '';
+      const firstOutputValue = document.querySelector('[data-ssh-terminal-telemetry-card="first-output"] strong')?.textContent ?? '';
+      const outputValue = document.querySelector('[data-ssh-terminal-telemetry-card="output"] strong')?.textContent ?? '';
+      return !/^--$/.test(inputValue.trim()) && /\d+ms/i.test(firstOutputValue) && /(?:lines|B|KB|MB)/i.test(outputValue);
+    }, undefined, { timeout: 5000 });
+    const terminalTelemetryText = await targetPage.locator('[data-ssh-terminal-telemetry="true"]').innerText();
+    if (!/Live telemetry/i.test(terminalTelemetryText) || !/Input/i.test(terminalTelemetryText) || !/First output/i.test(terminalTelemetryText) || !/Output/i.test(terminalTelemetryText) || !/Render/i.test(terminalTelemetryText)) {
+      throw new Error(`SSH terminal live telemetry did not render the full instrument strip: ${terminalTelemetryText}`);
+    }
+    if (!/(Live interaction is smooth|Live interaction needs watching|Live interaction is lagging|Collecting live samples)/i.test(terminalTelemetryText)) {
+      throw new Error(`SSH terminal live telemetry did not render an actionable status: ${terminalTelemetryText}`);
+    }
+    const telemetryCardCount = await targetPage.locator('[data-ssh-terminal-telemetry-card]').count();
+    if (telemetryCardCount !== 4) {
+      throw new Error(`SSH terminal live telemetry should expose four cards, got ${telemetryCardCount}`);
+    }
+    const terminalTelemetryClass = await targetPage.locator('[data-ssh-terminal-telemetry="true"]').getAttribute('class');
+    if (!/\b(good|warn|slow|pending)\b/.test(terminalTelemetryClass ?? '')) {
+      throw new Error(`SSH terminal live telemetry did not expose a quality tone: ${terminalTelemetryClass}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(terminalTelemetryText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(terminalTelemetryText)) {
+      throw new Error('SSH terminal live telemetry rendered a raw IP address or API key');
+    }
     console.log(`ok browser e2e SSH burst output rendered in ${burstOutputDurationMs}ms with max long task ${maxBurstLongTaskMs}ms`);
     await assertElementWithinViewport(targetPage, '.ssh-console', 'desktop SSH console');
-    await captureVisualEvidence(targetPage, 'desktop-ssh-terminal-network', ['.ssh-console', '.ssh-terminal-network', '.ssh-terminal-quality']);
+    await captureVisualEvidence(targetPage, 'desktop-ssh-terminal-network', ['.ssh-console', '.ssh-terminal-network', '.ssh-terminal-quality', '[data-ssh-terminal-telemetry="true"]']);
     await targetPage.getByRole('button', { name: /disconnect/i }).click();
     await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });
     const disconnectMessage = targetPage.locator('.action-message').filter({ hasText: /disconnected/i });
