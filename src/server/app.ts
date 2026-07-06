@@ -19,6 +19,7 @@ import { buildDiagnosticExport } from './services/diagnosticService.js';
 import { createOperationTask, preflightOperationTask } from './services/operationsService.js';
 import { buildReleaseReadiness, buildReleaseReadinessReport, recordReleaseReadinessSnapshot } from './services/releaseReadinessService.js';
 import { buildReleaseVerification, isReleaseVerificationAuthorized, isReleaseVerificationEnabled } from './services/releaseVerificationService.js';
+import { createSshRunbookCommand, deleteSshRunbookCommand, listSshRunbookCommands, updateSshRunbookCommand } from './services/sshRunbookService.js';
 import {
   buildServerInventorySnapshot,
   closeServerShell,
@@ -537,6 +538,66 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
 
   app.get('/api/servers/shells/status', (_request, response) => {
     response.json(getServerShellStatus());
+  });
+
+  app.get('/api/servers/ssh-runbook', (request, response, next) => {
+    try {
+      requireSession(request, config);
+      response.json({ commands: listSshRunbookCommands() });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post('/api/servers/ssh-runbook', (request, response, next) => {
+    try {
+      const session = requireSession(request, config);
+      const command = createSshRunbookCommand(request.body);
+      recordAudit({
+        action: 'SSH_RUNBOOK_CREATE',
+        actor: session.user.username,
+        target: 'ssh-runbook',
+        status: 'success',
+        detail: `SSH runbook command saved: ${command.title}`,
+      });
+      response.status(201).json(command);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.patch('/api/servers/ssh-runbook/:commandId', (request, response, next) => {
+    try {
+      const session = requireSession(request, config);
+      const command = updateSshRunbookCommand(request.params.commandId, request.body);
+      recordAudit({
+        action: 'SSH_RUNBOOK_UPDATE',
+        actor: session.user.username,
+        target: 'ssh-runbook',
+        status: 'success',
+        detail: `SSH runbook command updated: ${command.title}`,
+      });
+      response.json(command);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.delete('/api/servers/ssh-runbook/:commandId', (request, response, next) => {
+    try {
+      const session = requireSession(request, config);
+      const result = deleteSshRunbookCommand(request.params.commandId);
+      recordAudit({
+        action: 'SSH_RUNBOOK_DELETE',
+        actor: session.user.username,
+        target: 'ssh-runbook',
+        status: 'success',
+        detail: 'SSH runbook command deleted',
+      });
+      response.json(result);
+    } catch (error) {
+      next(error);
+    }
   });
 
   app.get('/api/servers/shells/:sessionId/stream', (request, response, next) => {

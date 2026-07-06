@@ -67,6 +67,10 @@ const unauthenticatedShellStatusResponse = await fetch(`${baseUrl}/api/servers/s
 if (unauthenticatedShellStatusResponse.status !== 401) {
   throw new Error(`/api/servers/shells/status expected 401 before login, got ${unauthenticatedShellStatusResponse.status}`);
 }
+const unauthenticatedRunbookResponse = await fetch(`${baseUrl}/api/servers/ssh-runbook`);
+if (unauthenticatedRunbookResponse.status !== 401) {
+  throw new Error(`/api/servers/ssh-runbook expected 401 before login, got ${unauthenticatedRunbookResponse.status}`);
+}
 const unauthenticatedPasswordResponse = await fetch(`${baseUrl}/api/account/password`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
@@ -498,6 +502,94 @@ for (const [path, assert] of getChecks) {
 
   console.log(`ok ${path}`);
 }
+
+const runbookInitialResponse = await fetch(`${baseUrl}/api/servers/ssh-runbook`, { headers: authHeaders });
+if (!runbookInitialResponse.ok) {
+  throw new Error(`/api/servers/ssh-runbook returned HTTP ${runbookInitialResponse.status}`);
+}
+const runbookInitialBody = await runbookInitialResponse.json();
+if (!Array.isArray(runbookInitialBody.commands)) {
+  throw new Error('/api/servers/ssh-runbook did not return a command array');
+}
+
+const runbookSmokeTitle = `Smoke runbook command ${Date.now()}`;
+const runbookSmokeUpdatedTitle = `${runbookSmokeTitle} updated`;
+const runbookCreateResponse = await fetch(`${baseUrl}/api/servers/ssh-runbook`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    title: runbookSmokeTitle,
+    command: 'printf colipas-runbook-smoke',
+  }),
+});
+if (runbookCreateResponse.status !== 201) {
+  throw new Error(`/api/servers/ssh-runbook expected 201 on create, got ${runbookCreateResponse.status}: ${await runbookCreateResponse.text()}`);
+}
+const runbookCreated = await runbookCreateResponse.json();
+if (!runbookCreated.id || runbookCreated.title !== runbookSmokeTitle || runbookCreated.command !== 'printf colipas-runbook-smoke') {
+  throw new Error(`/api/servers/ssh-runbook create returned unexpected payload: ${JSON.stringify(runbookCreated)}`);
+}
+
+const runbookDuplicateResponse = await fetch(`${baseUrl}/api/servers/ssh-runbook`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    title: runbookSmokeTitle,
+    command: 'uptime',
+  }),
+});
+if (runbookDuplicateResponse.status !== 409) {
+  throw new Error(`/api/servers/ssh-runbook expected 409 on duplicate title, got ${runbookDuplicateResponse.status}`);
+}
+
+const runbookSensitiveResponse = await fetch(`${baseUrl}/api/servers/ssh-runbook`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    title: 'Sensitive smoke',
+    command: 'curl https://example.invalid?token=secret-value',
+  }),
+});
+if (runbookSensitiveResponse.status !== 400) {
+  throw new Error(`/api/servers/ssh-runbook expected 400 for sensitive command, got ${runbookSensitiveResponse.status}`);
+}
+
+const runbookUpdateResponse = await fetch(`${baseUrl}/api/servers/ssh-runbook/${encodeURIComponent(runbookCreated.id)}`, {
+  method: 'PATCH',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    title: runbookSmokeUpdatedTitle,
+    command: 'printf colipas-runbook-updated',
+  }),
+});
+if (!runbookUpdateResponse.ok) {
+  throw new Error(`/api/servers/ssh-runbook/:id update returned HTTP ${runbookUpdateResponse.status}`);
+}
+const runbookUpdated = await runbookUpdateResponse.json();
+if (runbookUpdated.title !== runbookSmokeUpdatedTitle || runbookUpdated.command !== 'printf colipas-runbook-updated') {
+  throw new Error(`/api/servers/ssh-runbook/:id update returned unexpected payload: ${JSON.stringify(runbookUpdated)}`);
+}
+
+const runbookListResponse = await fetch(`${baseUrl}/api/servers/ssh-runbook`, { headers: authHeaders });
+const runbookListBody = await runbookListResponse.json();
+if (!runbookListBody.commands?.some((item) => item.id === runbookCreated.id && item.command === 'printf colipas-runbook-updated')) {
+  throw new Error(`/api/servers/ssh-runbook did not persist updated command: ${JSON.stringify(runbookListBody)}`);
+}
+
+const runbookDeleteResponse = await fetch(`${baseUrl}/api/servers/ssh-runbook/${encodeURIComponent(runbookCreated.id)}`, {
+  method: 'DELETE',
+  headers: authHeaders,
+});
+if (!runbookDeleteResponse.ok) {
+  throw new Error(`/api/servers/ssh-runbook/:id delete returned HTTP ${runbookDeleteResponse.status}`);
+}
+const runbookAuditResponse = await fetch(`${baseUrl}/api/audit/events`, { headers: authHeaders });
+const runbookAuditBody = await runbookAuditResponse.json();
+const runbookAuditText = JSON.stringify(runbookAuditBody.items?.filter((item) => String(item.action).startsWith('SSH_RUNBOOK')) ?? []);
+if (!/SSH_RUNBOOK_CREATE/.test(runbookAuditText) || /printf colipas-runbook|token=secret-value/.test(runbookAuditText)) {
+  throw new Error(`SSH runbook audit events are missing or leaked command bodies: ${runbookAuditText}`);
+}
+console.log('ok /api/servers/ssh-runbook persists custom commands without leaking command bodies to audit');
 
 async function readSseUntil(response, predicate, timeoutMs = 2500) {
   if (!response.body) {
@@ -2094,6 +2186,23 @@ try {
   console.log('ok /api/servers/shells websocket shell open/input/close round trip');
 } finally {
   await fetch(`${baseUrl}/api/servers/${shellSocketServer.id}`, {
+    method: 'DELETE',
+    headers: authHeaders,
+  }).catch(() => undefined);
+}
+
+const shellSocketEarlyInputServer = await createTemporarySimulatedSshServer({ name: `ws-shell-early-${Date.now()}` });
+try {
+  const shellSocketEarlyInputResult = await exerciseShellWebSocket(shellSocketEarlyInputServer.id, { earlyInput: true });
+  if (!shellSocketEarlyInputResult.text.includes('simulated$ whoami') || !shellSocketEarlyInputResult.text.includes('command simulated.')) {
+    throw new Error('SSH WebSocket shell did not queue early input while the shell was opening');
+  }
+  if (/SSH shell session not ready/i.test(shellSocketEarlyInputResult.text)) {
+    throw new Error('SSH WebSocket shell leaked not-ready errors for early input');
+  }
+  console.log('ok /api/servers/shells websocket queues early input until shell readiness');
+} finally {
+  await fetch(`${baseUrl}/api/servers/${shellSocketEarlyInputServer.id}`, {
     method: 'DELETE',
     headers: authHeaders,
   }).catch(() => undefined);
@@ -5190,6 +5299,7 @@ function assertSshTerminalRealtimeGuards() {
   const sshServiceSource = fs.readFileSync(new URL('../src/server/services/sshAccessService.ts', import.meta.url), 'utf8');
   const sshSocketSource = fs.readFileSync(new URL('../src/server/sshShellSocket.ts', import.meta.url), 'utf8');
   const apiClientSource = fs.readFileSync(new URL('../src/services/apiClient.ts', import.meta.url), 'utf8');
+  const sshRunbookServiceSource = fs.readFileSync(new URL('../src/server/services/sshRunbookService.ts', import.meta.url), 'utf8');
   const redactionSource = fs.readFileSync(new URL('../src/server/services/sensitiveRedaction.ts', import.meta.url), 'utf8');
   const globalCssSource = fs.readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
   const viteSource = fs.readFileSync(new URL('../vite.config.ts', import.meta.url), 'utf8');
@@ -5209,6 +5319,7 @@ function assertSshTerminalRealtimeGuards() {
     'function handleTerminalSocketClose(',
     'WebSocket terminal disconnected',
     'openCompatibleTerminalTransport(server, terminal, lifecycleSeq)',
+    'rows: Math.max(12, Math.min(80, terminal.rows || 30))',
     'queueTerminalWrite(terminal, event.content)',
     'function flushTerminalWriteBuffer(',
     'terminalWriteBaseChunkSize',
@@ -5292,6 +5403,18 @@ function assertSshTerminalRealtimeGuards() {
     'function sendSshQuickCommand(',
     "recordTerminalInput(payload)",
     "sendTerminalInput(sessionId, payload)",
+    'fetchSshRunbookCommands',
+    'createSshRunbookCommand',
+    'deleteSshRunbookCommand',
+    'sshRunbookCommands',
+    'setSshRunbookCommands',
+    'function saveSshRunbookCommand(',
+    'function removeSshRunbookCommand(',
+    'data-ssh-runbook-form="true"',
+    'data-ssh-runbook-command={item.id}',
+    'data-ssh-runbook-command-run={item.id}',
+    'data-ssh-runbook-command-delete={item.id}',
+    'data-ssh-runbook-empty="true"',
     'terminalSelfTestCommand',
     'terminalSelfTestTimeoutMs',
     'terminalSelfTestLinePattern',
@@ -5377,6 +5500,11 @@ function assertSshTerminalRealtimeGuards() {
     'servers.quickCommandInsert',
     'servers.quickCommandRun',
     'servers.quickCommandRunMessage',
+    'servers.quickCommandSave',
+    'servers.quickCommandSaved',
+    'servers.quickCommandDeleted',
+    'servers.quickCommandCustomTitlePlaceholder',
+    'servers.quickCommandEmptyTitle',
   ];
   const i18nSource = fs.readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
   const missingToolLabels = requiredToolLabels.filter((key) => !inventorySource.includes(key) || !i18nSource.includes(key));
@@ -5452,6 +5580,21 @@ function assertSshTerminalRealtimeGuards() {
     throw new Error(`SSH shell PTY backend guard is incomplete: ${missingBackend.join(', ')}`);
   }
 
+  const requiredRunbookServiceFragments = [
+    "const settingId = 'ssh_runbook_commands.v1'",
+    'const maxCommands = 20',
+    'redactSensitiveText(`${title}\\n${command}`)',
+    'SSH_RUNBOOK_COMMAND_SENSITIVE',
+    'export function createSshRunbookCommand',
+    'export function updateSshRunbookCommand',
+    'export function deleteSshRunbookCommand',
+    'writeAppSetting(settingId',
+  ];
+  const missingRunbookService = requiredRunbookServiceFragments.filter((fragment) => !sshRunbookServiceSource.includes(fragment));
+  if (missingRunbookService.length) {
+    throw new Error(`SSH runbook persistence guard is incomplete: ${missingRunbookService.join(', ')}`);
+  }
+
   const requiredApiFragments = [
     "app.post('/api/servers/shells'",
     "app.get('/api/servers/shells/status'",
@@ -5459,6 +5602,12 @@ function assertSshTerminalRealtimeGuards() {
     "app.post('/api/servers/shells/:sessionId/input'",
     "app.post('/api/servers/shells/:sessionId/self-test'",
     "app.delete('/api/servers/shells/:sessionId'",
+    "app.get('/api/servers/ssh-runbook'",
+    "app.post('/api/servers/ssh-runbook'",
+    "app.patch('/api/servers/ssh-runbook/:commandId'",
+    "app.delete('/api/servers/ssh-runbook/:commandId'",
+    'createSshRunbookCommand(request.body)',
+    'SSH_RUNBOOK_CREATE',
     'flushSse(response)',
     'X-Accel-Buffering',
   ];
@@ -5474,12 +5623,23 @@ function assertSshTerminalRealtimeGuards() {
     'export async function closeServerShell',
     'export async function fetchServerShellStatus',
     'export async function recordServerShellSelfTest',
+    'export async function fetchSshRunbookCommands',
+    'export async function createSshRunbookCommand',
+    'export async function updateSshRunbookCommand',
+    'export async function deleteSshRunbookCommand',
     'const shellSocketInputFlushMs = 2',
     'const shellSocketInputChunkSize = 8000',
     'export interface ServerShellSocketCloseEvent',
     'onClose?: (event: ServerShellSocketCloseEvent) => void',
     'onClose?.({',
     'input.includes(\'\\u0003\')',
+    'const canSendShellPayload = () => ready && socket.readyState === WebSocket.OPEN',
+    'let pendingReadyResize',
+    'if (!pendingInput || !canSendShellPayload())',
+    'if (!ready) {',
+    'pendingReadyResize = nextDimensions',
+    "if (payload.type === 'error')",
+    '/session not ready/i.test(error.message)',
     'window.setTimeout(flushInput, shellSocketInputFlushMs)',
     'flushInput();',
   ];
@@ -5517,6 +5677,13 @@ function assertSshTerminalRealtimeGuards() {
     'pendingOutputEvent.content?.length',
     'setTimeout(flushOutput, shellSocketOutputFlushMs)',
     'shellSocketDiagnostics.outputFlushes += 1',
+    'let openingShell = false',
+    'const messagesBeforeReady: ClientMessage[] = []',
+    'const drainMessagesBeforeReady = () =>',
+    'const queueMessageBeforeReady = (message: ClientMessage) =>',
+    'early input queue overflowed',
+    'drainMessagesBeforeReady()',
+    "webSocket.close(4001, 'shell not ready')",
     'touchDiagnostics(true)',
     'function touchDiagnostics(force = false)',
     'new Date(now).toISOString()',
@@ -5539,7 +5706,7 @@ function assertSshTerminalRealtimeGuards() {
   if (!globalCssSource.includes('.ssh-terminal-self-test') || !globalCssSource.includes('.ssh-terminal-self-test.complete')) {
     throw new Error('SSH terminal self-test result chip styles are missing');
   }
-  if (!globalCssSource.includes('.ssh-quick-command-deck') || !globalCssSource.includes('.ssh-quick-command-grid') || !globalCssSource.includes('grid-template-rows: 38px auto auto auto auto minmax(0, 1fr)')) {
+  if (!globalCssSource.includes('.ssh-quick-command-deck') || !globalCssSource.includes('.ssh-runbook-workspace') || !globalCssSource.includes('.ssh-runbook-form') || !globalCssSource.includes('.ssh-quick-command-grid') || !globalCssSource.includes('grid-template-rows: 38px auto auto auto auto minmax(0, 1fr)')) {
     throw new Error('SSH terminal quick command deck styles are missing or the terminal grid does not reserve space for it');
   }
 
@@ -6688,7 +6855,8 @@ async function assertUnauthorizedShellWebSocket() {
   });
 }
 
-async function exerciseShellWebSocket(serverId) {
+async function exerciseShellWebSocket(serverId, options = {}) {
+  const earlyInput = options.earlyInput === true;
   const socket = new WebSocket(`${socketBaseUrl}/api/servers/shells/ws`, {
     headers: authHeaders,
   });
@@ -6724,6 +6892,12 @@ async function exerciseShellWebSocket(serverId) {
 
   socket.addEventListener('open', () => {
     socket.send(JSON.stringify({ type: 'open', serverId, cols: 100, rows: 28 }));
+    if (earlyInput) {
+      socket.send(JSON.stringify({ type: 'resize', cols: 120, rows: 32 }));
+      for (const inputChunk of ['w', 'h', 'o', 'a', 'm', 'i', '\n']) {
+        socket.send(JSON.stringify({ type: 'input', data: inputChunk }));
+      }
+    }
   });
 
   socket.addEventListener('message', (event) => {
@@ -6731,8 +6905,10 @@ async function exerciseShellWebSocket(serverId) {
     if (payload.type === 'ready') {
       readySessionId = payload.sessionId;
       readyResolver(payload);
-      for (const inputChunk of ['w', 'h', 'o', 'a', 'm', 'i', '\n']) {
-        socket.send(JSON.stringify({ type: 'input', data: inputChunk }));
+      if (!earlyInput) {
+        for (const inputChunk of ['w', 'h', 'o', 'a', 'm', 'i', '\n']) {
+          socket.send(JSON.stringify({ type: 'input', data: inputChunk }));
+        }
       }
       return;
     }

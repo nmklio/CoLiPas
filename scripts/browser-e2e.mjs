@@ -133,6 +133,31 @@ async function assertSyntheticTraceDeepLink(targetPage, expectedTraceId) {
   }
 }
 
+async function ensureSshQuickCommandsEnabled(targetPage, sshServerRow) {
+  const quickRunButton = targetPage.locator('[data-ssh-quick-command-run="disk"]');
+  await quickRunButton.waitFor({ timeout: 5000 });
+  if (!(await quickRunButton.isDisabled())) {
+    return;
+  }
+
+  await targetPage.locator('.ssh-console-header .icon-button').click();
+  await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });
+  await targetPage.waitForFunction(async () => {
+    const response = await fetch('/api/servers/shells/status');
+    const status = await response.json();
+    return status.activeCount === 0;
+  }, undefined, { timeout: 7000 });
+  await sshServerRow.getByRole('button', { name: /^SSH$/i }).click();
+  await targetPage.locator('.ssh-console').waitFor({ timeout: 10000 });
+  await targetPage.locator('.ssh-terminal-screen .xterm').waitFor({ timeout: 10000 });
+  await targetPage.locator('.ssh-terminal-session-count').filter({ hasText: /sessions 1/i }).waitFor({ timeout: 10000 });
+  await targetPage.locator('.ssh-terminal-network').filter({ hasText: /RTT/i }).waitFor({ timeout: 10000 });
+  await quickRunButton.waitFor({ timeout: 5000 });
+  if (await quickRunButton.isDisabled()) {
+    throw new Error('SSH quick commands remained disabled after terminal reconnect recovery');
+  }
+}
+
 async function assertReleaseEvidenceBrief(targetPage) {
   await targetPage.locator('.security-evidence-brief').waitFor({ timeout: 10000 });
   await targetPage.locator('[data-release-fix-router="true"]').waitFor({ timeout: 10000 });
@@ -908,6 +933,7 @@ async function assertSshTerminalPanel(targetPage) {
     await targetPage.locator('.ssh-terminal-session-count').filter({ hasText: /sessions 1/i }).waitFor({ timeout: 10000 });
     await targetPage.locator('.ssh-terminal-network').filter({ hasText: /RTT/i }).waitFor({ timeout: 10000 });
     await targetPage.locator('[data-ssh-quick-command-deck="true"]').waitFor({ timeout: 5000 });
+    await ensureSshQuickCommandsEnabled(targetPage, sshServerRow);
     const quickCommandText = await targetPage.locator('[data-ssh-quick-command-deck="true"]').innerText();
     const requiredQuickCommandLabels = ['Terminal runbook', 'System and uptime', 'Disk space', 'Memory pressure', 'Interfaces and addresses', 'Top CPU processes', 'Recent warning logs'];
     const missingQuickCommandLabels = requiredQuickCommandLabels.filter((label) => !quickCommandText.toLowerCase().includes(label.toLowerCase()));
@@ -920,6 +946,90 @@ async function assertSshTerminalPanel(targetPage) {
     const quickCommandCount = await targetPage.locator('[data-ssh-quick-command]').count();
     if (quickCommandCount !== 6) {
       throw new Error(`SSH quick command deck should expose six commands, got ${quickCommandCount}`);
+    }
+    const customRunbookTitle = `E2E custom uptime ${Date.now()}`;
+    const customRunbookCommand = 'printf colipas-runbook-custom';
+    let customRunbookId = '';
+    await targetPage.locator('[data-ssh-runbook-form="true"] input').first().fill(customRunbookTitle);
+    await targetPage.locator('[data-ssh-runbook-form="true"] input').nth(1).fill(customRunbookCommand);
+    await targetPage.locator('[data-ssh-runbook-form="true"]').getByRole('button', { name: /save command/i }).click();
+    await targetPage.locator('.action-message').filter({ hasText: /runbook command saved/i }).waitFor({ timeout: 5000 });
+    const customRunbookCard = targetPage.locator('[data-ssh-runbook-command]').filter({ hasText: customRunbookTitle });
+    await customRunbookCard.waitFor({ timeout: 5000 });
+    const runbookApiState = await targetPage.evaluate(async () => {
+      const response = await fetch('/api/servers/ssh-runbook');
+      return response.json();
+    });
+    const persistedRunbookCommand = Array.isArray(runbookApiState.commands)
+      ? runbookApiState.commands.find((item) => item.title === customRunbookTitle && item.command === customRunbookCommand)
+      : null;
+    if (!persistedRunbookCommand?.id) {
+      throw new Error(`SSH runbook API did not persist the custom command: ${JSON.stringify(runbookApiState)}`);
+    }
+    customRunbookId = persistedRunbookCommand.id;
+    try {
+      await ensureSshQuickCommandsEnabled(targetPage, sshServerRow);
+      await customRunbookCard.locator('[data-ssh-runbook-command-run]').click();
+      await targetPage.locator('.action-message').filter({ hasText: customRunbookTitle }).waitFor({ timeout: 5000 });
+      try {
+        await targetPage.waitForFunction((expectedCommand) => {
+          const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
+          return terminalText.includes(expectedCommand) && terminalText.includes('command simulated.');
+        }, customRunbookCommand, { timeout: 10000 });
+      } catch (error) {
+        const runbookRunState = await targetPage.evaluate(async (expectedCommand) => {
+          const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
+          const messageText = Array.from(document.querySelectorAll('.action-message'))
+            .map((element) => element.textContent ?? '')
+            .join('\n');
+          const terminalState = document.querySelector('.ssh-terminal-state')?.textContent ?? '';
+          const sessionCount = document.querySelector('.ssh-terminal-session-count')?.textContent ?? '';
+          const networkState = document.querySelector('.ssh-terminal-network')?.textContent ?? '';
+          let replayHasCommand = false;
+          let shellStatus = null;
+          let socketDiagnostics = null;
+          try {
+            const response = await fetch('/api/audit/diagnostics/export');
+            const body = await response.json();
+            replayHasCommand = JSON.stringify(body.sshTerminal?.sessionReplays ?? []).includes(expectedCommand);
+            socketDiagnostics = body.sshTerminal?.websocket ?? null;
+            shellStatus = {
+              activeSessions: body.sshTerminal?.activeSessions,
+              byMode: body.sshTerminal?.byMode,
+            };
+          } catch {
+            replayHasCommand = false;
+          }
+          return {
+            terminalHasCommand: terminalText.includes(expectedCommand),
+            terminalHasSimulatedOutput: terminalText.includes('command simulated.'),
+            replayHasCommand,
+            terminalState,
+            sessionCount,
+            networkState,
+            shellStatus,
+            socketDiagnostics,
+            terminalTail: terminalText.slice(-600),
+            messageText,
+          };
+        }, customRunbookCommand);
+        throw new Error(`SSH runbook custom command did not render in terminal after click: ${JSON.stringify(runbookRunState)}; ${error instanceof Error ? error.message : String(error)}`);
+      }
+      await customRunbookCard.locator('[data-ssh-runbook-command-delete]').click();
+      await targetPage.locator('.action-message').filter({ hasText: /runbook command deleted/i }).waitFor({ timeout: 5000 });
+      await customRunbookCard.waitFor({ state: 'detached', timeout: 5000 });
+      const runbookApiAfterDelete = await targetPage.evaluate(async (deletedId) => {
+        const response = await fetch('/api/servers/ssh-runbook');
+        return response.json().then((body) => ({ status: response.status, body, deletedId }));
+      }, customRunbookId);
+      if (runbookApiAfterDelete.status !== 200 || runbookApiAfterDelete.body.commands?.some((item) => item.id === customRunbookId)) {
+        throw new Error(`SSH runbook API still returned deleted command: ${JSON.stringify(runbookApiAfterDelete)}`);
+      }
+      customRunbookId = '';
+    } finally {
+      if (customRunbookId) {
+        await targetPage.evaluate((staleId) => fetch(`/api/servers/ssh-runbook/${encodeURIComponent(staleId)}`, { method: 'DELETE' }).catch(() => undefined), customRunbookId);
+      }
     }
     await targetPage.locator('[data-ssh-quick-command-insert="identity"]').click();
     await targetPage.locator('.action-message').filter({ hasText: /Inserted System and uptime/i }).waitFor({ timeout: 5000 });

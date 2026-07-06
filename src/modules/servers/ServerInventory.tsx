@@ -7,10 +7,13 @@ import {
   closeServerShell,
   connectServerShellSocket,
   connectServer,
+  createSshRunbookCommand,
   type ConnectServerPayload,
+  deleteSshRunbookCommand,
   deleteServer,
   executeServerAction,
   fetchServerShellStatus,
+  fetchSshRunbookCommands,
   inspectServerIdentity,
   openServerShell,
   recordServerShellSelfTest,
@@ -26,7 +29,7 @@ import {
   type ServerShellSocketReady,
   updateServer,
 } from '../../services/apiClient';
-import { CloudProvider, ServerNode, ServerStatus, SshAuthType, SshVerifyMode } from '../../types';
+import { CloudProvider, ServerNode, ServerStatus, SshAuthType, SshRunbookCommand, SshVerifyMode } from '../../types';
 import { formatRegionName, percentClass, statusLabel } from '../../utils/format';
 import { ServerFilters } from './serverFilters';
 import { baseCloudProviders, customProviderFilterValue, resolveServerLifecycleStatus } from '../../shared/serverFilters';
@@ -371,6 +374,11 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const [terminalTelemetry, setTerminalTelemetry] = useState<TerminalTelemetryState>(emptyTerminalTelemetry);
   const [terminalSelfTest, setTerminalSelfTest] = useState<TerminalSelfTestState | null>(null);
   const [terminalTransport, setTerminalTransport] = useState<'websocket' | 'compatible' | null>(null);
+  const [sshRunbookCommands, setSshRunbookCommands] = useState<SshRunbookCommand[]>([]);
+  const [sshRunbookForm, setSshRunbookForm] = useState({ title: '', command: '' });
+  const [sshRunbookLoading, setSshRunbookLoading] = useState(false);
+  const [sshRunbookSaving, setSshRunbookSaving] = useState(false);
+  const [deletingSshRunbookId, setDeletingSshRunbookId] = useState('');
   const [diagnosingServerId, setDiagnosingServerId] = useState('');
   const [sshDoctorReport, setSshDoctorReport] = useState<SshConnectionDoctorReport | null>(null);
   const [sshDoctorHistory, setSshDoctorHistory] = useState<SshConnectionDoctorHistoryEntry[]>(() => readSshDoctorHistory());
@@ -497,6 +505,30 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     disposeXterm();
   }, []);
   const formVisible = formOpen || Boolean(editingServerId) || (allServers.length === 0 && !formDismissed);
+
+  useEffect(() => {
+    let active = true;
+    setSshRunbookLoading(true);
+    fetchSshRunbookCommands()
+      .then((result) => {
+        if (active) {
+          setSshRunbookCommands(result.commands);
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          showActionMessage(error instanceof Error ? error.message : t('servers.quickCommandLoadFailed'));
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setSshRunbookLoading(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [t]);
 
   useEffect(() => {
     if (releaseFocusAnchor !== 'server-ssh') {
@@ -1439,41 +1471,102 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     ))}
                   </div>
                 </div>
-                <div className="ssh-quick-command-deck" data-ssh-quick-command-deck="true">
+                <div className="ssh-quick-command-deck" data-ssh-quick-command-deck="true" onClick={(event) => event.stopPropagation()}>
                   <div className="ssh-quick-command-heading">
                     <span>{t('servers.quickCommandEyebrow')}</span>
                     <strong>{t('servers.quickCommandTitle')}</strong>
-                    <small>{t('servers.quickCommandDetail')}</small>
+                    <small>{sshRunbookLoading ? t('servers.quickCommandLoading') : t('servers.quickCommandDetail')}</small>
                   </div>
-                  <div className="ssh-quick-command-grid" role="list" aria-label={t('servers.quickCommandTitle')}>
-                    {sshQuickCommands.map((item) => {
-                      const title = t(`servers.quickCommand.${item.id}.title`);
-                      return (
-                        <article key={item.id} role="listitem" data-ssh-quick-command={item.id}>
-                          <span>{t(`servers.quickCommand.${item.id}.label`)}</span>
-                          <strong>{title}</strong>
+                  <div className="ssh-runbook-workspace">
+                    <form className="ssh-runbook-form" data-ssh-runbook-form="true" onSubmit={saveSshRunbookCommand}>
+                      <input
+                        value={sshRunbookForm.title}
+                        onChange={(event) => setSshRunbookForm((current) => ({ ...current, title: event.target.value }))}
+                        placeholder={t('servers.quickCommandCustomTitlePlaceholder')}
+                        maxLength={48}
+                      />
+                      <input
+                        value={sshRunbookForm.command}
+                        onChange={(event) => setSshRunbookForm((current) => ({ ...current, command: event.target.value }))}
+                        placeholder={t('servers.quickCommandCustomCommandPlaceholder')}
+                        maxLength={360}
+                      />
+                      <button type="submit" disabled={sshRunbookSaving}>
+                        {sshRunbookSaving ? t('common.processing') : t('servers.quickCommandSave')}
+                      </button>
+                    </form>
+                    <div className="ssh-quick-command-grid" role="list" aria-label={t('servers.quickCommandTitle')}>
+                      {sshQuickCommands.map((item) => {
+                        const title = t(`servers.quickCommand.${item.id}.title`);
+                        return (
+                          <article key={item.id} role="listitem" data-ssh-quick-command={item.id}>
+                            <span>{t(`servers.quickCommand.${item.id}.label`)}</span>
+                            <strong>{title}</strong>
+                            <code>{item.command}</code>
+                            <div>
+                              <button
+                                type="button"
+                                data-ssh-quick-command-insert={item.id}
+                                onClick={() => sendSshQuickCommand(item.command, title, 'insert')}
+                                disabled={!terminalShellId}
+                              >
+                                {t('servers.quickCommandInsert')}
+                              </button>
+                              <button
+                                type="button"
+                                data-ssh-quick-command-run={item.id}
+                                onClick={() => sendSshQuickCommand(item.command, title, 'run')}
+                                disabled={!terminalShellId}
+                              >
+                                {t('servers.quickCommandRun')}
+                              </button>
+                            </div>
+                          </article>
+                        );
+                      })}
+                      {sshRunbookCommands.map((item) => (
+                        <article key={item.id} role="listitem" className="custom" data-ssh-runbook-command={item.id}>
+                          <span>{t('servers.quickCommandCustomLabel')}</span>
+                          <strong>{item.title}</strong>
                           <code>{item.command}</code>
                           <div>
                             <button
                               type="button"
-                              data-ssh-quick-command-insert={item.id}
-                              onClick={() => sendSshQuickCommand(item.command, title, 'insert')}
+                              data-ssh-runbook-command-insert={item.id}
+                              onClick={() => sendSshQuickCommand(item.command, item.title, 'insert')}
                               disabled={!terminalShellId}
                             >
                               {t('servers.quickCommandInsert')}
                             </button>
                             <button
                               type="button"
-                              data-ssh-quick-command-run={item.id}
-                              onClick={() => sendSshQuickCommand(item.command, title, 'run')}
+                              data-ssh-runbook-command-run={item.id}
+                              onClick={() => sendSshQuickCommand(item.command, item.title, 'run')}
                               disabled={!terminalShellId}
                             >
                               {t('servers.quickCommandRun')}
                             </button>
+                            <button
+                              type="button"
+                              className="delete"
+                              data-ssh-runbook-command-delete={item.id}
+                              aria-label={t('servers.quickCommandDeleteAria', { title: item.title })}
+                              onClick={() => removeSshRunbookCommand(item.id)}
+                              disabled={deletingSshRunbookId === item.id}
+                            >
+                              <Trash2 size={12} />
+                            </button>
                           </div>
                         </article>
-                      );
-                    })}
+                      ))}
+                      {!sshRunbookLoading && sshRunbookCommands.length === 0 && (
+                        <article className="empty" data-ssh-runbook-empty="true">
+                          <span>{t('servers.quickCommandCustomLabel')}</span>
+                          <strong>{t('servers.quickCommandEmptyTitle')}</strong>
+                          <small>{t('servers.quickCommandEmptyDetail')}</small>
+                        </article>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div ref={terminalContainerRef} className="ssh-terminal-screen" aria-label="Interactive SSH terminal" />
@@ -1886,7 +1979,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       const socket = connectServerShellSocket(
         server.id,
         getTerminalDimensions(),
-        (event) => handleTerminalStreamEvent(server.id, terminal, event),
+        (event) => handleTerminalStreamEvent(server.id, terminal, event, lifecycleSeq),
         (event) => {
           if (!isCurrentTerminalLifecycle(server.id, lifecycleSeq)) {
             closeServerShell(event.sessionId).catch(() => undefined);
@@ -1958,7 +2051,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     attachTerminalInput(shell.sessionId);
     const stream = streamServerShell(
       shell.sessionId,
-      (event) => handleTerminalStreamEvent(server.id, terminal, event),
+      (event) => handleTerminalStreamEvent(server.id, terminal, event, lifecycleSeq),
       (error) => {
         if (terminalShellIdRef.current && sshConsoleOpenRef.current) {
           flushTerminalWriteBuffer(terminal, { drainAll: true });
@@ -1976,8 +2069,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     });
   }
 
-  function handleTerminalStreamEvent(serverId: string, terminal: XTerm, event: ServerShellStreamEvent) {
-    if (sshPanelServerIdRef.current !== serverId) {
+  function handleTerminalStreamEvent(serverId: string, terminal: XTerm, event: ServerShellStreamEvent, lifecycleSeq?: number) {
+    if (sshPanelServerIdRef.current !== serverId || (typeof lifecycleSeq === 'number' && !isCurrentTerminalLifecycle(serverId, lifecycleSeq))) {
       return;
     }
     if ((event.type === 'stdout' || event.type === 'stderr') && event.content) {
@@ -2656,6 +2749,41 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     terminal.focus();
   }
 
+  async function saveSshRunbookCommand(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const title = sshRunbookForm.title.trim();
+    const command = sshRunbookForm.command.trim();
+    if (!title || !command) {
+      showActionMessage(t('servers.quickCommandInvalid'));
+      return;
+    }
+
+    setSshRunbookSaving(true);
+    try {
+      const saved = await createSshRunbookCommand({ title, command });
+      setSshRunbookCommands((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
+      setSshRunbookForm({ title: '', command: '' });
+      showActionMessage(t('servers.quickCommandSaved'));
+    } catch (error) {
+      showActionMessage(error instanceof Error ? error.message : t('servers.quickCommandSaveFailed'));
+    } finally {
+      setSshRunbookSaving(false);
+    }
+  }
+
+  async function removeSshRunbookCommand(commandId: string) {
+    setDeletingSshRunbookId(commandId);
+    try {
+      await deleteSshRunbookCommand(commandId);
+      setSshRunbookCommands((current) => current.filter((item) => item.id !== commandId));
+      showActionMessage(t('servers.quickCommandDeleted'));
+    } catch (error) {
+      showActionMessage(error instanceof Error ? error.message : t('servers.quickCommandDeleteFailed'));
+    } finally {
+      setDeletingSshRunbookId('');
+    }
+  }
+
   function sendSshQuickCommand(command: string, title: string, mode: 'insert' | 'run') {
     const sessionId = terminalShellId;
     if (!sessionId) {
@@ -2832,7 +2960,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     if (terminal) {
       return {
         cols: Math.max(20, Math.min(240, terminal.cols || 100)),
-        rows: Math.max(8, Math.min(80, terminal.rows || 30)),
+        rows: Math.max(12, Math.min(80, terminal.rows || 30)),
       };
     }
 

@@ -5451,7 +5451,7 @@ td span,
 }
 
 .ssh-quick-command-deck {
-  min-height: 94px;
+  min-height: 136px;
   padding: 10px 14px 11px;
   border-bottom: 1px solid rgba(126, 161, 166, 0.12);
   background:
@@ -5461,6 +5461,59 @@ td span,
   grid-template-columns: minmax(150px, 0.33fr) minmax(0, 1.67fr);
   gap: 12px;
   align-items: stretch;
+}
+
+.ssh-runbook-workspace {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+}
+
+.ssh-runbook-form {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(120px, 0.55fr) minmax(180px, 1fr) auto;
+  gap: 7px;
+}
+
+.ssh-runbook-form input {
+  min-width: 0;
+  min-height: 32px;
+  border: 1px solid rgba(125, 211, 252, 0.16);
+  border-radius: 11px;
+  padding: 0 10px;
+  color: #ecfeff;
+  background: rgba(3, 7, 18, 0.58);
+  font: 760 11px "Cascadia Code", Consolas, monospace;
+  outline: none;
+}
+
+.ssh-runbook-form input:focus {
+  border-color: rgba(103, 232, 249, 0.52);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.16);
+}
+
+.ssh-runbook-form button {
+  min-height: 32px;
+  border: 1px solid rgba(94, 234, 212, 0.3);
+  border-radius: 11px;
+  padding: 0 12px;
+  color: #eafffb;
+  background: linear-gradient(135deg, rgba(20, 184, 166, 0.32), rgba(14, 116, 144, 0.32));
+  font-size: 11px;
+  font-weight: 920;
+  cursor: pointer;
+}
+
+.ssh-runbook-form button:hover:not(:disabled) {
+  border-color: rgba(165, 243, 252, 0.62);
+  transform: translateY(-1px);
+}
+
+.ssh-runbook-form button:disabled {
+  opacity: 0.58;
+  cursor: wait;
 }
 
 .ssh-quick-command-heading {
@@ -5519,6 +5572,32 @@ td span,
   background: rgba(14, 116, 144, 0.13);
 }
 
+.ssh-quick-command-grid article.custom {
+  border-color: rgba(168, 85, 247, 0.26);
+  background:
+    linear-gradient(135deg, rgba(88, 28, 135, 0.18), rgba(3, 7, 8, 0.18)),
+    rgba(255, 255, 255, 0.045);
+}
+
+.ssh-quick-command-grid article.custom span {
+  color: #d8b4fe;
+}
+
+.ssh-quick-command-grid article.empty {
+  grid-template-columns: 1fr;
+  align-content: center;
+  border-style: dashed;
+  border-color: rgba(148, 163, 184, 0.22);
+  background: rgba(15, 23, 42, 0.22);
+}
+
+.ssh-quick-command-grid article.empty small {
+  color: #91a7ad;
+  font-size: 10px;
+  font-weight: 730;
+  line-height: 1.35;
+}
+
 .ssh-quick-command-grid span,
 .ssh-quick-command-grid strong,
 .ssh-quick-command-grid code {
@@ -5573,6 +5652,15 @@ td span,
 .ssh-quick-command-grid button:last-child {
   border-color: rgba(94, 234, 212, 0.28);
   background: linear-gradient(135deg, rgba(20, 184, 166, 0.28), rgba(14, 116, 144, 0.26));
+}
+
+.ssh-quick-command-grid button.delete {
+  min-width: 26px;
+  padding: 0;
+  border-color: rgba(251, 113, 133, 0.3);
+  background: rgba(127, 29, 29, 0.24);
+  display: inline-grid;
+  place-items: center;
 }
 
 .ssh-quick-command-grid button:hover:not(:disabled) {
@@ -13382,6 +13470,10 @@ pre {
     border-bottom: 1px solid rgba(125, 211, 252, 0.14);
     padding-right: 0;
     padding-bottom: 7px;
+  }
+
+  .ssh-runbook-form {
+    grid-template-columns: 1fr;
   }
 
   .ssh-quick-command-grid {

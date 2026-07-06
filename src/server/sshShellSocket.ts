@@ -103,6 +103,9 @@ function bindSshShellSocket(webSocket: WebSocket) {
   let inputFlushTimer: ReturnType<typeof setTimeout> | null = null;
   let pendingOutputEvent: SshShellStreamEvent | null = null;
   let outputFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  let openingShell = false;
+  const messagesBeforeReady: ClientMessage[] = [];
+  const maxMessagesBeforeReady = 64;
 
   shellSocketDiagnostics.totalConnections += 1;
   shellSocketDiagnostics.activeConnections += 1;
@@ -243,21 +246,84 @@ function bindSshShellSocket(webSocket: WebSocket) {
     touchDiagnostics(true);
   };
 
+  const closeSocket = (reason = 'closed') => {
+    flushInput();
+    cleanup();
+    send({ type: 'close', signal: reason });
+    webSocket.close(1000, reason);
+  };
+
+  const handleReadyMessage = (message: ClientMessage) => {
+    if (message.type === 'input') {
+      const input = typeof message.data === 'string' ? message.data : '';
+      shellSocketDiagnostics.inputEvents += 1;
+      shellSocketDiagnostics.inputBytes += Buffer.byteLength(input, 'utf8');
+      touchDiagnostics();
+      queueInput(input);
+      return;
+    }
+
+    if (message.type === 'resize') {
+      resizeServerShell({ sessionId, cols: message.cols, rows: message.rows });
+      return;
+    }
+
+    if (message.type === 'ping') {
+      shellSocketDiagnostics.pingCount += 1;
+      shellSocketDiagnostics.pongCount += 1;
+      touchDiagnostics();
+      send({ type: 'pong', sentAt: message.sentAt, receivedAt: Date.now() });
+      return;
+    }
+
+    if (message.type === 'close') {
+      closeSocket('closed');
+    }
+  };
+
+  const drainMessagesBeforeReady = () => {
+    while (sessionId && !closing && messagesBeforeReady.length > 0) {
+      const message = messagesBeforeReady.shift();
+      if (message) {
+        handleReadyMessage(message);
+      }
+    }
+  };
+
+  const queueMessageBeforeReady = (message: ClientMessage) => {
+    if (message.type === 'close') {
+      closeSocket('closed');
+      return true;
+    }
+
+    if (messagesBeforeReady.length >= maxMessagesBeforeReady) {
+      shellSocketDiagnostics.errors += 1;
+      touchDiagnostics(true);
+      send({ type: 'error', message: 'SSH shell session is still opening; early input queue overflowed' });
+      return true;
+    }
+
+    messagesBeforeReady.push(message);
+    return true;
+  };
+
   webSocket.on('message', async (raw) => {
     try {
       touchDiagnostics();
       const message = JSON.parse(raw.toString('utf8')) as ClientMessage;
       if (message.type === 'open') {
-        if (sessionId || closing) {
+        if (sessionId || openingShell || closing) {
           return;
         }
 
+        openingShell = true;
         const shell = await openServerShell({
           serverId: message.serverId,
           cols: message.cols,
           rows: message.rows,
         });
         if (closing) {
+          openingShell = false;
           closeServerShell({ sessionId: shell.sessionId });
           return;
         }
@@ -281,46 +347,27 @@ function bindSshShellSocket(webSocket: WebSocket) {
           connectedAt: shell.connectedAt,
         });
         if (closing) {
+          openingShell = false;
           cleanup();
           return;
         }
+        openingShell = false;
+        drainMessagesBeforeReady();
         return;
       }
 
       if (!sessionId) {
+        if (queueMessageBeforeReady(message)) {
+          return;
+        }
         send({ type: 'error', message: 'SSH shell session not ready' });
+        webSocket.close(4001, 'shell not ready');
         return;
       }
 
-      if (message.type === 'input') {
-        const input = typeof message.data === 'string' ? message.data : '';
-        shellSocketDiagnostics.inputEvents += 1;
-        shellSocketDiagnostics.inputBytes += Buffer.byteLength(input, 'utf8');
-        touchDiagnostics();
-        queueInput(input);
-        return;
-      }
-
-      if (message.type === 'resize') {
-        resizeServerShell({ sessionId, cols: message.cols, rows: message.rows });
-        return;
-      }
-
-      if (message.type === 'ping') {
-        shellSocketDiagnostics.pingCount += 1;
-        shellSocketDiagnostics.pongCount += 1;
-        touchDiagnostics();
-        send({ type: 'pong', sentAt: message.sentAt, receivedAt: Date.now() });
-        return;
-      }
-
-      if (message.type === 'close') {
-        flushInput();
-        cleanup();
-        send({ type: 'close', signal: 'closed' });
-        webSocket.close(1000, 'closed');
-      }
+      handleReadyMessage(message);
     } catch (error) {
+      openingShell = false;
       shellSocketDiagnostics.errors += 1;
       touchDiagnostics(true);
       if (sessionId) {

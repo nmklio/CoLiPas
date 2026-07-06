@@ -15,6 +15,7 @@ import {
   ReleaseReadinessResponse,
   ReleaseReadinessSnapshotResponse,
   ServerNode,
+  SshRunbookCommand,
   SshAuthType,
   SshVerifyMode,
 } from '../types';
@@ -173,6 +174,10 @@ export interface ServerShellStatusResponse {
   byMode: Record<SshVerifyMode, number>;
   oldestConnectedAt: string | null;
   newestConnectedAt: string | null;
+}
+
+export interface SshRunbookResponse {
+  commands: SshRunbookCommand[];
 }
 
 export interface ServerShellStreamEvent {
@@ -862,6 +867,63 @@ export async function fetchServerShellStatus(fetcher: typeof fetch = fetch) {
   return (await response.json()) as ServerShellStatusResponse;
 }
 
+export async function fetchSshRunbookCommands(fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/servers/ssh-runbook');
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as SshRunbookResponse;
+}
+
+export async function createSshRunbookCommand(
+  payload: Pick<SshRunbookCommand, 'title' | 'command'>,
+  fetcher: typeof fetch = fetch,
+) {
+  const response = await fetcher('/api/servers/ssh-runbook', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as SshRunbookCommand;
+}
+
+export async function updateSshRunbookCommand(
+  commandId: string,
+  payload: Pick<SshRunbookCommand, 'title' | 'command'>,
+  fetcher: typeof fetch = fetch,
+) {
+  const response = await fetcher(`/api/servers/ssh-runbook/${encodeURIComponent(commandId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as SshRunbookCommand;
+}
+
+export async function deleteSshRunbookCommand(commandId: string, fetcher: typeof fetch = fetch) {
+  const response = await fetcher(`/api/servers/ssh-runbook/${encodeURIComponent(commandId)}`, {
+    method: 'DELETE',
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as { ok: boolean; id: string };
+}
+
 export async function writeServerShell(sessionId: string, input: string, fetcher: typeof fetch = fetch) {
   const response = await fetcher(`/api/servers/shells/${encodeURIComponent(sessionId)}/input`, {
     method: 'POST',
@@ -995,9 +1057,12 @@ export function connectServerShellSocket(
   let lastMetricsBytes = 0;
   let lastMetricsAt = performance.now();
   let latestRttMs: number | null = null;
+  let pendingReadyResize: { cols: number; rows: number } | null = null;
+
+  const canSendShellPayload = () => ready && socket.readyState === WebSocket.OPEN;
 
   const sendInputChunk = (input: string) => {
-    if (socket.readyState === WebSocket.OPEN) {
+    if (canSendShellPayload()) {
       socket.send(JSON.stringify({ type: 'input', data: input }));
     }
   };
@@ -1007,23 +1072,24 @@ export function connectServerShellSocket(
       window.clearTimeout(inputFlushTimer);
       inputFlushTimer = null;
     }
-    const input = pendingInput;
-    pendingInput = '';
-    if (!input || socket.readyState !== WebSocket.OPEN) {
+    if (!pendingInput || !canSendShellPayload()) {
       return;
     }
+    const input = pendingInput;
+    pendingInput = '';
     for (let offset = 0; offset < input.length; offset += shellSocketInputChunkSize) {
       sendInputChunk(input.slice(offset, offset + shellSocketInputChunkSize));
     }
   };
 
   const queueInput = (input: string) => {
-    if (!input || socket.readyState !== WebSocket.OPEN) {
+    if (!input || (socket.readyState !== WebSocket.OPEN && socket.readyState !== WebSocket.CONNECTING)) {
       return;
     }
 
     if (
-      !pendingInput
+      ready
+      && !pendingInput
       && input.length <= shellSocketImmediateInputSize
       && socket.bufferedAmount < shellSocketBackpressureBytes
     ) {
@@ -1039,6 +1105,10 @@ export function connectServerShellSocket(
       || pendingInput.length >= shellSocketInputChunkSize
     ) {
       flushInput();
+      return;
+    }
+
+    if (!ready) {
       return;
     }
 
@@ -1095,6 +1165,11 @@ export function connectServerShellSocket(
       if (payload.type === 'ready') {
         ready = true;
         onReady(payload);
+        if (pendingReadyResize) {
+          socket.send(JSON.stringify({ type: 'resize', ...pendingReadyResize }));
+          pendingReadyResize = null;
+        }
+        flushInput();
         sendPing();
         pingTimer = window.setInterval(sendPing, shellSocketPingIntervalMs);
         metricsTimer = window.setInterval(emitMetrics, shellSocketMetricsIntervalMs);
@@ -1104,6 +1179,14 @@ export function connectServerShellSocket(
         const sentAt = typeof payload.sentAt === 'number' ? payload.sentAt : null;
         latestRttMs = sentAt === null ? latestRttMs : Math.max(0, Math.round(performance.now() - sentAt));
         emitMetrics();
+        return;
+      }
+      if (payload.type === 'error') {
+        const error = new Error(payload.message || 'SSH shell stream failed');
+        onError(error);
+        if (/session not ready/i.test(error.message) && socket.readyState === WebSocket.OPEN) {
+          socket.close(4001, 'shell not ready');
+        }
         return;
       }
       if (typeof payload.content === 'string') {
@@ -1141,13 +1224,17 @@ export function connectServerShellSocket(
       queueInput(input);
     },
     resize(nextDimensions: { cols: number; rows: number }) {
-      if (socket.readyState === WebSocket.OPEN) {
+      if (canSendShellPayload()) {
         socket.send(JSON.stringify({ type: 'resize', ...nextDimensions }));
+        return;
       }
+      pendingReadyResize = nextDimensions;
     },
     close() {
       flushInput();
       stopTimers();
+      pendingInput = '';
+      pendingReadyResize = null;
       if (socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'close' }));
       }

@@ -45,6 +45,14 @@ export interface ServerNode {
   ssh?: ServerSshAccess;
 }
 
+export interface SshRunbookCommand {
+  id: string;
+  title: string;
+  command: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type EventSeverity = 'info' | 'warning' | 'critical';
 
 export interface OperationEvent {
