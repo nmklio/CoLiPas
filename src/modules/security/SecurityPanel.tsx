@@ -172,6 +172,29 @@ interface ReleaseHandoffPackSummary {
   copyText: string;
 }
 
+interface ReleaseFixRouteStep {
+  id: string;
+  module: ReleaseReadinessResponse['checks'][number]['relatedModule'];
+  moduleLabel: string;
+  title: string;
+  value: string;
+  detail: string;
+  actionLabel: string;
+  tone: 'ok' | 'warn' | 'fail';
+  check: ReleaseReadinessResponse['checks'][number];
+}
+
+interface ReleaseFixRouterSummary {
+  tone: 'ok' | 'warn' | 'fail';
+  title: string;
+  lead: string;
+  status: string;
+  emptyTitle: string;
+  emptyDetail: string;
+  steps: ReleaseFixRouteStep[];
+  copyText: string;
+}
+
 interface SshPerformanceMetric {
   id: string;
   label: string;
@@ -522,6 +545,10 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
     }),
     [activeAuditIssues.blocked, activeAuditIssues.failed, copy, evidenceBrief, releaseCockpit, sshPerformanceCopy, sshSupportBundle],
   );
+  const releaseFixRouter = useMemo(
+    () => buildReleaseFixRouter(readiness, copy),
+    [copy, readiness],
+  );
   const expandedSshMetric = useMemo(
     () => sshPerformance.metrics.find((metric) => metric.id === expandedSshMetricId) ?? sshPerformance.metrics[0] ?? null,
     [expandedSshMetricId, sshPerformance.metrics],
@@ -731,6 +758,23 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
     }
   }
 
+  async function copyReleaseFixRouter() {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) {
+      setRemediationMessage(releaseFixRouter.copyText);
+      setRemediationError(false);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(releaseFixRouter.copyText);
+      setRemediationMessage(copy.releaseFixCopied);
+      setRemediationError(false);
+    } catch {
+      setRemediationMessage(releaseFixRouter.copyText);
+      setRemediationError(false);
+    }
+  }
+
   async function copySshSupportBundle() {
     if (typeof navigator === 'undefined' || !navigator.clipboard) {
       setRemediationMessage(sshSupportBundle.copyText);
@@ -893,7 +937,7 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
       return;
     }
 
-    if (check.relatedModule === 'deployment') {
+    if (check.relatedModule === 'deployment' || check.relatedModule === 'security' || check.relatedModule === 'database') {
       focusRemediation();
       return;
     }
@@ -1085,6 +1129,50 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
             </button>
           </div>
         </div>
+      </article>
+
+      <article className={`security-release-fix-router ${releaseFixRouter.tone}`} data-release-fix-router="true" aria-labelledby="security-release-fix-router-title">
+        <div className="security-release-fix-router-heading">
+          <div>
+            <span>{copy.releaseFixKicker}</span>
+            <h3 id="security-release-fix-router-title"><SlidersHorizontal size={18} /> {releaseFixRouter.title}</h3>
+            <p>{releaseFixRouter.lead}</p>
+          </div>
+          <div className="security-release-fix-router-actions">
+            <strong>{releaseFixRouter.status}</strong>
+            <button type="button" className="tool-button" onClick={copyReleaseFixRouter} disabled={!releaseFixRouter.copyText}>
+              <ClipboardCheck size={15} />
+              {copy.releaseFixCopy}
+            </button>
+          </div>
+        </div>
+        {releaseFixRouter.steps.length > 0 ? (
+          <div className="security-release-fix-route" aria-label={copy.releaseFixRouteLabel}>
+            {releaseFixRouter.steps.map((step, index) => (
+              <button
+                key={step.id}
+                type="button"
+                className={`security-release-fix-step ${step.tone}`}
+                data-release-fix-step={step.module}
+                onClick={() => applyReadinessFilter(step.check)}
+              >
+                <span className="security-release-fix-index">{index + 1}</span>
+                <span className="security-release-fix-copy">
+                  <small>{step.moduleLabel}</small>
+                  <strong>{step.title}</strong>
+                  <em>{step.value}</em>
+                  <p>{step.detail}</p>
+                </span>
+                <span className="security-release-fix-action">{step.actionLabel}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="security-release-fix-empty">
+            <strong>{releaseFixRouter.emptyTitle}</strong>
+            <p>{releaseFixRouter.emptyDetail}</p>
+          </div>
+        )}
       </article>
 
       <article className={`security-release-cockpit ${releaseCockpit.tone}`} data-release-cockpit="true" aria-labelledby="security-release-cockpit-title">
@@ -2596,6 +2684,71 @@ function buildReleaseHandoffPack(input: {
     sections,
     copyText,
   };
+}
+
+function buildReleaseFixRouter(
+  readiness: ReleaseReadinessResponse | null,
+  copy: SecurityCopy,
+): ReleaseFixRouterSummary {
+  const findings = readiness?.checks
+    .filter((check) => !check.passed || check.severity !== 'info')
+    .sort((a, b) => getReleaseFixToneRank(getReleaseFixTone(b)) - getReleaseFixToneRank(getReleaseFixTone(a))) ?? [];
+  const steps: ReleaseFixRouteStep[] = findings.map((check) => ({
+    id: check.id,
+    module: check.relatedModule,
+    moduleLabel: copy.releaseFixModuleLabel(check.relatedModule),
+    title: sanitizeEvidenceBriefText(check.label),
+    value: sanitizeEvidenceBriefText(check.value),
+    detail: sanitizeEvidenceBriefText(check.recommendedAction || check.evidence),
+    actionLabel: copy.releaseFixActionLabel(check.relatedModule),
+    tone: getReleaseFixTone(check),
+    check,
+  }));
+  const tone: ReleaseFixRouterSummary['tone'] = steps.some((step) => step.tone === 'fail')
+    ? 'fail'
+    : steps.some((step) => step.tone === 'warn')
+      ? 'warn'
+      : 'ok';
+  const copyText = [
+    `# ${copy.releaseFixTitle}`,
+    `${copy.releaseFixStatus}: ${readiness ? copy.readinessStatus(readiness.status) : copy.waitingRefresh}`,
+    `${copy.releaseFixFindingCount(steps.length)}`,
+    '',
+    ...steps.map((step, index) => [
+      `${index + 1}. ${step.moduleLabel} / ${step.title}`,
+      `   ${copy.releaseFixValueLabel}: ${step.value}`,
+      `   ${copy.releaseFixActionText}: ${step.detail}`,
+      `   ${copy.releaseFixOpenText}: ${step.actionLabel}`,
+    ].join('\n')),
+    steps.length === 0 ? `${copy.releaseFixEmptyTitle}: ${copy.releaseFixEmptyDetail}` : '',
+    '',
+    copy.releaseFixSanitizedNote,
+  ].filter(Boolean).map(sanitizeEvidenceBriefText).join('\n');
+
+  return {
+    tone,
+    title: copy.releaseFixTitle,
+    lead: copy.releaseFixLead,
+    status: copy.releaseFixFindingCount(steps.length),
+    emptyTitle: copy.releaseFixEmptyTitle,
+    emptyDetail: copy.releaseFixEmptyDetail,
+    steps,
+    copyText,
+  };
+}
+
+function getReleaseFixTone(check: ReleaseReadinessResponse['checks'][number]): ReleaseFixRouteStep['tone'] {
+  if (check.severity === 'fail') {
+    return 'fail';
+  }
+  if (check.severity === 'warn' || !check.passed) {
+    return 'warn';
+  }
+  return 'ok';
+}
+
+function getReleaseFixToneRank(tone: ReleaseFixRouteStep['tone']) {
+  return tone === 'fail' ? 2 : tone === 'warn' ? 1 : 0;
 }
 
 function getReleaseCockpitSshTone(
@@ -4147,6 +4300,22 @@ interface SecurityCopy {
   releaseHandoffPolicyValue: string;
   releaseHandoffPolicyDetail: string;
   releaseHandoffSanitizedNote: string;
+  releaseFixTitle: string;
+  releaseFixLead: string;
+  releaseFixKicker: string;
+  releaseFixStatus: string;
+  releaseFixFindingCount: (count: number) => string;
+  releaseFixRouteLabel: string;
+  releaseFixCopy: string;
+  releaseFixCopied: string;
+  releaseFixEmptyTitle: string;
+  releaseFixEmptyDetail: string;
+  releaseFixValueLabel: string;
+  releaseFixActionText: string;
+  releaseFixOpenText: string;
+  releaseFixSanitizedNote: string;
+  releaseFixModuleLabel: (module: ReleaseReadinessResponse['checks'][number]['relatedModule']) => string;
+  releaseFixActionLabel: (module: ReleaseReadinessResponse['checks'][number]['relatedModule']) => string;
   releasePlaybookTitle: string;
   releasePlaybookDescription: string;
   releasePlaybookSignalLabel: string;
@@ -5339,6 +5508,44 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     releaseHandoffPolicyValue: '仅脱敏',
     releaseHandoffPolicyDetail: '只交付聚合状态、计数、版本和建议，不包含命令正文、服务器地址、密钥或用户数据。',
     releaseHandoffSanitizedNote: '发布交接包只组合已脱敏的驾驶舱、证据摘要和 SSH 支持包，适合复制给协作方复核。',
+    releaseFixTitle: '发布阻断修复导航',
+    releaseFixLead: '把每个未通过的上线检查变成可点击的模块入口，先修最高风险项。',
+    releaseFixKicker: '修复路线',
+    releaseFixStatus: '修复状态',
+    releaseFixFindingCount: (count) => count > 0 ? `${count} 个待处理入口` : '全部检查已路由',
+    releaseFixRouteLabel: '发布阻断修复路线',
+    releaseFixCopy: '复制修复路线',
+    releaseFixCopied: '发布修复路线已复制',
+    releaseFixEmptyTitle: '暂无阻断路线',
+    releaseFixEmptyDetail: '当前没有失败或预警检查，可以记录快照并继续发布验证。',
+    releaseFixValueLabel: '当前值',
+    releaseFixActionText: '建议动作',
+    releaseFixOpenText: '打开入口',
+    releaseFixSanitizedNote: '修复路线只包含检查名称、聚合值、建议动作和模块入口，不包含服务器地址、密钥、命令正文或用户数据。',
+    releaseFixModuleLabel: (module) => ({
+      ai: 'AI 模块',
+      api: '自定义 API',
+      audit: '安全审计',
+      database: '数据库',
+      deployment: '部署证据',
+      events: '运维事件',
+      runtime: '运行时',
+      security: '安全配置',
+      servers: '服务器',
+      ssh: 'SSH 终端',
+    })[module],
+    releaseFixActionLabel: (module) => ({
+      ai: '打开 AI 设置',
+      api: '打开自定义 API',
+      audit: '查看审计记录',
+      database: '查看安全证据',
+      deployment: '查看发布证据',
+      events: '打开运维编排',
+      runtime: '查看运行时风险',
+      security: '查看风险处置',
+      servers: '打开服务器',
+      ssh: '打开 SSH 接入',
+    })[module],
     releasePlaybookTitle: '发布失败诊断词典',
     releasePlaybookDescription: '把发布日志中的典型信号映射为下一步处理动作，便于上线前快速判断是网络、认证还是远端脚本问题。',
     releasePlaybookSignalLabel: '信号：',
@@ -5567,6 +5774,44 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     releaseHandoffPolicyValue: 'Sanitized only',
     releaseHandoffPolicyDetail: 'Shares only aggregate state, counts, version, and recommendations; no command text, server addresses, keys, or user data.',
     releaseHandoffSanitizedNote: 'The release handoff pack only combines sanitized cockpit, evidence brief, and SSH support bundle content for collaborator review.',
+    releaseFixTitle: 'Release fix router',
+    releaseFixLead: 'Turns every failing release check into a clickable module entry so the highest-risk item is fixed first.',
+    releaseFixKicker: 'Fix route',
+    releaseFixStatus: 'Fix state',
+    releaseFixFindingCount: (count) => count > 0 ? `${count} routed finding(s)` : 'All checks routed',
+    releaseFixRouteLabel: 'Release blocker fix route',
+    releaseFixCopy: 'Copy fix route',
+    releaseFixCopied: 'Release fix route copied',
+    releaseFixEmptyTitle: 'No blocker route',
+    releaseFixEmptyDetail: 'There are no failed or warning checks; record a snapshot and continue release verification.',
+    releaseFixValueLabel: 'Current value',
+    releaseFixActionText: 'Recommended action',
+    releaseFixOpenText: 'Open entry',
+    releaseFixSanitizedNote: 'The fix route only includes check names, aggregate values, recommended actions, and module entries; no server addresses, keys, command text, or user data.',
+    releaseFixModuleLabel: (module) => ({
+      ai: 'AI module',
+      api: 'Custom API',
+      audit: 'Security audit',
+      database: 'Database',
+      deployment: 'Deployment evidence',
+      events: 'Operations events',
+      runtime: 'Runtime',
+      security: 'Security config',
+      servers: 'Servers',
+      ssh: 'SSH terminal',
+    })[module],
+    releaseFixActionLabel: (module) => ({
+      ai: 'Open AI settings',
+      api: 'Open Custom API',
+      audit: 'Review audit records',
+      database: 'Review security evidence',
+      deployment: 'Review release evidence',
+      events: 'Open operations',
+      runtime: 'Review runtime risk',
+      security: 'Review remediation',
+      servers: 'Open servers',
+      ssh: 'Open SSH access',
+    })[module],
     releasePlaybookTitle: 'Release failure playbook',
     releasePlaybookDescription: 'Maps common release log signals to the next safe action so operators can tell network, authentication, and remote-script failures apart before retrying.',
     releasePlaybookSignalLabel: 'Signal: ',
@@ -5795,6 +6040,44 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     releaseHandoffPolicyValue: '脱敏のみ',
     releaseHandoffPolicyDetail: '集計状態、件数、バージョン、推奨のみを共有し、コマンド本文、サーバーアドレス、鍵、ユーザーデータは含めません。',
     releaseHandoffSanitizedNote: 'リリース引き継ぎパックは、脱敏済みのコックピット、証跡サマリー、SSH サポートバンドルだけを組み合わせます。',
+    releaseFixTitle: 'リリース修復ルーター',
+    releaseFixLead: '未合格のリリースチェックをクリック可能なモジュール入口に変換し、高リスク項目から修復します。',
+    releaseFixKicker: '修復ルート',
+    releaseFixStatus: '修復状態',
+    releaseFixFindingCount: (count) => count > 0 ? `${count} 件の修復入口` : '全チェックをルーティング済み',
+    releaseFixRouteLabel: 'リリースブロッカー修復ルート',
+    releaseFixCopy: '修復ルートをコピー',
+    releaseFixCopied: 'リリース修復ルートをコピーしました',
+    releaseFixEmptyTitle: 'ブロッカールートなし',
+    releaseFixEmptyDetail: '失敗または警告チェックはありません。スナップショットを記録してリリース検証を続行できます。',
+    releaseFixValueLabel: '現在値',
+    releaseFixActionText: '推奨アクション',
+    releaseFixOpenText: '入口を開く',
+    releaseFixSanitizedNote: '修復ルートにはチェック名、集計値、推奨アクション、モジュール入口のみが含まれ、サーバーアドレス、鍵、コマンド本文、ユーザーデータは含みません。',
+    releaseFixModuleLabel: (module) => ({
+      ai: 'AI モジュール',
+      api: 'カスタム API',
+      audit: 'セキュリティ監査',
+      database: 'データベース',
+      deployment: 'デプロイ証跡',
+      events: '運用イベント',
+      runtime: 'ランタイム',
+      security: 'セキュリティ設定',
+      servers: 'サーバー',
+      ssh: 'SSH 端末',
+    })[module],
+    releaseFixActionLabel: (module) => ({
+      ai: 'AI 設定を開く',
+      api: 'カスタム API を開く',
+      audit: '監査記録を確認',
+      database: 'セキュリティ証跡を確認',
+      deployment: 'リリース証跡を確認',
+      events: '運用編成を開く',
+      runtime: 'ランタイムリスクを確認',
+      security: 'リスク対応を確認',
+      servers: 'サーバーを開く',
+      ssh: 'SSH 接続を開く',
+    })[module],
     releasePlaybookTitle: 'リリース失敗診断プレイブック',
     releasePlaybookDescription: 'リリースログの代表的なシグナルを次の安全な対応に対応付け、ネットワーク、認証、リモートスクリプトの失敗を切り分けます。',
     releasePlaybookSignalLabel: 'シグナル: ',
