@@ -159,17 +159,35 @@ async function assertReleaseEvidenceBrief(targetPage) {
   if (!/full metric detail/i.test(sshPerfText) || !/track/i.test(sshPerfText) || !/latency/i.test(sshPerfText) || !/audit/i.test(sshPerfText) || !/input batching/i.test(sshPerfText) || !/socket errors/i.test(sshPerfText) || !/last safe test/i.test(sshPerfText) || !/response split/i.test(sshPerfText) || !/safe test trend/i.test(sshPerfText) || !/likely bottleneck/i.test(sshPerfText) || !/session replay/i.test(sshPerfText)) {
     throw new Error(`SSH performance card did not render batching/error evidence: ${sshPerfText}`);
   }
+  await targetPage.locator('[data-ssh-lag-report="true"]').waitFor({ timeout: 5000 });
+  const sshLagReportText = await targetPage.locator('[data-ssh-lag-report="true"]').innerText();
+  if (!/SSH lag diagnosis report/i.test(sshLagReportText) || !/input path/i.test(sshLagReportText) || !/output path/i.test(sshLagReportText) || !/latency call/i.test(sshLagReportText)) {
+    throw new Error(`SSH lag diagnosis report did not render key findings: ${sshLagReportText}`);
+  }
   await targetPage.evaluate(() => {
     window.__colipasCopiedSshPerformanceText = '';
+    window.__colipasCopiedSshLagReportText = '';
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: {
         writeText: async (text) => {
-          window.__colipasCopiedSshPerformanceText = text;
+          if (/SSH lag diagnosis report/i.test(text)) {
+            window.__colipasCopiedSshLagReportText = text;
+          } else {
+            window.__colipasCopiedSshPerformanceText = text;
+          }
         },
       },
     });
   });
+  await targetPage.getByRole('button', { name: /copy diagnosis report/i }).click();
+  const copiedSshLagReportText = await targetPage.evaluate(() => window.__colipasCopiedSshLagReportText ?? '');
+  if (!/SSH lag diagnosis report/i.test(copiedSshLagReportText) || !/Key evidence/i.test(copiedSshLagReportText) || !/Input path/i.test(copiedSshLagReportText) || !/sanitized aggregate metrics/i.test(copiedSshLagReportText)) {
+    throw new Error(`SSH lag diagnosis copy output is incomplete: ${copiedSshLagReportText}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshLagReportText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshLagReportText)) {
+    throw new Error('SSH lag diagnosis copy output leaked a raw IP address or API key');
+  }
   await targetPage.getByRole('button', { name: /copy summary|复制摘要|サマリーをコピー/i }).click();
   const copiedSshPerfText = await targetPage.evaluate(() => window.__colipasCopiedSshPerformanceText ?? '');
   if (!/SSH terminal performance|Input batching/i.test(copiedSshPerfText) || !/\[Track\]/i.test(copiedSshPerfText) || !/\[Latency\]/i.test(copiedSshPerfText) || !/\[Audit\]/i.test(copiedSshPerfText) || !/Socket errors/i.test(copiedSshPerfText) || !/Last safe test/i.test(copiedSshPerfText) || !/Response split/i.test(copiedSshPerfText) || !/Safe test trend/i.test(copiedSshPerfText) || !/Likely bottleneck/i.test(copiedSshPerfText) || !/Session replay/i.test(copiedSshPerfText)) {

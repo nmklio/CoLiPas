@@ -151,6 +151,9 @@ interface SshPerformanceSummary {
   status: string;
   nextAction: string;
   copyText: string;
+  reportHeadline: string;
+  reportFindings: string[];
+  reportText: string;
   metrics: SshPerformanceMetric[];
   groups: SshPerformanceGroup[];
 }
@@ -413,6 +416,23 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
       setRemediationError(false);
     } catch {
       setRemediationMessage(sshPerformance.copyText);
+      setRemediationError(false);
+    }
+  }
+
+  async function copySshLagReport() {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) {
+      setRemediationMessage(sshPerformance.reportText);
+      setRemediationError(false);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(sshPerformance.reportText);
+      setRemediationMessage(sshPerformanceCopy.reportCopied);
+      setRemediationError(false);
+    } catch {
+      setRemediationMessage(sshPerformance.reportText);
       setRemediationError(false);
     }
   }
@@ -742,6 +762,22 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
             <p>{expandedSshMetric.detail}</p>
           </div>
         ) : null}
+        <div className={`security-ssh-lag-report ${sshPerformance.tone}`} data-ssh-lag-report="true">
+          <div>
+            <span>{sshPerformanceCopy.reportTitle}</span>
+            <strong>{sshPerformance.reportHeadline}</strong>
+            <p>{sshPerformanceCopy.reportDescription}</p>
+          </div>
+          <ul>
+            {sshPerformance.reportFindings.map((finding) => (
+              <li key={finding}>{finding}</li>
+            ))}
+          </ul>
+          <button type="button" className="tool-button" onClick={copySshLagReport}>
+            <ClipboardCheck size={15} />
+            {sshPerformanceCopy.copyReport}
+          </button>
+        </div>
         <p className="security-ssh-performance-next">{sshPerformance.nextAction}</p>
       </article>
 
@@ -1755,6 +1791,17 @@ function buildSshPerformanceSummary(
   ];
   const status = tone === 'fail' ? copy.statusFail : tone === 'warn' ? copy.statusWarn : copy.statusOk;
   const nextAction = !hasEvidence ? copy.nextActionNoEvidence : tone === 'fail' ? copy.nextActionFail : tone === 'warn' ? copy.nextActionWarn : copy.nextActionOk;
+  const reportHeadline = copy.reportHeadline(status, hasEvidence);
+  const reportFindings = [
+    copy.reportFindingInput(inputEvents, inputFlushes, inputRatio),
+    copy.reportFindingOutput(outputEvents, outputFlushes, outputRatio),
+    copy.reportFindingLatency(
+      lastSelfTest ? copy.bottleneckValue(lastSelfTest.bottleneck) : '--',
+      lastSelfTest?.firstResponseMs ?? null,
+      lastSelfTest?.outputSpanMs ?? null,
+      errors,
+    ),
+  ];
   const copyText = [
     `# ${copy.title}`,
     `${copy.summaryStatus}: ${status}`,
@@ -1764,12 +1811,25 @@ function buildSshPerformanceSummary(
     ]),
     `${copy.summaryNextAction}: ${nextAction}`,
   ].join('\n');
+  const reportText = [
+    `# ${copy.reportTitle}`,
+    `${copy.summaryStatus}: ${status}`,
+    `${copy.reportHeadlineLabel}: ${reportHeadline}`,
+    `${copy.reportEvidenceLabel}:`,
+    ...reportFindings.map((finding) => `- ${finding}`),
+    `${copy.summaryNextAction}: ${nextAction}`,
+    '',
+    copy.reportSanitizedNote,
+  ].join('\n');
 
   return {
     tone,
     status,
     nextAction,
     copyText,
+    reportHeadline,
+    reportFindings,
+    reportText,
     metrics,
     groups,
   };
@@ -2083,6 +2143,13 @@ interface SshPerformanceCopy {
   groupLatency: string;
   groupAudit: string;
   detailTitle: string;
+  reportTitle: string;
+  reportDescription: string;
+  copyReport: string;
+  reportCopied: string;
+  reportHeadlineLabel: string;
+  reportEvidenceLabel: string;
+  reportSanitizedNote: string;
   copySummary: string;
   copyCopied: string;
   summaryStatus: string;
@@ -2094,6 +2161,10 @@ interface SshPerformanceCopy {
   nextActionWarn: string;
   nextActionFail: string;
   nextActionNoEvidence: string;
+  reportHeadline: (status: string, hasEvidence: boolean) => string;
+  reportFindingInput: (events: number, flushes: number, ratio: number) => string;
+  reportFindingOutput: (events: number, flushes: number, ratio: number) => string;
+  reportFindingLatency: (bottleneck: string, firstResponseMs: number | null, outputSpanMs: number | null, errors: number) => string;
   activeSessionsDetail: (count: number) => string;
   inputBatchDetail: (events: number, flushes: number) => string;
   outputBatchDetail: (events: number, flushes: number) => string;
@@ -2130,6 +2201,13 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     groupLatency: '延迟定位',
     groupAudit: '审计证据',
     detailTitle: '完整指标详情',
+    reportTitle: 'SSH 卡顿诊断报告',
+    reportDescription: '把输入、输出、延迟和错误聚合成可复制的脱敏排障报告。',
+    copyReport: '复制诊断报告',
+    reportCopied: 'SSH 卡顿诊断报告已复制',
+    reportHeadlineLabel: '结论',
+    reportEvidenceLabel: '关键证据',
+    reportSanitizedNote: '报告仅包含脱敏聚合指标，不包含服务器地址、命令正文、密钥或用户数据。',
     copySummary: '\u590d\u5236\u6458\u8981',
     copyCopied: 'SSH \u6027\u80fd\u6458\u8981\u5df2\u590d\u5236',
     summaryStatus: '\u72b6\u6001',
@@ -2141,6 +2219,10 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     nextActionWarn: '输入合并率偏低，建议继续采集真实 SSH 粘贴、大输出和弱网场景的诊断包。',
     nextActionFail: 'WebSocket 错误非零，优先检查反向代理升级头、超时和终端会话关闭链路。',
     nextActionNoEvidence: '暂无终端交互证据；打开一次 SSH 终端并执行安全命令后刷新即可生成性能指标。',
+    reportHeadline: (status, hasEvidence) => hasEvidence ? `当前 SSH 体验为「${status}」，建议按下方证据定位。` : '暂无 SSH 交互证据，先运行一次安全测速再生成报告。',
+    reportFindingInput: (events, flushes, ratio) => `输入链路：${events} 次输入 / ${flushes} 次写入，合并率 ${flushes > 0 ? formatBatchRatio(ratio) : '--'}x。`,
+    reportFindingOutput: (events, flushes, ratio) => `输出链路：${events} 次输出 / ${flushes} 次推送，合并率 ${flushes > 0 ? formatBatchRatio(ratio) : '--'}x。`,
+    reportFindingLatency: (bottleneck, firstResponseMs, outputSpanMs, errors) => `延迟判断：${bottleneck}，首包 ${firstResponseMs === null ? '--' : `${Math.round(firstResponseMs)}ms`}，输出段 ${outputSpanMs === null ? '--' : `${Math.round(outputSpanMs)}ms`}，连接错误 ${errors}。`,
     activeSessionsDetail: (count) => `${count} 个实时 shell 保持在服务端`,
     inputBatchDetail: (events, flushes) => `${events} 次输入事件 / ${flushes} 次后端写入`,
     outputBatchDetail: (events, flushes) => `${events} 次输出事件 / ${flushes} 次前端推送`,
@@ -2175,6 +2257,13 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     groupLatency: 'Latency',
     groupAudit: 'Audit',
     detailTitle: 'Full metric detail',
+    reportTitle: 'SSH lag diagnosis report',
+    reportDescription: 'Combines input, output, latency, and error evidence into one sanitized troubleshooting report.',
+    copyReport: 'Copy diagnosis report',
+    reportCopied: 'SSH lag diagnosis report copied',
+    reportHeadlineLabel: 'Conclusion',
+    reportEvidenceLabel: 'Key evidence',
+    reportSanitizedNote: 'This report only includes sanitized aggregate metrics. It excludes server addresses, command text, keys, and user data.',
     copySummary: 'Copy summary',
     copyCopied: 'SSH performance summary copied',
     summaryStatus: 'Status',
@@ -2186,6 +2275,10 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     nextActionWarn: 'Input batching is low. Capture diagnostics for paste bursts, large output, and weak-network SSH sessions.',
     nextActionFail: 'WebSocket errors are non-zero. Check proxy upgrade headers, timeouts, and terminal close cleanup first.',
     nextActionNoEvidence: 'No terminal interaction evidence yet. Open an SSH terminal, run a safe command, then refresh this panel.',
+    reportHeadline: (status, hasEvidence) => hasEvidence ? `Current SSH experience is "${status}"; use the evidence below to isolate the lag path.` : 'No SSH interaction evidence yet. Run one safe speed test before sharing the report.',
+    reportFindingInput: (events, flushes, ratio) => `Input path: ${events} input event(s) / ${flushes} backend write(s), batching ${flushes > 0 ? formatBatchRatio(ratio) : '--'}x.`,
+    reportFindingOutput: (events, flushes, ratio) => `Output path: ${events} output event(s) / ${flushes} frontend flush(es), batching ${flushes > 0 ? formatBatchRatio(ratio) : '--'}x.`,
+    reportFindingLatency: (bottleneck, firstResponseMs, outputSpanMs, errors) => `Latency call: ${bottleneck}, first response ${firstResponseMs === null ? '--' : `${Math.round(firstResponseMs)}ms`}, output span ${outputSpanMs === null ? '--' : `${Math.round(outputSpanMs)}ms`}, socket errors ${errors}.`,
     activeSessionsDetail: (count) => `${count} live shell session(s) retained server-side`,
     inputBatchDetail: (events, flushes) => `${events} input event(s) / ${flushes} backend write(s)`,
     outputBatchDetail: (events, flushes) => `${events} output event(s) / ${flushes} frontend flush(es)`,
@@ -2220,6 +2313,13 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     groupLatency: '遅延',
     groupAudit: '監査',
     detailTitle: '指標の詳細',
+    reportTitle: 'SSH 遅延診断レポート',
+    reportDescription: '入力、出力、遅延、エラーを匿名化した排障レポートにまとめます。',
+    copyReport: '診断レポートをコピー',
+    reportCopied: 'SSH 遅延診断レポートをコピーしました',
+    reportHeadlineLabel: '結論',
+    reportEvidenceLabel: '主な証跡',
+    reportSanitizedNote: 'このレポートは匿名化された集計指標のみを含み、サーバーアドレス、コマンド本文、キー、ユーザーデータは含みません。',
     copySummary: '\u30b5\u30de\u30ea\u30fc\u3092\u30b3\u30d4\u30fc',
     copyCopied: 'SSH \u30d1\u30d5\u30a9\u30fc\u30de\u30f3\u30b9\u30b5\u30de\u30ea\u30fc\u3092\u30b3\u30d4\u30fc\u3057\u307e\u3057\u305f',
     summaryStatus: '\u72b6\u614b',
@@ -2231,6 +2331,10 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     nextActionWarn: '入力バッチ率が低めです。貼り付け、大量出力、弱いネットワークの診断を追加取得してください。',
     nextActionFail: 'WebSocket エラーがあります。プロキシの Upgrade ヘッダー、タイムアウト、端末終了処理を優先確認してください。',
     nextActionNoEvidence: '端末操作の証跡がまだありません。SSH 端末で安全なコマンドを実行し、再読み込みしてください。',
+    reportHeadline: (status, hasEvidence) => hasEvidence ? `現在の SSH 体験は「${status}」です。下の証跡で遅延箇所を切り分けてください。` : 'SSH 操作の証跡がまだありません。安全な速度テストを 1 回実行してから共有してください。',
+    reportFindingInput: (events, flushes, ratio) => `入力経路：${events} 入力イベント / ${flushes} バックエンド書き込み、バッチ ${flushes > 0 ? formatBatchRatio(ratio) : '--'}x。`,
+    reportFindingOutput: (events, flushes, ratio) => `出力経路：${events} 出力イベント / ${flushes} フロントエンド送信、バッチ ${flushes > 0 ? formatBatchRatio(ratio) : '--'}x。`,
+    reportFindingLatency: (bottleneck, firstResponseMs, outputSpanMs, errors) => `遅延判定：${bottleneck}、初回応答 ${firstResponseMs === null ? '--' : `${Math.round(firstResponseMs)}ms`}、出力 ${outputSpanMs === null ? '--' : `${Math.round(outputSpanMs)}ms`}、接続エラー ${errors}。`,
     activeSessionsDetail: (count) => `${count} 件のライブ shell セッション`,
     inputBatchDetail: (events, flushes) => `${events} 入力イベント / ${flushes} バックエンド書き込み`,
     outputBatchDetail: (events, flushes) => `${events} 出力イベント / ${flushes} フロントエンド送信`,
