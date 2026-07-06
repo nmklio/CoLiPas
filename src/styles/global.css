@@ -5830,6 +5830,23 @@ td span,
   color: #fde68a;
 }
 
+
+.ssh-quick-command-grid .ssh-runbook-usage {
+  grid-column: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #b8c7d9;
+  font-size: 9px;
+  font-weight: 780;
+  letter-spacing: 0.01em;
+}
+
+.ssh-quick-command-grid article.custom.pinned .ssh-runbook-usage {
+  color: #fef3c7;
+}
+
 .ssh-quick-command-grid article.custom > div {
   max-width: 172px;
   flex-wrap: wrap;
@@ -5925,6 +5942,11 @@ td span,
   display: inline-grid;
   place-items: center;
   font-size: 12px;
+}
+
+.ssh-quick-command-grid button.pin svg,
+.ssh-quick-command-grid button.sort svg {
+  pointer-events: none;
 }
 
 .ssh-quick-command-grid button.sort {

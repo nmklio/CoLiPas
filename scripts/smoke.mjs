@@ -619,11 +619,31 @@ const runbookUnpinned = await runbookUnpinResponse.json();
 if (runbookUnpinned.command?.id !== runbookSecond.id || runbookUnpinned.command?.pinned !== false) {
   throw new Error(`/api/servers/ssh-runbook/:id/pin did not unpin command: ${JSON.stringify(runbookUnpinned)}`);
 }
+const runbookUseResponse = await fetch(`${baseUrl}/api/servers/ssh-runbook/${encodeURIComponent(runbookUpdated.id)}/use`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ mode: 'run' }),
+});
+if (!runbookUseResponse.ok) {
+  throw new Error(`/api/servers/ssh-runbook/:id/use returned HTTP ${runbookUseResponse.status}: ${await runbookUseResponse.text()}`);
+}
+const runbookUsed = await runbookUseResponse.json();
+if (runbookUsed.command?.id !== runbookUpdated.id || runbookUsed.command?.useCount !== 1 || !runbookUsed.command?.lastUsedAt || runbookUsed.command?.lastUsedMode !== 'run') {
+  throw new Error(`/api/servers/ssh-runbook/:id/use did not record usage metadata: ${JSON.stringify(runbookUsed)}`);
+}
+const runbookInvalidUseResponse = await fetch(`${baseUrl}/api/servers/ssh-runbook/${encodeURIComponent(runbookUpdated.id)}/use`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ mode: 'sudo' }),
+});
+if (runbookInvalidUseResponse.status !== 400) {
+  throw new Error(`/api/servers/ssh-runbook/:id/use expected 400 for invalid mode, got ${runbookInvalidUseResponse.status}`);
+}
 
 const runbookListResponse = await fetch(`${baseUrl}/api/servers/ssh-runbook`, { headers: authHeaders });
 const runbookListBody = await runbookListResponse.json();
-if (!runbookListBody.commands?.some((item) => item.id === runbookCreated.id && item.command === 'printf colipas-runbook-updated')) {
-  throw new Error(`/api/servers/ssh-runbook did not persist updated command: ${JSON.stringify(runbookListBody)}`);
+if (!runbookListBody.commands?.some((item) => item.id === runbookCreated.id && item.command === 'printf colipas-runbook-updated' && item.useCount === 1 && item.lastUsedMode === 'run')) {
+  throw new Error(`/api/servers/ssh-runbook did not persist updated command usage metadata: ${JSON.stringify(runbookListBody)}`);
 }
 
 const runbookDeleteResponse = await fetch(`${baseUrl}/api/servers/ssh-runbook/${encodeURIComponent(runbookCreated.id)}`, {
@@ -670,7 +690,7 @@ for (const importedCommand of runbookImported.imported) {
 const runbookAuditResponse = await fetch(`${baseUrl}/api/audit/events`, { headers: authHeaders });
 const runbookAuditBody = await runbookAuditResponse.json();
 const runbookAuditText = JSON.stringify(runbookAuditBody.items?.filter((item) => String(item.action).startsWith('SSH_RUNBOOK')) ?? []);
-if (!/SSH_RUNBOOK_CREATE/.test(runbookAuditText) || !/SSH_RUNBOOK_REORDER/.test(runbookAuditText) || !/SSH_RUNBOOK_PIN/.test(runbookAuditText) || !/SSH_RUNBOOK_IMPORT/.test(runbookAuditText) || /printf colipas-runbook|journalctl -p warning|token=secret-value/.test(runbookAuditText)) {
+if (!/SSH_RUNBOOK_CREATE/.test(runbookAuditText) || !/SSH_RUNBOOK_REORDER/.test(runbookAuditText) || !/SSH_RUNBOOK_PIN/.test(runbookAuditText) || !/SSH_RUNBOOK_USE/.test(runbookAuditText) || !/SSH_RUNBOOK_IMPORT/.test(runbookAuditText) || /printf colipas-runbook|journalctl -p warning|token=secret-value/.test(runbookAuditText)) {
   throw new Error(`SSH runbook audit events are missing or leaked command bodies: ${runbookAuditText}`);
 }
 console.log('ok /api/servers/ssh-runbook persists, imports, reorders, and audits custom commands without leaking command bodies');
@@ -5510,6 +5530,9 @@ function assertSshTerminalRealtimeGuards() {
     'function cancelSshRunbookEdit(',
     'function importSshRunbookPack(',
     'function toggleSshRunbookPin(',
+    'markSshRunbookCommandUsed(runbookCommandId, mode)',
+    'function formatSshRunbookUsage(',
+    'function formatSshRunbookUsageTime(',
     'function moveSshRunbookCommand(',
     'function removeSshRunbookCommand(',
     'data-ssh-runbook-form="true"',
@@ -5524,6 +5547,10 @@ function assertSshTerminalRealtimeGuards() {
     'data-ssh-runbook-command-pin={item.id}',
     'data-ssh-runbook-command-edit={item.id}',
     'data-ssh-runbook-command-run={item.id}',
+    'data-ssh-runbook-usage={item.id}',
+    '<Star size={12}',
+    '<ChevronUp size={12}',
+    '<ChevronDown size={12}',
     'data-ssh-runbook-command-move-up={item.id}',
     'data-ssh-runbook-command-move-down={item.id}',
     'data-ssh-runbook-command-delete={item.id}',
@@ -5635,6 +5662,8 @@ function assertSshTerminalRealtimeGuards() {
     'servers.quickCommandUnpinned',
     'servers.quickCommandPinFailed',
     'servers.quickCommandPinnedLabel',
+    'servers.quickCommandUsageMeta',
+    'servers.quickCommandUsageNever',
     'servers.quickCommandSaved',
     'servers.quickCommandDeleted',
     'servers.quickCommandPinAria',
@@ -5684,6 +5713,12 @@ function assertSshTerminalRealtimeGuards() {
     'servers.quickCommandPinnedLabel',
     'servers.quickCommandPinAria',
     'servers.quickCommandUnpinAria',
+    'servers.quickCommandUsageMeta',
+    'servers.quickCommandUsageNever',
+    'servers.quickCommandUsageJustNow',
+    'servers.quickCommandUsageMinutes',
+    'servers.quickCommandUsageHours',
+    'servers.quickCommandUsageDays',
     'servers.quickCommandPack.system.title',
     'servers.quickCommandPack.system.detail',
     'servers.quickCommandPack.system.load.title',
@@ -5714,6 +5749,12 @@ function assertSshTerminalRealtimeGuards() {
   const missingRunbookLensI18n = runbookLensI18n.filter((key) => (i18nSource.match(new RegExp(key.replace('.', '\\.'), 'g')) ?? []).length < 3);
   if (missingRunbookLensI18n.length) {
     throw new Error(`SSH runbook search/category i18n coverage is incomplete: ${missingRunbookLensI18n.join(', ')}`);
+  }
+  if (/servers\.quickCommand(?:Pinned|Unpinned|PinFailed|PinnedLabel|PinAria|UnpinAria)'\s*:\s*'\?/.test(i18nSource)) {
+    throw new Error('SSH runbook pin i18n must not regress to question-mark placeholders');
+  }
+  if (!inventorySource.includes("<Star size={12} fill={item.pinned ? 'currentColor' : 'none'} />")) {
+    throw new Error('SSH runbook pin control must use the shared Star icon instead of placeholder glyphs');
   }
   const closeSshConsoleMatch = inventorySource.match(/function closeSshConsole\(\)\s*\{(?<body>[\s\S]+?)\r?\n  \}\r?\n\r?\n  async function startTerminalLogin/);
   if (!closeSshConsoleMatch?.groups?.body?.includes('setSshConsoleOpen(false)')) {
@@ -5777,7 +5818,9 @@ function assertSshTerminalRealtimeGuards() {
     'export function createSshRunbookCommand',
     'export function updateSshRunbookCommand',
     'export function updateSshRunbookCommandPin',
+    'export function markSshRunbookCommandUsed',
     'function normalizePinned',
+    'function normalizeUseMode',
     'export function importSshRunbookCommands',
     'function normalizeImportCommands',
     'export function reorderSshRunbookCommands',
@@ -5802,15 +5845,18 @@ function assertSshTerminalRealtimeGuards() {
     "app.post('/api/servers/ssh-runbook/import'",
     "app.post('/api/servers/ssh-runbook/reorder'",
     "app.patch('/api/servers/ssh-runbook/:commandId/pin'",
+    "app.post('/api/servers/ssh-runbook/:commandId/use'",
     "app.patch('/api/servers/ssh-runbook/:commandId'",
     "app.delete('/api/servers/ssh-runbook/:commandId'",
     'createSshRunbookCommand(request.body)',
     'importSshRunbookCommands(request.body)',
     'reorderSshRunbookCommands(request.body)',
     'updateSshRunbookCommandPin(request.params.commandId, request.body)',
+    'markSshRunbookCommandUsed(request.params.commandId, request.body)',
     'SSH_RUNBOOK_CREATE',
     'SSH_RUNBOOK_IMPORT',
     'SSH_RUNBOOK_PIN',
+    'SSH_RUNBOOK_USE',
     'SSH_RUNBOOK_REORDER',
     'flushSse(response)',
     'X-Accel-Buffering',
@@ -5832,6 +5878,7 @@ function assertSshTerminalRealtimeGuards() {
     'export async function updateSshRunbookCommand',
     'export async function importSshRunbookCommands',
     'export async function updateSshRunbookCommandPin',
+    'export async function markSshRunbookCommandUsed',
     'export async function reorderSshRunbookCommands',
     'export async function deleteSshRunbookCommand',
     'const shellSocketInputFlushMs = 2',
@@ -5913,7 +5960,7 @@ function assertSshTerminalRealtimeGuards() {
   if (!globalCssSource.includes('.ssh-terminal-self-test') || !globalCssSource.includes('.ssh-terminal-self-test.complete')) {
     throw new Error('SSH terminal self-test result chip styles are missing');
   }
-  if (!globalCssSource.includes('.ssh-quick-command-deck') || !globalCssSource.includes('.ssh-runbook-workspace') || !globalCssSource.includes('.ssh-runbook-form') || !globalCssSource.includes('.ssh-runbook-form.editing') || !globalCssSource.includes('.ssh-runbook-lens') || !globalCssSource.includes('.ssh-runbook-categories button.active') || !globalCssSource.includes('.ssh-runbook-clear-filter') || !globalCssSource.includes('.ssh-runbook-pack-dock') || !globalCssSource.includes('.ssh-runbook-pack-grid') || !globalCssSource.includes('.ssh-quick-command-grid') || !globalCssSource.includes('.ssh-quick-command-grid article.custom.pinned') || !globalCssSource.includes('.ssh-quick-command-grid button.pin') || !globalCssSource.includes('.ssh-quick-command-grid button.sort') || !globalCssSource.includes('grid-template-rows: 38px auto auto auto minmax(0, 250px) minmax(160px, 1fr)')) {
+  if (!globalCssSource.includes('.ssh-quick-command-deck') || !globalCssSource.includes('.ssh-runbook-workspace') || !globalCssSource.includes('.ssh-runbook-form') || !globalCssSource.includes('.ssh-runbook-form.editing') || !globalCssSource.includes('.ssh-runbook-lens') || !globalCssSource.includes('.ssh-runbook-categories button.active') || !globalCssSource.includes('.ssh-runbook-clear-filter') || !globalCssSource.includes('.ssh-runbook-pack-dock') || !globalCssSource.includes('.ssh-runbook-pack-grid') || !globalCssSource.includes('.ssh-quick-command-grid') || !globalCssSource.includes('.ssh-quick-command-grid article.custom.pinned') || !globalCssSource.includes('.ssh-quick-command-grid .ssh-runbook-usage') || !globalCssSource.includes('.ssh-quick-command-grid button.pin') || !globalCssSource.includes('.ssh-quick-command-grid button.sort') || !globalCssSource.includes('grid-template-rows: 38px auto auto auto minmax(0, 250px) minmax(160px, 1fr)')) {
     throw new Error('SSH terminal quick command deck styles are missing or the terminal grid does not reserve space for it');
   }
 

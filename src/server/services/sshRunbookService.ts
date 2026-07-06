@@ -22,6 +22,10 @@ export interface SshRunbookPinPayload {
   pinned?: unknown;
 }
 
+export interface SshRunbookUsePayload {
+  mode?: unknown;
+}
+
 export interface SshRunbookImportPayload {
   commands?: unknown;
 }
@@ -98,6 +102,27 @@ export function updateSshRunbookCommandPin(commandId: string, payload: SshRunboo
   } else {
     next.splice(insertIndex, 0, updated);
   }
+  writeRunbookCommands(next);
+  return { commands: next, command: updated };
+}
+
+export function markSshRunbookCommandUsed(commandId: string, payload: SshRunbookUsePayload) {
+  const mode = normalizeUseMode(payload?.mode);
+  const commands = readRunbookCommands();
+  const index = commands.findIndex((item) => item.id === commandId);
+  if (index === -1) {
+    throw new HttpError(404, 'SSH runbook command was not found', 'SSH_RUNBOOK_COMMAND_NOT_FOUND');
+  }
+
+  const command = commands[index];
+  const updated: SshRunbookCommand = {
+    ...command,
+    useCount: Math.max(0, Math.trunc(command.useCount ?? 0)) + 1,
+    lastUsedAt: new Date().toISOString(),
+    lastUsedMode: mode,
+  };
+  const next = commands.slice();
+  next[index] = updated;
   writeRunbookCommands(next);
   return { commands: next, command: updated };
 }
@@ -211,6 +236,13 @@ function normalizeImportCommands(value: unknown) {
 function normalizePinned(value: unknown) {
   if (typeof value !== 'boolean') {
     throw new HttpError(400, 'Pinned value must be true or false', 'SSH_RUNBOOK_PIN_INVALID');
+  }
+  return value;
+}
+
+function normalizeUseMode(value: unknown): 'insert' | 'run' {
+  if (value !== 'insert' && value !== 'run') {
+    throw new HttpError(400, 'Use mode must be insert or run', 'SSH_RUNBOOK_USE_MODE_INVALID');
   }
   return value;
 }

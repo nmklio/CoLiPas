@@ -189,6 +189,10 @@ export interface SshRunbookPinResponse extends SshRunbookResponse {
   command: SshRunbookCommand;
 }
 
+export interface SshRunbookUseResponse extends SshRunbookResponse {
+  command: SshRunbookCommand;
+}
+
 export interface ServerShellStreamEvent {
   type: 'start' | 'stdout' | 'stderr' | 'close' | 'error';
   content?: string;
@@ -950,6 +954,20 @@ export async function updateSshRunbookCommandPin(commandId: string, pinned: bool
   }
 
   return (await response.json()) as SshRunbookPinResponse;
+}
+
+export async function markSshRunbookCommandUsed(commandId: string, mode: 'insert' | 'run', fetcher: typeof fetch = fetch) {
+  const response = await fetcher(`/api/servers/ssh-runbook/${encodeURIComponent(commandId)}/use`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as SshRunbookUseResponse;
 }
 
 export async function reorderSshRunbookCommands(commandIds: string[], fetcher: typeof fetch = fetch) {

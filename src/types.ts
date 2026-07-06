@@ -50,6 +50,9 @@ export interface SshRunbookCommand {
   title: string;
   command: string;
   pinned?: boolean;
+  useCount?: number;
+  lastUsedAt?: string;
+  lastUsedMode?: 'insert' | 'run';
   createdAt: string;
   updatedAt: string;
 }

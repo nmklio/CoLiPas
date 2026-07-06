@@ -1094,6 +1094,14 @@ async function assertSshTerminalPanel(targetPage) {
         throw new Error(`SSH runbook custom command did not render in terminal after click: ${JSON.stringify(runbookRunState)}; ${error instanceof Error ? error.message : String(error)}`);
       }
 
+      await targetPage.waitForFunction(async (expectedId) => {
+        const response = await fetch('/api/servers/ssh-runbook');
+        const body = await response.json();
+        const command = Array.isArray(body.commands) ? body.commands.find((item) => item.id === expectedId) : null;
+        return command?.useCount === 1 && command?.lastUsedMode === 'run' && typeof command?.lastUsedAt === 'string';
+      }, customRunbookId, { timeout: 5000 });
+      await targetPage.locator(`[data-ssh-runbook-usage="${customRunbookId}"]`).filter({ hasText: /Used 1x/i }).waitFor({ timeout: 5000 });
+
       const deletedRunbookIds = [customRunbookId, customRunbookSecondId];
       await customRunbookSecondCard.locator('[data-ssh-runbook-command-delete]').click();
       await targetPage.locator('.action-message').filter({ hasText: /runbook command deleted/i }).waitFor({ timeout: 5000 });

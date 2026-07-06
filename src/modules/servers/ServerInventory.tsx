@@ -1,7 +1,7 @@
 import { FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import type { Terminal as XTerm, IDisposable } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
-import { ChevronUp, Copy, Cpu, Database, Edit3, Eraser, FileKey2, FileText, Globe2, KeyRound, Network, Plus, Power, PowerOff, RotateCcw, Search, Server, ShieldCheck, Terminal, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Copy, Cpu, Database, Edit3, Eraser, FileKey2, FileText, Globe2, KeyRound, Network, Plus, Power, PowerOff, RotateCcw, Search, Server, ShieldCheck, Star, Terminal, Trash2, X } from 'lucide-react';
 import { Language, useI18n } from '../../i18n';
 import {
   closeServerShell,
@@ -16,6 +16,7 @@ import {
   fetchSshRunbookCommands,
   importSshRunbookCommands,
   inspectServerIdentity,
+  markSshRunbookCommandUsed,
   openServerShell,
   recordServerShellSelfTest,
   reorderSshRunbookCommands,
@@ -1655,6 +1656,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                           <article key={item.id} role="listitem" className={item.pinned ? 'custom pinned' : 'custom'} data-ssh-runbook-command={item.id}>
                             <span>{item.pinned ? t('servers.quickCommandPinnedLabel') : t(`servers.quickCommandCategory.${classifySshRunbookCommand(item)}`)}</span>
                             <strong>{item.title}</strong>
+                            <small className="ssh-runbook-usage" data-ssh-runbook-usage={item.id}>{formatSshRunbookUsage(item, t)}</small>
                             <code>{item.command}</code>
                             <div>
                               <button
@@ -1665,7 +1667,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                                 onClick={() => toggleSshRunbookPin(item)}
                                 disabled={pinningSshRunbookId === item.id}
                               >
-                                {item.pinned ? '★' : '☆'}
+                                <Star size={12} fill={item.pinned ? 'currentColor' : 'none'} />
                               </button>
                               <button
                                 type="button"
@@ -1678,7 +1680,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                               <button
                                 type="button"
                                 data-ssh-runbook-command-insert={item.id}
-                                onClick={() => sendSshQuickCommand(item.command, item.title, 'insert')}
+                                onClick={() => sendSshQuickCommand(item.command, item.title, 'insert', item.id)}
                                 disabled={!terminalShellId}
                               >
                                 {t('servers.quickCommandInsert')}
@@ -1686,7 +1688,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                               <button
                                 type="button"
                                 data-ssh-runbook-command-run={item.id}
-                                onClick={() => sendSshQuickCommand(item.command, item.title, 'run')}
+                                onClick={() => sendSshQuickCommand(item.command, item.title, 'run', item.id)}
                                 disabled={!terminalShellId}
                               >
                                 {t('servers.quickCommandRun')}
@@ -1709,7 +1711,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                                 onClick={() => moveSshRunbookCommand(item.id, -1)}
                                 disabled={orderIndex <= 0 || movingSshRunbookId === item.id}
                               >
-                                ↑
+                                <ChevronUp size={12} />
                               </button>
                               <button
                                 type="button"
@@ -1719,7 +1721,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                                 onClick={() => moveSshRunbookCommand(item.id, 1)}
                                 disabled={orderIndex === -1 || orderIndex === sshRunbookCommands.length - 1 || movingSshRunbookId === item.id}
                               >
-                                ↓
+                                <ChevronDown size={12} />
                               </button>
                             </div>
                           </article>
@@ -3036,7 +3038,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     }
   }
 
-  function sendSshQuickCommand(command: string, title: string, mode: 'insert' | 'run') {
+  function sendSshQuickCommand(command: string, title: string, mode: 'insert' | 'run', runbookCommandId?: string) {
     const sessionId = terminalShellId;
     if (!sessionId) {
       showActionMessage(t('servers.quickCommandUnavailable'));
@@ -3052,6 +3054,11 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       .then(() => {
         showActionMessage(t(mode === 'run' ? 'servers.quickCommandRunMessage' : 'servers.quickCommandInsertMessage', { title }));
         xtermRef.current?.focus();
+        if (runbookCommandId) {
+          markSshRunbookCommandUsed(runbookCommandId, mode)
+            .then((result) => setSshRunbookCommands(result.commands))
+            .catch(() => undefined);
+        }
       })
       .catch((error) => {
         showActionMessage(error instanceof Error ? error.message : t('servers.quickCommandFailed'));
@@ -4917,6 +4924,38 @@ function sanitizeSshDoctorText(text: string) {
       const separator = match.includes(':') ? ':' : '=';
       return `${match.split(separator)[0]}${separator} [redacted]`;
     });
+}
+
+function formatSshRunbookUsage(command: SshRunbookCommand, t: (key: string, vars?: Record<string, string | number>) => string) {
+  if (!command.useCount) {
+    return t('servers.quickCommandUsageNever');
+  }
+
+  return t('servers.quickCommandUsageMeta', {
+    count: command.useCount,
+    time: formatSshRunbookUsageTime(command.lastUsedAt, t),
+  });
+}
+
+function formatSshRunbookUsageTime(value: string | undefined, t: (key: string, vars?: Record<string, string | number>) => string) {
+  const timestamp = value ? Date.parse(value) : Number.NaN;
+  if (!Number.isFinite(timestamp)) {
+    return t('servers.quickCommandUsageUnknown');
+  }
+
+  const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+  if (seconds < 60) {
+    return t('servers.quickCommandUsageJustNow');
+  }
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) {
+    return t('servers.quickCommandUsageMinutes', { count: minutes });
+  }
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return t('servers.quickCommandUsageHours', { count: hours });
+  }
+  return t('servers.quickCommandUsageDays', { count: Math.floor(hours / 24) });
 }
 
 function ActionButton({ label, icon, disabled, onClick }: { label: string; icon: ReactNode; disabled?: boolean; onClick: () => void }) {
