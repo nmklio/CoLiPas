@@ -3319,6 +3319,11 @@ function assertAccountUiGuards() {
     'releaseCockpitSanitizedNote',
     'security-release-cockpit-radar',
     'security-release-cockpit-footer',
+    'data-release-handoff-pack="true"',
+    'data-release-handoff-section={section.id}',
+    'buildReleaseHandoffPack',
+    'releaseHandoffSanitizedNote',
+    'security-release-handoff-grid',
   ];
   const releaseCockpitSource = `${securitySource}\n${globalCss}`;
   const missingReleaseCockpit = releaseCockpitFragments.filter((fragment) => !releaseCockpitSource.includes(fragment));

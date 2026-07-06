@@ -154,6 +154,24 @@ interface ReleaseCockpitSummary {
   copyText: string;
 }
 
+interface ReleaseHandoffPackSection {
+  id: 'cockpit' | 'evidence' | 'ssh' | 'policy';
+  label: string;
+  value: string;
+  detail: string;
+  tone: 'ok' | 'warn' | 'fail';
+}
+
+interface ReleaseHandoffPackSummary {
+  tone: 'ok' | 'warn' | 'fail';
+  title: string;
+  lead: string;
+  status: string;
+  generatedLabel: string;
+  sections: ReleaseHandoffPackSection[];
+  copyText: string;
+}
+
 interface SshPerformanceMetric {
   id: string;
   label: string;
@@ -493,6 +511,17 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
     }),
     [locale, sshBottleneckTrend, sshFlightRecorder, sshInteractionSampler, sshPerformance, sshPerformanceCopy],
   );
+  const releaseHandoffPack = useMemo(
+    () => buildReleaseHandoffPack({
+      releaseCockpit,
+      evidenceBrief,
+      sshSupportBundle,
+      copy,
+      sshCopy: sshPerformanceCopy,
+      activeAuditIssues,
+    }),
+    [activeAuditIssues.blocked, activeAuditIssues.failed, copy, evidenceBrief, releaseCockpit, sshPerformanceCopy, sshSupportBundle],
+  );
   const expandedSshMetric = useMemo(
     () => sshPerformance.metrics.find((metric) => metric.id === expandedSshMetricId) ?? sshPerformance.metrics[0] ?? null,
     [expandedSshMetricId, sshPerformance.metrics],
@@ -681,6 +710,23 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
       setRemediationError(false);
     } catch {
       setRemediationMessage(releaseCockpit.copyText);
+      setRemediationError(false);
+    }
+  }
+
+  async function copyReleaseHandoffPack() {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) {
+      setRemediationMessage(releaseHandoffPack.copyText);
+      setRemediationError(false);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(releaseHandoffPack.copyText);
+      setRemediationMessage(copy.releaseHandoffCopied);
+      setRemediationError(false);
+    } catch {
+      setRemediationMessage(releaseHandoffPack.copyText);
       setRemediationError(false);
     }
   }
@@ -1079,6 +1125,36 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
             <ClipboardCheck size={15} />
             {copy.releaseCockpitCopy}
           </button>
+        </div>
+      </article>
+
+      <article className={`security-release-handoff ${releaseHandoffPack.tone}`} data-release-handoff-pack="true" aria-labelledby="security-release-handoff-title">
+        <div className="security-release-handoff-stamp">
+          <span>{copy.releaseHandoffKicker}</span>
+          <strong>{releaseHandoffPack.status}</strong>
+          <small>{releaseHandoffPack.generatedLabel}</small>
+        </div>
+        <div className="security-release-handoff-body">
+          <div className="security-release-handoff-heading">
+            <div>
+              <h3 id="security-release-handoff-title"><Download size={18} /> {releaseHandoffPack.title}</h3>
+              <p>{releaseHandoffPack.lead}</p>
+            </div>
+            <button type="button" className="tool-button" onClick={copyReleaseHandoffPack} disabled={!releaseHandoffPack.copyText}>
+              <ClipboardCheck size={15} />
+              {copy.releaseHandoffCopy}
+            </button>
+          </div>
+          <div className="security-release-handoff-grid" aria-label={copy.releaseHandoffSectionsLabel}>
+            {releaseHandoffPack.sections.map((section) => (
+              <div key={section.id} className={`security-release-handoff-section ${section.tone}`} data-release-handoff-section={section.id}>
+                <small>{section.label}</small>
+                <strong>{section.value}</strong>
+                <p>{section.detail}</p>
+              </div>
+            ))}
+          </div>
+          <small className="security-release-handoff-note">{copy.releaseHandoffSanitizedNote}</small>
         </div>
       </article>
 
@@ -2444,6 +2520,80 @@ function buildReleaseCockpitSummary(input: {
     generatedLabel,
     lanes,
     nextAction,
+    copyText,
+  };
+}
+
+function buildReleaseHandoffPack(input: {
+  releaseCockpit: ReleaseCockpitSummary;
+  evidenceBrief: ReleaseEvidenceBrief;
+  sshSupportBundle: SshSupportBundleSummary;
+  copy: SecurityCopy;
+  sshCopy: SshPerformanceCopy;
+  activeAuditIssues: ReturnType<typeof getActiveAuditIssues>;
+}): ReleaseHandoffPackSummary {
+  const { releaseCockpit, evidenceBrief, sshSupportBundle, copy, sshCopy, activeAuditIssues } = input;
+  const sections: ReleaseHandoffPackSection[] = [
+    {
+      id: 'cockpit',
+      label: copy.releaseHandoffSectionCockpit,
+      value: releaseCockpit.status,
+      detail: releaseCockpit.nextAction,
+      tone: releaseCockpit.tone,
+    },
+    {
+      id: 'evidence',
+      label: copy.releaseHandoffSectionEvidence,
+      value: evidenceBrief.deployment?.gitCommit ?? '--',
+      detail: evidenceBrief.blockers.length > 0 ? evidenceBrief.blockers.join(' / ') : copy.evidenceBriefNoBlockers,
+      tone: activeAuditIssues.failed > 0 ? 'fail' : activeAuditIssues.blocked > 0 ? 'warn' : 'ok',
+    },
+    {
+      id: 'ssh',
+      label: copy.releaseHandoffSectionSsh,
+      value: sshSupportBundle.title,
+      detail: sshSupportBundle.detail,
+      tone: sshSupportBundle.tone,
+    },
+    {
+      id: 'policy',
+      label: copy.releaseHandoffSectionPolicy,
+      value: copy.releaseHandoffPolicyValue,
+      detail: copy.releaseHandoffPolicyDetail,
+      tone: 'ok',
+    },
+  ];
+  const tone = sections.reduce<ReleaseHandoffPackSummary['tone']>((current, section) => (
+    getSshToneRank(section.tone) > getSshToneRank(current) ? section.tone : current
+  ), 'ok');
+  const generatedLabel = releaseCockpit.generatedLabel || evidenceBrief.generatedLabel || sshSupportBundle.generatedAt;
+  const copyText = [
+    `# ${copy.releaseHandoffTitle}`,
+    `${copy.releaseCockpitStatusLabel}: ${releaseCockpit.status}`,
+    `${copy.releaseHandoffGenerated}: ${generatedLabel}`,
+    '',
+    `[${copy.releaseCockpitTitle}]`,
+    releaseCockpit.copyText,
+    '',
+    `[${copy.evidenceBriefTitle}]`,
+    evidenceBrief.text,
+    '',
+    `[${sshCopy.supportBundleTitle}]`,
+    sshSupportBundle.copyText,
+    '',
+    `[${copy.releaseHandoffSectionsLabel}]`,
+    ...sections.map((section) => `- ${section.label}: ${section.value} / ${section.detail}`),
+    '',
+    copy.releaseHandoffSanitizedNote,
+  ].map(sanitizeEvidenceBriefText).join('\n');
+
+  return {
+    tone,
+    title: copy.releaseHandoffTitle,
+    lead: copy.releaseHandoffLead,
+    status: releaseCockpit.status,
+    generatedLabel,
+    sections,
     copyText,
   };
 }
@@ -3983,6 +4133,20 @@ interface SecurityCopy {
   releaseCockpitCopy: string;
   releaseCockpitCopied: string;
   releaseCockpitSanitizedNote: string;
+  releaseHandoffTitle: string;
+  releaseHandoffLead: string;
+  releaseHandoffKicker: string;
+  releaseHandoffCopy: string;
+  releaseHandoffCopied: string;
+  releaseHandoffGenerated: string;
+  releaseHandoffSectionsLabel: string;
+  releaseHandoffSectionCockpit: string;
+  releaseHandoffSectionEvidence: string;
+  releaseHandoffSectionSsh: string;
+  releaseHandoffSectionPolicy: string;
+  releaseHandoffPolicyValue: string;
+  releaseHandoffPolicyDetail: string;
+  releaseHandoffSanitizedNote: string;
   releasePlaybookTitle: string;
   releasePlaybookDescription: string;
   releasePlaybookSignalLabel: string;
@@ -5161,6 +5325,20 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     releaseCockpitCopy: '复制驾驶舱',
     releaseCockpitCopied: '发布健康驾驶舱已复制',
     releaseCockpitSanitizedNote: '驾驶舱只包含脱敏后的版本、聚合评分、计数和建议，不包含服务器地址、命令正文、密钥或用户数据。',
+    releaseHandoffTitle: '发布交接包',
+    releaseHandoffLead: '把发布状态、上线证据和 SSH 诊断合成一份可直接交给运维复核的脱敏文本。',
+    releaseHandoffKicker: '交接封套',
+    releaseHandoffCopy: '复制交接包',
+    releaseHandoffCopied: '发布交接包已复制',
+    releaseHandoffGenerated: '交接时间',
+    releaseHandoffSectionsLabel: '交接内容',
+    releaseHandoffSectionCockpit: '塔台结论',
+    releaseHandoffSectionEvidence: '上线证据',
+    releaseHandoffSectionSsh: 'SSH 现场',
+    releaseHandoffSectionPolicy: '交接规则',
+    releaseHandoffPolicyValue: '仅脱敏',
+    releaseHandoffPolicyDetail: '只交付聚合状态、计数、版本和建议，不包含命令正文、服务器地址、密钥或用户数据。',
+    releaseHandoffSanitizedNote: '发布交接包只组合已脱敏的驾驶舱、证据摘要和 SSH 支持包，适合复制给协作方复核。',
     releasePlaybookTitle: '发布失败诊断词典',
     releasePlaybookDescription: '把发布日志中的典型信号映射为下一步处理动作，便于上线前快速判断是网络、认证还是远端脚本问题。',
     releasePlaybookSignalLabel: '信号：',
@@ -5375,6 +5553,20 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     releaseCockpitCopy: 'Copy cockpit',
     releaseCockpitCopied: 'Release cockpit copied',
     releaseCockpitSanitizedNote: 'The cockpit only includes sanitized version, aggregate scores, counts, and recommendations; no server addresses, command text, keys, or user data.',
+    releaseHandoffTitle: 'Release handoff pack',
+    releaseHandoffLead: 'Combines release state, publish evidence, and SSH diagnostics into one sanitized text pack for operator review.',
+    releaseHandoffKicker: 'Handoff sleeve',
+    releaseHandoffCopy: 'Copy handoff pack',
+    releaseHandoffCopied: 'Release handoff pack copied',
+    releaseHandoffGenerated: 'Handoff time',
+    releaseHandoffSectionsLabel: 'Handoff contents',
+    releaseHandoffSectionCockpit: 'Tower conclusion',
+    releaseHandoffSectionEvidence: 'Publish evidence',
+    releaseHandoffSectionSsh: 'SSH field state',
+    releaseHandoffSectionPolicy: 'Handoff rule',
+    releaseHandoffPolicyValue: 'Sanitized only',
+    releaseHandoffPolicyDetail: 'Shares only aggregate state, counts, version, and recommendations; no command text, server addresses, keys, or user data.',
+    releaseHandoffSanitizedNote: 'The release handoff pack only combines sanitized cockpit, evidence brief, and SSH support bundle content for collaborator review.',
     releasePlaybookTitle: 'Release failure playbook',
     releasePlaybookDescription: 'Maps common release log signals to the next safe action so operators can tell network, authentication, and remote-script failures apart before retrying.',
     releasePlaybookSignalLabel: 'Signal: ',
@@ -5589,6 +5781,20 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     releaseCockpitCopy: 'コックピットをコピー',
     releaseCockpitCopied: 'リリース健康コックピットをコピーしました',
     releaseCockpitSanitizedNote: 'コックピットには脱敏済みのバージョン、集計スコア、件数、推奨のみが含まれ、サーバーアドレス、コマンド本文、鍵、ユーザーデータは含みません。',
+    releaseHandoffTitle: 'リリース引き継ぎパック',
+    releaseHandoffLead: 'リリース状態、公開証跡、SSH 診断を、運用レビュー向けの脱敏済みテキストにまとめます。',
+    releaseHandoffKicker: '引き継ぎ封筒',
+    releaseHandoffCopy: '引き継ぎパックをコピー',
+    releaseHandoffCopied: 'リリース引き継ぎパックをコピーしました',
+    releaseHandoffGenerated: '引き継ぎ時刻',
+    releaseHandoffSectionsLabel: '引き継ぎ内容',
+    releaseHandoffSectionCockpit: 'タワー結論',
+    releaseHandoffSectionEvidence: '公開証跡',
+    releaseHandoffSectionSsh: 'SSH 現場状態',
+    releaseHandoffSectionPolicy: '引き継ぎルール',
+    releaseHandoffPolicyValue: '脱敏のみ',
+    releaseHandoffPolicyDetail: '集計状態、件数、バージョン、推奨のみを共有し、コマンド本文、サーバーアドレス、鍵、ユーザーデータは含めません。',
+    releaseHandoffSanitizedNote: 'リリース引き継ぎパックは、脱敏済みのコックピット、証跡サマリー、SSH サポートバンドルだけを組み合わせます。',
     releasePlaybookTitle: 'リリース失敗診断プレイブック',
     releasePlaybookDescription: 'リリースログの代表的なシグナルを次の安全な対応に対応付け、ネットワーク、認証、リモートスクリプトの失敗を切り分けます。',
     releasePlaybookSignalLabel: 'シグナル: ',
