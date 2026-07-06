@@ -4487,9 +4487,12 @@ function assertOverviewMapInteractionGuards() {
     'function buildHealthBaselineTrend',
     'colipas.overview.healthTrend.v1',
     "onHealthSignalOpen?: (signal: HealthBaselineSignalId) => void",
+    'onOperationsDraftOpen?: () => void',
     'data-health-signal={signal.id}',
+    'health-baseline-draft-button',
     'overview.healthBaselineTitle',
     'overview.healthTrendTitle',
+    'overview.opsDraftButton',
     'overview.healthSignalOpen',
     'overview.healthSignalResources',
     'overview.healthSignalSsh',
@@ -4586,7 +4589,21 @@ function assertOverviewMapInteractionGuards() {
     "function openHealthSignal(signal: 'resources' | 'ssh' | 'events')",
     "health: signal === 'resources' ? 'resourcePressure' : 'sshMissing'",
     'onHealthSignalOpen={openHealthSignal}',
+    'const overviewTriageCommand',
+    'const [operationDraft, setOperationDraft] = useState<OperationsDraft | null>(null)',
+    'function openOverviewOperationsDraft()',
+    'onOperationsDraftOpen={openOverviewOperationsDraft}',
+    'draft={operationDraft}',
   ], 'overview health signal routing');
+
+  assertFileContains('src/modules/operations/OperationsCenter.tsx', [
+    'export interface OperationsDraft',
+    'draft?: OperationsDraft | null',
+    'data-ops-draft-banner="true"',
+    'setBuilderOpen(true)',
+    'setDraftNotice(draft)',
+    'draftHint',
+  ], 'overview operations draft');
 
   assertFileContains('src/modules/servers/ServerInventory.tsx', [
     'data-health-scope-chip="true"',

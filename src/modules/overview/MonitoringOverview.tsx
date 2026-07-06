@@ -16,6 +16,7 @@ interface MonitoringOverviewProps {
   avgCpu: number;
   onRegionServersOpen?: (region: string | string[]) => void;
   onHealthSignalOpen?: (signal: HealthBaselineSignalId) => void;
+  onOperationsDraftOpen?: () => void;
 }
 
 interface RegionNode {
@@ -216,7 +217,7 @@ const normalizedRegionLocations = regionLocations.map(({ aliases, location }) =>
 
 const fallbackLocation: RegionLocation = { lat: 18, lng: 0, countryId: '', matched: false };
 
-export function MonitoringOverview({ servers, events, onlineCount, avgCpu, onRegionServersOpen, onHealthSignalOpen }: MonitoringOverviewProps) {
+export function MonitoringOverview({ servers, events, onlineCount, avgCpu, onRegionServersOpen, onHealthSignalOpen, onOperationsDraftOpen }: MonitoringOverviewProps) {
   const { language, t } = useI18n();
   const providerName = (provider: string) => formatProviderName(provider, t);
   const regionName = (region: string) => formatRegionName(region, language);
@@ -367,6 +368,9 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, onReg
           {healthBaseline.actions.map((action) => (
             <small key={action}>{action}</small>
           ))}
+          <button type="button" className="health-baseline-draft-button" onClick={onOperationsDraftOpen}>
+            {t('overview.opsDraftButton')}
+          </button>
         </div>
       </article>
 

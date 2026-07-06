@@ -34,8 +34,20 @@ import { formatRegionName, percentClass, statusLabel } from '../../utils/format'
 interface OperationsCenterProps {
   events: OperationEvent[];
   servers: ServerNode[];
+  draft?: OperationsDraft | null;
   onTaskFinished?: () => Promise<void> | void;
   onAuditTraceOpen?: (correlationId: string) => void;
+}
+
+export interface OperationsDraft {
+  id: string;
+  title: string;
+  description: string;
+  type: OperationTaskType;
+  targetMode: OperationTaskTargetMode;
+  serverIds?: string[];
+  command?: string;
+  reason?: string;
 }
 
 interface TaskMeta {
@@ -90,6 +102,9 @@ type Copy = {
   viewTrace: string;
   choiceWindow: string;
   loadMoreTargets: string;
+  draftApplied: string;
+  draftHint: string;
+  dismissDraft: string;
   truncatedOutputs?: string;
 };
 
@@ -144,6 +159,9 @@ const copyByLanguage: Record<string, Copy> = {
     viewTrace: '查看审计链',
     choiceWindow: '已显示 {shown} / {total} 台候选服务器，继续加载不会影响已选择目标。',
     loadMoreTargets: '再加载 {count} 台',
+    draftApplied: '健康草案已生成',
+    draftHint: '草案只预填任务；点击执行编排后仍会先预检并要求确认。',
+    dismissDraft: '收起草案提示',
   },
   en: {
     running: 'Running',
@@ -190,6 +208,9 @@ const copyByLanguage: Record<string, Copy> = {
     viewTrace: 'View audit trace',
     choiceWindow: 'Showing {shown} / {total} candidate servers. Loading more keeps selected targets.',
     loadMoreTargets: 'Load {count} more',
+    draftApplied: 'Health draft generated',
+    draftHint: 'The draft only fills the task. Running it still performs preflight and confirmation first.',
+    dismissDraft: 'Dismiss draft note',
   },
   ja: {
     running: '実行中',
@@ -236,6 +257,9 @@ const copyByLanguage: Record<string, Copy> = {
     viewTrace: '監査 trace を表示',
     choiceWindow: '候補サーバー {shown} / {total} 台を表示中。追加読み込みしても選択は維持されます。',
     loadMoreTargets: '{count} 台を追加読み込み',
+    draftApplied: 'ヘルス草案を生成しました',
+    draftHint: '草案はタスクを入力するだけです。実行時は先にチェックと確認を行います。',
+    dismissDraft: '草案メモを閉じる',
   },
 };
 
@@ -297,7 +321,7 @@ const preflightCopyByLanguage: Record<string, {
   },
 };
 
-export function OperationsCenter({ events, servers, onTaskFinished, onAuditTraceOpen }: OperationsCenterProps) {
+export function OperationsCenter({ events, servers, draft, onTaskFinished, onAuditTraceOpen }: OperationsCenterProps) {
   const { language, t } = useI18n();
   const copy = copyByLanguage[language] ?? copyByLanguage.zh;
   const preflightCopy = preflightCopyByLanguage[language] ?? preflightCopyByLanguage.zh;
@@ -318,6 +342,8 @@ export function OperationsCenter({ events, servers, onTaskFinished, onAuditTrace
   const [preflight, setPreflight] = useState<OperationTaskPreflightResponse | null>(null);
   const [tasks, setTasks] = useState<OperationTaskResponse[]>([]);
   const [activeTaskId, setActiveTaskId] = useState('');
+  const [appliedDraftId, setAppliedDraftId] = useState('');
+  const [draftNotice, setDraftNotice] = useState<OperationsDraft | null>(null);
 
   const taskMeta = useMemo(() => buildTaskMeta(language), [language]);
   const activeTask = tasks.find((task) => task.id === activeTaskId) ?? tasks[0] ?? null;
@@ -366,6 +392,23 @@ export function OperationsCenter({ events, servers, onTaskFinished, onAuditTrace
   useEffect(() => {
     setPreflight(null);
   }, [activeSelectedServerIds, command, reason, targetMode, taskType]);
+
+  useEffect(() => {
+    if (!draft || draft.id === appliedDraftId) {
+      return;
+    }
+
+    setBuilderOpen(true);
+    setTaskType(draft.type);
+    setTargetMode(draft.targetMode);
+    setSelectedServerIds(draft.serverIds ?? []);
+    setCommand(draft.command ?? 'hostname && uptime');
+    setReason(draft.reason ?? '');
+    setPreflight(null);
+    setMessage('');
+    setDraftNotice(draft);
+    setAppliedDraftId(draft.id);
+  }, [appliedDraftId, draft]);
 
   async function runTask() {
     const validation = validateTask();
@@ -503,6 +546,20 @@ export function OperationsCenter({ events, servers, onTaskFinished, onAuditTrace
 
           {builderOpen && (
             <div className="ops-builder">
+              {draftNotice && (
+                <div className="ops-draft-banner" data-ops-draft-banner="true">
+                  <div>
+                    <span><Workflow size={16} /> {copy.draftApplied}</span>
+                    <strong>{draftNotice.title}</strong>
+                    <p>{draftNotice.description}</p>
+                    <small>{copy.draftHint}</small>
+                  </div>
+                  <button type="button" className="icon-button" aria-label={copy.dismissDraft} title={copy.dismissDraft} onClick={() => setDraftNotice(null)}>
+                    <XCircle size={16} />
+                  </button>
+                </div>
+              )}
+
               <div className="ops-type-grid" role="group" aria-label={t('ops.workflow')}>
                 {taskIds.map((id) => {
                   const meta = taskMeta[id];

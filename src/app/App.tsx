@@ -23,7 +23,7 @@ import { getLocale, languageOptions, useI18n } from '../i18n';
 import { AIConsole } from '../modules/ai/AIConsole';
 import { LoginPage } from './LoginPage';
 import { CustomApiLab } from '../modules/custom-api/CustomApiLab';
-import { OperationsCenter } from '../modules/operations/OperationsCenter';
+import { OperationsCenter, type OperationsDraft } from '../modules/operations/OperationsCenter';
 import { MonitoringOverview } from '../modules/overview/MonitoringOverview';
 import { SecurityPanel } from '../modules/security/SecurityPanel';
 import { ServerInventory } from '../modules/servers/ServerInventory';
@@ -82,6 +82,17 @@ const defaultFilters: ServerFilters = {
   status: 'all',
   region: 'all',
 };
+const overviewTriageCommand = [
+  "printf '== CoLiPas health triage ==\\n'",
+  'hostname',
+  'uptime',
+  "printf '\\n== Disk ==\\n'",
+  'df -h /',
+  "printf '\\n== Memory ==\\n'",
+  '(free -m || vm_stat) 2>/dev/null || true',
+  "printf '\\n== Top CPU ==\\n'",
+  "ps -eo pid,comm,%cpu,%mem --sort=-%cpu 2>/dev/null | head -8 || true",
+].join(' && ');
 const avatarMaxBytes = 2 * 1024 * 1024;
 const settingsMessageTtlMs = 2800;
 
@@ -168,6 +179,7 @@ export function App() {
   const [activeSection, setActiveSection] = useState<SectionId>(initialHashRouteRef.current.section);
   const [securityTraceFocusId, setSecurityTraceFocusId] = useState(initialHashRouteRef.current.traceId);
   const [filters, setFilters] = useState<ServerFilters>(defaultFilters);
+  const [operationDraft, setOperationDraft] = useState<OperationsDraft | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [aiCollapsed, setAiCollapsed] = useState(true);
   const [aiSeedQuestion, setAiSeedQuestion] = useState('');
@@ -541,6 +553,37 @@ export function App() {
     navigateToSection('servers');
   }
 
+  function openOverviewOperationsDraft() {
+    const connectedServers = overview.servers.filter((server) => resolveServerLifecycleStatus(server) !== 'unconnected');
+    const pressureServers = connectedServers
+      .filter((server) => Math.max(server.cpu, server.memory, server.disk) >= 70)
+      .sort((left, right) => Math.max(right.cpu, right.memory, right.disk) - Math.max(left.cpu, left.memory, left.disk))
+      .slice(0, 50);
+    const missingSshCount = overview.servers.filter((server) => !server.ssh?.connected).length;
+    const openEventCount = overview.operationEvents.filter((event) => event.status === 'open').length;
+    const draftType = pressureServers.length > 0 ? 'sshCommand' : connectedServers.length > 0 ? 'healthCheck' : 'assetSync';
+    const targetMode = pressureServers.length > 0 ? 'selected' : draftType === 'assetSync' ? 'allServers' : 'allConnected';
+    const draftVars = {
+      assets: overview.servers.length,
+      connected: connectedServers.length,
+      pressure: pressureServers.length,
+      missingSsh: missingSshCount,
+      events: openEventCount,
+    };
+
+    setOperationDraft({
+      id: `overview-health-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      title: t('overview.opsDraftTitle'),
+      description: t('overview.opsDraftDesc', draftVars),
+      type: draftType,
+      targetMode,
+      serverIds: pressureServers.map((server) => server.id),
+      command: draftType === 'sshCommand' ? overviewTriageCommand : undefined,
+      reason: t('overview.opsDraftReason', draftVars),
+    });
+    navigateToSection('operations');
+  }
+
   function openAiWithQuestion(question: string) {
     setAiSeedQuestion(question);
     setAiCollapsed(false);
@@ -824,6 +867,7 @@ export function App() {
               avgCpu={avgCpu}
               onRegionServersOpen={openServersForRegion}
               onHealthSignalOpen={openHealthSignal}
+              onOperationsDraftOpen={openOverviewOperationsDraft}
             />
           )}
 
@@ -842,6 +886,7 @@ export function App() {
             <OperationsCenter
               events={overview.operationEvents}
               servers={overview.servers}
+              draft={operationDraft}
               onTaskFinished={refreshOverview}
               onAuditTraceOpen={openSecurityTrace}
             />

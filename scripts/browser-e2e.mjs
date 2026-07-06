@@ -858,7 +858,30 @@ async function assertOverviewHealthBaseline(targetPage) {
   await assertElementWithinViewport(targetPage, '[data-health-baseline="true"]', 'desktop overview health baseline');
   await captureVisualEvidence(targetPage, 'desktop-overview-health-baseline', ['[data-health-baseline="true"]', '.monitor-kpis']);
 
-  await baseline.locator('[data-health-signal="ssh"]').click();
+  const draftButton = baseline.locator('.health-baseline-draft-button');
+  await draftButton.waitFor({ timeout: 10000 });
+  const draftButtonText = await draftButton.innerText();
+  if (!/Create ops draft/i.test(draftButtonText)) {
+    throw new Error(`Overview health baseline should expose an operations draft CTA, got ${draftButtonText}`);
+  }
+  await draftButton.click();
+  await targetPage.locator('#ops-title').waitFor({ timeout: 10000 });
+  const draftBanner = targetPage.locator('[data-ops-draft-banner="true"]');
+  await draftBanner.waitFor({ timeout: 10000 });
+  const draftBannerText = await draftBanner.innerText();
+  if (!/Health draft generated|Overview health response draft/i.test(draftBannerText)) {
+    throw new Error(`Operations draft banner is missing health draft context: ${draftBannerText}`);
+  }
+  await targetPage.locator('.ops-builder').waitFor({ timeout: 10000 });
+  if (!/#operations/.test(targetPage.url())) {
+    throw new Error(`Overview operations draft should route to operations, got ${targetPage.url()}`);
+  }
+  await captureVisualEvidence(targetPage, 'desktop-ops-health-draft', ['[data-ops-draft-banner="true"]', '.ops-builder']);
+
+  await targetPage.goto(`${baseUrl}/admin/#overview`, { waitUntil: 'networkidle', timeout: 30000 });
+  const rerenderedBaseline = targetPage.locator('[data-health-baseline="true"]');
+  await rerenderedBaseline.waitFor({ timeout: 10000 });
+  await rerenderedBaseline.locator('[data-health-signal="ssh"]').click();
   await targetPage.locator('#servers-title').waitFor({ timeout: 10000 });
   const healthScopeChip = targetPage.locator('[data-health-scope-chip="true"]');
   await healthScopeChip.waitFor({ timeout: 10000 });
