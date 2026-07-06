@@ -15,8 +15,10 @@ import {
   openServerShell,
   recordServerShellSelfTest,
   resizeServerShell,
+  runServerDiagnostic,
   streamServerShell,
   writeServerShell,
+  type ServerDiagnosticResponse,
   type ServerShellSocketCloseEvent,
   type ServerIdentityResponse,
   type ServerShellSocketMetrics,
@@ -144,6 +146,27 @@ interface TerminalBottleneckAdvisor {
   items: TerminalBottleneckItem[];
 }
 
+type SshConnectionDoctorStepId = 'asset' | 'credential' | 'backend' | 'shell' | 'terminal';
+
+interface SshConnectionDoctorStep {
+  id: SshConnectionDoctorStepId;
+  label: string;
+  value: string;
+  detail: string;
+  tone: TerminalNetworkQuality['tone'];
+}
+
+interface SshConnectionDoctorReport {
+  serverId: string;
+  serverName: string;
+  checkedAt: string;
+  tone: TerminalNetworkQuality['tone'];
+  title: string;
+  detail: string;
+  summary: string;
+  steps: SshConnectionDoctorStep[];
+}
+
 type TerminalBottleneckSnapshotReason = 'close' | 'remote-close' | 'disconnect';
 
 interface TerminalBottleneckSnapshot {
@@ -254,6 +277,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const [terminalTelemetry, setTerminalTelemetry] = useState<TerminalTelemetryState>(emptyTerminalTelemetry);
   const [terminalSelfTest, setTerminalSelfTest] = useState<TerminalSelfTestState | null>(null);
   const [terminalTransport, setTerminalTransport] = useState<'websocket' | 'compatible' | null>(null);
+  const [diagnosingServerId, setDiagnosingServerId] = useState('');
+  const [sshDoctorReport, setSshDoctorReport] = useState<SshConnectionDoctorReport | null>(null);
   const [loginProbe, setLoginProbe] = useState<LoginProbe | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [formDismissed, setFormDismissed] = useState(false);
@@ -302,6 +327,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const hiddenServerCount = Math.max(servers.length - visibleServerRows.length, 0);
   const allServersById = useMemo(() => buildServerById(allServers), [allServers]);
   const activeSshServer = useMemo(() => allServersById.get(sshPanelServerId) ?? null, [allServersById, sshPanelServerId]);
+  const sshDoctorServer = useMemo(() => (sshDoctorReport ? allServersById.get(sshDoctorReport.serverId) ?? null : null), [allServersById, sshDoctorReport]);
   const terminalNetworkLabel = terminalNetworkStats
     ? `${formatTerminalRtt(terminalNetworkStats.rttMs)} / ${formatBytesPerSecond(terminalNetworkStats.throughputBytesPerSecond)}`
     : '';
@@ -425,6 +451,42 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       }
     } catch (error) {
       showActionMessage(error instanceof Error ? error.message : 'action failed');
+    }
+  }
+
+  async function runSshConnectionDoctor(server: ServerNode) {
+    setDiagnosingServerId(server.id);
+    clearActionMessage();
+
+    try {
+      const diagnostic = server.ssh?.connected ? await runServerDiagnostic(server.id) : null;
+      const report = buildSshConnectionDoctorReport({
+        server,
+        diagnostic,
+        error: null,
+        terminalActive: terminalShellServerIdRef.current === server.id && Boolean(terminalShellIdRef.current),
+        terminalTransport: terminalShellServerIdRef.current === server.id ? terminalShellTransportRef.current : null,
+        terminalNetworkStats: terminalShellServerIdRef.current === server.id ? terminalNetworkRenderedRef.current : null,
+        terminalTelemetry: terminalShellServerIdRef.current === server.id ? terminalTelemetryRef.current : emptyTerminalTelemetry,
+        t,
+      });
+      setSshDoctorReport(report);
+      showActionMessage(t('servers.sshDoctorComplete', { name: report.serverName }));
+    } catch (error) {
+      const report = buildSshConnectionDoctorReport({
+        server,
+        diagnostic: null,
+        error,
+        terminalActive: terminalShellServerIdRef.current === server.id && Boolean(terminalShellIdRef.current),
+        terminalTransport: terminalShellServerIdRef.current === server.id ? terminalShellTransportRef.current : null,
+        terminalNetworkStats: terminalShellServerIdRef.current === server.id ? terminalNetworkRenderedRef.current : null,
+        terminalTelemetry: terminalShellServerIdRef.current === server.id ? terminalTelemetryRef.current : emptyTerminalTelemetry,
+        t,
+      });
+      setSshDoctorReport(report);
+      showActionMessage(t('servers.sshDoctorIssueFound', { name: report.serverName }), { autoDismissMs: 7000 });
+    } finally {
+      setDiagnosingServerId('');
     }
   }
 
@@ -804,6 +866,44 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
         </div>
       )}
 
+      {sshDoctorReport && (
+        <div className={`ssh-connection-doctor ${sshDoctorReport.tone}`} data-ssh-connection-doctor="true" aria-live="polite">
+          <div className="ssh-connection-doctor-header">
+            <span className="ssh-connection-doctor-icon" aria-hidden="true">
+              <ShieldCheck size={20} />
+            </span>
+            <div>
+              <small>{t('servers.sshDoctorEyebrow')}</small>
+              <h3>{sshDoctorReport.title}</h3>
+              <p>{sshDoctorReport.detail}</p>
+            </div>
+            <div className="ssh-connection-doctor-actions">
+              <button type="button" onClick={copySshDoctorSummary}>
+                <Copy size={14} />
+                {t('servers.sshDoctorCopy')}
+              </button>
+              <button type="button" disabled={!sshDoctorServer?.ssh?.connected} onClick={() => sshDoctorServer && openSshConsole(sshDoctorServer)}>
+                <Terminal size={14} />
+                {t('servers.sshDoctorOpenTerminal')}
+              </button>
+              <button type="button" className="icon-button" aria-label={t('common.cancel')} onClick={() => setSshDoctorReport(null)}>
+                <X size={15} />
+              </button>
+            </div>
+          </div>
+          <div className="ssh-connection-doctor-steps">
+            {sshDoctorReport.steps.map((step) => (
+              <article key={step.id} className={step.tone} data-ssh-connection-doctor-step={step.id}>
+                <span>{step.label}</span>
+                <strong>{step.value}</strong>
+                <small>{step.detail}</small>
+              </article>
+            ))}
+          </div>
+          <p className="ssh-connection-doctor-safe">{t('servers.sshDoctorSafeNote')}</p>
+        </div>
+      )}
+
       {servers.length === 0 ? (
         <div className="empty-state">
           <Database size={26} />
@@ -896,6 +996,10 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                       <Terminal size={15} />
                       {t('servers.ssh')}
                     </button>
+                    <button type="button" disabled={diagnosingServerId === server.id} onClick={() => runSshConnectionDoctor(server)}>
+                      <ShieldCheck size={15} />
+                      {diagnosingServerId === server.id ? t('servers.sshDoctorRunningShort') : t('servers.diagnostic')}
+                    </button>
                     <button type="button" onClick={() => startEdit(server)}>
                       <Edit3 size={15} />
                       {t('common.edit')}
@@ -912,6 +1016,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                   <ActionButton label={t('servers.reboot')} disabled={!connected} onClick={() => runAction(server, 'reboot')} icon={<RotateCcw size={15} />} />
                   <ActionButton label={t('common.edit')} onClick={() => startEdit(server)} icon={<Edit3 size={15} />} />
                   <ActionButton label={t('servers.ssh')} disabled={!canOpenTerminal} onClick={() => openSshConsole(server)} icon={<Terminal size={15} />} />
+                  <ActionButton label={diagnosingServerId === server.id ? t('servers.sshDoctorRunning') : t('servers.diagnostic')} disabled={diagnosingServerId === server.id} onClick={() => runSshConnectionDoctor(server)} icon={<ShieldCheck size={15} />} />
                   <ActionButton label={t('common.delete')} onClick={() => handleDelete(server)} icon={<Trash2 size={15} />} />
                 </div>
               </article>
@@ -2208,6 +2313,19 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     }
   }
 
+  async function copySshDoctorSummary() {
+    if (!sshDoctorReport) {
+      return;
+    }
+
+    try {
+      await writeClipboardText(sshDoctorReport.summary);
+      showActionMessage(t('servers.sshDoctorCopied'));
+    } catch {
+      showActionMessage(t('servers.terminalCopyFailed'));
+    }
+  }
+
   function clearTerminalOutput() {
     const terminal = xtermRef.current;
     if (!terminal) {
@@ -3148,6 +3266,208 @@ function formatTerminalSelfTestLabel(state: TerminalSelfTestState, language: Lan
   const network = state.networkLabel ? ` / ${state.networkLabel}` : '';
   const timeoutLabel = language === 'en' ? 'timeout' : language === 'ja' ? 'タイムアウト' : '超时';
   return state.status === 'timeout' ? `${timeoutLabel} · ${base}${split}${network}` : `${base}${split}${network}`;
+}
+
+function buildSshConnectionDoctorReport({
+  server,
+  diagnostic,
+  error,
+  terminalActive,
+  terminalTransport,
+  terminalNetworkStats,
+  terminalTelemetry,
+  t,
+}: {
+  server: ServerNode;
+  diagnostic: ServerDiagnosticResponse | null;
+  error: unknown;
+  terminalActive: boolean;
+  terminalTransport: 'websocket' | 'compatible' | null;
+  terminalNetworkStats: TerminalNetworkStats | null;
+  terminalTelemetry: TerminalTelemetryState;
+  t: (key: string, vars?: Record<string, string | number>) => string;
+}): SshConnectionDoctorReport {
+  const serverName = sanitizeSshDoctorText(server.name || t('common.server'));
+  const sshAccess = server.ssh;
+  const connected = Boolean(sshAccess?.connected);
+  const errorInfo = error ? classifySshDoctorError(error) : null;
+  const credentialTone: TerminalNetworkQuality['tone'] = !connected
+    ? 'pending'
+    : sshAccess?.verifyMode === 'simulate'
+      ? 'warn'
+      : 'good';
+  const backendTone: TerminalNetworkQuality['tone'] = diagnostic
+    ? 'good'
+    : errorInfo && (errorInfo.stage === 'backend' || errorInfo.stage === 'credential')
+      ? 'slow'
+      : 'pending';
+  const shellSignals = countSshDiagnosticSignals(diagnostic?.output ?? '');
+  const shellTone: TerminalNetworkQuality['tone'] = diagnostic
+    ? shellSignals >= 3
+      ? 'good'
+      : 'warn'
+    : errorInfo?.stage === 'shell'
+      ? 'slow'
+      : 'pending';
+  const terminalAdvisor = terminalActive
+    ? getTerminalBottleneckAdvisor(terminalTelemetry, terminalNetworkStats, terminalTransport, true, t)
+    : null;
+  const terminalValue = terminalAdvisor
+    ? getTerminalTransportLabel(terminalTransport, t)
+    : t('servers.sshDoctorTerminalNotOpen');
+  const terminalDetail = terminalAdvisor
+    ? terminalAdvisor.detail
+    : t('servers.sshDoctorTerminalNotOpenDetail');
+  const terminalTone: TerminalNetworkQuality['tone'] = terminalAdvisor?.tone ?? 'pending';
+  const credentialDetail = connected && sshAccess
+    ? t('servers.sshDoctorCredentialReadyDetail', {
+      mode: formatSshDoctorVerifyMode(sshAccess.verifyMode, t),
+      auth: sshAccess.authType === 'password' ? t('servers.passwordAuth') : t('servers.keyAuth'),
+    })
+    : t('servers.sshDoctorCredentialMissingDetail');
+
+  const steps: SshConnectionDoctorStep[] = [
+    {
+      id: 'asset',
+      label: t('servers.sshDoctorStepAsset'),
+      value: connected ? t('servers.sshDoctorAssetReady') : t('servers.sshDoctorAssetMissing'),
+      detail: connected ? t('servers.sshDoctorAssetReadyDetail') : t('servers.sshDoctorAssetMissingDetail'),
+      tone: connected ? 'good' : 'slow',
+    },
+    {
+      id: 'credential',
+      label: t('servers.sshDoctorStepCredential'),
+      value: connected && sshAccess
+        ? (sshAccess.authType === 'password' ? t('servers.passwordAuth') : t('servers.keyAuth'))
+        : t('servers.sshDoctorCredentialMissing'),
+      detail: errorInfo?.stage === 'credential' ? errorInfo.detail : credentialDetail,
+      tone: errorInfo?.stage === 'credential' ? 'slow' : credentialTone,
+    },
+    {
+      id: 'backend',
+      label: t('servers.sshDoctorStepBackend'),
+      value: diagnostic ? t('servers.sshDoctorBackendReady') : errorInfo ? t('servers.sshDoctorBackendBlocked') : t('servers.sshDoctorBackendPending'),
+      detail: errorInfo && errorInfo.stage !== 'terminal' ? errorInfo.detail : diagnostic ? t('servers.sshDoctorBackendReadyDetail') : t('servers.sshDoctorBackendPendingDetail'),
+      tone: backendTone,
+    },
+    {
+      id: 'shell',
+      label: t('servers.sshDoctorStepShell'),
+      value: diagnostic ? t('servers.sshDoctorShellSignals', { count: shellSignals }) : t('servers.sshDoctorShellPending'),
+      detail: diagnostic
+        ? shellSignals >= 3
+          ? t('servers.sshDoctorShellReadyDetail')
+          : t('servers.sshDoctorShellWeakDetail')
+        : errorInfo?.stage === 'shell'
+          ? errorInfo.detail
+          : t('servers.sshDoctorShellPendingDetail'),
+      tone: shellTone,
+    },
+    {
+      id: 'terminal',
+      label: t('servers.sshDoctorStepTerminal'),
+      value: terminalValue,
+      detail: errorInfo?.stage === 'terminal' ? errorInfo.detail : terminalDetail,
+      tone: errorInfo?.stage === 'terminal' ? 'slow' : terminalTone,
+    },
+  ];
+  const tone = getSshDoctorOverallTone(steps);
+  const title = tone === 'slow'
+    ? t('servers.sshDoctorTitleSlow', { name: serverName })
+    : tone === 'warn'
+      ? t('servers.sshDoctorTitleWarn', { name: serverName })
+      : tone === 'pending'
+        ? t('servers.sshDoctorTitlePending', { name: serverName })
+        : t('servers.sshDoctorTitleGood', { name: serverName });
+  const detail = tone === 'slow'
+    ? t('servers.sshDoctorDetailSlow')
+    : tone === 'warn'
+      ? t('servers.sshDoctorDetailWarn')
+      : tone === 'pending'
+        ? t('servers.sshDoctorDetailPending')
+        : t('servers.sshDoctorDetailGood');
+  const checkedAt = diagnostic?.checkedAt ?? new Date().toISOString();
+  const summary = sanitizeSshDoctorText([
+    title,
+    detail,
+    `${t('servers.sshDoctorCheckedAt')}: ${checkedAt}`,
+    ...steps.map((step) => `${step.label}: ${step.value} - ${step.detail}`),
+  ].join('\n'));
+
+  return {
+    serverId: server.id,
+    serverName,
+    checkedAt,
+    tone,
+    title,
+    detail,
+    summary,
+    steps: steps.map((step) => ({
+      ...step,
+      value: sanitizeSshDoctorText(step.value),
+      detail: sanitizeSshDoctorText(step.detail),
+    })),
+  };
+}
+
+function formatSshDoctorVerifyMode(
+  mode: SshVerifyMode,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+) {
+  if (mode === 'simulate') {
+    return t('servers.simulateSsh');
+  }
+  if (mode === 'real') {
+    return t('servers.realSsh');
+  }
+  return t('servers.assetOnly');
+}
+
+function countSshDiagnosticSignals(output: string) {
+  const checks = [
+    /host=/i,
+    /\b(?:linux|ubuntu|debian|centos|almalinux|rocky|windows|darwin|bsd|kernel)\b/i,
+    /\b(?:load average|up\s+\d|uptime)\b/i,
+    /\b(?:filesystem|\/dev\/|\d+%)\b/i,
+  ];
+  return checks.reduce((count, pattern) => count + (pattern.test(output) ? 1 : 0), 0);
+}
+
+function classifySshDoctorError(error: unknown): { stage: SshConnectionDoctorStepId; detail: string } {
+  const detail = sanitizeSshDoctorText(error instanceof Error ? error.message : String(error || 'SSH diagnostic failed'));
+  const lower = detail.toLowerCase();
+  if (/permission|denied|auth|password|publickey|passphrase|credential/.test(lower)) {
+    return { stage: 'credential', detail };
+  }
+  if (/websocket|socket|upgrade|stream|session/.test(lower)) {
+    return { stage: 'terminal', detail };
+  }
+  if (/shell|pty|channel|exec/.test(lower)) {
+    return { stage: 'shell', detail };
+  }
+  if (/timeout|timed out|refused|unreachable|network|host|port|dns|enotfound|ehostunreach|econnreset/.test(lower)) {
+    return { stage: 'backend', detail };
+  }
+  return { stage: 'backend', detail };
+}
+
+function getSshDoctorOverallTone(steps: SshConnectionDoctorStep[]): TerminalNetworkQuality['tone'] {
+  if (steps.some((step) => step.tone === 'slow')) {
+    return 'slow';
+  }
+  if (steps.some((step) => step.tone === 'warn')) {
+    return 'warn';
+  }
+  const blockingPending = steps.some((step) => step.tone === 'pending' && step.id !== 'terminal');
+  return blockingPending ? 'pending' : 'good';
+}
+
+function sanitizeSshDoctorText(text: string) {
+  return text
+    .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, '[redacted-host]')
+    .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, '[redacted-private-key]')
+    .replace(/\bsk-[A-Za-z0-9_-]{12,}\b/g, '[redacted-api-key]')
+    .replace(/\b(?:password|passphrase|api[_-]?key|token|secret)=\S+/gi, (match) => `${match.split('=')[0]}=[redacted]`);
 }
 
 function ActionButton({ label, icon, disabled, onClick }: { label: string; icon: ReactNode; disabled?: boolean; onClick: () => void }) {

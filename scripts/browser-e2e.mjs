@@ -787,7 +787,22 @@ async function assertSshTerminalPanel(targetPage) {
     await targetPage.reload({ waitUntil: 'networkidle' });
     await targetPage.locator('.server-workspace-row').filter({ hasText: sshServer.name }).waitFor({ timeout: 10000 });
 
-    await targetPage.locator('.server-workspace-row').filter({ hasText: sshServer.name }).getByRole('button', { name: /^SSH$/i }).click();
+    const sshServerRow = targetPage.locator('.server-workspace-row').filter({ hasText: sshServer.name });
+    await sshServerRow.getByRole('button', { name: /diagnose/i }).click();
+    await targetPage.locator('[data-ssh-connection-doctor="true"]').waitFor({ timeout: 10000 });
+    const sshDoctorText = await targetPage.locator('[data-ssh-connection-doctor="true"]').innerText();
+    if (!/SSH connection doctor|SSH link/i.test(sshDoctorText) || !/Credential/i.test(sshDoctorText) || !/Backend/i.test(sshDoctorText) || !/Shell/i.test(sshDoctorText) || !/Terminal/i.test(sshDoctorText)) {
+      throw new Error(`SSH connection doctor did not render the full diagnostic chain: ${sshDoctorText}`);
+    }
+    const sshDoctorStepCount = await targetPage.locator('[data-ssh-connection-doctor-step]').count();
+    if (sshDoctorStepCount !== 5) {
+      throw new Error(`SSH connection doctor should render five stages, got ${sshDoctorStepCount}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(sshDoctorText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(sshDoctorText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(sshDoctorText)) {
+      throw new Error('SSH connection doctor rendered raw IP or secret material');
+    }
+    await captureVisualEvidence(targetPage, 'desktop-ssh-connection-doctor', ['[data-ssh-connection-doctor="true"]']);
+    await targetPage.getByRole('button', { name: /open ssh terminal/i }).click();
     await targetPage.locator('.ssh-console').waitFor({ timeout: 10000 });
     await targetPage.locator('.ssh-console-header .icon-button').click();
     await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });
@@ -798,7 +813,7 @@ async function assertSshTerminalPanel(targetPage) {
       return !/live ssh terminal connected/i.test(messageText);
     }, undefined, { timeout: 2500 });
 
-    await targetPage.locator('.server-workspace-row').filter({ hasText: sshServer.name }).getByRole('button', { name: /^SSH$/i }).click();
+    await sshServerRow.getByRole('button', { name: /^SSH$/i }).click();
     await targetPage.locator('.ssh-console').waitFor({ timeout: 10000 });
     await targetPage.locator('.ssh-terminal-screen .xterm').waitFor({ timeout: 10000 });
     await targetPage.locator('.ssh-terminal-session-count').filter({ hasText: /sessions 1/i }).waitFor({ timeout: 10000 });
@@ -1800,10 +1815,13 @@ async function assertMobileServerOpsLayout(targetPage) {
     const actionStrip = row.querySelector('.server-mobile-action-strip');
     const primary = row.querySelector('.server-mobile-primary-action');
     const iconActions = row.querySelector('.server-row-actions');
+    const actionTexts = Array.from(actionStrip?.querySelectorAll('button') ?? []).map((button) => button.textContent?.trim() ?? '');
     return {
       opsDisplay: ops ? getComputedStyle(ops).display : '',
       statusColumns: statusStrip ? getComputedStyle(statusStrip).gridTemplateColumns : '',
       actionColumns: actionStrip ? getComputedStyle(actionStrip).gridTemplateColumns : '',
+      actionCount: actionTexts.length,
+      actionTexts,
       primaryText: primary?.textContent?.trim() ?? '',
       iconActionsDisplay: iconActions ? getComputedStyle(iconActions).display : '',
       opsRight: ops ? ops.getBoundingClientRect().right : 0,
@@ -1814,11 +1832,11 @@ async function assertMobileServerOpsLayout(targetPage) {
   if (metrics.opsDisplay !== 'grid') {
     throw new Error(`Mobile server operation strip should be visible as grid: ${JSON.stringify(metrics)}`);
   }
-  if (metrics.statusColumns.split(' ').filter(Boolean).length !== 3 || metrics.actionColumns.split(' ').filter(Boolean).length !== 3) {
-    throw new Error(`Mobile server operation strip should expose three status chips and three actions: ${JSON.stringify(metrics)}`);
+  if (metrics.statusColumns.split(' ').filter(Boolean).length !== 3 || metrics.actionCount !== 4 || metrics.actionColumns.split(' ').filter(Boolean).length > 2) {
+    throw new Error(`Mobile server operation strip should expose three status chips and four compact actions: ${JSON.stringify(metrics)}`);
   }
-  if (!/ssh/i.test(metrics.primaryText) || metrics.iconActionsDisplay !== 'none') {
-    throw new Error(`Mobile server primary SSH action should replace crowded icon actions: ${JSON.stringify(metrics)}`);
+  if (!/ssh/i.test(metrics.primaryText) || !metrics.actionTexts.some((text) => /diagnose/i.test(text)) || metrics.iconActionsDisplay !== 'none') {
+    throw new Error(`Mobile server primary SSH and Diagnose actions should replace crowded icon actions: ${JSON.stringify(metrics)}`);
   }
   if (metrics.opsRight > metrics.viewportWidth + 1 || metrics.rowRight > metrics.viewportWidth + 1) {
     throw new Error(`Mobile server operation strip overflowed viewport: ${JSON.stringify(metrics)}`);

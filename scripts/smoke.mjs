@@ -35,6 +35,7 @@ assertSessionCookieSecurityGuards();
 assertServerIdentityDetectionGuards();
 assertServerStatusLifecycleGuards();
 assertSshTerminalRealtimeGuards();
+assertSshConnectionDoctorGuards();
 assertProductionSshProbeGuards();
 assertSshKeyAuthenticationGuards();
 assertMobileTopbarKeepsCoreActions();
@@ -5517,6 +5518,71 @@ function assertSshTerminalRealtimeGuards() {
   }
 
   console.log('ok SSH terminal uses live PTY shell streaming and keeps input responsive');
+}
+
+function assertSshConnectionDoctorGuards() {
+  const inventorySource = fs.readFileSync(new URL('../src/modules/servers/ServerInventory.tsx', import.meta.url), 'utf8');
+  const i18nSource = fs.readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
+  const globalCssSource = fs.readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
+
+  const requiredInventoryFragments = [
+    'runServerDiagnostic(server.id)',
+    'SshConnectionDoctorReport',
+    'function runSshConnectionDoctor(server: ServerNode)',
+    'function buildSshConnectionDoctorReport(',
+    'function sanitizeSshDoctorText(text: string)',
+    'className={`ssh-connection-doctor ${sshDoctorReport.tone}`}',
+    'data-ssh-connection-doctor="true"',
+    'data-ssh-connection-doctor-step={step.id}',
+    'copySshDoctorSummary',
+    "openSshConsole(sshDoctorServer)",
+    "replace(/\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b/g, '[redacted-host]')",
+    "replace(/\\bsk-[A-Za-z0-9_-]{12,}\\b/g, '[redacted-api-key]')",
+    "sshAccess.authType === 'password' ? t('servers.passwordAuth') : t('servers.keyAuth')",
+    "getTerminalBottleneckAdvisor(terminalTelemetry, terminalNetworkStats, terminalTransport, true, t)",
+  ];
+  const missingInventory = requiredInventoryFragments.filter((fragment) => !inventorySource.includes(fragment));
+  if (missingInventory.length) {
+    throw new Error(`SSH connection doctor frontend guard is incomplete: ${missingInventory.join(', ')}`);
+  }
+
+  const requiredI18nKeys = [
+    'servers.sshDoctorEyebrow',
+    'servers.sshDoctorRunning',
+    'servers.sshDoctorComplete',
+    'servers.sshDoctorIssueFound',
+    'servers.sshDoctorCopy',
+    'servers.sshDoctorOpenTerminal',
+    'servers.sshDoctorSafeNote',
+    'servers.sshDoctorStepAsset',
+    'servers.sshDoctorStepCredential',
+    'servers.sshDoctorStepBackend',
+    'servers.sshDoctorStepShell',
+    'servers.sshDoctorStepTerminal',
+    'servers.sshDoctorTerminalNotOpenDetail',
+  ];
+  const missingI18n = requiredI18nKeys.filter((key) => (i18nSource.match(new RegExp(key.replaceAll('.', '\\.'), 'g')) ?? []).length < 3);
+  if (missingI18n.length) {
+    throw new Error(`SSH connection doctor i18n coverage is incomplete: ${missingI18n.join(', ')}`);
+  }
+
+  const requiredCssFragments = [
+    '.ssh-connection-doctor',
+    '.ssh-connection-doctor-header',
+    '.ssh-connection-doctor-actions',
+    '.ssh-connection-doctor-steps',
+    '.ssh-connection-doctor-steps article.good',
+    '.ssh-connection-doctor-steps article.warn',
+    '.ssh-connection-doctor-steps article.slow',
+    '.ssh-connection-doctor-steps article.pending',
+    '-webkit-line-clamp: 3',
+  ];
+  const missingCss = requiredCssFragments.filter((fragment) => !globalCssSource.includes(fragment));
+  if (missingCss.length) {
+    throw new Error(`SSH connection doctor CSS guard is incomplete: ${missingCss.join(', ')}`);
+  }
+
+  console.log('ok SSH connection doctor diagnoses sanitized SSH link stages');
 }
 
 function assertProductionSshProbeGuards() {
