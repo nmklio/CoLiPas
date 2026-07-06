@@ -22,8 +22,11 @@ Set-Location $RepoRoot
 $script:PublishedCommitSha = ""
 $script:TargetUpdateResults = @()
 $script:SuccessfulDeployTargets = @()
+$script:TargetHealthResults = @()
 $script:DefaultTargetUpdateAttempts = 2
 $script:DefaultTargetUpdateRetryDelaySeconds = 15
+$script:DefaultHealthCommitValidationAttempts = 6
+$script:DefaultHealthCommitValidationRetryDelaySeconds = 5
 
 function Run-Step {
   param(
@@ -87,6 +90,115 @@ function Invoke-ProductionBrowserValidation {
       $global:LASTEXITCODE = 0
     }
   }
+}
+
+function Join-UrlPath {
+  param(
+    [string]$BaseUrl,
+    [string]$Path
+  )
+
+  if ([string]::IsNullOrWhiteSpace($BaseUrl)) {
+    return ""
+  }
+
+  return "$($BaseUrl.TrimEnd('/'))/$($Path.TrimStart('/'))"
+}
+
+function Get-HealthGitCommit {
+  param([object]$Health)
+
+  if ($null -eq $Health -or $null -eq $Health.PSObject.Properties["release"]) {
+    return ""
+  }
+
+  $release = $Health.release
+  if ($null -eq $release -or $null -eq $release.PSObject.Properties["gitCommit"]) {
+    return ""
+  }
+
+  return [string]$release.gitCommit
+}
+
+function Test-HealthCommitMatches {
+  param(
+    [object]$Health,
+    [string]$ExpectedCommit
+  )
+
+  $actualCommit = Get-HealthGitCommit $Health
+  if ([string]::IsNullOrWhiteSpace($actualCommit) -or [string]::IsNullOrWhiteSpace($ExpectedCommit)) {
+    return $false
+  }
+  if ($actualCommit -notmatch '^[0-9a-fA-F]{7,40}$' -or $ExpectedCommit -notmatch '^[0-9a-fA-F]{7,40}$') {
+    return $false
+  }
+
+  return $ExpectedCommit.StartsWith($actualCommit, [StringComparison]::OrdinalIgnoreCase) -or $actualCommit.StartsWith($ExpectedCommit, [StringComparison]::OrdinalIgnoreCase)
+}
+
+function Invoke-TargetHealthCommitValidation {
+  param(
+    [object]$Target,
+    [string]$ExpectedCommit,
+    [int]$MaxAttempts = $script:DefaultHealthCommitValidationAttempts,
+    [int]$RetryDelaySeconds = $script:DefaultHealthCommitValidationRetryDelaySeconds
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Target.publicBaseUrl)) {
+    Write-Host "Skipping health commit validation for target $($Target.name): no publicBaseUrl."
+    return
+  }
+
+  $healthUrl = Join-UrlPath $Target.publicBaseUrl "/api/health"
+  $lastError = ""
+  for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+    try {
+      $health = Invoke-RestMethod -Uri $healthUrl -Method Get -TimeoutSec 20 -Headers @{
+        "Cache-Control" = "no-cache"
+        "Pragma" = "no-cache"
+      }
+      if ($health.status -ne "ok") {
+        throw "Health endpoint status was '$($health.status)' instead of 'ok'."
+      }
+
+      $actualCommit = Get-HealthGitCommit $health
+      if (-not (Test-HealthCommitMatches -Health $health -ExpectedCommit $ExpectedCommit)) {
+        throw "Health endpoint commit '$actualCommit' does not match published commit '$($ExpectedCommit.Substring(0, [Math]::Min(12, $ExpectedCommit.Length)))'."
+      }
+
+      $script:TargetHealthResults += [pscustomobject]@{
+        name = $Target.name
+        ok = $true
+        publicBaseUrl = $Target.publicBaseUrl
+        gitCommit = $actualCommit
+        attempts = $attempt
+        error = ""
+      }
+      Write-Host "Target $($Target.name) health commit verified: $actualCommit."
+      return
+    } catch {
+      $lastError = [string]$_
+      $global:LASTEXITCODE = 0
+      if ($attempt -lt $MaxAttempts) {
+        Write-Warning "Health commit validation attempt $attempt/$MaxAttempts failed for target $($Target.name): $lastError"
+        if ($RetryDelaySeconds -gt 0) {
+          Start-Sleep -Seconds $RetryDelaySeconds
+        }
+        continue
+      }
+    }
+  }
+
+  $script:TargetHealthResults += [pscustomobject]@{
+    name = $Target.name
+    ok = $false
+    publicBaseUrl = $Target.publicBaseUrl
+    gitCommit = ""
+    attempts = $MaxAttempts
+    error = $lastError
+  }
+  throw "Health commit validation failed for target $($Target.name) after $MaxAttempts attempts: $lastError"
 }
 
 function Resolve-LocalPath {
@@ -970,6 +1082,49 @@ esac
   }
 }
 
+function Test-TargetHealthCommitValidation {
+  $expectedCommit = "abcdef1234567890abcdef1234567890abcdef12"
+  $matchingHealth = [pscustomobject]@{
+    status = "ok"
+    release = [pscustomobject]@{
+      gitCommit = "abcdef123456"
+    }
+  }
+  $fullHealth = [pscustomobject]@{
+    status = "ok"
+    release = [pscustomobject]@{
+      gitCommit = $expectedCommit
+    }
+  }
+  $staleHealth = [pscustomobject]@{
+    status = "ok"
+    release = [pscustomobject]@{
+      gitCommit = "111111111111"
+    }
+  }
+  $missingHealth = [pscustomobject]@{
+    status = "ok"
+  }
+
+  if ((Join-UrlPath "https://example.test/" "/api/health") -ne "https://example.test/api/health") {
+    throw "Health validation URL join did not normalize duplicate slashes."
+  }
+  if (-not (Test-HealthCommitMatches -Health $matchingHealth -ExpectedCommit $expectedCommit)) {
+    throw "Health commit validation did not accept a target commit prefix."
+  }
+  if (-not (Test-HealthCommitMatches -Health $fullHealth -ExpectedCommit $expectedCommit)) {
+    throw "Health commit validation did not accept an exact target commit."
+  }
+  if (Test-HealthCommitMatches -Health $staleHealth -ExpectedCommit $expectedCommit) {
+    throw "Health commit validation did not reject a stale target commit."
+  }
+  if (Test-HealthCommitMatches -Health $missingHealth -ExpectedCommit $expectedCommit) {
+    throw "Health commit validation did not reject missing release evidence."
+  }
+
+  Write-Host "ok release deploy validates production health commits and detects target drift"
+}
+
 
 function Push-GitHub {
   git push origin $Branch
@@ -1156,6 +1311,7 @@ if ($SelfTest) {
   Test-GitHubApiJsonFallback
   Test-GitHubApiCommitObjectImport
   Test-TargetUpdateFailureIsolation
+  Test-TargetHealthCommitValidation
   exit 0
 }
 
@@ -1200,6 +1356,20 @@ Run-Step "Production target browser validation" {
 
     Write-Host "Validating $($target.name) at $($target.publicBaseUrl) in $($target.publicMode) mode."
     Invoke-ProductionBrowserValidation -Target $target
+  }
+}
+
+Run-Step "Production target health commit validation" {
+  $expectedCommit = $script:PublishedCommitSha
+  if ([string]::IsNullOrWhiteSpace($expectedCommit)) {
+    $expectedCommit = (git rev-parse "HEAD").Trim()
+  }
+  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($expectedCommit)) {
+    throw "Unable to read expected deployment commit for production health validation."
+  }
+
+  foreach ($target in $script:SuccessfulDeployTargets) {
+    Invoke-TargetHealthCommitValidation -Target $target -ExpectedCommit $expectedCommit
   }
 }
 

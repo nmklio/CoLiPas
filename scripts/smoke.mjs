@@ -3197,8 +3197,11 @@ function assertAccountUiGuards() {
     "PUBLIC_PAGES_MODE: 'admin'",
     "['scripts/public-pages-check.mjs']",
     'Production target browser validation',
+    'Production target health commit validation',
     '$env:PUBLIC_PAGES_BASE_URL = $Target.publicBaseUrl',
     'Invoke-ProductionBrowserValidation',
+    'Invoke-TargetHealthCommitValidation',
+    'Test-HealthCommitMatches',
     '[int]$MaxAttempts = 3',
     'Start-Sleep -Seconds $RetryDelaySeconds',
     'Invoke-TargetUpdateWithRetry',
@@ -4536,11 +4539,12 @@ async function assertReleaseDeployTargetPlanGuards() {
     || !selfTest.stdout.includes('ok release deploy GitHub API JSON fallback uses BOM-free temp-file input')
     || !selfTest.stdout.includes('ok release deploy imports GitHub API commit objects when fetch is unavailable')
     || !selfTest.stdout.includes('ok release deploy retries transient target updates, preserves healthy targets, and reports partial failures')
+    || !selfTest.stdout.includes('ok release deploy validates production health commits and detects target drift')
   ) {
     throw new Error(`Release deploy GitHub API fallback self-test failed: ${selfTest.stderr || selfTest.stdout}`);
   }
 
-  console.log('ok release deploy supports sanitized multi-target publish plans, API fallback, retrying target updates, and partial-failure isolation self-tests');
+  console.log('ok release deploy supports sanitized multi-target publish plans, API fallback, retrying target updates, health commit validation, and partial-failure isolation self-tests');
 }
 
 function assertOverviewMapInteractionGuards() {
