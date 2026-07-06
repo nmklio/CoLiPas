@@ -162,11 +162,19 @@ interface SshPerformanceSummary {
 interface SshLagReportSnapshot {
   id: string;
   createdAt: string;
+  tone?: SshPerformanceSummary['tone'];
   status: string;
   headline: string;
   context: string[];
   findings: string[];
   text: string;
+}
+
+interface SshLagReportComparison {
+  tone: 'ok' | 'warn' | 'fail';
+  title: string;
+  detail: string;
+  delta: string;
 }
 
 const sshLagReportHistoryStorageKey = 'colipas.sshLagReportHistory.v1';
@@ -253,6 +261,10 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
   const sshPerformance = useMemo(
     () => buildSshPerformanceSummary(diagnosticBundle, sshPerformanceCopy, locale),
     [diagnosticBundle, locale, sshPerformanceCopy],
+  );
+  const sshLagReportComparison = useMemo(
+    () => buildSshLagReportComparison(sshPerformance, sshLagReportHistory[0] ?? null, sshPerformanceCopy),
+    [sshLagReportHistory, sshPerformance, sshPerformanceCopy],
   );
   const expandedSshMetric = useMemo(
     () => sshPerformance.metrics.find((metric) => metric.id === expandedSshMetricId) ?? sshPerformance.metrics[0] ?? null,
@@ -821,16 +833,24 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
             </button>
           </div>
           {sshLagReportHistory.length > 0 ? (
-            <div className="security-ssh-lag-history-list">
-              {sshLagReportHistory.slice(0, sshLagReportHistoryVisibleLimit).map((snapshot) => (
-                <article key={snapshot.id}>
-                  <span>{new Date(snapshot.createdAt).toLocaleString(locale)}</span>
-                  <strong>{snapshot.status}</strong>
-                  <p>{snapshot.headline}</p>
-                  <small>{snapshot.findings.slice(0, 2).join(' · ')}</small>
-                </article>
-              ))}
-            </div>
+            <>
+              <div className={`security-ssh-lag-history-compare ${sshLagReportComparison.tone}`} data-ssh-lag-history-compare="true">
+                <span>{sshPerformanceCopy.historyCompareTitle}</span>
+                <strong>{sshLagReportComparison.title}</strong>
+                <p>{sshLagReportComparison.detail}</p>
+                <small>{sshLagReportComparison.delta}</small>
+              </div>
+              <div className="security-ssh-lag-history-list">
+                {sshLagReportHistory.slice(0, sshLagReportHistoryVisibleLimit).map((snapshot) => (
+                  <article key={snapshot.id}>
+                    <span>{new Date(snapshot.createdAt).toLocaleString(locale)}</span>
+                    <strong>{snapshot.status}</strong>
+                    <p>{snapshot.headline}</p>
+                    <small>{snapshot.findings.slice(0, 2).join(' · ')}</small>
+                  </article>
+                ))}
+              </div>
+            </>
           ) : (
             <p className="security-ssh-lag-history-empty">{sshPerformanceCopy.historyEmpty}</p>
           )}
@@ -1913,6 +1933,7 @@ function createSshLagReportSnapshot(summary: SshPerformanceSummary): SshLagRepor
   return {
     id: `${createdAt}-${Math.random().toString(36).slice(2, 8)}`,
     createdAt,
+    tone: summary.tone,
     status: summary.status,
     headline: summary.reportHeadline,
     context: summary.reportContext,
@@ -1955,6 +1976,74 @@ function saveSshLagReportHistory(history: SshLagReportSnapshot[]) {
   }
 }
 
+function buildSshLagReportComparison(
+  current: SshPerformanceSummary,
+  baseline: SshLagReportSnapshot | null,
+  copy: SshPerformanceCopy,
+): SshLagReportComparison {
+  if (!baseline) {
+    return {
+      tone: 'warn',
+      title: copy.historyCompareEmptyTitle,
+      detail: copy.historyCompareEmptyDetail,
+      delta: copy.historyCompareEmptyDelta,
+    };
+  }
+
+  const baselineTone = baseline.tone ?? inferSshSnapshotTone(baseline.status);
+  if (!baselineTone) {
+    return {
+      tone: 'warn',
+      title: copy.historyCompareUnknown,
+      detail: copy.historyCompareDetail(current.status, baseline.status),
+      delta: copy.historyCompareUnknownDelta,
+    };
+  }
+
+  const toneDelta = getSshToneRank(current.tone) - getSshToneRank(baselineTone);
+  const findingDelta = current.reportFindings.length - baseline.findings.length;
+  if (toneDelta < 0) {
+    return {
+      tone: 'ok',
+      title: copy.historyCompareBetter,
+      detail: copy.historyCompareDetail(current.status, baseline.status),
+      delta: copy.historyCompareDelta(findingDelta),
+    };
+  }
+  if (toneDelta > 0) {
+    return {
+      tone: 'fail',
+      title: copy.historyCompareWorse,
+      detail: copy.historyCompareDetail(current.status, baseline.status),
+      delta: copy.historyCompareDelta(findingDelta),
+    };
+  }
+  return {
+    tone: current.tone === 'fail' ? 'fail' : current.tone === 'warn' ? 'warn' : 'ok',
+    title: copy.historyCompareSame,
+    detail: copy.historyCompareDetail(current.status, baseline.status),
+    delta: copy.historyCompareDelta(findingDelta),
+  };
+}
+
+function getSshToneRank(tone: SshPerformanceSummary['tone']) {
+  return tone === 'fail' ? 2 : tone === 'warn' ? 1 : 0;
+}
+
+function inferSshSnapshotTone(status: string): SshPerformanceSummary['tone'] | null {
+  const normalized = status.toLowerCase();
+  if (/error|fail|异常|エラー|異常/.test(normalized)) {
+    return 'fail';
+  }
+  if (/watch|warn|观察|注意|監視/.test(normalized)) {
+    return 'warn';
+  }
+  if (/healthy|ok|流畅|正常|健全/.test(normalized)) {
+    return 'ok';
+  }
+  return null;
+}
+
 function isSshLagReportSnapshot(value: unknown): value is SshLagReportSnapshot {
   if (!value || typeof value !== 'object') {
     return false;
@@ -1962,6 +2051,7 @@ function isSshLagReportSnapshot(value: unknown): value is SshLagReportSnapshot {
   const candidate = value as Partial<SshLagReportSnapshot>;
   return typeof candidate.id === 'string'
     && typeof candidate.createdAt === 'string'
+    && (candidate.tone === undefined || candidate.tone === 'ok' || candidate.tone === 'warn' || candidate.tone === 'fail')
     && typeof candidate.status === 'string'
     && typeof candidate.headline === 'string'
     && Array.isArray(candidate.context)
@@ -2292,6 +2382,17 @@ interface SshPerformanceCopy {
   historyEmpty: string;
   saveSnapshot: string;
   historySaved: string;
+  historyCompareTitle: string;
+  historyCompareEmptyTitle: string;
+  historyCompareEmptyDetail: string;
+  historyCompareEmptyDelta: string;
+  historyCompareBetter: string;
+  historyCompareSame: string;
+  historyCompareWorse: string;
+  historyCompareUnknown: string;
+  historyCompareUnknownDelta: string;
+  historyCompareDetail: (current: string, baseline: string) => string;
+  historyCompareDelta: (findingDelta: number) => string;
   copySummary: string;
   copyCopied: string;
   summaryStatus: string;
@@ -2359,6 +2460,17 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     historyEmpty: '暂无历史快照，保存一次当前报告后即可对比。',
     saveSnapshot: '保存快照',
     historySaved: 'SSH 诊断快照已保存在当前浏览器',
+    historyCompareTitle: '与最近快照对比',
+    historyCompareEmptyTitle: '等待基线',
+    historyCompareEmptyDetail: '保存一次当前脱敏报告后，这里会显示当前 SSH 体验相对上一份快照的变化。',
+    historyCompareEmptyDelta: '趋势只保存在当前浏览器，不上传服务器。',
+    historyCompareBetter: '体验变好',
+    historyCompareSame: '体验持平',
+    historyCompareWorse: '体验变差',
+    historyCompareUnknown: '基线待补充',
+    historyCompareUnknownDelta: '旧快照缺少趋势等级，重新保存一次后即可精确比较。',
+    historyCompareDetail: (current, baseline) => `当前 ${current} / 基线 ${baseline}`,
+    historyCompareDelta: (findingDelta) => findingDelta === 0 ? '关键证据数量持平' : findingDelta > 0 ? `关键证据增加 ${findingDelta} 条` : `关键证据减少 ${Math.abs(findingDelta)} 条`,
     copySummary: '\u590d\u5236\u6458\u8981',
     copyCopied: 'SSH \u6027\u80fd\u6458\u8981\u5df2\u590d\u5236',
     summaryStatus: '\u72b6\u6001',
@@ -2424,6 +2536,17 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     historyEmpty: 'No snapshots yet. Save the current report once to start comparing.',
     saveSnapshot: 'Save snapshot',
     historySaved: 'SSH diagnosis snapshot saved in this browser',
+    historyCompareTitle: 'Trend vs latest snapshot',
+    historyCompareEmptyTitle: 'Waiting for baseline',
+    historyCompareEmptyDetail: 'Save the current sanitized report once to compare the current SSH experience against the latest snapshot.',
+    historyCompareEmptyDelta: 'The trend stays in this browser and is never uploaded.',
+    historyCompareBetter: 'Experience improved',
+    historyCompareSame: 'Experience unchanged',
+    historyCompareWorse: 'Experience degraded',
+    historyCompareUnknown: 'Baseline needs refresh',
+    historyCompareUnknownDelta: 'The older snapshot lacks a trend score. Save one more snapshot for exact comparison.',
+    historyCompareDetail: (current, baseline) => `Current ${current} / baseline ${baseline}`,
+    historyCompareDelta: (findingDelta) => findingDelta === 0 ? 'Key evidence count unchanged' : findingDelta > 0 ? `Key evidence increased by ${findingDelta}` : `Key evidence decreased by ${Math.abs(findingDelta)}`,
     copySummary: 'Copy summary',
     copyCopied: 'SSH performance summary copied',
     summaryStatus: 'Status',
@@ -2489,6 +2612,17 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     historyEmpty: 'スナップショットはまだありません。現在のレポートを保存すると比較できます。',
     saveSnapshot: 'スナップショット保存',
     historySaved: 'SSH 診断スナップショットをこのブラウザに保存しました',
+    historyCompareTitle: '最新スナップショットとの比較',
+    historyCompareEmptyTitle: '基準待ち',
+    historyCompareEmptyDetail: '現在の匿名化レポートを一度保存すると、最新スナップショットとの差分を表示します。',
+    historyCompareEmptyDelta: '比較結果はこのブラウザだけに保存され、サーバーへ送信されません。',
+    historyCompareBetter: '体験が改善',
+    historyCompareSame: '体験は同等',
+    historyCompareWorse: '体験が悪化',
+    historyCompareUnknown: '基準の更新が必要',
+    historyCompareUnknownDelta: '古いスナップショットにトレンド評価がありません。もう一度保存すると比較できます。',
+    historyCompareDetail: (current, baseline) => `現在 ${current} / 基準 ${baseline}`,
+    historyCompareDelta: (findingDelta) => findingDelta === 0 ? '主要証跡数は同じ' : findingDelta > 0 ? `主要証跡が ${findingDelta} 件増加` : `主要証跡が ${Math.abs(findingDelta)} 件減少`,
     copySummary: '\u30b5\u30de\u30ea\u30fc\u3092\u30b3\u30d4\u30fc',
     copyCopied: 'SSH \u30d1\u30d5\u30a9\u30fc\u30de\u30f3\u30b9\u30b5\u30de\u30ea\u30fc\u3092\u30b3\u30d4\u30fc\u3057\u307e\u3057\u305f',
     summaryStatus: '\u72b6\u614b',

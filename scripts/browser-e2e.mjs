@@ -200,11 +200,15 @@ async function assertReleaseEvidenceBrief(targetPage) {
   }
   await targetPage.getByRole('button', { name: /save snapshot/i }).click();
   sshLagHistoryText = await targetPage.locator('[data-ssh-lag-history="true"]').innerText();
-  if (!/Current SSH experience/i.test(sshLagHistoryText) || !/Watch closely|Healthy path|Errors found/i.test(sshLagHistoryText)) {
+  if (!/Current SSH experience/i.test(sshLagHistoryText) || !/Trend vs latest snapshot/i.test(sshLagHistoryText) || !/Watch closely|Healthy path|Errors found/i.test(sshLagHistoryText)) {
     throw new Error(`SSH lag diagnosis history did not save the current snapshot: ${sshLagHistoryText}`);
   }
+  const sshLagCompareText = await targetPage.locator('[data-ssh-lag-history-compare="true"]').innerText();
+  if (!/Experience unchanged|Experience improved|Experience degraded/i.test(sshLagCompareText) || !/Current .* baseline/i.test(sshLagCompareText)) {
+    throw new Error(`SSH lag diagnosis history did not render a trend comparison: ${sshLagCompareText}`);
+  }
   const storedSshLagHistory = await targetPage.evaluate(() => window.localStorage.getItem('colipas.sshLagReportHistory.v1') ?? '');
-  if (!/SSH lag diagnosis report/i.test(storedSshLagHistory) || /\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(storedSshLagHistory) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(storedSshLagHistory)) {
+  if (!/SSH lag diagnosis report/i.test(storedSshLagHistory) || !/"tone":/i.test(storedSshLagHistory) || /\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(storedSshLagHistory) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(storedSshLagHistory)) {
     throw new Error(`SSH lag diagnosis history storage is missing or unsafe: ${storedSshLagHistory}`);
   }
   await targetPage.getByRole('button', { name: /copy summary|复制摘要|サマリーをコピー/i }).click();
