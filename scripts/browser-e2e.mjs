@@ -161,8 +161,12 @@ async function assertReleaseEvidenceBrief(targetPage) {
   }
   await targetPage.locator('[data-ssh-lag-report="true"]').waitFor({ timeout: 5000 });
   const sshLagReportText = await targetPage.locator('[data-ssh-lag-report="true"]').innerText();
-  if (!/SSH lag diagnosis report/i.test(sshLagReportText) || !/input path/i.test(sshLagReportText) || !/output path/i.test(sshLagReportText) || !/latency call/i.test(sshLagReportText)) {
+  if (!/SSH lag diagnosis report/i.test(sshLagReportText) || !/generated/i.test(sshLagReportText) || !/sanitized/i.test(sshLagReportText) || !/input path/i.test(sshLagReportText) || !/output path/i.test(sshLagReportText) || !/latency call/i.test(sshLagReportText)) {
     throw new Error(`SSH lag diagnosis report did not render key findings: ${sshLagReportText}`);
+  }
+  const sshLagContextCount = await targetPage.locator('.security-ssh-lag-report-context small').count();
+  if (sshLagContextCount !== 3) {
+    throw new Error(`SSH lag diagnosis report should expose three context badges, got ${sshLagContextCount}`);
   }
   await targetPage.evaluate(() => {
     window.__colipasCopiedSshPerformanceText = '';
@@ -182,7 +186,7 @@ async function assertReleaseEvidenceBrief(targetPage) {
   });
   await targetPage.getByRole('button', { name: /copy diagnosis report/i }).click();
   const copiedSshLagReportText = await targetPage.evaluate(() => window.__colipasCopiedSshLagReportText ?? '');
-  if (!/SSH lag diagnosis report/i.test(copiedSshLagReportText) || !/Key evidence/i.test(copiedSshLagReportText) || !/Input path/i.test(copiedSshLagReportText) || !/sanitized aggregate metrics/i.test(copiedSshLagReportText)) {
+  if (!/SSH lag diagnosis report/i.test(copiedSshLagReportText) || !/Report context/i.test(copiedSshLagReportText) || !/Generated/i.test(copiedSshLagReportText) || !/Sanitized/i.test(copiedSshLagReportText) || !/Key evidence/i.test(copiedSshLagReportText) || !/Input path/i.test(copiedSshLagReportText) || !/sanitized aggregate metrics/i.test(copiedSshLagReportText)) {
     throw new Error(`SSH lag diagnosis copy output is incomplete: ${copiedSshLagReportText}`);
   }
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshLagReportText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshLagReportText)) {

@@ -7393,6 +7393,36 @@ pre {
   line-height: 1.45;
 }
 
+.security-ssh-lag-report-context {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.security-ssh-lag-report-context small {
+  min-height: 24px;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 999px;
+  padding: 5px 8px;
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.72);
+  color: #0f766e;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.security-ssh-lag-report.warn .security-ssh-lag-report-context small {
+  border-color: rgba(245, 158, 11, 0.22);
+  color: #b65f00;
+}
+
+.security-ssh-lag-report.fail .security-ssh-lag-report-context small {
+  border-color: rgba(239, 68, 68, 0.22);
+  color: var(--red);
+}
+
 .security-ssh-lag-report ul {
   margin: 0;
   padding-left: 18px;
