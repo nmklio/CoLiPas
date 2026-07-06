@@ -2479,7 +2479,7 @@ main {
     #ffffff;
   box-shadow: var(--shadow-soft);
   display: grid;
-  grid-template-columns: 116px minmax(0, 1fr) minmax(220px, 0.34fr);
+  grid-template-columns: 116px minmax(150px, 0.34fr) minmax(0, 1fr) minmax(220px, 0.34fr);
   gap: 14px;
   align-items: stretch;
 }
@@ -2511,6 +2511,7 @@ main {
 }
 
 .health-baseline-score span,
+.health-baseline-trend span,
 .health-baseline-actions span,
 .health-baseline-signal span {
   color: var(--muted);
@@ -2535,6 +2536,70 @@ main {
     linear-gradient(90deg, #14b8a6, #22c55e) 0 0 / var(--score) 100% no-repeat,
     #e6eff1;
   box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.12);
+}
+
+.health-baseline-trend {
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 9px;
+  padding: 11px;
+  background:
+    radial-gradient(circle at 18% 20%, rgba(20, 184, 166, 0.16), transparent 34%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.84), rgba(239, 253, 250, 0.72));
+  display: grid;
+  gap: 6px;
+  align-content: center;
+  overflow: hidden;
+}
+
+.health-baseline-trend strong {
+  color: #143c3a;
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.health-baseline-trend svg {
+  width: 100%;
+  height: 44px;
+  overflow: visible;
+}
+
+.health-baseline-trend polygon {
+  fill: rgba(20, 184, 166, 0.12);
+}
+
+.health-baseline-trend polyline {
+  fill: none;
+  stroke: #0f766e;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 5px 7px rgba(15, 118, 110, 0.2));
+}
+
+.health-baseline-trend small {
+  color: #5c747b;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.health-baseline-trend.up polyline {
+  stroke: #16a34a;
+}
+
+.health-baseline-trend.down polyline {
+  stroke: #dc2626;
+}
+
+.health-baseline-trend.down polygon {
+  fill: rgba(248, 113, 113, 0.13);
+}
+
+.health-baseline-trend.flat polyline {
+  stroke: #2563eb;
+}
+
+.health-baseline-trend.new polyline {
+  stroke-dasharray: 6 5;
 }
 
 .health-baseline-main {

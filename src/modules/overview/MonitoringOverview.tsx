@@ -71,6 +71,24 @@ interface HealthBaselineSummary {
   actions: string[];
 }
 
+type HealthTrendDirection = 'up' | 'down' | 'flat' | 'new';
+
+interface HealthTrendPoint {
+  score: number;
+  tone: HealthBaselineTone;
+  timestamp: number;
+}
+
+interface HealthBaselineTrend {
+  points: HealthTrendPoint[];
+  direction: HealthTrendDirection;
+  delta: number;
+  label: string;
+  detail: string;
+  linePoints: string;
+  fillPoints: string;
+}
+
 interface MapCountryShape {
   id: string;
   path: string;
@@ -81,6 +99,9 @@ interface MapCountryShape {
 const MAP_WIDTH = 1000;
 const MAP_HEIGHT = 520;
 const tooltipServerNameLimit = 6;
+const healthTrendStorageKey = 'colipas.overview.healthTrend.v1';
+const healthTrendLimit = 12;
+const healthTrendRefreshMs = 15 * 60 * 1000;
 
 const countries = feature(
   countriesAtlas as never,
@@ -215,6 +236,7 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, onReg
   const activeCountryIds = useMemo(() => new Set(mapRegions.flatMap((region) => region.countryIds)), [mapRegions]);
   const regionsByCountryId = useMemo(() => buildCountryRegionMap(mapRegions), [mapRegions]);
   const healthBaseline = useMemo(() => buildHealthBaselineSummary(servers, events, t), [events, servers, t]);
+  const healthTrend = useHealthBaselineTrend(healthBaseline, t);
   const selectedRegion = visibleRegions.find((region) => region.region === selectedRegionName) ?? visibleRegions[0];
   const visibleCountryPopup = hoveredCountry ?? pinnedCountry;
   const visibleTooltipAnchor = visibleCountryPopup ? getTooltipViewportAnchor(visibleCountryPopup) : null;
@@ -305,6 +327,15 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, onReg
           <span>{t('overview.healthBaselineScoreLabel')}</span>
           <strong>{healthBaseline.score}</strong>
           <i style={{ '--score': `${healthBaseline.score}%` } as CSSProperties} />
+        </div>
+        <div className={`health-baseline-trend ${healthTrend.direction}`} data-health-trend="true">
+          <span>{t('overview.healthTrendTitle')}</span>
+          <strong>{healthTrend.label}</strong>
+          <svg viewBox="0 0 100 44" role="img" aria-label={healthTrend.detail} focusable="false">
+            <polygon points={healthTrend.fillPoints} />
+            <polyline points={healthTrend.linePoints} />
+          </svg>
+          <small>{healthTrend.detail}</small>
         </div>
         <div className="health-baseline-main">
           <div className="panel-title">
@@ -1009,6 +1040,154 @@ function buildHealthBaselineActions({
     actions.push(t(tone === 'good' ? 'overview.healthActionGood' : 'overview.healthActionWatch'));
   }
   return actions.slice(0, 3);
+}
+
+function useHealthBaselineTrend(
+  healthBaseline: HealthBaselineSummary,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): HealthBaselineTrend {
+  const [points, setPoints] = useState<HealthTrendPoint[]>([]);
+
+  useEffect(() => {
+    const history = readHealthTrendHistory();
+    const now = Date.now();
+    const nextPoint: HealthTrendPoint = {
+      score: healthBaseline.score,
+      tone: healthBaseline.tone,
+      timestamp: now,
+    };
+    const lastPoint = history[history.length - 1];
+    const nextHistory = lastPoint
+      && lastPoint.score === nextPoint.score
+      && lastPoint.tone === nextPoint.tone
+      && now - lastPoint.timestamp < healthTrendRefreshMs
+      ? [...history.slice(0, -1), nextPoint]
+      : [...history, nextPoint];
+    const trimmedHistory = nextHistory.slice(-healthTrendLimit);
+    setPoints(trimmedHistory);
+    writeHealthTrendHistory(trimmedHistory);
+  }, [healthBaseline.score, healthBaseline.tone]);
+
+  return useMemo(() => buildHealthBaselineTrend(points, t), [points, t]);
+}
+
+function readHealthTrendHistory(): HealthTrendPoint[] {
+  if (typeof window === 'undefined') {
+    return [];
+  }
+
+  try {
+    const raw = window.localStorage.getItem(healthTrendStorageKey);
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed
+      .map((item) => sanitizeHealthTrendPoint(item))
+      .filter((item): item is HealthTrendPoint => Boolean(item))
+      .slice(-healthTrendLimit);
+  } catch {
+    return [];
+  }
+}
+
+function writeHealthTrendHistory(points: HealthTrendPoint[]) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(healthTrendStorageKey, JSON.stringify(points.slice(-healthTrendLimit)));
+  } catch {
+    // localStorage can be unavailable in private or restricted browser contexts.
+  }
+}
+
+function sanitizeHealthTrendPoint(item: unknown): HealthTrendPoint | null {
+  if (!item || typeof item !== 'object') {
+    return null;
+  }
+  const raw = item as Partial<HealthTrendPoint>;
+  const score = Number(raw.score);
+  const timestamp = Number(raw.timestamp);
+  if (!Number.isFinite(score) || !Number.isFinite(timestamp)) {
+    return null;
+  }
+  if (raw.tone !== 'good' && raw.tone !== 'watch' && raw.tone !== 'critical') {
+    return null;
+  }
+  return {
+    score: Math.round(clamp(score, 0, 100)),
+    tone: raw.tone,
+    timestamp,
+  };
+}
+
+function buildHealthBaselineTrend(
+  points: HealthTrendPoint[],
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): HealthBaselineTrend {
+  const normalizedPoints = points.length ? points : [{ score: 100, tone: 'good' as const, timestamp: Date.now() }];
+  const firstPoint = normalizedPoints[0];
+  const lastPoint = normalizedPoints[normalizedPoints.length - 1];
+  const rawDelta = lastPoint.score - firstPoint.score;
+  const absoluteDelta = Math.abs(rawDelta);
+  const direction: HealthTrendDirection = normalizedPoints.length < 2
+    ? 'new'
+    : rawDelta >= 3
+      ? 'up'
+      : rawDelta <= -3
+        ? 'down'
+        : 'flat';
+  const displayDelta = direction === 'down' ? absoluteDelta : formatSignedDelta(rawDelta);
+  const labelVars = {
+    delta: displayDelta,
+    absDelta: absoluteDelta,
+  };
+  const detailVars = {
+    count: normalizedPoints.length,
+    delta: absoluteDelta,
+    score: lastPoint.score,
+  };
+  const linePoints = buildHealthTrendLinePoints(normalizedPoints);
+  return {
+    points: normalizedPoints,
+    direction,
+    delta: rawDelta,
+    label: t(`overview.healthTrendLabel.${direction}`, labelVars),
+    detail: t(`overview.healthTrendDetail.${direction}`, detailVars),
+    linePoints,
+    fillPoints: `${linePoints} 100,42 0,42`,
+  };
+}
+
+function formatSignedDelta(delta: number) {
+  if (delta > 0) {
+    return `+${delta}`;
+  }
+  return `${delta}`;
+}
+
+function buildHealthTrendLinePoints(points: HealthTrendPoint[]) {
+  const safePoints = points.length ? points : [{ score: 100, tone: 'good' as const, timestamp: 0 }];
+  if (safePoints.length === 1) {
+    const y = healthTrendScoreToY(safePoints[0].score);
+    return `0,${y} 100,${y}`;
+  }
+
+  return safePoints
+    .map((point, index) => {
+      const x = Math.round((index / (safePoints.length - 1)) * 100);
+      return `${x},${healthTrendScoreToY(point.score)}`;
+    })
+    .join(' ');
+}
+
+function healthTrendScoreToY(score: number) {
+  return Math.round(6 + ((100 - clamp(score, 0, 100)) / 100) * 30);
 }
 
 function buildCountryHover(

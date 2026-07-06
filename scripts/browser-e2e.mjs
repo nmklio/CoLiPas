@@ -809,6 +809,7 @@ async function assertOverviewHealthBaseline(targetPage) {
     /Resource level/i,
     /SSH coverage/i,
     /Event pressure/i,
+    /Trend snapshot/i,
     /Next best actions/i,
   ];
   for (const phrase of requiredPhrases) {
@@ -825,12 +826,38 @@ async function assertOverviewHealthBaseline(targetPage) {
   if (!Number.isFinite(score) || score < 0 || score > 100) {
     throw new Error(`Overview health baseline score is invalid: ${scoreText}`);
   }
+  const trend = baseline.locator('[data-health-trend="true"]');
+  await trend.waitFor({ timeout: 10000 });
+  const trendText = await trend.innerText();
+  if (!/Trend snapshot/i.test(trendText)) {
+    throw new Error(`Overview health trend snapshot is missing from baseline card: ${trendText}`);
+  }
+  const storedTrend = await targetPage.evaluate(() => window.localStorage.getItem('colipas.overview.healthTrend.v1'));
+  if (!storedTrend) {
+    throw new Error('Overview health trend did not persist an anonymous browser snapshot');
+  }
+  const parsedTrend = JSON.parse(storedTrend);
+  if (!Array.isArray(parsedTrend) || parsedTrend.length < 1 || parsedTrend.length > 12) {
+    throw new Error(`Overview health trend stored invalid history: ${storedTrend}`);
+  }
+  for (const point of parsedTrend) {
+    const keys = Object.keys(point).sort().join(',');
+    if (keys !== 'score,timestamp,tone') {
+      throw new Error(`Overview health trend should store only anonymous score/tone/timestamp fields, got ${keys}`);
+    }
+    if (!Number.isFinite(point.score) || point.score < 0 || point.score > 100 || !Number.isFinite(point.timestamp)) {
+      throw new Error(`Overview health trend stored invalid point: ${JSON.stringify(point)}`);
+    }
+  }
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b|sk-[A-Za-z0-9_-]{12,}|BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(baselineText)) {
     throw new Error('Overview health baseline leaked a raw IP address or secret');
   }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b|sk-[A-Za-z0-9_-]{12,}|BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(storedTrend)) {
+    throw new Error('Overview health trend storage leaked a raw IP address or secret');
+  }
   await assertElementWithinViewport(targetPage, '[data-health-baseline="true"]', 'desktop overview health baseline');
   await captureVisualEvidence(targetPage, 'desktop-overview-health-baseline', ['[data-health-baseline="true"]', '.monitor-kpis']);
-  console.log('ok browser e2e covers overview health baseline alerts');
+  console.log('ok browser e2e covers overview health baseline alerts and trend snapshots');
 }
 
 async function assertMobileConsoleAndMap() {
