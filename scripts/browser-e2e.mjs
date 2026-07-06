@@ -948,13 +948,18 @@ async function assertSshTerminalPanel(targetPage) {
       throw new Error(`SSH quick command deck should expose six commands, got ${quickCommandCount}`);
     }
     const customRunbookTitle = `E2E custom uptime ${Date.now()}`;
+    const customRunbookUpdatedTitle = `${customRunbookTitle} edited`;
+    const customRunbookSecondTitle = `${customRunbookTitle} second`;
     const customRunbookCommand = 'printf colipas-runbook-custom';
+    const customRunbookUpdatedCommand = 'printf colipas-runbook-custom-edited';
+    const customRunbookSecondCommand = 'printf colipas-runbook-second';
     let customRunbookId = '';
+    let customRunbookSecondId = '';
     await targetPage.locator('[data-ssh-runbook-form="true"] input').first().fill(customRunbookTitle);
     await targetPage.locator('[data-ssh-runbook-form="true"] input').nth(1).fill(customRunbookCommand);
     await targetPage.locator('[data-ssh-runbook-form="true"]').getByRole('button', { name: /save command/i }).click();
     await targetPage.locator('.action-message').filter({ hasText: /runbook command saved/i }).waitFor({ timeout: 5000 });
-    const customRunbookCard = targetPage.locator('[data-ssh-runbook-command]').filter({ hasText: customRunbookTitle });
+    let customRunbookCard = targetPage.locator('[data-ssh-runbook-command]').filter({ hasText: customRunbookTitle });
     await customRunbookCard.waitFor({ timeout: 5000 });
     const runbookApiState = await targetPage.evaluate(async () => {
       const response = await fetch('/api/servers/ssh-runbook');
@@ -968,14 +973,57 @@ async function assertSshTerminalPanel(targetPage) {
     }
     customRunbookId = persistedRunbookCommand.id;
     try {
+      await customRunbookCard.locator(`[data-ssh-runbook-command-edit="${customRunbookId}"]`).click();
+      await targetPage.locator('.action-message').filter({ hasText: customRunbookTitle }).waitFor({ timeout: 5000 });
+      await targetPage.locator('[data-ssh-runbook-form="true"] input').first().fill(customRunbookUpdatedTitle);
+      await targetPage.locator('[data-ssh-runbook-form="true"] input').nth(1).fill(customRunbookUpdatedCommand);
+      await targetPage.locator('[data-ssh-runbook-form="true"]').getByRole('button', { name: /update command/i }).click();
+      await targetPage.locator('.action-message').filter({ hasText: /runbook command updated/i }).waitFor({ timeout: 5000 });
+      customRunbookCard = targetPage.locator('[data-ssh-runbook-command]').filter({ hasText: customRunbookUpdatedTitle });
+      await customRunbookCard.waitFor({ timeout: 5000 });
+
+      await targetPage.locator('[data-ssh-runbook-form="true"] input').first().fill(customRunbookSecondTitle);
+      await targetPage.locator('[data-ssh-runbook-form="true"] input').nth(1).fill(customRunbookSecondCommand);
+      await targetPage.locator('[data-ssh-runbook-form="true"]').getByRole('button', { name: /save command/i }).click();
+      await targetPage.locator('.action-message').filter({ hasText: /runbook command saved/i }).waitFor({ timeout: 5000 });
+      const customRunbookSecondCard = targetPage.locator('[data-ssh-runbook-command]').filter({ hasText: customRunbookSecondTitle });
+      await customRunbookSecondCard.waitFor({ timeout: 5000 });
+      const runbookApiAfterSecondCreate = await targetPage.evaluate(async (titles) => {
+        const response = await fetch('/api/servers/ssh-runbook');
+        const body = await response.json();
+        return { status: response.status, body, titles };
+      }, { first: customRunbookUpdatedTitle, second: customRunbookSecondTitle });
+      const persistedUpdatedCommand = Array.isArray(runbookApiAfterSecondCreate.body.commands)
+        ? runbookApiAfterSecondCreate.body.commands.find((item) => item.title === customRunbookUpdatedTitle && item.command === customRunbookUpdatedCommand)
+        : null;
+      const persistedSecondCommand = Array.isArray(runbookApiAfterSecondCreate.body.commands)
+        ? runbookApiAfterSecondCreate.body.commands.find((item) => item.title === customRunbookSecondTitle && item.command === customRunbookSecondCommand)
+        : null;
+      if (!persistedUpdatedCommand?.id || persistedUpdatedCommand.id !== customRunbookId || !persistedSecondCommand?.id) {
+        throw new Error(`SSH runbook API did not persist edit/create correctly: ${JSON.stringify(runbookApiAfterSecondCreate)}`);
+      }
+      customRunbookSecondId = persistedSecondCommand.id;
+
+      await customRunbookSecondCard.locator(`[data-ssh-runbook-command-move-down="${customRunbookSecondId}"]`).click();
+      await targetPage.locator('.action-message').filter({ hasText: /runbook order updated/i }).waitFor({ timeout: 5000 });
+      const runbookApiAfterMove = await targetPage.evaluate(async (ids) => {
+        const response = await fetch('/api/servers/ssh-runbook');
+        const body = await response.json();
+        return { status: response.status, body, ids };
+      }, { first: customRunbookId, second: customRunbookSecondId });
+      const orderedIds = runbookApiAfterMove.body.commands?.map((item) => item.id) ?? [];
+      if (orderedIds.indexOf(customRunbookId) === -1 || orderedIds.indexOf(customRunbookSecondId) === -1 || orderedIds.indexOf(customRunbookId) > orderedIds.indexOf(customRunbookSecondId)) {
+        throw new Error(`SSH runbook reorder did not put edited command before second command: ${JSON.stringify(runbookApiAfterMove)}`);
+      }
+
       await ensureSshQuickCommandsEnabled(targetPage, sshServerRow);
       await customRunbookCard.locator('[data-ssh-runbook-command-run]').click();
-      await targetPage.locator('.action-message').filter({ hasText: customRunbookTitle }).waitFor({ timeout: 5000 });
+      await targetPage.locator('.action-message').filter({ hasText: customRunbookUpdatedTitle }).waitFor({ timeout: 5000 });
       try {
         await targetPage.waitForFunction((expectedCommand) => {
           const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
           return terminalText.includes(expectedCommand) && terminalText.includes('command simulated.');
-        }, customRunbookCommand, { timeout: 10000 });
+        }, customRunbookUpdatedCommand, { timeout: 10000 });
       } catch (error) {
         const runbookRunState = await targetPage.evaluate(async (expectedCommand) => {
           const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
@@ -1012,21 +1060,30 @@ async function assertSshTerminalPanel(targetPage) {
             terminalTail: terminalText.slice(-600),
             messageText,
           };
-        }, customRunbookCommand);
+        }, customRunbookUpdatedCommand);
         throw new Error(`SSH runbook custom command did not render in terminal after click: ${JSON.stringify(runbookRunState)}; ${error instanceof Error ? error.message : String(error)}`);
       }
+
+      const deletedRunbookIds = [customRunbookId, customRunbookSecondId];
+      await customRunbookSecondCard.locator('[data-ssh-runbook-command-delete]').click();
+      await targetPage.locator('.action-message').filter({ hasText: /runbook command deleted/i }).waitFor({ timeout: 5000 });
+      await customRunbookSecondCard.waitFor({ state: 'detached', timeout: 5000 });
+      customRunbookSecondId = '';
       await customRunbookCard.locator('[data-ssh-runbook-command-delete]').click();
       await targetPage.locator('.action-message').filter({ hasText: /runbook command deleted/i }).waitFor({ timeout: 5000 });
       await customRunbookCard.waitFor({ state: 'detached', timeout: 5000 });
-      const runbookApiAfterDelete = await targetPage.evaluate(async (deletedId) => {
+      const runbookApiAfterDelete = await targetPage.evaluate(async (ids) => {
         const response = await fetch('/api/servers/ssh-runbook');
-        return response.json().then((body) => ({ status: response.status, body, deletedId }));
-      }, customRunbookId);
-      if (runbookApiAfterDelete.status !== 200 || runbookApiAfterDelete.body.commands?.some((item) => item.id === customRunbookId)) {
+        return response.json().then((body) => ({ status: response.status, body, ids }));
+      }, deletedRunbookIds);
+      if (runbookApiAfterDelete.status !== 200 || runbookApiAfterDelete.body.commands?.some((item) => deletedRunbookIds.includes(item.id))) {
         throw new Error(`SSH runbook API still returned deleted command: ${JSON.stringify(runbookApiAfterDelete)}`);
       }
       customRunbookId = '';
     } finally {
+      if (customRunbookSecondId) {
+        await targetPage.evaluate((staleId) => fetch(`/api/servers/ssh-runbook/${encodeURIComponent(staleId)}`, { method: 'DELETE' }).catch(() => undefined), customRunbookSecondId);
+      }
       if (customRunbookId) {
         await targetPage.evaluate((staleId) => fetch(`/api/servers/ssh-runbook/${encodeURIComponent(staleId)}`, { method: 'DELETE' }).catch(() => undefined), customRunbookId);
       }

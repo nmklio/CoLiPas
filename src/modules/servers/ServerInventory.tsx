@@ -17,9 +17,11 @@ import {
   inspectServerIdentity,
   openServerShell,
   recordServerShellSelfTest,
+  reorderSshRunbookCommands,
   resizeServerShell,
   runServerDiagnostic,
   streamServerShell,
+  updateSshRunbookCommand,
   writeServerShell,
   type ServerDiagnosticResponse,
   type ServerShellSocketCloseEvent,
@@ -376,9 +378,11 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const [terminalTransport, setTerminalTransport] = useState<'websocket' | 'compatible' | null>(null);
   const [sshRunbookCommands, setSshRunbookCommands] = useState<SshRunbookCommand[]>([]);
   const [sshRunbookForm, setSshRunbookForm] = useState({ title: '', command: '' });
+  const [editingSshRunbookId, setEditingSshRunbookId] = useState('');
   const [sshRunbookLoading, setSshRunbookLoading] = useState(false);
   const [sshRunbookSaving, setSshRunbookSaving] = useState(false);
   const [deletingSshRunbookId, setDeletingSshRunbookId] = useState('');
+  const [movingSshRunbookId, setMovingSshRunbookId] = useState('');
   const [diagnosingServerId, setDiagnosingServerId] = useState('');
   const [sshDoctorReport, setSshDoctorReport] = useState<SshConnectionDoctorReport | null>(null);
   const [sshDoctorHistory, setSshDoctorHistory] = useState<SshConnectionDoctorHistoryEntry[]>(() => readSshDoctorHistory());
@@ -1478,7 +1482,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     <small>{sshRunbookLoading ? t('servers.quickCommandLoading') : t('servers.quickCommandDetail')}</small>
                   </div>
                   <div className="ssh-runbook-workspace">
-                    <form className="ssh-runbook-form" data-ssh-runbook-form="true" onSubmit={saveSshRunbookCommand}>
+                    <form className={editingSshRunbookId ? 'ssh-runbook-form editing' : 'ssh-runbook-form'} data-ssh-runbook-form="true" onSubmit={saveSshRunbookCommand}>
                       <input
                         value={sshRunbookForm.title}
                         onChange={(event) => setSshRunbookForm((current) => ({ ...current, title: event.target.value }))}
@@ -1492,8 +1496,13 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                         maxLength={360}
                       />
                       <button type="submit" disabled={sshRunbookSaving}>
-                        {sshRunbookSaving ? t('common.processing') : t('servers.quickCommandSave')}
+                        {sshRunbookSaving ? t('common.processing') : editingSshRunbookId ? t('servers.quickCommandUpdate') : t('servers.quickCommandSave')}
                       </button>
+                      {editingSshRunbookId && (
+                        <button type="button" className="secondary" data-ssh-runbook-edit-cancel="true" onClick={cancelSshRunbookEdit}>
+                          {t('servers.quickCommandCancelEdit')}
+                        </button>
+                      )}
                     </form>
                     <div className="ssh-quick-command-grid" role="list" aria-label={t('servers.quickCommandTitle')}>
                       {sshQuickCommands.map((item) => {
@@ -1524,12 +1533,20 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                           </article>
                         );
                       })}
-                      {sshRunbookCommands.map((item) => (
+                      {sshRunbookCommands.map((item, index) => (
                         <article key={item.id} role="listitem" className="custom" data-ssh-runbook-command={item.id}>
                           <span>{t('servers.quickCommandCustomLabel')}</span>
                           <strong>{item.title}</strong>
                           <code>{item.command}</code>
                           <div>
+                            <button
+                              type="button"
+                              data-ssh-runbook-command-edit={item.id}
+                              aria-label={t('servers.quickCommandEditAria', { title: item.title })}
+                              onClick={() => startEditSshRunbookCommand(item)}
+                            >
+                              {t('servers.quickCommandEdit')}
+                            </button>
                             <button
                               type="button"
                               data-ssh-runbook-command-insert={item.id}
@@ -1555,6 +1572,26 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                               disabled={deletingSshRunbookId === item.id}
                             >
                               <Trash2 size={12} />
+                            </button>
+                            <button
+                              type="button"
+                              className="sort"
+                              data-ssh-runbook-command-move-up={item.id}
+                              aria-label={t('servers.quickCommandMoveUpAria', { title: item.title })}
+                              onClick={() => moveSshRunbookCommand(item.id, -1)}
+                              disabled={index === 0 || movingSshRunbookId === item.id}
+                            >
+                              ↑
+                            </button>
+                            <button
+                              type="button"
+                              className="sort"
+                              data-ssh-runbook-command-move-down={item.id}
+                              aria-label={t('servers.quickCommandMoveDownAria', { title: item.title })}
+                              onClick={() => moveSshRunbookCommand(item.id, 1)}
+                              disabled={index === sshRunbookCommands.length - 1 || movingSshRunbookId === item.id}
+                            >
+                              ↓
                             </button>
                           </div>
                         </article>
@@ -2760,14 +2797,54 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
 
     setSshRunbookSaving(true);
     try {
-      const saved = await createSshRunbookCommand({ title, command });
-      setSshRunbookCommands((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
+      const saved = editingSshRunbookId
+        ? await updateSshRunbookCommand(editingSshRunbookId, { title, command })
+        : await createSshRunbookCommand({ title, command });
+      setSshRunbookCommands((current) => (editingSshRunbookId
+        ? current.map((item) => (item.id === saved.id ? saved : item))
+        : [saved, ...current.filter((item) => item.id !== saved.id)]));
       setSshRunbookForm({ title: '', command: '' });
-      showActionMessage(t('servers.quickCommandSaved'));
+      setEditingSshRunbookId('');
+      showActionMessage(t(editingSshRunbookId ? 'servers.quickCommandUpdated' : 'servers.quickCommandSaved'));
     } catch (error) {
       showActionMessage(error instanceof Error ? error.message : t('servers.quickCommandSaveFailed'));
     } finally {
       setSshRunbookSaving(false);
+    }
+  }
+
+  function startEditSshRunbookCommand(command: SshRunbookCommand) {
+    setEditingSshRunbookId(command.id);
+    setSshRunbookForm({ title: command.title, command: command.command });
+    showActionMessage(t('servers.quickCommandEditing', { title: command.title }));
+  }
+
+  function cancelSshRunbookEdit() {
+    setEditingSshRunbookId('');
+    setSshRunbookForm({ title: '', command: '' });
+  }
+
+  async function moveSshRunbookCommand(commandId: string, direction: -1 | 1) {
+    const index = sshRunbookCommands.findIndex((item) => item.id === commandId);
+    const targetIndex = index + direction;
+    if (index === -1 || targetIndex < 0 || targetIndex >= sshRunbookCommands.length) {
+      return;
+    }
+
+    const previous = sshRunbookCommands;
+    const next = previous.slice();
+    [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+    setMovingSshRunbookId(commandId);
+    setSshRunbookCommands(next);
+    try {
+      const result = await reorderSshRunbookCommands(next.map((item) => item.id));
+      setSshRunbookCommands(result.commands);
+      showActionMessage(t('servers.quickCommandMoved'));
+    } catch (error) {
+      setSshRunbookCommands(previous);
+      showActionMessage(error instanceof Error ? error.message : t('servers.quickCommandReorderFailed'));
+    } finally {
+      setMovingSshRunbookId('');
     }
   }
 
@@ -2776,6 +2853,9 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     try {
       await deleteSshRunbookCommand(commandId);
       setSshRunbookCommands((current) => current.filter((item) => item.id !== commandId));
+      if (editingSshRunbookId === commandId) {
+        cancelSshRunbookEdit();
+      }
       showActionMessage(t('servers.quickCommandDeleted'));
     } catch (error) {
       showActionMessage(error instanceof Error ? error.message : t('servers.quickCommandDeleteFailed'));

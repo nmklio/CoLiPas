@@ -14,6 +14,10 @@ export interface SshRunbookCommandPayload {
   command?: unknown;
 }
 
+export interface SshRunbookReorderPayload {
+  commandIds?: unknown;
+}
+
 export function listSshRunbookCommands() {
   return readRunbookCommands();
 }
@@ -67,6 +71,29 @@ export function deleteSshRunbookCommand(commandId: string) {
   return { ok: true, id: commandId };
 }
 
+export function reorderSshRunbookCommands(payload: SshRunbookReorderPayload) {
+  const requestedIds = normalizeCommandIds(payload?.commandIds);
+  const commands = readRunbookCommands();
+  const byId = new Map(commands.map((item) => [item.id, item]));
+  const reordered: SshRunbookCommand[] = [];
+
+  for (const commandId of requestedIds) {
+    const command = byId.get(commandId);
+    if (!command) {
+      throw new HttpError(404, 'SSH runbook command was not found', 'SSH_RUNBOOK_COMMAND_NOT_FOUND');
+    }
+    reordered.push(command);
+  }
+
+  const requested = new Set(requestedIds);
+  const next = [
+    ...reordered,
+    ...commands.filter((item) => !requested.has(item.id)),
+  ].slice(0, maxCommands);
+  writeRunbookCommands(next);
+  return next;
+}
+
 function normalizePayload(payload: SshRunbookCommandPayload) {
   const title = typeof payload?.title === 'string' ? payload.title.trim().replace(/\s+/g, ' ') : '';
   const command = typeof payload?.command === 'string' ? payload.command.trim() : '';
@@ -80,6 +107,17 @@ function normalizePayload(payload: SshRunbookCommandPayload) {
     throw new HttpError(400, 'Command appears to contain sensitive material', 'SSH_RUNBOOK_COMMAND_SENSITIVE');
   }
   return { title, command };
+}
+
+function normalizeCommandIds(value: unknown) {
+  if (!Array.isArray(value) || value.length === 0 || value.length > maxCommands) {
+    throw new HttpError(400, `Command order must include 1-${maxCommands} command ids`, 'SSH_RUNBOOK_ORDER_INVALID');
+  }
+  const commandIds = value.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean);
+  if (commandIds.length !== value.length || new Set(commandIds).size !== commandIds.length) {
+    throw new HttpError(400, 'Command order must contain unique command ids', 'SSH_RUNBOOK_ORDER_INVALID');
+  }
+  return commandIds;
 }
 
 function ensureUniqueTitle(commands: SshRunbookCommand[], title: string) {

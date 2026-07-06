@@ -5477,6 +5477,10 @@ td span,
   gap: 7px;
 }
 
+.ssh-runbook-form.editing {
+  grid-template-columns: minmax(120px, 0.55fr) minmax(180px, 1fr) auto auto;
+}
+
 .ssh-runbook-form input {
   min-width: 0;
   min-height: 32px;
@@ -5509,6 +5513,12 @@ td span,
 .ssh-runbook-form button:hover:not(:disabled) {
   border-color: rgba(165, 243, 252, 0.62);
   transform: translateY(-1px);
+}
+
+.ssh-runbook-form button.secondary {
+  border-color: rgba(148, 163, 184, 0.22);
+  color: #dbeafe;
+  background: rgba(15, 23, 42, 0.58);
 }
 
 .ssh-runbook-form button:disabled {
@@ -5581,6 +5591,12 @@ td span,
 
 .ssh-quick-command-grid article.custom span {
   color: #d8b4fe;
+}
+
+.ssh-quick-command-grid article.custom > div {
+  max-width: 172px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .ssh-quick-command-grid article.empty {
@@ -5661,6 +5677,14 @@ td span,
   background: rgba(127, 29, 29, 0.24);
   display: inline-grid;
   place-items: center;
+}
+
+.ssh-quick-command-grid button.sort {
+  min-width: 24px;
+  padding: 0 7px;
+  border-color: rgba(216, 180, 254, 0.28);
+  color: #f5e8ff;
+  background: rgba(88, 28, 135, 0.32);
 }
 
 .ssh-quick-command-grid button:hover:not(:disabled) {
@@ -13473,6 +13497,10 @@ pre {
   }
 
   .ssh-runbook-form {
+    grid-template-columns: 1fr;
+  }
+
+  .ssh-runbook-form.editing {
     grid-template-columns: 1fr;
   }
 

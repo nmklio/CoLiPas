@@ -912,6 +912,20 @@ export async function updateSshRunbookCommand(
   return (await response.json()) as SshRunbookCommand;
 }
 
+export async function reorderSshRunbookCommands(commandIds: string[], fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/servers/ssh-runbook/reorder', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ commandIds }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as SshRunbookResponse;
+}
+
 export async function deleteSshRunbookCommand(commandId: string, fetcher: typeof fetch = fetch) {
   const response = await fetcher(`/api/servers/ssh-runbook/${encodeURIComponent(commandId)}`, {
     method: 'DELETE',
