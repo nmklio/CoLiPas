@@ -78,6 +78,8 @@ const sshQuickCommands = [
   { id: 'processes', command: 'ps -eo pid,ppid,stat,pcpu,pmem,comm --sort=-pcpu | head -12' },
   { id: 'logs', command: 'journalctl -p warning -n 50 --no-pager' },
 ] as const;
+const sshRunbookCategories = ['all', 'system', 'network', 'storage', 'logs', 'other'] as const;
+type SshRunbookCategory = (typeof sshRunbookCategories)[number];
 
 const actionCommands: Record<'powerOn' | 'shutdown' | 'reboot', string> = {
   powerOn: 'printf "server reachable via SSH\\n"; uptime',
@@ -379,6 +381,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const [sshRunbookCommands, setSshRunbookCommands] = useState<SshRunbookCommand[]>([]);
   const [sshRunbookForm, setSshRunbookForm] = useState({ title: '', command: '' });
   const [editingSshRunbookId, setEditingSshRunbookId] = useState('');
+  const [sshRunbookSearch, setSshRunbookSearch] = useState('');
+  const [sshRunbookCategory, setSshRunbookCategory] = useState<SshRunbookCategory>('all');
   const [sshRunbookLoading, setSshRunbookLoading] = useState(false);
   const [sshRunbookSaving, setSshRunbookSaving] = useState(false);
   const [deletingSshRunbookId, setDeletingSshRunbookId] = useState('');
@@ -451,6 +455,12 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     sshRunning,
     t,
   );
+  const sshRunbookCategoryCounts = useMemo(() => countSshRunbookCategories(sshRunbookCommands), [sshRunbookCommands]);
+  const visibleSshRunbookCommands = useMemo(
+    () => filterSshRunbookCommands(sshRunbookCommands, sshRunbookSearch, sshRunbookCategory),
+    [sshRunbookCommands, sshRunbookSearch, sshRunbookCategory],
+  );
+  const sshRunbookHasFilters = sshRunbookSearch.trim().length > 0 || sshRunbookCategory !== 'all';
   const terminalTelemetryInsight = getTerminalTelemetryInsight(terminalTelemetry, terminalNetworkStats, terminalTransport, Boolean(terminalShellId), t);
   const terminalBottleneckAdvisor = getTerminalBottleneckAdvisor(terminalTelemetry, terminalNetworkStats, terminalTransport, Boolean(terminalShellId), t);
   const sshTroubleshootingReport = useMemo(() => (sshDoctorReport
@@ -1504,6 +1514,46 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                         </button>
                       )}
                     </form>
+                    <div className="ssh-runbook-lens" data-ssh-runbook-lens="true">
+                      <label className="ssh-runbook-search">
+                        <Search size={13} />
+                        <input
+                          data-ssh-runbook-search="true"
+                          value={sshRunbookSearch}
+                          onChange={(event) => setSshRunbookSearch(event.target.value)}
+                          placeholder={t('servers.quickCommandSearchPlaceholder')}
+                          aria-label={t('servers.quickCommandSearchPlaceholder')}
+                        />
+                      </label>
+                      <div className="ssh-runbook-categories" aria-label={t('servers.quickCommandFilterLabel')}>
+                        {sshRunbookCategories.map((category) => (
+                          <button
+                            key={category}
+                            type="button"
+                            className={sshRunbookCategory === category ? 'active' : undefined}
+                            data-ssh-runbook-category={category}
+                            aria-pressed={sshRunbookCategory === category}
+                            onClick={() => setSshRunbookCategory(category)}
+                          >
+                            <span>{t(`servers.quickCommandCategory.${category}`)}</span>
+                            <small>{category === 'all' ? sshRunbookCommands.length : sshRunbookCategoryCounts[category]}</small>
+                          </button>
+                        ))}
+                      </div>
+                      {sshRunbookHasFilters && (
+                        <button
+                          type="button"
+                          className="ssh-runbook-clear-filter"
+                          data-ssh-runbook-clear-filter="true"
+                          onClick={() => {
+                            setSshRunbookSearch('');
+                            setSshRunbookCategory('all');
+                          }}
+                        >
+                          {t('servers.quickCommandFilterClear')}
+                        </button>
+                      )}
+                    </div>
                     <div className="ssh-quick-command-grid" role="list" aria-label={t('servers.quickCommandTitle')}>
                       {sshQuickCommands.map((item) => {
                         const title = t(`servers.quickCommand.${item.id}.title`);
@@ -1533,74 +1583,84 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                           </article>
                         );
                       })}
-                      {sshRunbookCommands.map((item, index) => (
-                        <article key={item.id} role="listitem" className="custom" data-ssh-runbook-command={item.id}>
-                          <span>{t('servers.quickCommandCustomLabel')}</span>
-                          <strong>{item.title}</strong>
-                          <code>{item.command}</code>
-                          <div>
-                            <button
-                              type="button"
-                              data-ssh-runbook-command-edit={item.id}
-                              aria-label={t('servers.quickCommandEditAria', { title: item.title })}
-                              onClick={() => startEditSshRunbookCommand(item)}
-                            >
-                              {t('servers.quickCommandEdit')}
-                            </button>
-                            <button
-                              type="button"
-                              data-ssh-runbook-command-insert={item.id}
-                              onClick={() => sendSshQuickCommand(item.command, item.title, 'insert')}
-                              disabled={!terminalShellId}
-                            >
-                              {t('servers.quickCommandInsert')}
-                            </button>
-                            <button
-                              type="button"
-                              data-ssh-runbook-command-run={item.id}
-                              onClick={() => sendSshQuickCommand(item.command, item.title, 'run')}
-                              disabled={!terminalShellId}
-                            >
-                              {t('servers.quickCommandRun')}
-                            </button>
-                            <button
-                              type="button"
-                              className="delete"
-                              data-ssh-runbook-command-delete={item.id}
-                              aria-label={t('servers.quickCommandDeleteAria', { title: item.title })}
-                              onClick={() => removeSshRunbookCommand(item.id)}
-                              disabled={deletingSshRunbookId === item.id}
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                            <button
-                              type="button"
-                              className="sort"
-                              data-ssh-runbook-command-move-up={item.id}
-                              aria-label={t('servers.quickCommandMoveUpAria', { title: item.title })}
-                              onClick={() => moveSshRunbookCommand(item.id, -1)}
-                              disabled={index === 0 || movingSshRunbookId === item.id}
-                            >
-                              ↑
-                            </button>
-                            <button
-                              type="button"
-                              className="sort"
-                              data-ssh-runbook-command-move-down={item.id}
-                              aria-label={t('servers.quickCommandMoveDownAria', { title: item.title })}
-                              onClick={() => moveSshRunbookCommand(item.id, 1)}
-                              disabled={index === sshRunbookCommands.length - 1 || movingSshRunbookId === item.id}
-                            >
-                              ↓
-                            </button>
-                          </div>
-                        </article>
-                      ))}
+                      {visibleSshRunbookCommands.map((item) => {
+                        const orderIndex = sshRunbookCommands.findIndex((command) => command.id === item.id);
+                        return (
+                          <article key={item.id} role="listitem" className="custom" data-ssh-runbook-command={item.id}>
+                            <span>{t(`servers.quickCommandCategory.${classifySshRunbookCommand(item)}`)}</span>
+                            <strong>{item.title}</strong>
+                            <code>{item.command}</code>
+                            <div>
+                              <button
+                                type="button"
+                                data-ssh-runbook-command-edit={item.id}
+                                aria-label={t('servers.quickCommandEditAria', { title: item.title })}
+                                onClick={() => startEditSshRunbookCommand(item)}
+                              >
+                                {t('servers.quickCommandEdit')}
+                              </button>
+                              <button
+                                type="button"
+                                data-ssh-runbook-command-insert={item.id}
+                                onClick={() => sendSshQuickCommand(item.command, item.title, 'insert')}
+                                disabled={!terminalShellId}
+                              >
+                                {t('servers.quickCommandInsert')}
+                              </button>
+                              <button
+                                type="button"
+                                data-ssh-runbook-command-run={item.id}
+                                onClick={() => sendSshQuickCommand(item.command, item.title, 'run')}
+                                disabled={!terminalShellId}
+                              >
+                                {t('servers.quickCommandRun')}
+                              </button>
+                              <button
+                                type="button"
+                                className="delete"
+                                data-ssh-runbook-command-delete={item.id}
+                                aria-label={t('servers.quickCommandDeleteAria', { title: item.title })}
+                                onClick={() => removeSshRunbookCommand(item.id)}
+                                disabled={deletingSshRunbookId === item.id}
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                              <button
+                                type="button"
+                                className="sort"
+                                data-ssh-runbook-command-move-up={item.id}
+                                aria-label={t('servers.quickCommandMoveUpAria', { title: item.title })}
+                                onClick={() => moveSshRunbookCommand(item.id, -1)}
+                                disabled={orderIndex <= 0 || movingSshRunbookId === item.id}
+                              >
+                                ↑
+                              </button>
+                              <button
+                                type="button"
+                                className="sort"
+                                data-ssh-runbook-command-move-down={item.id}
+                                aria-label={t('servers.quickCommandMoveDownAria', { title: item.title })}
+                                onClick={() => moveSshRunbookCommand(item.id, 1)}
+                                disabled={orderIndex === -1 || orderIndex === sshRunbookCommands.length - 1 || movingSshRunbookId === item.id}
+                              >
+                                ↓
+                              </button>
+                            </div>
+                          </article>
+                        );
+                      })}
                       {!sshRunbookLoading && sshRunbookCommands.length === 0 && (
                         <article className="empty" data-ssh-runbook-empty="true">
                           <span>{t('servers.quickCommandCustomLabel')}</span>
                           <strong>{t('servers.quickCommandEmptyTitle')}</strong>
                           <small>{t('servers.quickCommandEmptyDetail')}</small>
+                        </article>
+                      )}
+                      {!sshRunbookLoading && sshRunbookCommands.length > 0 && visibleSshRunbookCommands.length === 0 && (
+                        <article className="empty" data-ssh-runbook-filter-empty="true">
+                          <span>{t('servers.quickCommandFilterLabel')}</span>
+                          <strong>{t('servers.quickCommandFilterEmptyTitle')}</strong>
+                          <small>{t('servers.quickCommandFilterEmptyDetail')}</small>
                         </article>
                       )}
                     </div>
@@ -4592,6 +4652,52 @@ function formatSshChannelStageLabel(
     return t('servers.sshChannelCheckCompatible');
   }
   return t('servers.sshChannelCheckCleanup');
+}
+
+function classifySshRunbookCommand(command: SshRunbookCommand): Exclude<SshRunbookCategory, 'all'> {
+  const text = normalizeRunbookSearchText(`${command.title} ${command.command}`);
+  if (/\b(journalctl|tail|grep|awk|sed|logrotate|dmesg|syslog|log)\b/u.test(text)) {
+    return 'logs';
+  }
+  if (/\b(ip|ifconfig|ss|netstat|curl|wget|ping|traceroute|tracepath|dig|nslookup|iptables|nft|ufw|firewall-cmd|route)\b/u.test(text)) {
+    return 'network';
+  }
+  if (/\b(df|du|lsblk|blkid|mount|umount|iostat|smartctl|fdisk|parted|xfs|ext4|disk)\b/u.test(text)) {
+    return 'storage';
+  }
+  if (/\b(uname|uptime|free|top|htop|ps|vmstat|systemctl|service|who|w|hostname|cpu|memory|load)\b/u.test(text)) {
+    return 'system';
+  }
+  return 'other';
+}
+
+function countSshRunbookCategories(commands: SshRunbookCommand[]): Record<SshRunbookCategory, number> {
+  const counts = sshRunbookCategories.reduce((next, category) => {
+    next[category] = 0;
+    return next;
+  }, {} as Record<SshRunbookCategory, number>);
+  counts.all = commands.length;
+  for (const command of commands) {
+    counts[classifySshRunbookCommand(command)] += 1;
+  }
+  return counts;
+}
+
+function filterSshRunbookCommands(commands: SshRunbookCommand[], query: string, category: SshRunbookCategory) {
+  const normalizedQuery = normalizeRunbookSearchText(query);
+  return commands.filter((command) => {
+    if (category !== 'all' && classifySshRunbookCommand(command) !== category) {
+      return false;
+    }
+    if (!normalizedQuery) {
+      return true;
+    }
+    return normalizeRunbookSearchText(`${command.title} ${command.command}`).includes(normalizedQuery);
+  });
+}
+
+function normalizeRunbookSearchText(value: string) {
+  return value.toLocaleLowerCase().replace(/\s+/g, ' ').trim();
 }
 
 function readSshDoctorHistory(): SshConnectionDoctorHistoryEntry[] {

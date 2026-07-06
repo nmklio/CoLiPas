@@ -952,7 +952,7 @@ async function assertSshTerminalPanel(targetPage) {
     const customRunbookSecondTitle = `${customRunbookTitle} second`;
     const customRunbookCommand = 'printf colipas-runbook-custom';
     const customRunbookUpdatedCommand = 'printf colipas-runbook-custom-edited';
-    const customRunbookSecondCommand = 'printf colipas-runbook-second';
+    const customRunbookSecondCommand = 'journalctl -n 5 --no-pager';
     let customRunbookId = '';
     let customRunbookSecondId = '';
     await targetPage.locator('[data-ssh-runbook-form="true"] input').first().fill(customRunbookTitle);
@@ -1003,6 +1003,23 @@ async function assertSshTerminalPanel(targetPage) {
         throw new Error(`SSH runbook API did not persist edit/create correctly: ${JSON.stringify(runbookApiAfterSecondCreate)}`);
       }
       customRunbookSecondId = persistedSecondCommand.id;
+
+      await targetPage.locator('[data-ssh-runbook-search="true"]').fill('second');
+      await targetPage.waitForFunction((expectedTitle) => {
+        const cards = Array.from(document.querySelectorAll('[data-ssh-runbook-command]'));
+        return cards.length === 1 && (cards[0]?.textContent ?? '').includes(expectedTitle);
+      }, customRunbookSecondTitle, { timeout: 5000 });
+      await targetPage.locator('[data-ssh-runbook-clear-filter="true"]').click();
+      await targetPage.locator(`[data-ssh-runbook-command="${customRunbookId}"]`).waitFor({ timeout: 5000 });
+      await targetPage.locator(`[data-ssh-runbook-command="${customRunbookSecondId}"]`).waitFor({ timeout: 5000 });
+      await targetPage.locator('[data-ssh-runbook-category="logs"]').click();
+      await targetPage.waitForFunction((expectedTitle) => {
+        const cards = Array.from(document.querySelectorAll('[data-ssh-runbook-command]'));
+        return cards.length === 1 && (cards[0]?.textContent ?? '').includes(expectedTitle);
+      }, customRunbookSecondTitle, { timeout: 5000 });
+      await targetPage.locator('[data-ssh-runbook-category="all"]').click();
+      await targetPage.locator(`[data-ssh-runbook-command="${customRunbookId}"]`).waitFor({ timeout: 5000 });
+      await targetPage.locator(`[data-ssh-runbook-command="${customRunbookSecondId}"]`).waitFor({ timeout: 5000 });
 
       await customRunbookSecondCard.locator(`[data-ssh-runbook-command-move-down="${customRunbookSecondId}"]`).click();
       await targetPage.locator('.action-message').filter({ hasText: /runbook order updated/i }).waitFor({ timeout: 5000 });
