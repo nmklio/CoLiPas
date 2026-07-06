@@ -3999,6 +3999,25 @@ function assertSqlitePersistenceGuards() {
     throw new Error(`SSH bottleneck trend snapshot guard is incomplete: ${missingSshBottleneckTrendFragments.join(', ')}`);
   }
 
+  const sshSupportBundleFragments = [
+    'SshSupportBundleSummary',
+    'buildSshSupportBundle',
+    'copySshSupportBundle',
+    'data-ssh-support-bundle="true"',
+    'supportBundleTitle',
+    'supportBundleCopy',
+    'supportBundleSanitizedNote',
+    'SSH sanitized support bundle',
+    '__colipasCopiedSshSupportBundleText',
+    '.security-ssh-support-bundle',
+    '.security-ssh-support-bundle-sections',
+    'SSH support bundle copy output leaked a raw IP address or secret',
+  ];
+  const missingSshSupportBundleFragments = sshSupportBundleFragments.filter((fragment) => !sshBottleneckTrendSource.includes(fragment));
+  if (missingSshSupportBundleFragments.length) {
+    throw new Error(`SSH sanitized support bundle guard is incomplete: ${missingSshSupportBundleFragments.join(', ')}`);
+  }
+
   const inventorySummaryFragments = [
     'export function summarizeServerInventory',
     'export function buildServerInventorySnapshot',

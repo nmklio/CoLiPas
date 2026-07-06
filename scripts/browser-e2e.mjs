@@ -194,11 +194,14 @@ async function assertReleaseEvidenceBrief(targetPage) {
     window.__colipasCopiedSshFlightText = '';
     window.__colipasCopiedSshSamplerText = '';
     window.__colipasCopiedSshBottleneckTrendText = '';
+    window.__colipasCopiedSshSupportBundleText = '';
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: {
         writeText: async (text) => {
-          if (/SSH lag diagnosis report/i.test(text)) {
+          if (/SSH sanitized support bundle/i.test(text)) {
+            window.__colipasCopiedSshSupportBundleText = text;
+          } else if (/SSH lag diagnosis report/i.test(text)) {
             window.__colipasCopiedSshLagReportText = text;
           } else if (/SSH flight recorder/i.test(text)) {
             window.__colipasCopiedSshFlightText = text;
@@ -213,6 +216,19 @@ async function assertReleaseEvidenceBrief(targetPage) {
       },
     });
   });
+  await targetPage.locator('[data-ssh-support-bundle="true"]').waitFor({ timeout: 5000 });
+  const sshSupportBundleText = await targetPage.locator('[data-ssh-support-bundle="true"]').innerText();
+  if (!/SSH sanitized support bundle/i.test(sshSupportBundleText) || !/Bundle contents/i.test(sshSupportBundleText) || !/Performance summary/i.test(sshSupportBundleText) || !/Bottleneck trend/i.test(sshSupportBundleText)) {
+    throw new Error(`SSH support bundle did not render all evidence sections: ${sshSupportBundleText}`);
+  }
+  await targetPage.getByRole('button', { name: /copy support bundle/i }).click();
+  const copiedSshSupportBundleText = await targetPage.evaluate(() => window.__colipasCopiedSshSupportBundleText ?? '');
+  if (!/SSH sanitized support bundle/i.test(copiedSshSupportBundleText) || !/Performance summary/i.test(copiedSshSupportBundleText) || !/Lag diagnosis/i.test(copiedSshSupportBundleText) || !/Flight recorder/i.test(copiedSshSupportBundleText) || !/Real sampler/i.test(copiedSshSupportBundleText) || !/Bottleneck trend/i.test(copiedSshSupportBundleText) || !/This support bundle only includes sanitized aggregate metrics/i.test(copiedSshSupportBundleText)) {
+    throw new Error(`SSH support bundle copy output is incomplete: ${copiedSshSupportBundleText}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshSupportBundleText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshSupportBundleText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(copiedSshSupportBundleText)) {
+    throw new Error('SSH support bundle copy output leaked a raw IP address or secret');
+  }
   await targetPage.getByRole('button', { name: /copy diagnosis report/i }).click();
   const copiedSshLagReportText = await targetPage.evaluate(() => window.__colipasCopiedSshLagReportText ?? '');
   if (!/SSH lag diagnosis report/i.test(copiedSshLagReportText) || !/Report context/i.test(copiedSshLagReportText) || !/Generated/i.test(copiedSshLagReportText) || !/Sanitized/i.test(copiedSshLagReportText) || !/Key evidence/i.test(copiedSshLagReportText) || !/Input path/i.test(copiedSshLagReportText) || !/sanitized aggregate metrics/i.test(copiedSshLagReportText)) {

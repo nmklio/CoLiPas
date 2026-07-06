@@ -323,6 +323,23 @@ interface SshBottleneckTrendSummary {
   recent: SshBottleneckRadarSnapshot[];
 }
 
+interface SshSupportBundleSection {
+  id: 'summary' | 'lag-report' | 'flight' | 'sampler' | 'trend';
+  title: string;
+  detail: string;
+  tone: 'ok' | 'warn' | 'fail';
+}
+
+interface SshSupportBundleSummary {
+  tone: 'ok' | 'warn' | 'fail';
+  title: string;
+  detail: string;
+  generatedAt: string;
+  sectionsLabel: string;
+  sections: SshSupportBundleSection[];
+  copyText: string;
+}
+
 const sshLagReportHistoryStorageKey = 'colipas.sshLagReportHistory.v1';
 const sshLagReportHistoryVisibleLimit = 5;
 const sshBottleneckRadarHistoryStorageKey = 'colipas.sshBottleneckRadarHistory.v1';
@@ -431,6 +448,17 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
   const sshBottleneckTrend = useMemo(
     () => buildSshBottleneckTrend(sshBottleneckRadarHistory, sshPerformanceCopy, locale),
     [locale, sshBottleneckRadarHistory, sshPerformanceCopy],
+  );
+  const sshSupportBundle = useMemo(
+    () => buildSshSupportBundle({
+      sshPerformance,
+      sshFlightRecorder,
+      sshInteractionSampler,
+      sshBottleneckTrend,
+      copy: sshPerformanceCopy,
+      locale,
+    }),
+    [locale, sshBottleneckTrend, sshFlightRecorder, sshInteractionSampler, sshPerformance, sshPerformanceCopy],
   );
   const expandedSshMetric = useMemo(
     () => sshPerformance.metrics.find((metric) => metric.id === expandedSshMetricId) ?? sshPerformance.metrics[0] ?? null,
@@ -603,6 +631,23 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
       setRemediationError(false);
     } catch {
       setRemediationMessage(evidenceBrief.text);
+      setRemediationError(false);
+    }
+  }
+
+  async function copySshSupportBundle() {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) {
+      setRemediationMessage(sshSupportBundle.copyText);
+      setRemediationError(false);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(sshSupportBundle.copyText);
+      setRemediationMessage(sshPerformanceCopy.supportBundleCopied);
+      setRemediationError(false);
+    } catch {
+      setRemediationMessage(sshSupportBundle.copyText);
       setRemediationError(false);
     }
   }
@@ -1003,6 +1048,28 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
             </button>
           </div>
         </div>
+        <section className={`security-ssh-support-bundle ${sshSupportBundle.tone}`} data-ssh-support-bundle="true" aria-label={sshPerformanceCopy.supportBundleTitle}>
+          <div className="security-ssh-support-bundle-copy">
+            <span><ClipboardCheck size={15} /> {sshPerformanceCopy.supportBundleTitle}</span>
+            <strong>{sshSupportBundle.title}</strong>
+            <p>{sshPerformanceCopy.supportBundleDescription}</p>
+            <small>{sshSupportBundle.detail}</small>
+            <small>{sshPerformanceCopy.supportBundleGenerated}: {sshSupportBundle.generatedAt}</small>
+          </div>
+          <div className="security-ssh-support-bundle-sections" aria-label={sshSupportBundle.sectionsLabel}>
+            <span className="security-ssh-support-bundle-section-label">{sshSupportBundle.sectionsLabel}</span>
+            {sshSupportBundle.sections.map((section) => (
+              <small key={section.id} className={section.tone}>
+                <b>{section.title}</b>
+                {section.detail}
+              </small>
+            ))}
+          </div>
+          <button type="button" className="tool-button" onClick={copySshSupportBundle}>
+            <ClipboardCheck size={15} />
+            {sshPerformanceCopy.supportBundleCopy}
+          </button>
+        </section>
         <section className={`security-ssh-experience-summary ${sshPerformance.tone}`} data-ssh-experience-summary="true" aria-label={sshPerformance.experience.title}>
           <div className="security-ssh-experience-lead">
             <span><Gauge size={15} /> {sshPerformance.experience.title}</span>
@@ -2570,6 +2637,97 @@ function buildSshBottleneckTrend(
   };
 }
 
+function buildSshSupportBundle({
+  sshPerformance,
+  sshFlightRecorder,
+  sshInteractionSampler,
+  sshBottleneckTrend,
+  copy,
+  locale,
+}: {
+  sshPerformance: SshPerformanceSummary;
+  sshFlightRecorder: SshFlightRecorderSummary;
+  sshInteractionSampler: SshInteractionSamplerSummary;
+  sshBottleneckTrend: SshBottleneckTrendSummary;
+  copy: SshPerformanceCopy;
+  locale: string;
+}): SshSupportBundleSummary {
+  const sections: SshSupportBundleSection[] = [
+    {
+      id: 'summary',
+      title: copy.supportBundleSectionSummary,
+      detail: sshPerformance.status,
+      tone: sshPerformance.tone,
+    },
+    {
+      id: 'lag-report',
+      title: copy.supportBundleSectionLagReport,
+      detail: sshPerformance.reportHeadline,
+      tone: sshPerformance.tone,
+    },
+    {
+      id: 'flight',
+      title: copy.supportBundleSectionFlight,
+      detail: sshFlightRecorder.diagnosis.title,
+      tone: sshFlightRecorder.tone,
+    },
+    {
+      id: 'sampler',
+      title: copy.supportBundleSectionSampler,
+      detail: sshInteractionSampler.title,
+      tone: sshInteractionSampler.tone,
+    },
+    {
+      id: 'trend',
+      title: copy.supportBundleSectionTrend,
+      detail: sshBottleneckTrend.title,
+      tone: sshBottleneckTrend.tone,
+    },
+  ];
+  const tone = sections.reduce<SshSupportBundleSummary['tone']>((current, section) => (
+    getSshToneRank(section.tone) > getSshToneRank(current) ? section.tone : current
+  ), 'ok');
+  const generatedAt = new Date().toLocaleString(locale);
+  const title = copy.supportBundleStatus(sshPerformance.status, tone);
+  const detail = copy.supportBundleDetail(sections.length);
+  const copyText = [
+    `# ${copy.supportBundleTitle}`,
+    `${copy.supportBundleGenerated}: ${generatedAt}`,
+    `${copy.summaryStatus}: ${sshPerformance.status}`,
+    `${copy.supportBundleRecommendedAction}: ${sshPerformance.nextAction}`,
+    '',
+    `[${copy.supportBundleSections}]`,
+    ...sections.map((section) => `- ${section.title}: ${section.detail}`),
+    '',
+    `[${copy.supportBundleSectionSummary}]`,
+    sshPerformance.copyText,
+    '',
+    `[${copy.supportBundleSectionLagReport}]`,
+    sshPerformance.reportText,
+    '',
+    `[${copy.supportBundleSectionFlight}]`,
+    sshFlightRecorder.copyText,
+    '',
+    `[${copy.supportBundleSectionSampler}]`,
+    sshInteractionSampler.copyText,
+    '',
+    `[${copy.supportBundleSectionTrend}]`,
+    sshBottleneckTrend.copyText,
+    '',
+    copy.supportBundleSanitizedNote,
+  ].join('\n');
+
+  return {
+    tone,
+    title,
+    detail,
+    generatedAt,
+    sectionsLabel: copy.supportBundleSections,
+    sections,
+    copyText,
+  };
+}
+
 function isSshBottleneckRadarSnapshot(value: unknown): value is SshBottleneckRadarSnapshot {
   if (!value || typeof value !== 'object') {
     return false;
@@ -3597,6 +3755,21 @@ interface SecurityCopy {
 interface SshPerformanceCopy {
   title: string;
   description: string;
+  supportBundleTitle: string;
+  supportBundleDescription: string;
+  supportBundleCopy: string;
+  supportBundleCopied: string;
+  supportBundleGenerated: string;
+  supportBundleSections: string;
+  supportBundleRecommendedAction: string;
+  supportBundleSanitizedNote: string;
+  supportBundleStatus: (status: string, tone: 'ok' | 'warn' | 'fail') => string;
+  supportBundleDetail: (sections: number) => string;
+  supportBundleSectionSummary: string;
+  supportBundleSectionLagReport: string;
+  supportBundleSectionFlight: string;
+  supportBundleSectionSampler: string;
+  supportBundleSectionTrend: string;
   activeSessions: string;
   inputBatch: string;
   outputBatch: string;
@@ -3812,6 +3985,21 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
   zh: {
     title: 'SSH 终端性能',
     description: '用脱敏诊断数据观察终端输入合并、输出批次和连接错误，定位卡顿不暴露服务器信息。',
+    supportBundleTitle: 'SSH 脱敏支持包',
+    supportBundleDescription: '把性能摘要、诊断报告、飞行记录、真实采样和瓶颈趋势合并为一份可转发证据。',
+    supportBundleCopy: '复制支持包',
+    supportBundleCopied: 'SSH 脱敏支持包已复制',
+    supportBundleGenerated: '生成时间',
+    supportBundleSections: '支持包内容',
+    supportBundleRecommendedAction: '建议动作',
+    supportBundleSanitizedNote: '支持包只包含脱敏聚合指标、本地趋势和建议动作，不包含服务器地址、命令正文、密钥、API Key 或用户数据。',
+    supportBundleStatus: (status, tone) => tone === 'fail' ? `需要优先处理：${status}` : tone === 'warn' ? `可交付排障：${status}` : `可作为基线：${status}`,
+    supportBundleDetail: (sections) => `已汇总 ${sections} 类 SSH 证据，用户反馈卡顿时可直接复制给运维或开发定位。`,
+    supportBundleSectionSummary: '性能摘要',
+    supportBundleSectionLagReport: '卡顿诊断',
+    supportBundleSectionFlight: '飞行记录',
+    supportBundleSectionSampler: '真实采样',
+    supportBundleSectionTrend: '瓶颈趋势',
     activeSessions: '活跃会话',
     inputBatch: '输入合并',
     outputBatch: '输出合并',
@@ -4025,6 +4213,21 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
   en: {
     title: 'SSH terminal performance',
     description: 'Uses sanitized diagnostics to track input batching, output flushes, and socket errors without exposing server data.',
+    supportBundleTitle: 'SSH sanitized support bundle',
+    supportBundleDescription: 'Combines performance, lag diagnosis, flight records, real interaction sampling, and bottleneck trends into one shareable evidence pack.',
+    supportBundleCopy: 'Copy support bundle',
+    supportBundleCopied: 'SSH sanitized support bundle copied',
+    supportBundleGenerated: 'Generated at',
+    supportBundleSections: 'Bundle contents',
+    supportBundleRecommendedAction: 'Recommended action',
+    supportBundleSanitizedNote: 'This support bundle only includes sanitized aggregate metrics, local trends, and recommended actions. It excludes server addresses, command text, keys, API keys, and user data.',
+    supportBundleStatus: (status, tone) => tone === 'fail' ? `Needs priority handling: ${status}` : tone === 'warn' ? `Ready for triage: ${status}` : `Baseline ready: ${status}`,
+    supportBundleDetail: (sections) => `${sections} SSH evidence sections are bundled so user lag reports can be copied directly to ops or development.`,
+    supportBundleSectionSummary: 'Performance summary',
+    supportBundleSectionLagReport: 'Lag diagnosis',
+    supportBundleSectionFlight: 'Flight recorder',
+    supportBundleSectionSampler: 'Real sampler',
+    supportBundleSectionTrend: 'Bottleneck trend',
     activeSessions: 'Active sessions',
     inputBatch: 'Input batching',
     outputBatch: 'Output batching',
@@ -4238,6 +4441,21 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
   ja: {
     title: 'SSH 端末パフォーマンス',
     description: '匿名化診断で入力バッチ、出力フラッシュ、ソケットエラーを確認し、サーバー情報は表示しません。',
+    supportBundleTitle: 'SSH 匿名化サポートパック',
+    supportBundleDescription: '性能サマリー、遅延診断、フライト記録、実操作サンプル、ボトルネック傾向を 1 つの共有用証跡にまとめます。',
+    supportBundleCopy: 'サポートパックをコピー',
+    supportBundleCopied: 'SSH 匿名化サポートパックをコピーしました',
+    supportBundleGenerated: '生成日時',
+    supportBundleSections: 'パック内容',
+    supportBundleRecommendedAction: '推奨アクション',
+    supportBundleSanitizedNote: 'このサポートパックには匿名化された集計指標、ローカル傾向、推奨アクションのみが含まれ、サーバーアドレス、コマンド本文、キー、API Key、ユーザーデータは含みません。',
+    supportBundleStatus: (status, tone) => tone === 'fail' ? `優先対応が必要：${status}` : tone === 'warn' ? `調査に共有可能：${status}` : `基準として利用可能：${status}`,
+    supportBundleDetail: (sections) => `${sections} 種類の SSH 証跡をまとめ、遅延報告時に運用または開発へ直接共有できます。`,
+    supportBundleSectionSummary: '性能サマリー',
+    supportBundleSectionLagReport: '遅延診断',
+    supportBundleSectionFlight: 'フライト記録',
+    supportBundleSectionSampler: '実操作サンプル',
+    supportBundleSectionTrend: 'ボトルネック傾向',
     activeSessions: 'アクティブセッション',
     inputBatch: '入力バッチ',
     outputBatch: '出力バッチ',
