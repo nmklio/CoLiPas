@@ -3948,6 +3948,10 @@ function assertSqlitePersistenceGuards() {
     'recordTerminalInput',
     'recordTerminalOutput',
     'data-ssh-terminal-telemetry="true"',
+    'getTerminalBottleneckAdvisor',
+    'data-ssh-terminal-bottleneck="true"',
+    '.ssh-terminal-bottleneck',
+    '.ssh-terminal-bottleneck-radar',
     '.ssh-terminal-telemetry',
     '.ssh-terminal-telemetry-grid',
     'ssh-terminal-quality',
@@ -5064,6 +5068,10 @@ function assertSshTerminalRealtimeGuards() {
     'function recordTerminalOutput(',
     'function getTerminalTelemetryInsight(',
     'data-ssh-terminal-telemetry="true"',
+    'TerminalBottleneckAdvisor',
+    'function getTerminalBottleneckAdvisor(',
+    'function getBottleneckTone(',
+    'data-ssh-terminal-bottleneck="true"',
     'const allServersById = useMemo(() => buildServerById(allServers), [allServers])',
     'allServersById.get(sshPanelServerId)',
     'function buildServerById(servers: ServerNode[])',
@@ -5173,6 +5181,11 @@ function assertSshTerminalRealtimeGuards() {
     'servers.telemetryFirstOutputLabel',
     'servers.telemetryOutputLabel',
     'servers.telemetryRenderLabel',
+    'servers.bottleneckTitle',
+    'servers.bottleneckNetworkLabel',
+    'servers.bottleneckInputLabel',
+    'servers.bottleneckOutputLabel',
+    'servers.bottleneckRenderLabel',
   ];
   const missingToolLabels = requiredToolLabels.filter((key) => !inventorySource.includes(key) || !fs.readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8').includes(key));
   if (missingToolLabels.length) {

@@ -768,9 +768,32 @@ async function assertSshTerminalPanel(targetPage) {
     if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(terminalTelemetryText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(terminalTelemetryText)) {
       throw new Error('SSH terminal live telemetry rendered a raw IP address or API key');
     }
+    await targetPage.locator('[data-ssh-terminal-bottleneck="true"]').waitFor({ timeout: 5000 });
+    const terminalBottleneckText = await targetPage.locator('[data-ssh-terminal-bottleneck="true"]').innerText();
+    if (!/Bottleneck radar/i.test(terminalBottleneckText) || !/Network/i.test(terminalBottleneckText) || !/Input/i.test(terminalBottleneckText) || !/Output/i.test(terminalBottleneckText) || !/Render/i.test(terminalBottleneckText)) {
+      throw new Error(`SSH terminal bottleneck radar did not render all diagnosis lanes: ${terminalBottleneckText}`);
+    }
+    if (!/(No major bottleneck found|needs watching|is the main bottleneck|Waiting for live data)/i.test(terminalBottleneckText)) {
+      throw new Error(`SSH terminal bottleneck radar did not render a diagnosis summary: ${terminalBottleneckText}`);
+    }
+    const bottleneckItemCount = await targetPage.locator('[data-ssh-terminal-bottleneck-item]').count();
+    if (bottleneckItemCount !== 4) {
+      throw new Error(`SSH terminal bottleneck radar should expose four lanes, got ${bottleneckItemCount}`);
+    }
+    const terminalBottleneckClass = await targetPage.locator('[data-ssh-terminal-bottleneck="true"]').getAttribute('class');
+    if (!/\b(good|warn|slow|pending)\b/.test(terminalBottleneckClass ?? '')) {
+      throw new Error(`SSH terminal bottleneck radar did not expose a quality tone: ${terminalBottleneckClass}`);
+    }
+    const radarWidths = await targetPage.locator('[data-ssh-terminal-bottleneck-item] i b').evaluateAll((bars) => bars.map((bar) => Number.parseFloat(getComputedStyle(bar).width)));
+    if (radarWidths.length !== 4 || radarWidths.some((width) => !Number.isFinite(width) || width <= 0)) {
+      throw new Error(`SSH terminal bottleneck radar bars did not render measurable widths: ${radarWidths.join(', ')}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(terminalBottleneckText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(terminalBottleneckText)) {
+      throw new Error('SSH terminal bottleneck radar rendered a raw IP address or API key');
+    }
     console.log(`ok browser e2e SSH burst output rendered in ${burstOutputDurationMs}ms with max long task ${maxBurstLongTaskMs}ms`);
     await assertElementWithinViewport(targetPage, '.ssh-console', 'desktop SSH console');
-    await captureVisualEvidence(targetPage, 'desktop-ssh-terminal-network', ['.ssh-console', '.ssh-terminal-network', '.ssh-terminal-quality', '[data-ssh-terminal-telemetry="true"]']);
+    await captureVisualEvidence(targetPage, 'desktop-ssh-terminal-network', ['.ssh-console', '.ssh-terminal-network', '.ssh-terminal-quality', '[data-ssh-terminal-telemetry="true"]', '[data-ssh-terminal-bottleneck="true"]']);
     await targetPage.getByRole('button', { name: /disconnect/i }).click();
     await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });
     const disconnectMessage = targetPage.locator('.action-message').filter({ hasText: /disconnected/i });

@@ -121,6 +121,24 @@ interface TerminalTelemetryInsight {
   cards: TerminalTelemetryCard[];
 }
 
+interface TerminalBottleneckItem {
+  id: 'network' | 'input' | 'output' | 'render';
+  label: string;
+  value: string;
+  detail: string;
+  level: number;
+  tone: TerminalNetworkQuality['tone'];
+}
+
+interface TerminalBottleneckAdvisor {
+  tone: TerminalNetworkQuality['tone'];
+  title: string;
+  detail: string;
+  action: string;
+  primaryLabel: string;
+  items: TerminalBottleneckItem[];
+}
+
 interface TerminalSelfTestState {
   status: 'running' | 'complete' | 'timeout' | 'failed';
   lines: number;
@@ -267,6 +285,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     t,
   );
   const terminalTelemetryInsight = getTerminalTelemetryInsight(terminalTelemetry, terminalNetworkStats, terminalTransport, Boolean(terminalShellId), t);
+  const terminalBottleneckAdvisor = getTerminalBottleneckAdvisor(terminalTelemetry, terminalNetworkStats, terminalTransport, Boolean(terminalShellId), t);
   const terminalSelfTestRunning = terminalSelfTest?.status === 'running';
   const terminalSelfTestLabel = terminalSelfTest ? formatTerminalSelfTestLabel(terminalSelfTest, language) : '';
   const visibleSummary = useMemo(() => {
@@ -991,6 +1010,26 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                         <span>{card.label}</span>
                         <strong>{card.value}</strong>
                         <small>{card.detail}</small>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+                <div className={`ssh-terminal-bottleneck ${terminalBottleneckAdvisor.tone}`} data-ssh-terminal-bottleneck="true" aria-live="polite">
+                  <div className="ssh-terminal-bottleneck-summary">
+                    <span>{t('servers.bottleneckTitle')}</span>
+                    <strong>{terminalBottleneckAdvisor.title}</strong>
+                    <small>{terminalBottleneckAdvisor.detail}</small>
+                    <em>{terminalBottleneckAdvisor.action}</em>
+                  </div>
+                  <div className="ssh-terminal-bottleneck-radar" aria-label={terminalBottleneckAdvisor.primaryLabel}>
+                    {terminalBottleneckAdvisor.items.map((item) => (
+                      <article key={item.id} className={item.tone} data-ssh-terminal-bottleneck-item={item.id}>
+                        <div>
+                          <span>{item.label}</span>
+                          <strong>{item.value}</strong>
+                        </div>
+                        <i aria-hidden="true"><b style={{ width: `${item.level}%` }} /></i>
+                        <small>{item.detail}</small>
                       </article>
                     ))}
                   </div>
@@ -2775,6 +2814,120 @@ function getTerminalTelemetryDetail(
     return t('servers.telemetryGoodDetail', { transport: transportLabel });
   }
   return t('servers.telemetryPendingDetail', { transport: transportLabel });
+}
+
+function getTerminalBottleneckAdvisor(
+  telemetry: TerminalTelemetryState,
+  stats: TerminalNetworkStats | null,
+  transport: 'websocket' | 'compatible' | null,
+  connected: boolean,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): TerminalBottleneckAdvisor {
+  const transportLabel = getTerminalTransportLabel(transport, t);
+  const rttMs = stats?.rttMs ?? null;
+  const throughput = stats?.throughputBytesPerSecond ?? 0;
+  const networkLevel = !connected
+    ? 0
+    : rttMs === null
+      ? 22
+      : rttMs >= 1500
+        ? 96
+        : rttMs >= 700
+          ? 74
+          : rttMs >= 250
+            ? 44
+            : 16;
+  const averageInputBytes = telemetry.inputBytes / Math.max(1, telemetry.inputEvents);
+  const inputLevel = !connected || telemetry.inputEvents === 0
+    ? 0
+    : telemetry.inputEvents >= 40 && averageInputBytes <= 2
+      ? 38
+      : 14;
+  const outputLevel = !connected || telemetry.outputBytes === 0
+    ? 0
+    : throughput > 0 && throughput < 16 * 1024 && telemetry.outputBytes > 16 * 1024
+      ? 72
+      : throughput > 0 && throughput < 64 * 1024 && telemetry.outputBytes > 128 * 1024
+        ? 54
+        : 18;
+  const renderLevel = !connected
+    ? 0
+    : telemetry.renderLagMs >= 64 || telemetry.pendingBytes >= terminalWriteLargeBacklogThreshold
+      ? 92
+      : telemetry.renderLagMs >= 24 || telemetry.pendingBytes > 0
+        ? 56
+        : 12;
+  const items: TerminalBottleneckItem[] = [
+    {
+      id: 'network',
+      label: t('servers.bottleneckNetworkLabel'),
+      value: formatTerminalRtt(rttMs),
+      detail: t('servers.bottleneckNetworkDetail', { transport: transportLabel }),
+      level: networkLevel,
+      tone: getBottleneckTone(networkLevel, connected),
+    },
+    {
+      id: 'input',
+      label: t('servers.bottleneckInputLabel'),
+      value: telemetry.inputEvents > 0 ? t('servers.telemetryInputValue', { count: telemetry.inputEvents }) : '--',
+      detail: t('servers.bottleneckInputDetail', { bytes: formatCompactBytes(telemetry.inputBytes) }),
+      level: inputLevel,
+      tone: getBottleneckTone(inputLevel, connected && telemetry.inputEvents > 0),
+    },
+    {
+      id: 'output',
+      label: t('servers.bottleneckOutputLabel'),
+      value: formatBytesPerSecond(throughput),
+      detail: t('servers.bottleneckOutputDetail', { bytes: formatCompactBytes(telemetry.outputBytes), lines: telemetry.outputLines }),
+      level: outputLevel,
+      tone: getBottleneckTone(outputLevel, connected && telemetry.outputBytes > 0),
+    },
+    {
+      id: 'render',
+      label: t('servers.bottleneckRenderLabel'),
+      value: `${Math.round(telemetry.renderLagMs)}ms`,
+      detail: t('servers.bottleneckRenderDetail', { pending: formatCompactBytes(telemetry.pendingBytes), peak: formatCompactBytes(telemetry.peakPendingBytes) }),
+      level: renderLevel,
+      tone: getBottleneckTone(renderLevel, connected),
+    },
+  ];
+  const primary = items.reduce((best, item) => (item.level > best.level ? item : best), items[0]);
+  const tone = getBottleneckTone(primary.level, connected);
+  return {
+    tone,
+    title: connected
+      ? tone === 'slow'
+        ? t('servers.bottleneckSlowTitle', { target: primary.label })
+        : tone === 'warn'
+          ? t('servers.bottleneckWarnTitle', { target: primary.label })
+          : t('servers.bottleneckGoodTitle')
+      : t('servers.bottleneckIdleTitle'),
+    detail: connected
+      ? t('servers.bottleneckDetail', { target: primary.label, value: primary.value })
+      : t('servers.bottleneckIdleDetail'),
+    action: connected
+      ? tone === 'slow'
+        ? t('servers.bottleneckSlowAction')
+        : tone === 'warn'
+          ? t('servers.bottleneckWarnAction')
+          : t('servers.bottleneckGoodAction')
+      : t('servers.bottleneckIdleAction'),
+    primaryLabel: t('servers.bottleneckPrimaryLabel', { target: primary.label }),
+    items,
+  };
+}
+
+function getBottleneckTone(level: number, active: boolean): TerminalNetworkQuality['tone'] {
+  if (!active) {
+    return 'pending';
+  }
+  if (level >= 80) {
+    return 'slow';
+  }
+  if (level >= 50) {
+    return 'warn';
+  }
+  return 'good';
 }
 
 function getTerminalTransportLabel(
