@@ -208,6 +208,30 @@ interface ReleaseFixRouterSummary {
   copyText: string;
 }
 
+type ReleaseFixChecklistStatus = 'open' | 'done' | 'deferred';
+
+interface ReleaseFixChecklistState {
+  version: 1;
+  statuses: Record<string, ReleaseFixChecklistStatus>;
+}
+
+interface ReleaseFixChecklistItem extends ReleaseFixRouteStep {
+  status: ReleaseFixChecklistStatus;
+}
+
+interface ReleaseFixChecklistSummary {
+  tone: 'ok' | 'warn' | 'fail';
+  title: string;
+  lead: string;
+  progressLabel: string;
+  total: number;
+  done: number;
+  deferred: number;
+  open: number;
+  items: ReleaseFixChecklistItem[];
+  copyText: string;
+}
+
 interface SshPerformanceMetric {
   id: string;
   label: string;
@@ -419,6 +443,8 @@ const sshLagReportHistoryStorageKey = 'colipas.sshLagReportHistory.v1';
 const sshLagReportHistoryVisibleLimit = 5;
 const sshBottleneckRadarHistoryStorageKey = 'colipas.sshBottleneckRadarHistory.v1';
 const sshBottleneckRadarHistoryVisibleLimit = 6;
+const releaseFixChecklistStorageKey = 'colipas.releaseFixChecklist.v1';
+const releaseFixChecklistStatuses: ReleaseFixChecklistStatus[] = ['open', 'done', 'deferred'];
 
 type SshSelfTestBottleneck = NonNullable<DiagnosticExportResponse['sshTerminal']['lastSelfTest']>['bottleneck'];
 type SshFlightTimelineEvent = DiagnosticExportResponse['sshTerminal']['sessionReplays'][number]['timeline'][number];
@@ -450,6 +476,7 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
   const [expandedSshMetricId, setExpandedSshMetricId] = useState('');
   const [sshLagReportHistory, setSshLagReportHistory] = useState<SshLagReportSnapshot[]>(() => loadSshLagReportHistory());
   const [sshBottleneckRadarHistory, setSshBottleneckRadarHistory] = useState<SshBottleneckRadarSnapshot[]>(() => loadSshBottleneckRadarHistory());
+  const [releaseFixChecklistState, setReleaseFixChecklistState] = useState<ReleaseFixChecklistState>(() => loadReleaseFixChecklistState());
 
   const openEvents = useMemo(() => events.filter((event) => event.status === 'open'), [events]);
   const filteredAudits = useMemo(() => {
@@ -561,6 +588,10 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
   const releaseFixRouter = useMemo(
     () => buildReleaseFixRouter(readiness, copy),
     [copy, readiness],
+  );
+  const releaseFixChecklist = useMemo(
+    () => buildReleaseFixChecklist(releaseFixRouter.steps, releaseFixChecklistState, copy),
+    [copy, releaseFixChecklistState, releaseFixRouter.steps],
   );
   const expandedSshMetric = useMemo(
     () => sshPerformance.metrics.find((metric) => metric.id === expandedSshMetricId) ?? sshPerformance.metrics[0] ?? null,
@@ -786,6 +817,43 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
       setRemediationMessage(releaseFixRouter.copyText);
       setRemediationError(false);
     }
+  }
+
+  async function copyReleaseFixChecklist() {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) {
+      setRemediationMessage(releaseFixChecklist.copyText);
+      setRemediationError(false);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(releaseFixChecklist.copyText);
+      setRemediationMessage(copy.releaseFixChecklistCopied);
+      setRemediationError(false);
+    } catch {
+      setRemediationMessage(releaseFixChecklist.copyText);
+      setRemediationError(false);
+    }
+  }
+
+  function updateReleaseFixChecklistStatus(id: string, status: ReleaseFixChecklistStatus) {
+    setReleaseFixChecklistState((current) => {
+      const statuses = { ...current.statuses };
+      if (status === 'open') {
+        delete statuses[id];
+      } else {
+        statuses[id] = status;
+      }
+      const next: ReleaseFixChecklistState = { version: 1, statuses };
+      saveReleaseFixChecklistState(next);
+      return next;
+    });
+  }
+
+  function resetReleaseFixChecklist() {
+    const next: ReleaseFixChecklistState = { version: 1, statuses: {} };
+    saveReleaseFixChecklistState(next);
+    setReleaseFixChecklistState(next);
   }
 
   async function copySshSupportBundle() {
@@ -1186,6 +1254,70 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
             <p>{releaseFixRouter.emptyDetail}</p>
           </div>
         )}
+      </article>
+
+      <article className={`security-release-fix-checklist ${releaseFixChecklist.tone}`} data-release-fix-checklist="true" aria-labelledby="security-release-fix-checklist-title">
+        <div className="security-release-fix-checklist-heading">
+          <div>
+            <span>{copy.releaseFixStatus}</span>
+            <h3 id="security-release-fix-checklist-title"><ClipboardCheck size={18} /> {releaseFixChecklist.title}</h3>
+            <p>{releaseFixChecklist.lead}</p>
+          </div>
+          <div className="security-release-fix-checklist-actions">
+            <strong>{releaseFixChecklist.progressLabel}</strong>
+            <button type="button" className="tool-button" onClick={copyReleaseFixChecklist} disabled={!releaseFixChecklist.copyText}>
+              <ClipboardCheck size={15} />
+              {copy.releaseFixChecklistCopy}
+            </button>
+            <button type="button" className="tool-button" onClick={resetReleaseFixChecklist} disabled={releaseFixChecklist.done === 0 && releaseFixChecklist.deferred === 0}>
+              <RefreshCw size={15} />
+              {copy.releaseFixChecklistReset}
+            </button>
+          </div>
+        </div>
+        <div className="security-release-fix-checklist-progress" aria-label={releaseFixChecklist.progressLabel}>
+          <span style={{ width: `${releaseFixChecklist.total ? Math.round((releaseFixChecklist.done / releaseFixChecklist.total) * 100) : 100}%` }} />
+        </div>
+        {releaseFixChecklist.items.length > 0 ? (
+          <div className="security-release-fix-checklist-list">
+            {releaseFixChecklist.items.map((item) => (
+              <article
+                key={item.id}
+                className={`security-release-fix-checklist-item ${item.tone} ${item.status}`}
+                data-release-fix-checklist-item={item.id}
+                data-release-fix-checklist-status={item.status}
+              >
+                <div className="security-release-fix-checklist-main">
+                  <small>{item.moduleLabel}</small>
+                  <strong>{item.title}</strong>
+                  <span>{copy.releaseFixValueLabel}: {item.value}</span>
+                  <p>{item.detail}</p>
+                </div>
+                <div className="security-release-fix-checklist-status" role="group" aria-label={item.title}>
+                  {releaseFixChecklistStatuses.map((status) => (
+                    <button
+                      key={status}
+                      type="button"
+                      className={item.status === status ? 'active' : ''}
+                      onClick={() => updateReleaseFixChecklistStatus(item.id, status)}
+                    >
+                      {status === 'done' ? copy.releaseFixChecklistDone : status === 'deferred' ? copy.releaseFixChecklistDeferred : copy.releaseFixChecklistOpen}
+                    </button>
+                  ))}
+                </div>
+                <button type="button" className="security-release-fix-checklist-open" onClick={() => applyReadinessFilter(item.check)}>
+                  {copy.releaseFixOpenText}
+                </button>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="security-release-fix-empty">
+            <strong>{releaseFixChecklist.title}</strong>
+            <p>{releaseFixChecklist.lead}</p>
+          </div>
+        )}
+        <small className="security-release-fix-checklist-note">{copy.releaseFixChecklistSanitizedNote}</small>
       </article>
 
       <article className={`security-release-cockpit ${releaseCockpit.tone}`} data-release-cockpit="true" aria-labelledby="security-release-cockpit-title">
@@ -2748,6 +2880,113 @@ function buildReleaseFixRouter(
     steps,
     copyText,
   };
+}
+
+
+function loadReleaseFixChecklistState(): ReleaseFixChecklistState {
+  if (typeof window === 'undefined') {
+    return { version: 1, statuses: {} };
+  }
+
+  try {
+    const raw = window.localStorage.getItem(releaseFixChecklistStorageKey);
+    if (!raw || containsSensitiveReportText(raw)) {
+      return { version: 1, statuses: {} };
+    }
+    const parsed = JSON.parse(raw) as Partial<ReleaseFixChecklistState>;
+    if (parsed.version !== 1 || !parsed.statuses || typeof parsed.statuses !== 'object') {
+      return { version: 1, statuses: {} };
+    }
+    const statuses = Object.entries(parsed.statuses).reduce<Record<string, ReleaseFixChecklistStatus>>((acc, [id, status]) => {
+      if (isSafeChecklistId(id) && isReleaseFixChecklistStatus(status)) {
+        acc[id] = status;
+      }
+      return acc;
+    }, {});
+    return { version: 1, statuses };
+  } catch {
+    return { version: 1, statuses: {} };
+  }
+}
+
+function saveReleaseFixChecklistState(state: ReleaseFixChecklistState) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(releaseFixChecklistStorageKey, JSON.stringify({ version: 1, statuses: state.statuses }));
+  } catch {
+    // Keep the security panel usable when browser storage is unavailable.
+  }
+}
+
+function isReleaseFixChecklistStatus(value: unknown): value is ReleaseFixChecklistStatus {
+  return typeof value === 'string' && releaseFixChecklistStatuses.includes(value as ReleaseFixChecklistStatus);
+}
+
+function isSafeChecklistId(value: string) {
+  return /^[a-z0-9._:-]{1,96}$/i.test(value);
+}
+
+function buildReleaseFixChecklist(
+  steps: ReleaseFixRouteStep[],
+  state: ReleaseFixChecklistState,
+  copy: SecurityCopy,
+): ReleaseFixChecklistSummary {
+  const items = steps.map((step) => ({
+    ...step,
+    status: state.statuses[step.id] ?? 'open',
+  }));
+  const done = items.filter((item) => item.status === 'done').length;
+  const deferred = items.filter((item) => item.status === 'deferred').length;
+  const open = Math.max(0, items.length - done - deferred);
+  const hasOpenFail = items.some((item) => item.status === 'open' && item.tone === 'fail');
+  const hasOpenWarn = items.some((item) => item.status === 'open' && item.tone === 'warn');
+  const tone: ReleaseFixChecklistSummary['tone'] = hasOpenFail
+    ? 'fail'
+    : hasOpenWarn || deferred > 0
+      ? 'warn'
+      : 'ok';
+  const progressLabel = copy.releaseFixChecklistProgress(done, items.length);
+  const copyText = [
+    `# ${copy.releaseFixChecklistTitle}`,
+    progressLabel,
+    `${copy.releaseFixChecklistOpen}: ${open} / ${copy.releaseFixChecklistDeferred}: ${deferred}`,
+    '',
+    ...items.map((item, index) => [
+      `${index + 1}. [${getReleaseFixChecklistStatusLabel(item.status, copy)}] ${item.moduleLabel} / ${item.title}`,
+      `   ${copy.releaseFixValueLabel}: ${item.value}`,
+      `   ${copy.releaseFixActionText}: ${item.detail}`,
+      `   ${copy.releaseFixOpenText}: ${item.actionLabel}`,
+    ].join('\n')),
+    items.length === 0 ? `${copy.releaseFixChecklistEmptyTitle}: ${copy.releaseFixChecklistEmptyDetail}` : '',
+    '',
+    copy.releaseFixChecklistSanitizedNote,
+  ].filter(Boolean).map(sanitizeEvidenceBriefText).join('\n');
+
+  return {
+    tone,
+    title: items.length > 0 ? copy.releaseFixChecklistTitle : copy.releaseFixChecklistEmptyTitle,
+    lead: items.length > 0 ? copy.releaseFixChecklistLead : copy.releaseFixChecklistEmptyDetail,
+    progressLabel,
+    total: items.length,
+    done,
+    deferred,
+    open,
+    items,
+    copyText,
+  };
+}
+
+function getReleaseFixChecklistStatusLabel(status: ReleaseFixChecklistStatus, copy: SecurityCopy) {
+  if (status === 'done') {
+    return copy.releaseFixChecklistDone;
+  }
+  if (status === 'deferred') {
+    return copy.releaseFixChecklistDeferred;
+  }
+  return copy.releaseFixChecklistOpen;
 }
 
 function buildReleaseFixFocus(
@@ -4358,6 +4597,18 @@ interface SecurityCopy {
   releaseFixActionText: string;
   releaseFixOpenText: string;
   releaseFixSanitizedNote: string;
+  releaseFixChecklistTitle: string;
+  releaseFixChecklistLead: string;
+  releaseFixChecklistProgress: (done: number, total: number) => string;
+  releaseFixChecklistOpen: string;
+  releaseFixChecklistDone: string;
+  releaseFixChecklistDeferred: string;
+  releaseFixChecklistCopy: string;
+  releaseFixChecklistCopied: string;
+  releaseFixChecklistReset: string;
+  releaseFixChecklistSanitizedNote: string;
+  releaseFixChecklistEmptyTitle: string;
+  releaseFixChecklistEmptyDetail: string;
   releaseFixModuleLabel: (module: ReleaseReadinessResponse['checks'][number]['relatedModule']) => string;
   releaseFixActionLabel: (module: ReleaseReadinessResponse['checks'][number]['relatedModule']) => string;
   releasePlaybookTitle: string;
@@ -5566,6 +5817,18 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     releaseFixActionText: '建议动作',
     releaseFixOpenText: '打开入口',
     releaseFixSanitizedNote: '修复路线只包含检查名称、聚合值、建议动作和模块入口，不包含服务器地址、密钥、命令正文或用户数据。',
+    releaseFixChecklistTitle: '????????',
+    releaseFixChecklistLead: '?????????????????????????????????',
+    releaseFixChecklistProgress: (done, total) => total > 0 ? `${done}/${total} ???` : '????',
+    releaseFixChecklistOpen: '???',
+    releaseFixChecklistDone: '???',
+    releaseFixChecklistDeferred: '??',
+    releaseFixChecklistCopy: '????',
+    releaseFixChecklistCopied: '???????????',
+    releaseFixChecklistReset: '????',
+    releaseFixChecklistSanitizedNote: '???????????? ID ??????????????????????????????????',
+    releaseFixChecklistEmptyTitle: '??????',
+    releaseFixChecklistEmptyDetail: '??????????????????????????',
     releaseFixModuleLabel: (module) => ({
       ai: 'AI 模块',
       api: '自定义 API',
@@ -5832,6 +6095,18 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     releaseFixActionText: 'Recommended action',
     releaseFixOpenText: 'Open entry',
     releaseFixSanitizedNote: 'The fix route only includes check names, aggregate values, recommended actions, and module entries; no server addresses, keys, command text, or user data.',
+    releaseFixChecklistTitle: 'Release fix checklist',
+    releaseFixChecklistLead: 'Track each release blocker as open, done, or deferred; browser refresh keeps the review progress without saving sensitive data.',
+    releaseFixChecklistProgress: (done, total) => total > 0 ? `${done}/${total} done` : 'No tasks',
+    releaseFixChecklistOpen: 'Open',
+    releaseFixChecklistDone: 'Done',
+    releaseFixChecklistDeferred: 'Deferred',
+    releaseFixChecklistCopy: 'Copy checklist',
+    releaseFixChecklistCopied: 'Release fix checklist copied',
+    releaseFixChecklistReset: 'Reset checklist',
+    releaseFixChecklistSanitizedNote: 'The checklist stores only check IDs and statuses in the browser; copied text is sanitized and excludes server addresses, keys, command text, and user data.',
+    releaseFixChecklistEmptyTitle: 'No fix tasks',
+    releaseFixChecklistEmptyDetail: 'There are no failed or warning checks; keep recording snapshots and validating production endpoints.',
     releaseFixModuleLabel: (module) => ({
       ai: 'AI module',
       api: 'Custom API',
@@ -6098,6 +6373,18 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     releaseFixActionText: '推奨アクション',
     releaseFixOpenText: '入口を開く',
     releaseFixSanitizedNote: '修復ルートにはチェック名、集計値、推奨アクション、モジュール入口のみが含まれ、サーバーアドレス、鍵、コマンド本文、ユーザーデータは含みません。',
+    releaseFixChecklistTitle: '?????????????',
+    releaseFixChecklistLead: '?????????????????????????????????????????',
+    releaseFixChecklistProgress: (done, total) => total > 0 ? `${done}/${total} ??` : '?????',
+    releaseFixChecklistOpen: '???',
+    releaseFixChecklistDone: '??',
+    releaseFixChecklistDeferred: '??',
+    releaseFixChecklistCopy: '???????????',
+    releaseFixChecklistCopied: '?????????????????????',
+    releaseFixChecklistReset: '????',
+    releaseFixChecklistSanitizedNote: '?????????????????? ID ????????????????????????????????????????????????????????',
+    releaseFixChecklistEmptyTitle: '???????',
+    releaseFixChecklistEmptyDetail: '??????????????????????????????????????????',
     releaseFixModuleLabel: (module) => ({
       ai: 'AI モジュール',
       api: 'カスタム API',

@@ -135,12 +135,14 @@ async function assertSyntheticTraceDeepLink(targetPage, expectedTraceId) {
 async function assertReleaseEvidenceBrief(targetPage) {
   await targetPage.locator('.security-evidence-brief').waitFor({ timeout: 10000 });
   await targetPage.locator('[data-release-fix-router="true"]').waitFor({ timeout: 10000 });
+  await targetPage.locator('[data-release-fix-checklist="true"]').waitFor({ timeout: 10000 });
   await targetPage.locator('[data-release-cockpit="true"]').waitFor({ timeout: 10000 });
   await targetPage.locator('[data-release-handoff-pack="true"]').waitFor({ timeout: 10000 });
   await targetPage.locator('.security-release-playbook').waitFor({ timeout: 10000 });
   await targetPage.locator('.security-ssh-performance-card').waitFor({ timeout: 10000 });
   await targetPage.getByRole('button', { name: /copy evidence brief/i }).waitFor({ timeout: 5000 });
   await targetPage.getByRole('button', { name: /copy fix route/i }).waitFor({ timeout: 5000 });
+  await targetPage.getByRole('button', { name: /copy checklist/i }).waitFor({ timeout: 5000 });
   await targetPage.getByRole('button', { name: /copy cockpit/i }).waitFor({ timeout: 5000 });
   await targetPage.getByRole('button', { name: /copy handoff pack/i }).waitFor({ timeout: 5000 });
   const releaseFixText = await targetPage.locator('[data-release-fix-router="true"]').innerText();
@@ -154,6 +156,27 @@ async function assertReleaseEvidenceBrief(targetPage) {
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(releaseFixText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(releaseFixText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(releaseFixText)) {
     throw new Error('Release fix router rendered a raw IP address or secret');
   }
+  const releaseFixChecklistText = await targetPage.locator('[data-release-fix-checklist="true"]').innerText();
+  if (!/Release fix checklist/i.test(releaseFixChecklistText) || !/Open/i.test(releaseFixChecklistText) || !/Done/i.test(releaseFixChecklistText) || !/Deferred/i.test(releaseFixChecklistText)) {
+    throw new Error(`Release fix checklist did not render status controls: ${releaseFixChecklistText}`);
+  }
+  const releaseFixChecklistItem = targetPage.locator('[data-release-fix-checklist-item]').first();
+  if (await releaseFixChecklistItem.count() === 0) {
+    throw new Error('Release fix checklist should expose at least one checklist item in the grey test fixture');
+  }
+  await releaseFixChecklistItem.locator('button', { hasText: /^Done$/i }).click();
+  await expectReleaseFixChecklistStatus(targetPage, 'done');
+  await releaseFixChecklistItem.locator('button', { hasText: /^Deferred$/i }).click();
+  await expectReleaseFixChecklistStatus(targetPage, 'deferred');
+  const storedReleaseFixChecklist = await targetPage.evaluate(() => window.localStorage.getItem('colipas.releaseFixChecklist.v1') ?? '');
+  if (!/"version":1/.test(storedReleaseFixChecklist) || !/"deferred"/.test(storedReleaseFixChecklist)) {
+    throw new Error(`Release fix checklist did not persist sanitized status state: ${storedReleaseFixChecklist}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(storedReleaseFixChecklist) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(storedReleaseFixChecklist) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(storedReleaseFixChecklist)) {
+    throw new Error('Release fix checklist storage leaked a raw IP address or secret');
+  }
+  await releaseFixChecklistItem.locator('button', { hasText: /^Open$/i }).click();
+  await expectReleaseFixChecklistStatus(targetPage, 'open');
   const focusStep = targetPage.locator('[data-release-fix-step="ai"], [data-release-fix-step="api"], [data-release-fix-step="servers"], [data-release-fix-step="ssh"], [data-release-fix-step="events"]').first();
   if (await focusStep.count() === 0) {
     throw new Error('Release fix router should expose at least one cross-module focus route in the grey test fixture');
@@ -263,6 +286,7 @@ async function assertReleaseEvidenceBrief(targetPage) {
   }
   await targetPage.evaluate(() => {
     window.__colipasCopiedReleaseFixText = '';
+    window.__colipasCopiedReleaseFixChecklistText = '';
     window.__colipasCopiedReleaseCockpitText = '';
     window.__colipasCopiedReleaseHandoffText = '';
     window.__colipasCopiedSshPerformanceText = '';
@@ -276,7 +300,9 @@ async function assertReleaseEvidenceBrief(targetPage) {
       configurable: true,
       value: {
         writeText: async (text) => {
-          if (/Release fix router/i.test(text)) {
+          if (/Release fix checklist/i.test(text)) {
+            window.__colipasCopiedReleaseFixChecklistText = text;
+          } else if (/Release fix router/i.test(text)) {
             window.__colipasCopiedReleaseFixText = text;
           } else if (/Release handoff pack/i.test(text)) {
             window.__colipasCopiedReleaseHandoffText = text;
@@ -308,6 +334,14 @@ async function assertReleaseEvidenceBrief(targetPage) {
   }
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedReleaseFixText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedReleaseFixText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(copiedReleaseFixText)) {
     throw new Error('Release fix route copy output leaked a raw IP address or secret');
+  }
+  await targetPage.getByRole('button', { name: /copy checklist/i }).click();
+  const copiedReleaseFixChecklistText = await targetPage.evaluate(() => window.__colipasCopiedReleaseFixChecklistText ?? '');
+  if (!/Release fix checklist/i.test(copiedReleaseFixChecklistText) || !/Open/i.test(copiedReleaseFixChecklistText) || !/Current value/i.test(copiedReleaseFixChecklistText) || !/copied text is sanitized/i.test(copiedReleaseFixChecklistText)) {
+    throw new Error(`Release fix checklist copy output is incomplete: ${copiedReleaseFixChecklistText}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedReleaseFixChecklistText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedReleaseFixChecklistText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(copiedReleaseFixChecklistText)) {
+    throw new Error('Release fix checklist copy output leaked a raw IP address or secret');
   }
   await targetPage.getByRole('button', { name: /copy cockpit/i }).click();
   const copiedReleaseCockpitText = await targetPage.evaluate(() => window.__colipasCopiedReleaseCockpitText ?? '');
@@ -475,16 +509,25 @@ async function assertReleaseEvidenceBrief(targetPage) {
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshPerfText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshPerfText)) {
     throw new Error('SSH performance copy output leaked a raw IP address or API key');
   }
-  const text = `${releaseFixText}\n${releaseCockpitText}\n${releaseHandoffText}\n${await targetPage.locator('.security-evidence-brief').innerText()}\n${await targetPage.locator('.security-release-playbook').innerText()}\n${sshPerfText}`;
+  const text = `${releaseFixText}\n${releaseFixChecklistText}\n${releaseCockpitText}\n${releaseHandoffText}\n${await targetPage.locator('.security-evidence-brief').innerText()}\n${await targetPage.locator('.security-release-playbook').innerText()}\n${sshPerfText}`;
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(text) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(text)) {
     throw new Error('Release fix router, cockpit, handoff pack, evidence, failure playbook, or SSH performance card rendered a raw IP address or API key');
   }
   await assertElementHorizontallyWithinViewport(targetPage, '[data-release-fix-router="true"]', 'desktop release fix router');
+  await assertElementHorizontallyWithinViewport(targetPage, '[data-release-fix-checklist="true"]', 'desktop release fix checklist');
   await assertElementHorizontallyWithinViewport(targetPage, '[data-release-cockpit="true"]', 'desktop release cockpit');
   await assertElementHorizontallyWithinViewport(targetPage, '[data-release-handoff-pack="true"]', 'desktop release handoff pack');
   await assertElementHorizontallyWithinViewport(targetPage, '.security-evidence-brief', 'desktop release evidence brief');
   await assertElementHorizontallyWithinViewport(targetPage, '.security-release-playbook', 'desktop release failure playbook');
   await assertElementHorizontallyWithinViewport(targetPage, '.security-ssh-performance-card', 'desktop SSH performance card');
+}
+
+async function expectReleaseFixChecklistStatus(targetPage, status) {
+  await targetPage.waitForFunction(
+    (expectedStatus) => document.querySelector('[data-release-fix-checklist-item]')?.getAttribute('data-release-fix-checklist-status') === expectedStatus,
+    status,
+    { timeout: 5000 },
+  );
 }
 
 function releaseFixAnchorForModule(module) {
