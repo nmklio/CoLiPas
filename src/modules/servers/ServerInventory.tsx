@@ -65,6 +65,14 @@ const sshDoctorHistoryLimit = 12;
 const terminalSelfTestCommand = `printf 'colipas-ssh-self-test-start\\n'; i=1; while [ "$i" -le 40 ]; do printf 'colipas-ssh-self-test-%02d\\n' "$i"; i=$((i+1)); done; printf 'colipas-ssh-self-test-end\\n'`;
 const terminalSelfTestTimeoutMs = 15000;
 const terminalSelfTestLinePattern = /colipas-ssh-self-test-\d{2}/g;
+const sshQuickCommands = [
+  { id: 'identity', command: 'uname -a && uptime' },
+  { id: 'disk', command: 'df -h' },
+  { id: 'memory', command: 'free -h' },
+  { id: 'network', command: 'ip -br addr' },
+  { id: 'processes', command: 'ps -eo pid,ppid,stat,pcpu,pmem,comm --sort=-pcpu | head -12' },
+  { id: 'logs', command: 'journalctl -p warning -n 50 --no-pager' },
+] as const;
 
 const actionCommands: Record<'powerOn' | 'shutdown' | 'reboot', string> = {
   powerOn: 'printf "server reachable via SSH\\n"; uptime',
@@ -1431,6 +1439,43 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     ))}
                   </div>
                 </div>
+                <div className="ssh-quick-command-deck" data-ssh-quick-command-deck="true">
+                  <div className="ssh-quick-command-heading">
+                    <span>{t('servers.quickCommandEyebrow')}</span>
+                    <strong>{t('servers.quickCommandTitle')}</strong>
+                    <small>{t('servers.quickCommandDetail')}</small>
+                  </div>
+                  <div className="ssh-quick-command-grid" role="list" aria-label={t('servers.quickCommandTitle')}>
+                    {sshQuickCommands.map((item) => {
+                      const title = t(`servers.quickCommand.${item.id}.title`);
+                      return (
+                        <article key={item.id} role="listitem" data-ssh-quick-command={item.id}>
+                          <span>{t(`servers.quickCommand.${item.id}.label`)}</span>
+                          <strong>{title}</strong>
+                          <code>{item.command}</code>
+                          <div>
+                            <button
+                              type="button"
+                              data-ssh-quick-command-insert={item.id}
+                              onClick={() => sendSshQuickCommand(item.command, title, 'insert')}
+                              disabled={!terminalShellId}
+                            >
+                              {t('servers.quickCommandInsert')}
+                            </button>
+                            <button
+                              type="button"
+                              data-ssh-quick-command-run={item.id}
+                              onClick={() => sendSshQuickCommand(item.command, title, 'run')}
+                              disabled={!terminalShellId}
+                            >
+                              {t('servers.quickCommandRun')}
+                            </button>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
                 <div ref={terminalContainerRef} className="ssh-terminal-screen" aria-label="Interactive SSH terminal" />
               </div>
             </div>
@@ -2609,6 +2654,28 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     terminal.clear();
     showActionMessage(t('servers.terminalCleared'));
     terminal.focus();
+  }
+
+  function sendSshQuickCommand(command: string, title: string, mode: 'insert' | 'run') {
+    const sessionId = terminalShellId;
+    if (!sessionId) {
+      showActionMessage(t('servers.quickCommandUnavailable'));
+      return;
+    }
+
+    const payload = mode === 'run' ? `${command}\r` : command;
+    flushTerminalInput(sessionId)
+      .then(() => {
+        recordTerminalInput(payload);
+        return sendTerminalInput(sessionId, payload);
+      })
+      .then(() => {
+        showActionMessage(t(mode === 'run' ? 'servers.quickCommandRunMessage' : 'servers.quickCommandInsertMessage', { title }));
+        xtermRef.current?.focus();
+      })
+      .catch((error) => {
+        showActionMessage(error instanceof Error ? error.message : t('servers.quickCommandFailed'));
+      });
   }
 
   function runTerminalSelfTest() {

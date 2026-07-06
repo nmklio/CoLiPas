@@ -907,6 +907,32 @@ async function assertSshTerminalPanel(targetPage) {
     await targetPage.locator('.ssh-terminal-screen .xterm').waitFor({ timeout: 10000 });
     await targetPage.locator('.ssh-terminal-session-count').filter({ hasText: /sessions 1/i }).waitFor({ timeout: 10000 });
     await targetPage.locator('.ssh-terminal-network').filter({ hasText: /RTT/i }).waitFor({ timeout: 10000 });
+    await targetPage.locator('[data-ssh-quick-command-deck="true"]').waitFor({ timeout: 5000 });
+    const quickCommandText = await targetPage.locator('[data-ssh-quick-command-deck="true"]').innerText();
+    const requiredQuickCommandLabels = ['Terminal runbook', 'System and uptime', 'Disk space', 'Memory pressure', 'Interfaces and addresses', 'Top CPU processes', 'Recent warning logs'];
+    const missingQuickCommandLabels = requiredQuickCommandLabels.filter((label) => !quickCommandText.toLowerCase().includes(label.toLowerCase()));
+    if (missingQuickCommandLabels.length) {
+      throw new Error(`SSH quick command deck did not render ${missingQuickCommandLabels.join(', ')}: ${quickCommandText}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(quickCommandText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(quickCommandText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY|password=|passphrase=/i.test(quickCommandText)) {
+      throw new Error('SSH quick command deck rendered raw host or secret material');
+    }
+    const quickCommandCount = await targetPage.locator('[data-ssh-quick-command]').count();
+    if (quickCommandCount !== 6) {
+      throw new Error(`SSH quick command deck should expose six commands, got ${quickCommandCount}`);
+    }
+    await targetPage.locator('[data-ssh-quick-command-insert="identity"]').click();
+    await targetPage.locator('.action-message').filter({ hasText: /Inserted System and uptime/i }).waitFor({ timeout: 5000 });
+    await targetPage.keyboard.press('Enter');
+    await targetPage.waitForFunction(() => {
+      const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
+      return terminalText.includes('simulated$ uname -a && uptime') && terminalText.includes('command simulated.');
+    }, undefined, { timeout: 10000 });
+    await targetPage.locator('[data-ssh-quick-command-run="disk"]').click();
+    await targetPage.waitForFunction(() => {
+      const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
+      return terminalText.includes('simulated$ df -h') && terminalText.includes('command simulated.');
+    }, undefined, { timeout: 10000 });
     await targetPage.locator('.ssh-terminal-screen').click();
     await targetPage.keyboard.type('whoami', { delay: 10 });
     await targetPage.keyboard.press('Enter');
@@ -1183,7 +1209,7 @@ async function assertSshTerminalPanel(targetPage) {
       const status = await response.json();
       return status.activeCount === 0;
     }, undefined, { timeout: 5000 });
-    console.log('ok browser e2e covers interactive xterm SSH terminal, copy/clear tools, status count, and panel disconnect cleanup');
+    console.log('ok browser e2e covers interactive xterm SSH terminal, quick commands, copy/clear tools, status count, and panel disconnect cleanup');
   } finally {
     await deleteTemporaryAssetServer(targetPage, sshServer.id).catch(() => undefined);
   }

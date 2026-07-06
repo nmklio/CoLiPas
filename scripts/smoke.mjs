@@ -5284,6 +5284,14 @@ function assertSshTerminalRealtimeGuards() {
     'getVisibleTerminalText(terminal)',
     'function clearTerminalOutput()',
     'terminal.clear()',
+    'const sshQuickCommands = [',
+    'data-ssh-quick-command-deck="true"',
+    'data-ssh-quick-command={item.id}',
+    'data-ssh-quick-command-insert={item.id}',
+    'data-ssh-quick-command-run={item.id}',
+    'function sendSshQuickCommand(',
+    "recordTerminalInput(payload)",
+    "sendTerminalInput(sessionId, payload)",
     'terminalSelfTestCommand',
     'terminalSelfTestTimeoutMs',
     'terminalSelfTestLinePattern',
@@ -5365,10 +5373,30 @@ function assertSshTerminalRealtimeGuards() {
     'servers.bottleneckInputLabel',
     'servers.bottleneckOutputLabel',
     'servers.bottleneckRenderLabel',
+    'servers.quickCommandTitle',
+    'servers.quickCommandInsert',
+    'servers.quickCommandRun',
+    'servers.quickCommandRunMessage',
   ];
-  const missingToolLabels = requiredToolLabels.filter((key) => !inventorySource.includes(key) || !fs.readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8').includes(key));
+  const i18nSource = fs.readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
+  const missingToolLabels = requiredToolLabels.filter((key) => !inventorySource.includes(key) || !i18nSource.includes(key));
   if (missingToolLabels.length) {
     throw new Error(`SSH terminal tool i18n or UI wiring is incomplete: ${missingToolLabels.join(', ')}`);
+  }
+  if (!inventorySource.includes('servers.quickCommand.${item.id}.title') || !inventorySource.includes('servers.quickCommand.${item.id}.label')) {
+    throw new Error('SSH terminal quick command deck must resolve per-command dynamic i18n labels');
+  }
+  const requiredQuickCommandI18n = [
+    'servers.quickCommand.identity.title',
+    'servers.quickCommand.disk.title',
+    'servers.quickCommand.memory.title',
+    'servers.quickCommand.network.title',
+    'servers.quickCommand.processes.title',
+    'servers.quickCommand.logs.title',
+  ];
+  const missingQuickCommandI18n = requiredQuickCommandI18n.filter((key) => !i18nSource.includes(key));
+  if (missingQuickCommandI18n.length) {
+    throw new Error(`SSH terminal quick command i18n coverage is incomplete: ${missingQuickCommandI18n.join(', ')}`);
   }
   const closeSshConsoleMatch = inventorySource.match(/function closeSshConsole\(\)\s*\{(?<body>[\s\S]+?)\r?\n  \}\r?\n\r?\n  async function startTerminalLogin/);
   if (!closeSshConsoleMatch?.groups?.body?.includes('setSshConsoleOpen(false)')) {
@@ -5510,6 +5538,9 @@ function assertSshTerminalRealtimeGuards() {
   }
   if (!globalCssSource.includes('.ssh-terminal-self-test') || !globalCssSource.includes('.ssh-terminal-self-test.complete')) {
     throw new Error('SSH terminal self-test result chip styles are missing');
+  }
+  if (!globalCssSource.includes('.ssh-quick-command-deck') || !globalCssSource.includes('.ssh-quick-command-grid') || !globalCssSource.includes('grid-template-rows: 38px auto auto auto auto minmax(0, 1fr)')) {
+    throw new Error('SSH terminal quick command deck styles are missing or the terminal grid does not reserve space for it');
   }
 
   const redactionRequired = [

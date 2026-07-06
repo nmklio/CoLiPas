@@ -4892,7 +4892,7 @@ td span,
   box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.03);
   overflow: hidden;
   display: grid;
-  grid-template-rows: 38px auto auto auto minmax(0, 1fr);
+  grid-template-rows: 38px auto auto auto auto minmax(0, 1fr);
 }
 
 .ssh-terminal-titlebar {
@@ -5448,6 +5448,141 @@ td span,
   font-size: 10px;
   font-weight: 720;
   line-height: 1.25;
+}
+
+.ssh-quick-command-deck {
+  min-height: 94px;
+  padding: 10px 14px 11px;
+  border-bottom: 1px solid rgba(126, 161, 166, 0.12);
+  background:
+    radial-gradient(circle at 7% 20%, rgba(56, 189, 248, 0.12), transparent 28%),
+    linear-gradient(135deg, rgba(4, 12, 16, 0.98), rgba(3, 7, 8, 0.99));
+  display: grid;
+  grid-template-columns: minmax(150px, 0.33fr) minmax(0, 1.67fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.ssh-quick-command-heading {
+  min-width: 0;
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  padding-right: 12px;
+  border-right: 1px solid rgba(125, 211, 252, 0.14);
+}
+
+.ssh-quick-command-heading span {
+  color: #67e8f9;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.ssh-quick-command-heading strong {
+  color: #f4fffb;
+  font-size: 13px;
+  font-weight: 950;
+  line-height: 1.2;
+}
+
+.ssh-quick-command-heading small {
+  color: #93aeb4;
+  font-size: 10px;
+  font-weight: 730;
+  line-height: 1.35;
+}
+
+.ssh-quick-command-grid {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.ssh-quick-command-grid article {
+  min-width: 0;
+  border: 1px solid rgba(125, 211, 252, 0.16);
+  border-radius: 13px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  align-items: center;
+}
+
+.ssh-quick-command-grid article:hover {
+  border-color: rgba(103, 232, 249, 0.34);
+  background: rgba(14, 116, 144, 0.13);
+}
+
+.ssh-quick-command-grid span,
+.ssh-quick-command-grid strong,
+.ssh-quick-command-grid code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ssh-quick-command-grid span {
+  color: #67e8f9;
+  font-size: 9px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ssh-quick-command-grid strong {
+  color: #f8fffc;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.ssh-quick-command-grid code {
+  grid-column: 1 / -1;
+  color: #bdebdc;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.ssh-quick-command-grid article > div {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.ssh-quick-command-grid button {
+  min-height: 24px;
+  border: 1px solid rgba(103, 232, 249, 0.18);
+  border-radius: 999px;
+  padding: 0 8px;
+  color: #e6fffb;
+  background: rgba(8, 47, 73, 0.42);
+  font-size: 10px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.ssh-quick-command-grid button:last-child {
+  border-color: rgba(94, 234, 212, 0.28);
+  background: linear-gradient(135deg, rgba(20, 184, 166, 0.28), rgba(14, 116, 144, 0.26));
+}
+
+.ssh-quick-command-grid button:hover:not(:disabled) {
+  border-color: rgba(165, 243, 252, 0.56);
+  background: rgba(8, 145, 178, 0.36);
+}
+
+.ssh-quick-command-grid button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .ssh-terminal-self-test {
@@ -13234,6 +13369,37 @@ pre {
 
   .ssh-terminal-bottleneck-radar small {
     white-space: normal;
+  }
+
+  .ssh-quick-command-deck {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 9px 12px 11px;
+  }
+
+  .ssh-quick-command-heading {
+    border-right: 0;
+    border-bottom: 1px solid rgba(125, 211, 252, 0.14);
+    padding-right: 0;
+    padding-bottom: 7px;
+  }
+
+  .ssh-quick-command-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ssh-quick-command-grid article {
+    grid-template-columns: 1fr;
+  }
+
+  .ssh-quick-command-grid article > div {
+    grid-row: auto;
+    grid-column: auto;
+    justify-content: stretch;
+  }
+
+  .ssh-quick-command-grid button {
+    flex: 1 1 auto;
   }
 
   .ssh-terminal-session-count {
