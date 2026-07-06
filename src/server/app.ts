@@ -19,7 +19,7 @@ import { buildDiagnosticExport } from './services/diagnosticService.js';
 import { createOperationTask, preflightOperationTask } from './services/operationsService.js';
 import { buildReleaseReadiness, buildReleaseReadinessReport, recordReleaseReadinessSnapshot } from './services/releaseReadinessService.js';
 import { buildReleaseVerification, isReleaseVerificationAuthorized, isReleaseVerificationEnabled } from './services/releaseVerificationService.js';
-import { createSshRunbookCommand, deleteSshRunbookCommand, importSshRunbookCommands, listSshRunbookCommands, reorderSshRunbookCommands, updateSshRunbookCommand } from './services/sshRunbookService.js';
+import { createSshRunbookCommand, deleteSshRunbookCommand, importSshRunbookCommands, listSshRunbookCommands, reorderSshRunbookCommands, updateSshRunbookCommand, updateSshRunbookCommandPin } from './services/sshRunbookService.js';
 import {
   buildServerInventorySnapshot,
   closeServerShell,
@@ -595,6 +595,23 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
         detail: `SSH runbook commands reordered: ${commands.length}`,
       });
       response.json({ commands });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.patch('/api/servers/ssh-runbook/:commandId/pin', (request, response, next) => {
+    try {
+      const session = requireSession(request, config);
+      const result = updateSshRunbookCommandPin(request.params.commandId, request.body);
+      recordAudit({
+        action: 'SSH_RUNBOOK_PIN',
+        actor: session.user.username,
+        target: 'ssh-runbook',
+        status: 'success',
+        detail: `SSH runbook command ${result.command.pinned ? 'pinned' : 'unpinned'}: ${result.command.title}`,
+      });
+      response.json(result);
     } catch (error) {
       next(error);
     }

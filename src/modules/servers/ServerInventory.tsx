@@ -23,6 +23,7 @@ import {
   runServerDiagnostic,
   streamServerShell,
   updateSshRunbookCommand,
+  updateSshRunbookCommandPin,
   writeServerShell,
   type ServerDiagnosticResponse,
   type ServerShellSocketCloseEvent,
@@ -427,6 +428,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const [deletingSshRunbookId, setDeletingSshRunbookId] = useState('');
   const [movingSshRunbookId, setMovingSshRunbookId] = useState('');
   const [importingSshRunbookPackId, setImportingSshRunbookPackId] = useState('');
+  const [pinningSshRunbookId, setPinningSshRunbookId] = useState('');
   const [diagnosingServerId, setDiagnosingServerId] = useState('');
   const [sshDoctorReport, setSshDoctorReport] = useState<SshConnectionDoctorReport | null>(null);
   const [sshDoctorHistory, setSshDoctorHistory] = useState<SshConnectionDoctorHistoryEntry[]>(() => readSshDoctorHistory());
@@ -1650,11 +1652,21 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                       {visibleSshRunbookCommands.map((item) => {
                         const orderIndex = sshRunbookCommands.findIndex((command) => command.id === item.id);
                         return (
-                          <article key={item.id} role="listitem" className="custom" data-ssh-runbook-command={item.id}>
-                            <span>{t(`servers.quickCommandCategory.${classifySshRunbookCommand(item)}`)}</span>
+                          <article key={item.id} role="listitem" className={item.pinned ? 'custom pinned' : 'custom'} data-ssh-runbook-command={item.id}>
+                            <span>{item.pinned ? t('servers.quickCommandPinnedLabel') : t(`servers.quickCommandCategory.${classifySshRunbookCommand(item)}`)}</span>
                             <strong>{item.title}</strong>
                             <code>{item.command}</code>
                             <div>
+                              <button
+                                type="button"
+                                className="pin"
+                                data-ssh-runbook-command-pin={item.id}
+                                aria-label={t(item.pinned ? 'servers.quickCommandUnpinAria' : 'servers.quickCommandPinAria', { title: item.title })}
+                                onClick={() => toggleSshRunbookPin(item)}
+                                disabled={pinningSshRunbookId === item.id}
+                              >
+                                {item.pinned ? '★' : '☆'}
+                              </button>
                               <button
                                 type="button"
                                 data-ssh-runbook-command-edit={item.id}
@@ -2990,6 +3002,21 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       showActionMessage(error instanceof Error ? error.message : t('servers.quickCommandPackImportFailed'));
     } finally {
       setImportingSshRunbookPackId('');
+    }
+  }
+
+  async function toggleSshRunbookPin(command: SshRunbookCommand) {
+    setPinningSshRunbookId(command.id);
+    try {
+      const result = await updateSshRunbookCommandPin(command.id, !command.pinned);
+      setSshRunbookCommands(result.commands);
+      showActionMessage(t(result.command.pinned ? 'servers.quickCommandPinned' : 'servers.quickCommandUnpinned', {
+        title: result.command.title,
+      }));
+    } catch (error) {
+      showActionMessage(error instanceof Error ? error.message : t('servers.quickCommandPinFailed'));
+    } finally {
+      setPinningSshRunbookId('');
     }
   }
 

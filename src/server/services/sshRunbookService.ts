@@ -18,6 +18,10 @@ export interface SshRunbookReorderPayload {
   commandIds?: unknown;
 }
 
+export interface SshRunbookPinPayload {
+  pinned?: unknown;
+}
+
 export interface SshRunbookImportPayload {
   commands?: unknown;
 }
@@ -69,6 +73,33 @@ export function updateSshRunbookCommand(commandId: string, payload: SshRunbookCo
   next[index] = updated;
   writeRunbookCommands(next);
   return updated;
+}
+
+export function updateSshRunbookCommandPin(commandId: string, payload: SshRunbookPinPayload) {
+  const pinned = normalizePinned(payload?.pinned);
+  const commands = readRunbookCommands();
+  const index = commands.findIndex((item) => item.id === commandId);
+  if (index === -1) {
+    throw new HttpError(404, 'SSH runbook command was not found', 'SSH_RUNBOOK_COMMAND_NOT_FOUND');
+  }
+
+  const updated: SshRunbookCommand = {
+    ...commands[index],
+    pinned,
+    updatedAt: new Date().toISOString(),
+  };
+  const rest = commands.filter((item) => item.id !== commandId);
+  const insertIndex = pinned
+    ? Math.max(0, rest.findIndex((item) => !item.pinned))
+    : rest.findIndex((item) => !item.pinned);
+  const next = rest.slice();
+  if (insertIndex === -1) {
+    next.push(updated);
+  } else {
+    next.splice(insertIndex, 0, updated);
+  }
+  writeRunbookCommands(next);
+  return { commands: next, command: updated };
 }
 
 export function deleteSshRunbookCommand(commandId: string) {
@@ -175,6 +206,13 @@ function normalizeImportCommands(value: unknown) {
     throw new HttpError(400, 'Runbook import must include 1-8 commands', 'SSH_RUNBOOK_IMPORT_INVALID');
   }
   return value.map((item) => normalizePayload(item as SshRunbookCommandPayload));
+}
+
+function normalizePinned(value: unknown) {
+  if (typeof value !== 'boolean') {
+    throw new HttpError(400, 'Pinned value must be true or false', 'SSH_RUNBOOK_PIN_INVALID');
+  }
+  return value;
 }
 
 function ensureUniqueTitle(commands: SshRunbookCommand[], title: string) {

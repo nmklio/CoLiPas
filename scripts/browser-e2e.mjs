@@ -1021,6 +1021,19 @@ async function assertSshTerminalPanel(targetPage) {
       await targetPage.locator(`[data-ssh-runbook-command="${customRunbookId}"]`).waitFor({ timeout: 5000 });
       await targetPage.locator(`[data-ssh-runbook-command="${customRunbookSecondId}"]`).waitFor({ timeout: 5000 });
 
+      await customRunbookSecondCard.locator(`[data-ssh-runbook-command-pin="${customRunbookSecondId}"]`).click();
+      await targetPage.locator('.action-message').filter({ hasText: /Pinned/i }).waitFor({ timeout: 5000 });
+      const runbookApiAfterPin = await targetPage.evaluate(async (expectedId) => {
+        const response = await fetch('/api/servers/ssh-runbook');
+        const body = await response.json();
+        return { status: response.status, body, expectedId };
+      }, customRunbookSecondId);
+      if (runbookApiAfterPin.status !== 200 || runbookApiAfterPin.body.commands?.[0]?.id !== customRunbookSecondId || runbookApiAfterPin.body.commands?.[0]?.pinned !== true) {
+        throw new Error(`SSH runbook pin did not move command to front: ${JSON.stringify(runbookApiAfterPin)}`);
+      }
+      await customRunbookSecondCard.locator(`[data-ssh-runbook-command-pin="${customRunbookSecondId}"]`).click();
+      await targetPage.locator('.action-message').filter({ hasText: /Unpinned/i }).waitFor({ timeout: 5000 });
+
       await customRunbookSecondCard.locator(`[data-ssh-runbook-command-move-down="${customRunbookSecondId}"]`).click();
       await targetPage.locator('.action-message').filter({ hasText: /runbook order updated/i }).waitFor({ timeout: 5000 });
       const runbookApiAfterMove = await targetPage.evaluate(async (ids) => {

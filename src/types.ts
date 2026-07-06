@@ -49,6 +49,7 @@ export interface SshRunbookCommand {
   id: string;
   title: string;
   command: string;
+  pinned?: boolean;
   createdAt: string;
   updatedAt: string;
 }

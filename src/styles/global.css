@@ -5811,8 +5811,23 @@ td span,
     rgba(255, 255, 255, 0.045);
 }
 
+.ssh-quick-command-grid article.custom.pinned {
+  border-color: rgba(251, 191, 36, 0.42);
+  background:
+    radial-gradient(circle at 0 0, rgba(251, 191, 36, 0.18), transparent 42%),
+    linear-gradient(135deg, rgba(113, 63, 18, 0.16), rgba(3, 7, 8, 0.16)),
+    rgba(255, 255, 255, 0.045);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 8px 22px rgba(146, 64, 14, 0.14);
+}
+
 .ssh-quick-command-grid article.custom span {
   color: #d8b4fe;
+}
+
+.ssh-quick-command-grid article.custom.pinned span {
+  color: #fde68a;
 }
 
 .ssh-quick-command-grid article.custom > div {
@@ -5899,6 +5914,17 @@ td span,
   background: rgba(127, 29, 29, 0.24);
   display: inline-grid;
   place-items: center;
+}
+
+.ssh-quick-command-grid button.pin {
+  min-width: 26px;
+  padding: 0;
+  border-color: rgba(251, 191, 36, 0.3);
+  color: #fde68a;
+  background: rgba(113, 63, 18, 0.28);
+  display: inline-grid;
+  place-items: center;
+  font-size: 12px;
 }
 
 .ssh-quick-command-grid button.sort {
