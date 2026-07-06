@@ -145,8 +145,18 @@ async function assertReleaseEvidenceBrief(targetPage) {
   if (sshPerfGroupCount !== 3) {
     throw new Error(`SSH performance card should expose three grouped sections, got ${sshPerfGroupCount}`);
   }
+  const sshPerfSelectedCount = await targetPage.locator('.security-ssh-performance-metric[aria-pressed="true"]').count();
+  if (sshPerfSelectedCount !== 1) {
+    throw new Error(`SSH performance card should keep exactly one selected metric for detail review, got ${sshPerfSelectedCount}`);
+  }
+  await targetPage.locator('[data-ssh-performance-detail="true"]').waitFor({ timeout: 5000 });
+  await targetPage.getByRole('button', { name: /likely bottleneck/i }).click();
+  const sshPerfDetailText = await targetPage.locator('[data-ssh-performance-detail="true"]').innerText();
+  if (!/full metric detail/i.test(sshPerfDetailText) || !/likely bottleneck/i.test(sshPerfDetailText)) {
+    throw new Error(`SSH performance detail panel did not switch to the selected metric: ${sshPerfDetailText}`);
+  }
   const sshPerfText = await targetPage.locator('.security-ssh-performance-card').innerText();
-  if (!/track/i.test(sshPerfText) || !/latency/i.test(sshPerfText) || !/audit/i.test(sshPerfText) || !/input batching/i.test(sshPerfText) || !/socket errors/i.test(sshPerfText) || !/last safe test/i.test(sshPerfText) || !/response split/i.test(sshPerfText) || !/safe test trend/i.test(sshPerfText) || !/likely bottleneck/i.test(sshPerfText) || !/session replay/i.test(sshPerfText)) {
+  if (!/full metric detail/i.test(sshPerfText) || !/track/i.test(sshPerfText) || !/latency/i.test(sshPerfText) || !/audit/i.test(sshPerfText) || !/input batching/i.test(sshPerfText) || !/socket errors/i.test(sshPerfText) || !/last safe test/i.test(sshPerfText) || !/response split/i.test(sshPerfText) || !/safe test trend/i.test(sshPerfText) || !/likely bottleneck/i.test(sshPerfText) || !/session replay/i.test(sshPerfText)) {
     throw new Error(`SSH performance card did not render batching/error evidence: ${sshPerfText}`);
   }
   await targetPage.evaluate(() => {

@@ -133,6 +133,7 @@ interface ReleaseFailurePlaybookItem {
 }
 
 interface SshPerformanceMetric {
+  id: string;
   label: string;
   value: string;
   detail: string;
@@ -180,6 +181,7 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
   const [recordingSnapshot, setRecordingSnapshot] = useState(false);
   const [exportingReadinessReport, setExportingReadinessReport] = useState(false);
   const [exportingDiagnostic, setExportingDiagnostic] = useState(false);
+  const [expandedSshMetricId, setExpandedSshMetricId] = useState('');
 
   const openEvents = useMemo(() => events.filter((event) => event.status === 'open'), [events]);
   const filteredAudits = useMemo(() => {
@@ -233,6 +235,10 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
   const sshPerformance = useMemo(
     () => buildSshPerformanceSummary(diagnosticBundle, sshPerformanceCopy),
     [diagnosticBundle, sshPerformanceCopy],
+  );
+  const expandedSshMetric = useMemo(
+    () => sshPerformance.metrics.find((metric) => metric.id === expandedSshMetricId) ?? sshPerformance.metrics[0] ?? null,
+    [expandedSshMetricId, sshPerformance.metrics],
   );
 
   useEffect(() => {
@@ -713,16 +719,29 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
               </div>
               <div className="security-ssh-performance-grid">
                 {group.metrics.map((metric) => (
-                  <div key={metric.label} className={`security-ssh-performance-metric ${metric.tone}`}>
+                  <button
+                    key={metric.id}
+                    type="button"
+                    className={`security-ssh-performance-metric ${metric.tone} ${expandedSshMetric?.id === metric.id ? 'selected' : ''}`}
+                    onClick={() => setExpandedSshMetricId(metric.id)}
+                    aria-pressed={expandedSshMetric?.id === metric.id}
+                  >
                     <span>{metric.label}</span>
                     <strong>{metric.value}</strong>
                     <small>{metric.detail}</small>
-                  </div>
+                  </button>
                 ))}
               </div>
             </section>
           ))}
         </div>
+        {expandedSshMetric ? (
+          <div className={`security-ssh-performance-detail ${expandedSshMetric.tone}`} data-ssh-performance-detail="true">
+            <span>{sshPerformanceCopy.detailTitle}</span>
+            <strong>{expandedSshMetric.label}: {expandedSshMetric.value}</strong>
+            <p>{expandedSshMetric.detail}</p>
+          </div>
+        ) : null}
         <p className="security-ssh-performance-next">{sshPerformance.nextAction}</p>
       </article>
 
@@ -1644,24 +1663,28 @@ function buildSshPerformanceSummary(
       : 'ok';
   const metrics: SshPerformanceMetric[] = [
     {
+      id: 'active-sessions',
       label: copy.activeSessions,
       value: String(activeSessions),
       detail: copy.activeSessionsDetail(activeSessions),
       tone: activeSessions > 8 ? 'warn' : 'ok',
     },
     {
+      id: 'input-batch',
       label: copy.inputBatch,
       value: inputFlushes > 0 ? `${formatBatchRatio(inputRatio)}x` : '--',
       detail: copy.inputBatchDetail(inputEvents, inputFlushes),
       tone: inputEvents >= 8 && inputRatio < 1.2 ? 'warn' : 'ok',
     },
     {
+      id: 'output-batch',
       label: copy.outputBatch,
       value: outputFlushes > 0 ? `${formatBatchRatio(outputRatio)}x` : '--',
       detail: copy.outputBatchDetail(outputEvents, outputFlushes),
       tone: outputEvents >= 8 && outputRatio < 1.2 ? 'warn' : 'ok',
     },
     {
+      id: 'last-self-test',
       label: copy.lastSelfTest,
       value: lastSelfTest ? `${lastSelfTest.lines}/${Math.round(lastSelfTest.durationMs)}ms` : '--',
       detail: lastSelfTest
@@ -1670,6 +1693,7 @@ function buildSshPerformanceSummary(
       tone: lastSelfTest ? lastSelfTestTone : 'warn',
     },
     {
+      id: 'response-split',
       label: copy.responseSplit,
       value: lastSelfTest ? `${Math.round(lastSelfTest.firstResponseMs)}/${Math.round(lastSelfTest.outputSpanMs)}ms` : '--',
       detail: lastSelfTest
@@ -1678,6 +1702,7 @@ function buildSshPerformanceSummary(
       tone: lastSelfTest && (lastSelfTest.firstResponseMs >= 2000 || lastSelfTest.outputSpanMs >= 2500) ? 'warn' : lastSelfTest ? 'ok' : 'warn',
     },
     {
+      id: 'self-test-trend',
       label: copy.selfTestTrend,
       value: selfTestTrend && selfTestTrend.samples > 0 ? copy.trendValue(selfTestTrend.direction, selfTestTrend.samples) : '--',
       detail: selfTestTrend && selfTestTrend.samples > 0
@@ -1686,6 +1711,7 @@ function buildSshPerformanceSummary(
       tone: selfTestTrend?.direction === 'degrading' ? 'warn' : selfTestTrend?.direction === 'unknown' ? 'warn' : 'ok',
     },
     {
+      id: 'likely-bottleneck',
       label: copy.likelyBottleneck,
       value: lastSelfTest ? copy.bottleneckValue(lastSelfTest.bottleneck) : '--',
       detail: lastSelfTest
@@ -1694,6 +1720,7 @@ function buildSshPerformanceSummary(
       tone: bottleneckTone,
     },
     {
+      id: 'session-replay',
       label: copy.sessionReplay,
       value: sessionReplays.length > 0 ? copy.sessionReplayValue(sessionReplays.length, activeReplayCount) : '--',
       detail: latestReplay
@@ -1702,6 +1729,7 @@ function buildSshPerformanceSummary(
       tone: latestReplay?.errorCount ? 'warn' : sessionReplays.length > 0 ? 'ok' : 'warn',
     },
     {
+      id: 'websocket-errors',
       label: copy.websocketErrors,
       value: String(errors),
       detail: copy.websocketErrorsDetail(errors),
@@ -2054,6 +2082,7 @@ interface SshPerformanceCopy {
   groupTrack: string;
   groupLatency: string;
   groupAudit: string;
+  detailTitle: string;
   copySummary: string;
   copyCopied: string;
   summaryStatus: string;
@@ -2100,6 +2129,7 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     groupTrack: '链路追踪',
     groupLatency: '延迟定位',
     groupAudit: '审计证据',
+    detailTitle: '完整指标详情',
     copySummary: '\u590d\u5236\u6458\u8981',
     copyCopied: 'SSH \u6027\u80fd\u6458\u8981\u5df2\u590d\u5236',
     summaryStatus: '\u72b6\u6001',
@@ -2144,6 +2174,7 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     groupTrack: 'Track',
     groupLatency: 'Latency',
     groupAudit: 'Audit',
+    detailTitle: 'Full metric detail',
     copySummary: 'Copy summary',
     copyCopied: 'SSH performance summary copied',
     summaryStatus: 'Status',
@@ -2188,6 +2219,7 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     groupTrack: '追跡',
     groupLatency: '遅延',
     groupAudit: '監査',
+    detailTitle: '指標の詳細',
     copySummary: '\u30b5\u30de\u30ea\u30fc\u3092\u30b3\u30d4\u30fc',
     copyCopied: 'SSH \u30d1\u30d5\u30a9\u30fc\u30de\u30f3\u30b9\u30b5\u30de\u30ea\u30fc\u3092\u30b3\u30d4\u30fc\u3057\u307e\u3057\u305f',
     summaryStatus: '\u72b6\u614b',
