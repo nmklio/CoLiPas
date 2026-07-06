@@ -62,6 +62,7 @@ async function createE2ePage(options) {
     window.localStorage.removeItem('colipas.aiConsoleState');
     window.localStorage.removeItem('colipas.aiResponseCache');
     window.localStorage.removeItem('colipas.sshLagReportHistory.v1');
+    window.localStorage.removeItem('colipas.sshConnectionDoctorHistory.v1');
   });
   targetPage.on('console', (message) => {
     if (message.type() === 'error' || message.type() === 'warning') {
@@ -800,6 +801,22 @@ async function assertSshTerminalPanel(targetPage) {
     }
     if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(sshDoctorText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(sshDoctorText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(sshDoctorText)) {
       throw new Error('SSH connection doctor rendered raw IP or secret material');
+    }
+    await targetPage.locator('[data-ssh-connection-doctor-trend="true"]').waitFor({ timeout: 5000 });
+    const sshDoctorTrendText = await targetPage.locator('[data-ssh-connection-doctor-trend="true"]').innerText();
+    if (!/History trend|Baseline saved|Current focus/i.test(sshDoctorTrendText)) {
+      throw new Error(`SSH connection doctor trend did not render baseline evidence: ${sshDoctorTrendText}`);
+    }
+    const sshDoctorTrendLaneCount = await targetPage.locator('[data-ssh-connection-doctor-trend-lane]').count();
+    if (sshDoctorTrendLaneCount !== 5) {
+      throw new Error(`SSH connection doctor trend should render five lanes, got ${sshDoctorTrendLaneCount}`);
+    }
+    const sshDoctorHistory = await targetPage.evaluate(() => window.localStorage.getItem('colipas.sshConnectionDoctorHistory.v1') ?? '');
+    if (!/"targetKey"/.test(sshDoctorHistory) || /"serverId"|"serverName"|"summary"|"detail"|"value"|"label"/.test(sshDoctorHistory)) {
+      throw new Error(`SSH connection doctor history should only persist compact stage metrics: ${sshDoctorHistory}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(sshDoctorHistory) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(sshDoctorHistory) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(sshDoctorHistory)) {
+      throw new Error('SSH connection doctor history leaked raw IP or secret material');
     }
     await captureVisualEvidence(targetPage, 'desktop-ssh-connection-doctor', ['[data-ssh-connection-doctor="true"]']);
     await targetPage.getByRole('button', { name: /open ssh terminal/i }).click();

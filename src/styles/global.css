@@ -4309,6 +4309,101 @@ td span,
   line-height: 1.45;
 }
 
+.ssh-connection-doctor-trend {
+  border: 1px solid #d6e5e8;
+  border-radius: 11px;
+  padding: 10px;
+  background:
+    linear-gradient(135deg, rgba(15, 118, 110, 0.06), rgba(255, 255, 255, 0.9));
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(0, 1.4fr);
+  gap: 10px;
+  align-items: stretch;
+}
+
+.ssh-connection-doctor-trend.good {
+  border-color: rgba(22, 163, 74, 0.24);
+  background: linear-gradient(135deg, #f3fbf5, #ffffff);
+}
+
+.ssh-connection-doctor-trend.warn {
+  border-color: rgba(217, 119, 6, 0.25);
+  background: linear-gradient(135deg, #fff8ec, #ffffff);
+}
+
+.ssh-connection-doctor-trend.slow {
+  border-color: rgba(220, 38, 38, 0.27);
+  background: linear-gradient(135deg, #fff4f4, #ffffff);
+}
+
+.ssh-connection-doctor-trend-summary {
+  min-width: 0;
+  border-right: 1px dashed #cadde2;
+  padding-right: 10px;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+}
+
+.ssh-connection-doctor-trend-summary span,
+.ssh-connection-doctor-trend-lanes span {
+  color: #60777d;
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.ssh-connection-doctor-trend-summary strong {
+  color: #163038;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.ssh-connection-doctor-trend-summary small,
+.ssh-connection-doctor-trend-lanes small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.ssh-connection-doctor-trend-lanes {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.ssh-connection-doctor-trend-lanes article {
+  min-width: 0;
+  border: 1px solid #dce8eb;
+  border-radius: 9px;
+  padding: 8px;
+  background: #ffffff;
+  display: grid;
+  gap: 3px;
+}
+
+.ssh-connection-doctor-trend-lanes article.good {
+  border-color: rgba(22, 163, 74, 0.2);
+}
+
+.ssh-connection-doctor-trend-lanes article.warn {
+  border-color: rgba(217, 119, 6, 0.24);
+}
+
+.ssh-connection-doctor-trend-lanes article.slow {
+  border-color: rgba(220, 38, 38, 0.24);
+}
+
+.ssh-connection-doctor-trend-lanes strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #17333a;
+  font-size: 13px;
+}
+
 .ssh-connection-doctor-safe {
   margin: 0;
   border-top: 1px dashed #cfdee2;
@@ -12655,6 +12750,21 @@ pre {
   }
 
   .ssh-connection-doctor-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .ssh-connection-doctor-trend {
+    grid-template-columns: 1fr;
+  }
+
+  .ssh-connection-doctor-trend-summary {
+    border-right: 0;
+    border-bottom: 1px dashed #cadde2;
+    padding-right: 0;
+    padding-bottom: 8px;
+  }
+
+  .ssh-connection-doctor-trend-lanes {
     grid-template-columns: 1fr;
   }
 

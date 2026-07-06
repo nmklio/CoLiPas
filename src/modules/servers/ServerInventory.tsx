@@ -60,6 +60,8 @@ const terminalTextEncoder = new TextEncoder();
 const terminalBottleneckHistoryStorageKey = 'colipas.sshBottleneckRadarHistory.v1';
 const terminalBottleneckHistoryLimit = 12;
 const terminalBottleneckSnapshotDedupeMs = 6000;
+const sshDoctorHistoryStorageKey = 'colipas.sshConnectionDoctorHistory.v1';
+const sshDoctorHistoryLimit = 12;
 const terminalSelfTestCommand = `printf 'colipas-ssh-self-test-start\\n'; i=1; while [ "$i" -le 40 ]; do printf 'colipas-ssh-self-test-%02d\\n' "$i"; i=$((i+1)); done; printf 'colipas-ssh-self-test-end\\n'`;
 const terminalSelfTestTimeoutMs = 15000;
 const terminalSelfTestLinePattern = /colipas-ssh-self-test-\d{2}/g;
@@ -147,6 +149,7 @@ interface TerminalBottleneckAdvisor {
 }
 
 type SshConnectionDoctorStepId = 'asset' | 'credential' | 'backend' | 'shell' | 'terminal';
+const sshConnectionDoctorStepIds: SshConnectionDoctorStepId[] = ['asset', 'credential', 'backend', 'shell', 'terminal'];
 
 interface SshConnectionDoctorStep {
   id: SshConnectionDoctorStepId;
@@ -165,6 +168,34 @@ interface SshConnectionDoctorReport {
   detail: string;
   summary: string;
   steps: SshConnectionDoctorStep[];
+}
+
+interface SshConnectionDoctorHistoryEntry {
+  version: 1;
+  id: string;
+  targetKey: string;
+  createdAt: string;
+  tone: TerminalNetworkQuality['tone'];
+  primary: SshConnectionDoctorStepId;
+  stepTones: Record<SshConnectionDoctorStepId, TerminalNetworkQuality['tone']>;
+  slowCount: number;
+  warnCount: number;
+  pendingCount: number;
+}
+
+interface SshConnectionDoctorTrendLane {
+  id: SshConnectionDoctorStepId;
+  label: string;
+  value: string;
+  detail: string;
+  tone: TerminalNetworkQuality['tone'];
+}
+
+interface SshConnectionDoctorTrend {
+  tone: TerminalNetworkQuality['tone'];
+  title: string;
+  detail: string;
+  lanes: SshConnectionDoctorTrendLane[];
 }
 
 type TerminalBottleneckSnapshotReason = 'close' | 'remote-close' | 'disconnect';
@@ -279,6 +310,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const [terminalTransport, setTerminalTransport] = useState<'websocket' | 'compatible' | null>(null);
   const [diagnosingServerId, setDiagnosingServerId] = useState('');
   const [sshDoctorReport, setSshDoctorReport] = useState<SshConnectionDoctorReport | null>(null);
+  const [sshDoctorHistory, setSshDoctorHistory] = useState<SshConnectionDoctorHistoryEntry[]>(() => readSshDoctorHistory());
   const [loginProbe, setLoginProbe] = useState<LoginProbe | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [formDismissed, setFormDismissed] = useState(false);
@@ -328,6 +360,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const allServersById = useMemo(() => buildServerById(allServers), [allServers]);
   const activeSshServer = useMemo(() => allServersById.get(sshPanelServerId) ?? null, [allServersById, sshPanelServerId]);
   const sshDoctorServer = useMemo(() => (sshDoctorReport ? allServersById.get(sshDoctorReport.serverId) ?? null : null), [allServersById, sshDoctorReport]);
+  const sshDoctorTrend = useMemo(() => (sshDoctorReport ? buildSshDoctorTrend(sshDoctorReport, sshDoctorHistory, t) : null), [sshDoctorReport, sshDoctorHistory, t]);
   const terminalNetworkLabel = terminalNetworkStats
     ? `${formatTerminalRtt(terminalNetworkStats.rttMs)} / ${formatBytesPerSecond(terminalNetworkStats.throughputBytesPerSecond)}`
     : '';
@@ -471,6 +504,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
         t,
       });
       setSshDoctorReport(report);
+      setSshDoctorHistory((current) => rememberSshDoctorReport(report, current));
       showActionMessage(t('servers.sshDoctorComplete', { name: report.serverName }));
     } catch (error) {
       const report = buildSshConnectionDoctorReport({
@@ -484,6 +518,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
         t,
       });
       setSshDoctorReport(report);
+      setSshDoctorHistory((current) => rememberSshDoctorReport(report, current));
       showActionMessage(t('servers.sshDoctorIssueFound', { name: report.serverName }), { autoDismissMs: 7000 });
     } finally {
       setDiagnosingServerId('');
@@ -900,6 +935,24 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
               </article>
             ))}
           </div>
+          {sshDoctorTrend && (
+            <div className={`ssh-connection-doctor-trend ${sshDoctorTrend.tone}`} data-ssh-connection-doctor-trend="true">
+              <div className="ssh-connection-doctor-trend-summary">
+                <span>{t('servers.sshDoctorTrendEyebrow')}</span>
+                <strong>{sshDoctorTrend.title}</strong>
+                <small>{sshDoctorTrend.detail}</small>
+              </div>
+              <div className="ssh-connection-doctor-trend-lanes">
+                {sshDoctorTrend.lanes.map((lane) => (
+                  <article key={lane.id} className={lane.tone} data-ssh-connection-doctor-trend-lane={lane.id}>
+                    <span>{lane.label}</span>
+                    <strong>{lane.value}</strong>
+                    <small>{lane.detail}</small>
+                  </article>
+                ))}
+              </div>
+            </div>
+          )}
           <p className="ssh-connection-doctor-safe">{t('servers.sshDoctorSafeNote')}</p>
         </div>
       )}
@@ -3460,6 +3513,189 @@ function getSshDoctorOverallTone(steps: SshConnectionDoctorStep[]): TerminalNetw
   }
   const blockingPending = steps.some((step) => step.tone === 'pending' && step.id !== 'terminal');
   return blockingPending ? 'pending' : 'good';
+}
+
+function rememberSshDoctorReport(report: SshConnectionDoctorReport, currentHistory: SshConnectionDoctorHistoryEntry[]) {
+  const nextEntry = buildSshDoctorHistoryEntry(report);
+  const nextHistory = [
+    nextEntry,
+    ...currentHistory.filter((entry) => entry.id !== nextEntry.id),
+  ].slice(0, sshDoctorHistoryLimit);
+  writeSshDoctorHistory(nextHistory);
+  return nextHistory;
+}
+
+function buildSshDoctorHistoryEntry(report: SshConnectionDoctorReport): SshConnectionDoctorHistoryEntry {
+  const stepTones = sshConnectionDoctorStepIds.reduce((result, stepId) => {
+    result[stepId] = report.steps.find((step) => step.id === stepId)?.tone ?? 'pending';
+    return result;
+  }, {} as Record<SshConnectionDoctorStepId, TerminalNetworkQuality['tone']>);
+  const primary = getSshDoctorPrimaryStep(report.steps);
+  return {
+    version: 1,
+    id: `${hashSshDoctorTarget(report.serverId)}:${Date.parse(report.checkedAt) || Date.now()}:${report.tone}:${primary}`,
+    targetKey: hashSshDoctorTarget(report.serverId),
+    createdAt: report.checkedAt,
+    tone: report.tone,
+    primary,
+    stepTones,
+    slowCount: Object.values(stepTones).filter((tone) => tone === 'slow').length,
+    warnCount: Object.values(stepTones).filter((tone) => tone === 'warn').length,
+    pendingCount: Object.values(stepTones).filter((tone) => tone === 'pending').length,
+  };
+}
+
+function buildSshDoctorTrend(
+  report: SshConnectionDoctorReport,
+  history: SshConnectionDoctorHistoryEntry[],
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): SshConnectionDoctorTrend {
+  const currentEntry = buildSshDoctorHistoryEntry(report);
+  const entries = [
+    currentEntry,
+    ...history.filter((entry) => entry.targetKey === currentEntry.targetKey && entry.id !== currentEntry.id),
+  ].slice(0, sshDoctorHistoryLimit);
+  const previousEntry = entries[1] ?? null;
+  const currentScore = getSshDoctorToneScore(currentEntry.tone);
+  const previousScore = previousEntry ? getSshDoctorToneScore(previousEntry.tone) : currentScore;
+  const primaryLabel = report.steps.find((step) => step.id === currentEntry.primary)?.label ?? t('servers.sshDoctorStepTerminal');
+  const trendTone: TerminalNetworkQuality['tone'] = !previousEntry
+    ? currentEntry.tone
+    : currentScore < previousScore
+      ? 'good'
+      : currentScore > previousScore
+        ? 'slow'
+        : currentEntry.tone;
+  const title = !previousEntry
+    ? t('servers.sshDoctorTrendNewTitle')
+    : currentScore < previousScore
+      ? t('servers.sshDoctorTrendImprovedTitle')
+      : currentScore > previousScore
+        ? t('servers.sshDoctorTrendWorseTitle')
+        : t('servers.sshDoctorTrendStableTitle');
+  const detail = !previousEntry
+    ? t('servers.sshDoctorTrendNewDetail', { samples: entries.length, primary: primaryLabel })
+    : currentScore < previousScore
+      ? t('servers.sshDoctorTrendImprovedDetail', { samples: entries.length, primary: primaryLabel })
+      : currentScore > previousScore
+        ? t('servers.sshDoctorTrendWorseDetail', { samples: entries.length, primary: primaryLabel })
+        : t('servers.sshDoctorTrendStableDetail', { samples: entries.length, primary: primaryLabel });
+  return {
+    tone: trendTone,
+    title,
+    detail,
+    lanes: report.steps.map((step) => {
+      const previousTone = previousEntry?.stepTones[step.id] ?? null;
+      return {
+        id: step.id,
+        label: step.label,
+        value: formatSshDoctorTone(step.tone, t),
+        detail: previousTone
+          ? t('servers.sshDoctorTrendLaneCompare', {
+            previous: formatSshDoctorTone(previousTone, t),
+            current: formatSshDoctorTone(step.tone, t),
+          })
+          : t('servers.sshDoctorTrendLaneNew'),
+        tone: step.tone,
+      };
+    }),
+  };
+}
+
+function readSshDoctorHistory(): SshConnectionDoctorHistoryEntry[] {
+  if (typeof window === 'undefined') {
+    return [];
+  }
+  try {
+    const raw = window.localStorage.getItem(sshDoctorHistoryStorageKey);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed)
+      ? parsed.filter(isSshDoctorHistoryEntry).slice(0, sshDoctorHistoryLimit)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeSshDoctorHistory(history: SshConnectionDoctorHistoryEntry[]) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  try {
+    window.localStorage.setItem(sshDoctorHistoryStorageKey, JSON.stringify(history.slice(0, sshDoctorHistoryLimit)));
+  } catch {
+    // Local history is best-effort and must never block SSH diagnostics.
+  }
+}
+
+function isSshDoctorHistoryEntry(value: unknown): value is SshConnectionDoctorHistoryEntry {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const entry = value as Partial<SshConnectionDoctorHistoryEntry>;
+  const stepTones = entry.stepTones as Partial<Record<SshConnectionDoctorStepId, unknown>> | undefined;
+  return entry.version === 1
+    && typeof entry.id === 'string'
+    && typeof entry.targetKey === 'string'
+    && typeof entry.createdAt === 'string'
+    && isSshDoctorTone(entry.tone)
+    && sshConnectionDoctorStepIds.includes(entry.primary as SshConnectionDoctorStepId)
+    && Boolean(stepTones)
+    && sshConnectionDoctorStepIds.every((stepId) => isSshDoctorTone(stepTones?.[stepId]))
+    && Number.isInteger(entry.slowCount)
+    && Number.isInteger(entry.warnCount)
+    && Number.isInteger(entry.pendingCount);
+}
+
+function isSshDoctorTone(value: unknown): value is TerminalNetworkQuality['tone'] {
+  return value === 'pending' || value === 'good' || value === 'warn' || value === 'slow';
+}
+
+function getSshDoctorPrimaryStep(steps: SshConnectionDoctorStep[]) {
+  return steps.reduce((primary, step) => (
+    getSshDoctorToneScore(step.tone) > getSshDoctorToneScore(primary.tone) ? step : primary
+  ), steps[0] ?? {
+    id: 'terminal',
+    tone: 'pending',
+  } as SshConnectionDoctorStep).id;
+}
+
+function getSshDoctorToneScore(tone: TerminalNetworkQuality['tone']) {
+  if (tone === 'slow') {
+    return 3;
+  }
+  if (tone === 'warn') {
+    return 2;
+  }
+  if (tone === 'pending') {
+    return 1;
+  }
+  return 0;
+}
+
+function formatSshDoctorTone(
+  tone: TerminalNetworkQuality['tone'],
+  t: (key: string, vars?: Record<string, string | number>) => string,
+) {
+  if (tone === 'slow') {
+    return t('servers.sshDoctorToneSlow');
+  }
+  if (tone === 'warn') {
+    return t('servers.sshDoctorToneWarn');
+  }
+  if (tone === 'pending') {
+    return t('servers.sshDoctorTonePending');
+  }
+  return t('servers.sshDoctorToneGood');
+}
+
+function hashSshDoctorTarget(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `target-${(hash >>> 0).toString(36)}`;
 }
 
 function sanitizeSshDoctorText(text: string) {

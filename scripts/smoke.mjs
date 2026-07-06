@@ -4275,13 +4275,19 @@ function assertBuildChunkingGuards() {
     "id.includes('node_modules/topojson-client')",
     "id.includes('node_modules/world-atlas')",
     "id.includes('node_modules/lucide-react')",
+    "normalizedId.includes('/src/modules/servers/')",
+    "'module-servers'",
+    "'module-security'",
+    "'module-overview'",
+    "'module-operations'",
+    "'module-custom-api'",
   ];
   const missing = requiredFragments.filter((fragment) => !viteConfig.includes(fragment));
   if (missing.length) {
     throw new Error(`Build chunking guard is incomplete: ${missing.join(', ')}`);
   }
 
-  console.log('ok production build splits React, map, and icon vendors');
+  console.log('ok production build splits React, map, icon vendors, and heavy admin modules');
 }
 
 function assertStandalonePerformanceCheckGuards() {
@@ -5528,14 +5534,24 @@ function assertSshConnectionDoctorGuards() {
   const requiredInventoryFragments = [
     'runServerDiagnostic(server.id)',
     'SshConnectionDoctorReport',
+    'SshConnectionDoctorHistoryEntry',
     'function runSshConnectionDoctor(server: ServerNode)',
     'function buildSshConnectionDoctorReport(',
+    'function rememberSshDoctorReport(',
+    'function buildSshDoctorTrend(',
+    'function readSshDoctorHistory()',
+    'function writeSshDoctorHistory(',
+    'function hashSshDoctorTarget(value: string)',
+    'sshDoctorHistoryStorageKey',
     'function sanitizeSshDoctorText(text: string)',
     'className={`ssh-connection-doctor ${sshDoctorReport.tone}`}',
     'data-ssh-connection-doctor="true"',
     'data-ssh-connection-doctor-step={step.id}',
+    'data-ssh-connection-doctor-trend="true"',
+    'data-ssh-connection-doctor-trend-lane={lane.id}',
     'copySshDoctorSummary',
     "openSshConsole(sshDoctorServer)",
+    'stepTones: Record<SshConnectionDoctorStepId',
     "replace(/\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b/g, '[redacted-host]')",
     "replace(/\\bsk-[A-Za-z0-9_-]{12,}\\b/g, '[redacted-api-key]')",
     "sshAccess.authType === 'password' ? t('servers.passwordAuth') : t('servers.keyAuth')",
@@ -5560,6 +5576,11 @@ function assertSshConnectionDoctorGuards() {
     'servers.sshDoctorStepShell',
     'servers.sshDoctorStepTerminal',
     'servers.sshDoctorTerminalNotOpenDetail',
+    'servers.sshDoctorTrendEyebrow',
+    'servers.sshDoctorTrendNewTitle',
+    'servers.sshDoctorTrendLaneCompare',
+    'servers.sshDoctorToneGood',
+    'servers.sshDoctorToneSlow',
   ];
   const missingI18n = requiredI18nKeys.filter((key) => (i18nSource.match(new RegExp(key.replaceAll('.', '\\.'), 'g')) ?? []).length < 3);
   if (missingI18n.length) {
@@ -5571,6 +5592,8 @@ function assertSshConnectionDoctorGuards() {
     '.ssh-connection-doctor-header',
     '.ssh-connection-doctor-actions',
     '.ssh-connection-doctor-steps',
+    '.ssh-connection-doctor-trend',
+    '.ssh-connection-doctor-trend-lanes',
     '.ssh-connection-doctor-steps article.good',
     '.ssh-connection-doctor-steps article.warn',
     '.ssh-connection-doctor-steps article.slow',
