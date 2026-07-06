@@ -586,12 +586,18 @@ export function App() {
   }
 
   function recordOverviewDraftPreflight(draft: OperationsDraft, preflight: OperationTaskPreflightResponse) {
+    const displayedTotalTargets = !preflight.requiresSsh && preflight.summary.totalTargets === 0
+      ? overview.servers.length
+      : preflight.summary.totalTargets;
+    const displayedRunnableTargets = preflight.requiresSsh
+      ? preflight.summary.runnableTargets
+      : displayedTotalTargets;
     setOverviewPreflightSnapshot({
       id: `${draft.id}-${preflight.correlationId}`,
       title: draft.title,
       status: preflight.ok ? (preflight.requiresConfirmation ? 'warn' : 'ready') : 'blocked',
-      runnableTargets: preflight.summary.runnableTargets,
-      totalTargets: preflight.summary.totalTargets,
+      runnableTargets: displayedRunnableTargets,
+      totalTargets: displayedTotalTargets,
       issueCount: preflight.issues.length,
       generatedAt: preflight.generatedAt,
     });

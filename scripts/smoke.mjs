@@ -4609,12 +4609,22 @@ function assertOverviewMapInteractionGuards() {
     'onDraftPreflight?: (draft: OperationsDraft, preflight: OperationTaskPreflightResponse) => void',
     'data-ops-draft-banner="true"',
     'data-ops-draft-preflight-button="true"',
+    'data-ops-preflight-history="true"',
+    'data-ops-preflight-history-item="true"',
     'async function executePreflightOnly()',
+    'interface PreflightHistoryEntry',
+    'const [preflightHistory, setPreflightHistory] = useState<PreflightHistoryEntry[]>([])',
+    'function restorePreflightHistory(entry: PreflightHistoryEntry)',
+    'function createPreflightHistoryEntry(',
+    'function formatPreflightSummaryLine(',
+    'function resolveDisplayedPreflightTargetCount(',
     'setBuilderOpen(true)',
     'setDraftNotice(draft)',
+    'setPreflightHistory((current) => [',
     'onDraftPreflight?.(draftNotice, preflightResult)',
     'draftHint',
     'preflightOnlyHint',
+    'preflightHistory',
   ], 'overview operations draft');
 
   assertFileContains('src/modules/servers/ServerInventory.tsx', [

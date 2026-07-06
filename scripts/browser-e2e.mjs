@@ -873,6 +873,14 @@ async function assertOverviewHealthBaseline(targetPage) {
     throw new Error(`Operations draft banner is missing health draft context: ${draftBannerText}`);
   }
   await targetPage.locator('.ops-builder').waitFor({ timeout: 10000 });
+  await targetPage.waitForFunction(
+    () => {
+      const targetScope = document.querySelector('.ops-builder select');
+      return targetScope instanceof HTMLSelectElement && targetScope.value === 'allServers';
+    },
+    null,
+    { timeout: 10000 },
+  );
   if (!/#operations/.test(targetPage.url())) {
     throw new Error(`Overview operations draft should route to operations, got ${targetPage.url()}`);
   }
@@ -891,6 +899,22 @@ async function assertOverviewHealthBaseline(targetPage) {
   const tasksAfterPreflight = await targetPage.locator('.ops-task-item').count();
   if (tasksAfterPreflight !== tasksBeforePreflight) {
     throw new Error(`Preflight-only should not create a task, before=${tasksBeforePreflight}, after=${tasksAfterPreflight}`);
+  }
+  const preflightHistoryPanel = targetPage.locator('[data-ops-preflight-history="true"]');
+  await preflightHistoryPanel.waitFor({ timeout: 10000 });
+  const preflightHistoryItem = preflightHistoryPanel.locator('[data-ops-preflight-history-item="true"]').first();
+  await preflightHistoryItem.waitFor({ timeout: 10000 });
+  const preflightHistoryText = await preflightHistoryPanel.innerText();
+  if (!/Preflight history|Latest|Ready to run|Blocked|Targets/i.test(preflightHistoryText)) {
+    throw new Error(`Operations preflight history should keep the latest preflight evidence, got ${preflightHistoryText}`);
+  }
+  if (/0\/0/.test(preflightHistoryText)) {
+    throw new Error(`Operations preflight history should not show an all-server asset draft as 0/0 targets: ${preflightHistoryText}`);
+  }
+  await preflightHistoryItem.click();
+  const tasksAfterHistoryRestore = await targetPage.locator('.ops-task-item').count();
+  if (tasksAfterHistoryRestore !== tasksBeforePreflight) {
+    throw new Error(`Restoring preflight history should not create a task, before=${tasksBeforePreflight}, after=${tasksAfterHistoryRestore}`);
   }
   await captureVisualEvidence(targetPage, 'desktop-ops-health-draft', ['[data-ops-draft-banner="true"]', '.ops-builder']);
 

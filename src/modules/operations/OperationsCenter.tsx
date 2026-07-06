@@ -51,6 +51,18 @@ export interface OperationsDraft {
   reason?: string;
 }
 
+interface PreflightHistoryEntry {
+  id: string;
+  type: OperationTaskType;
+  targetMode: OperationTaskTargetMode;
+  serverIds: string[];
+  command: string;
+  reason: string;
+  targetCount: number;
+  createdAt: string;
+  preflight: OperationTaskPreflightResponse;
+}
+
 interface TaskMeta {
   id: OperationTaskType;
   label: string;
@@ -108,6 +120,10 @@ type Copy = {
   dismissDraft: string;
   runPreflight: string;
   preflightOnlyHint: string;
+  preflightHistory: string;
+  noPreflightHistory: string;
+  restorePreflight: string;
+  latestPreflight: string;
   truncatedOutputs?: string;
 };
 
@@ -167,6 +183,10 @@ const copyByLanguage: Record<string, Copy> = {
     dismissDraft: '收起草案提示',
     runPreflight: '只预检',
     preflightOnlyHint: '只验证目标和风险，不执行命令。',
+    preflightHistory: '最近预检记录',
+    noPreflightHistory: '还没有预检记录。点击“只预检”后会在这里留下上线前检查证据。',
+    restorePreflight: '恢复这次预检上下文',
+    latestPreflight: '最新',
   },
   en: {
     running: 'Running',
@@ -218,6 +238,10 @@ const copyByLanguage: Record<string, Copy> = {
     dismissDraft: 'Dismiss draft note',
     runPreflight: 'Preflight only',
     preflightOnlyHint: 'Validate targets and risk without running commands.',
+    preflightHistory: 'Preflight history',
+    noPreflightHistory: 'No preflight evidence yet. Run Preflight only to keep a release-check record here.',
+    restorePreflight: 'Restore this preflight context',
+    latestPreflight: 'Latest',
   },
   ja: {
     running: '実行中',
@@ -269,6 +293,10 @@ const copyByLanguage: Record<string, Copy> = {
     dismissDraft: '草案メモを閉じる',
     runPreflight: 'チェックのみ',
     preflightOnlyHint: 'コマンドを実行せず、対象とリスクだけ確認します。',
+    preflightHistory: '最新チェック履歴',
+    noPreflightHistory: 'チェック履歴はまだありません。チェックのみを実行すると、リリース前の確認証跡を残せます。',
+    restorePreflight: 'このチェック内容を復元',
+    latestPreflight: '最新',
   },
 };
 
@@ -349,6 +377,7 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
   const [preflighting, setPreflighting] = useState(false);
   const [message, setMessage] = useState('');
   const [preflight, setPreflight] = useState<OperationTaskPreflightResponse | null>(null);
+  const [preflightHistory, setPreflightHistory] = useState<PreflightHistoryEntry[]>([]);
   const [tasks, setTasks] = useState<OperationTaskResponse[]>([]);
   const [activeTaskId, setActiveTaskId] = useState('');
   const [appliedDraftId, setAppliedDraftId] = useState('');
@@ -432,6 +461,18 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
     try {
       const preflightResult = await preflightOperationTask(preflightPayload);
       setPreflight(preflightResult);
+      const historyEntry = createPreflightHistoryEntry(preflightResult, {
+        type: taskType,
+        targetMode,
+        serverIds: activeSelectedServerIds,
+        command,
+        reason,
+        targetCount: previewCount,
+      });
+      setPreflightHistory((current) => [
+        historyEntry,
+        ...current.filter((entry) => entry.id !== historyEntry.id),
+      ].slice(0, 5));
       setMessage(preflightResult.ok ? preflightStatusText(preflightResult, preflightCopy) : preflightResult.issues[0]?.message ?? preflightCopy.blocked);
       if (draftNotice) {
         onDraftPreflight?.(draftNotice, preflightResult);
@@ -522,6 +563,17 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
         ? current.filter((id) => id !== serverId)
         : [...current, serverId]
     ));
+  }
+
+  function restorePreflightHistory(entry: PreflightHistoryEntry) {
+    setBuilderOpen(true);
+    setTaskType(entry.type);
+    setTargetMode(entry.targetMode);
+    setSelectedServerIds(entry.serverIds);
+    setCommand(entry.command || 'hostname && uptime');
+    setReason(entry.reason);
+    setPreflight(entry.preflight);
+    setMessage(preflightStatusText(entry.preflight, preflightCopy));
   }
 
   return (
@@ -698,7 +750,7 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
                 <strong>{preflight ? preflightStatusText(preflight, preflightCopy) : preflightCopy.unavailable}</strong>
                 <small>
                   {preflight
-                    ? `${preflightCopy.targets}: ${preflight.summary.totalTargets}/${preflight.summary.runnableTargets} · ${preflightCopy.issues}: ${preflight.issues.length}`
+                    ? formatPreflightSummaryLine(preflight, preflightCopy, copy.preview, previewCount)
                     : preflightCopy.unavailable}
                 </small>
                 {preflight && preflight.issues.length > 0 && (
@@ -712,7 +764,7 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
                   <div className="ops-preflight-plan" aria-label={preflightCopy.planTitle}>
                     <span>{preflightCopy.planTitle}</span>
                     <strong>{preflight.plan.title}</strong>
-                    <p>{preflight.plan.targetSummary} · {preflight.plan.riskSummary}</p>
+                    <p>{formatPreflightPlanTargetSummary(preflight, previewCount)} / {preflight.plan.riskSummary}</p>
                     <p>{preflight.plan.impact}</p>
                     {preflight.plan.commandPreview && (
                       <code>{preflightCopy.commandPreview}: {preflight.plan.commandPreview}</code>
@@ -820,6 +872,45 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
                 );
               })
             )}
+          </div>
+
+          <div className="ops-preflight-history" data-ops-preflight-history="true">
+            <div className="ops-panel-title">
+              <h3>{copy.preflightHistory}</h3>
+              <span>{preflightHistory.length}</span>
+            </div>
+            <div className="ops-preflight-history-list">
+              {preflightHistory.length === 0 ? (
+                <div className="quiet-state">{copy.noPreflightHistory}</div>
+              ) : (
+                preflightHistory.map((entry, index) => {
+                  const meta = taskMeta[entry.type];
+                  const Icon = meta.icon;
+                  return (
+                    <button
+                      key={entry.id}
+                      type="button"
+                      className={`ops-preflight-history-item ${preflightTone(entry.preflight)}`}
+                      title={copy.restorePreflight}
+                      data-ops-preflight-history-item="true"
+                      onClick={() => restorePreflightHistory(entry)}
+                    >
+                      <Icon size={16} />
+                      <span>
+                        <strong>
+                          {meta.label}
+                          {index === 0 && <em>{copy.latestPreflight}</em>}
+                        </strong>
+                        <small>
+                          {formatTaskTime(entry.createdAt, language)} / {formatPreflightSummaryLine(entry.preflight, preflightCopy, copy.preview, entry.targetCount)}
+                        </small>
+                      </span>
+                      <b>{preflightStatusText(entry.preflight, preflightCopy)}</b>
+                    </button>
+                  );
+                })
+              )}
+            </div>
           </div>
 
           <div className="ops-mini-events">
@@ -977,6 +1068,30 @@ function createPendingTask(
   };
 }
 
+function createPreflightHistoryEntry(
+  preflight: OperationTaskPreflightResponse,
+  form: {
+    type: OperationTaskType;
+    targetMode: OperationTaskTargetMode;
+    serverIds: string[];
+    command: string;
+    reason: string;
+    targetCount: number;
+  },
+): PreflightHistoryEntry {
+  return {
+    id: preflight.correlationId,
+    type: form.type,
+    targetMode: form.targetMode,
+    serverIds: [...form.serverIds],
+    command: form.command,
+    reason: form.reason,
+    targetCount: form.targetCount,
+    createdAt: preflight.generatedAt,
+    preflight,
+  };
+}
+
 function createFailedTask(pendingTask: OperationTaskResponse, error: string): OperationTaskResponse {
   const now = new Date().toISOString();
   return {
@@ -1078,6 +1193,35 @@ function preflightStatusText(
     return copy.warn;
   }
   return copy.ready;
+}
+
+function formatPreflightSummaryLine(
+  preflight: OperationTaskPreflightResponse,
+  copy: (typeof preflightCopyByLanguage)[string],
+  nonSshTargetLabel: string,
+  fallbackTargetCount = 0,
+) {
+  const totalTargets = resolveDisplayedPreflightTargetCount(preflight, fallbackTargetCount);
+  if (!preflight.requiresSsh) {
+    return `${nonSshTargetLabel}: ${totalTargets} / ${copy.issues}: ${preflight.issues.length}`;
+  }
+
+  return `${copy.targets}: ${totalTargets}/${preflight.summary.runnableTargets} / ${copy.issues}: ${preflight.issues.length}`;
+}
+
+function formatPreflightPlanTargetSummary(preflight: OperationTaskPreflightResponse, fallbackTargetCount = 0) {
+  if (preflight.requiresSsh) {
+    return preflight.plan.targetSummary;
+  }
+
+  const totalTargets = resolveDisplayedPreflightTargetCount(preflight, fallbackTargetCount);
+  return `${totalTargets} target${totalTargets === 1 ? '' : 's'} included`;
+}
+
+function resolveDisplayedPreflightTargetCount(preflight: OperationTaskPreflightResponse, fallbackTargetCount = 0) {
+  return !preflight.requiresSsh && preflight.summary.totalTargets === 0 && fallbackTargetCount > 0
+    ? fallbackTargetCount
+    : preflight.summary.totalTargets;
 }
 
 function preflightTone(preflight: OperationTaskPreflightResponse) {
