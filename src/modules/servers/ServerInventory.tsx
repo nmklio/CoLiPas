@@ -236,6 +236,23 @@ interface SshChannelCheckReport {
   stages: SshChannelCheckStage[];
 }
 
+interface SshChannelFixAction {
+  id: SshChannelCheckStageId | 'summary';
+  label: string;
+  title: string;
+  detail: string;
+  action: string;
+  tone: TerminalNetworkQuality['tone'];
+}
+
+interface SshChannelFixPlan {
+  tone: TerminalNetworkQuality['tone'];
+  title: string;
+  detail: string;
+  actions: SshChannelFixAction[];
+  text: string;
+}
+
 type TerminalBottleneckSnapshotReason = 'close' | 'remote-close' | 'disconnect';
 
 interface TerminalBottleneckSnapshot {
@@ -429,6 +446,9 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
         t,
       })
     : null), [sshDoctorReport, sshDoctorTrend, sshDoctorTerminalActive, terminalTelemetry, terminalNetworkStats, terminalTransport, terminalSelfTest, terminalBottleneckAdvisor, t]);
+  const sshChannelFixPlan = useMemo(() => (
+    sshChannelCheckReport ? buildSshChannelFixPlan(sshChannelCheckReport, t) : null
+  ), [sshChannelCheckReport, t]);
   const terminalSelfTestRunning = terminalSelfTest?.status === 'running';
   const terminalSelfTestLabel = terminalSelfTest ? formatTerminalSelfTestLabel(terminalSelfTest, language) : '';
   const visibleSummary = useMemo(() => {
@@ -1103,6 +1123,29 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                   </article>
                 ))}
               </div>
+              {sshChannelFixPlan && (
+                <div className={`ssh-channel-fix-plan ${sshChannelFixPlan.tone}`} data-ssh-channel-fix-plan="true">
+                  <div className="ssh-channel-fix-plan-summary">
+                    <span>{t('servers.sshChannelFixPlanEyebrow')}</span>
+                    <strong>{sshChannelFixPlan.title}</strong>
+                    <small>{sshChannelFixPlan.detail}</small>
+                    <button type="button" data-ssh-channel-fix-plan-copy="true" onClick={copySshChannelFixPlan}>
+                      <Copy size={14} />
+                      {t('servers.sshChannelFixPlanCopy')}
+                    </button>
+                  </div>
+                  <div className="ssh-channel-fix-plan-actions">
+                    {sshChannelFixPlan.actions.map((action) => (
+                      <article key={action.id} className={action.tone} data-ssh-channel-fix-plan-action={action.id}>
+                        <span>{action.label}</span>
+                        <strong>{action.title}</strong>
+                        <small>{action.detail}</small>
+                        <em>{action.action}</em>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           <p className="ssh-connection-doctor-safe">{t('servers.sshDoctorSafeNote')}</p>
@@ -2539,6 +2582,19 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     try {
       await writeClipboardText(sshTroubleshootingReport.text);
       showActionMessage(t('servers.sshTroubleshootingReportCopied'));
+    } catch {
+      showActionMessage(t('servers.terminalCopyFailed'));
+    }
+  }
+
+  async function copySshChannelFixPlan() {
+    if (!sshChannelFixPlan) {
+      return;
+    }
+
+    try {
+      await writeClipboardText(sshChannelFixPlan.text);
+      showActionMessage(t('servers.sshChannelFixPlanCopied'));
     } catch {
       showActionMessage(t('servers.terminalCopyFailed'));
     }
@@ -4127,6 +4183,119 @@ function buildSshChannelCheckReport(
     detail,
     summary,
     stages: safeStages,
+  };
+}
+
+function buildSshChannelFixPlan(
+  report: SshChannelCheckReport,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): SshChannelFixPlan {
+  const attentionStages = report.stages.filter((stage) => stage.tone === 'slow' || stage.tone === 'warn');
+  const sourceStages = attentionStages.length > 0 ? attentionStages : report.stages.filter((stage) => stage.id !== 'cleanup').slice(0, 1);
+  const actions = sourceStages.map((stage) => buildSshChannelFixAction(stage, report, t));
+  if (attentionStages.length === 0) {
+    actions.push({
+      id: 'summary',
+      label: t('servers.sshChannelFixPlanKeepLabel'),
+      title: t('servers.sshChannelFixPlanKeepTitle'),
+      detail: t('servers.sshChannelFixPlanKeepDetail'),
+      action: t('servers.sshChannelFixPlanKeepAction'),
+      tone: 'good',
+    });
+  }
+
+  const tone: TerminalNetworkQuality['tone'] = actions.some((action) => action.tone === 'slow')
+    ? 'slow'
+    : actions.some((action) => action.tone === 'warn')
+      ? 'warn'
+      : 'good';
+  const title = tone === 'slow'
+    ? t('servers.sshChannelFixPlanTitleSlow')
+    : tone === 'warn'
+      ? t('servers.sshChannelFixPlanTitleWarn')
+      : t('servers.sshChannelFixPlanTitleGood');
+  const detail = tone === 'good'
+    ? t('servers.sshChannelFixPlanDetailGood')
+    : t('servers.sshChannelFixPlanDetailActionable');
+  const text = sanitizeSshDoctorText([
+    `[${t('servers.sshChannelFixPlanTitle')}]`,
+    `${t('servers.sshChannelCheckEyebrow')}: ${report.title}`,
+    `${t('servers.sshDoctorCheckedAt')}: ${report.checkedAt}`,
+    '',
+    `[${t('servers.sshChannelFixPlanSteps')}]`,
+    ...actions.map((action, index) => `${index + 1}. ${action.title}\n   ${action.detail}\n   ${t('servers.sshChannelFixPlanNextAction')}: ${action.action}`),
+    '',
+    `[${t('servers.sshTroubleshootingReportSafeNote')}]`,
+    t('servers.sshChannelFixPlanSafeNote'),
+  ].join('\n'));
+
+  return {
+    tone,
+    title,
+    detail,
+    actions: actions.map((action) => ({
+      ...action,
+      title: sanitizeSshDoctorText(action.title),
+      detail: sanitizeSshDoctorText(action.detail),
+      action: sanitizeSshDoctorText(action.action),
+    })),
+    text,
+  };
+}
+
+function buildSshChannelFixAction(
+  stage: SshChannelCheckStage,
+  report: SshChannelCheckReport,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): SshChannelFixAction {
+  const tone = stage.tone === 'slow' ? 'slow' : stage.tone === 'warn' ? 'warn' : 'good';
+  if (stage.id === 'browser') {
+    return {
+      id: stage.id,
+      label: stage.label,
+      title: t('servers.sshChannelFixBrowserTitle'),
+      detail: t('servers.sshChannelFixBrowserDetail'),
+      action: t('servers.sshChannelFixBrowserAction'),
+      tone,
+    };
+  }
+  if (stage.id === 'websocket') {
+    return {
+      id: stage.id,
+      label: stage.label,
+      title: t('servers.sshChannelFixWebSocketTitle'),
+      detail: t('servers.sshChannelFixWebSocketDetail'),
+      action: t('servers.sshChannelFixWebSocketAction'),
+      tone,
+    };
+  }
+  if (stage.id === 'compatible') {
+    return {
+      id: stage.id,
+      label: stage.label,
+      title: t('servers.sshChannelFixCompatibleTitle'),
+      detail: t('servers.sshChannelFixCompatibleDetail'),
+      action: t('servers.sshChannelFixCompatibleAction'),
+      tone,
+    };
+  }
+  if (stage.id === 'cleanup') {
+    return {
+      id: stage.id,
+      label: stage.label,
+      title: t('servers.sshChannelFixCleanupTitle'),
+      detail: t('servers.sshChannelFixCleanupDetail'),
+      action: t('servers.sshChannelFixCleanupAction'),
+      tone,
+    };
+  }
+  return {
+    id: 'summary',
+    label: t('servers.sshChannelFixPlanKeepLabel'),
+    title: report.title,
+    detail: report.detail,
+    action: t('servers.sshChannelFixPlanKeepAction'),
+    tone,
   };
 }
 

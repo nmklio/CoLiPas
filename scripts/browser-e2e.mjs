@@ -858,6 +858,33 @@ async function assertSshTerminalPanel(targetPage) {
     if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(sshChannelCheckText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(sshChannelCheckText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY|test-browser-e2e-value|password=|passphrase=/i.test(sshChannelCheckText)) {
       throw new Error('SSH channel self-check rendered raw host or secret material');
     }
+    await targetPage.locator('[data-ssh-channel-fix-plan="true"]').waitFor({ timeout: 5000 });
+    const sshChannelFixPlanText = await targetPage.locator('[data-ssh-channel-fix-plan="true"]').innerText();
+    if (!/Fix plan|Keep WebSocket|compatible fallback|Copy fix plan/i.test(sshChannelFixPlanText)) {
+      throw new Error(`SSH channel fix plan did not render actionable guidance: ${sshChannelFixPlanText}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(sshChannelFixPlanText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(sshChannelFixPlanText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY|test-browser-e2e-value|password=|passphrase=/i.test(sshChannelFixPlanText)) {
+      throw new Error('SSH channel fix plan rendered raw host or secret material');
+    }
+    await targetPage.evaluate(() => {
+      window.__colipasCopiedSshChannelFixPlan = '';
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: async (text) => {
+            window.__colipasCopiedSshChannelFixPlan = text;
+          },
+        },
+      });
+    });
+    await targetPage.locator('[data-ssh-channel-fix-plan-copy="true"]').click();
+    const copiedSshChannelFixPlan = await targetPage.evaluate(() => window.__colipasCopiedSshChannelFixPlan ?? '');
+    if (!/SSH channel fix plan|SSH channel check|Steps|Next action|Safe/i.test(copiedSshChannelFixPlan)) {
+      throw new Error(`SSH channel fix plan copy output is incomplete: ${copiedSshChannelFixPlan}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshChannelFixPlan) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshChannelFixPlan) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY|test-browser-e2e-value|password=|passphrase=|__colipas_/i.test(copiedSshChannelFixPlan)) {
+      throw new Error('SSH channel fix plan copy output leaked raw host, secret, or probe marker');
+    }
     await targetPage.waitForFunction(async () => {
       const response = await fetch('/api/servers/shells/status');
       const status = await response.json();

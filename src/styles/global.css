@@ -4602,6 +4602,124 @@ td span,
   font-size: 13px;
 }
 
+.ssh-channel-fix-plan {
+  grid-column: 1 / -1;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 12px;
+  padding: 10px;
+  background:
+    radial-gradient(circle at 100% 100%, rgba(20, 184, 166, 0.11), transparent 26%),
+    linear-gradient(135deg, #f9fefd, #ffffff);
+  display: grid;
+  grid-template-columns: minmax(190px, 0.7fr) minmax(0, 1.6fr);
+  gap: 10px;
+}
+
+.ssh-channel-fix-plan.warn {
+  border-color: rgba(217, 119, 6, 0.25);
+}
+
+.ssh-channel-fix-plan.slow {
+  border-color: rgba(220, 38, 38, 0.27);
+}
+
+.ssh-channel-fix-plan-summary {
+  min-width: 0;
+  border-right: 1px dashed #cfdee2;
+  padding-right: 10px;
+  display: grid;
+  align-content: center;
+  gap: 6px;
+}
+
+.ssh-channel-fix-plan-summary span,
+.ssh-channel-fix-plan-actions span {
+  color: #60777d;
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.ssh-channel-fix-plan-summary strong {
+  color: #12343b;
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.ssh-channel-fix-plan-summary small,
+.ssh-channel-fix-plan-actions small,
+.ssh-channel-fix-plan-actions em {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ssh-channel-fix-plan-summary button {
+  width: fit-content;
+  min-height: 32px;
+  border: 1px solid #cfe1e5;
+  border-radius: 9px;
+  padding: 7px 10px;
+  background: #ffffff;
+  color: #25434b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.ssh-channel-fix-plan-summary button:hover {
+  border-color: var(--brand-line);
+  background: #f0fbfa;
+}
+
+.ssh-channel-fix-plan-actions {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 7px;
+}
+
+.ssh-channel-fix-plan-actions article {
+  min-width: 0;
+  border: 1px solid #dce8eb;
+  border-radius: 10px;
+  padding: 9px;
+  background: rgba(255, 255, 255, 0.9);
+  display: grid;
+  gap: 4px;
+}
+
+.ssh-channel-fix-plan-actions article.good {
+  border-color: rgba(22, 163, 74, 0.22);
+  background: #f3fbf5;
+}
+
+.ssh-channel-fix-plan-actions article.warn {
+  border-color: rgba(217, 119, 6, 0.25);
+  background: #fff8ec;
+}
+
+.ssh-channel-fix-plan-actions article.slow {
+  border-color: rgba(220, 38, 38, 0.27);
+  background: #fff4f4;
+}
+
+.ssh-channel-fix-plan-actions strong {
+  color: #17333a;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.ssh-channel-fix-plan-actions em {
+  border-top: 1px dashed rgba(148, 163, 184, 0.45);
+  padding-top: 5px;
+  font-style: normal;
+  font-weight: 760;
+}
+
 .ssh-connection-doctor-safe {
   margin: 0;
   border-top: 1px dashed #cfdee2;
@@ -12994,6 +13112,21 @@ pre {
 
   .ssh-channel-check-stages {
     grid-template-columns: 1fr;
+  }
+
+  .ssh-channel-fix-plan {
+    grid-template-columns: 1fr;
+  }
+
+  .ssh-channel-fix-plan-summary {
+    border-right: 0;
+    border-bottom: 1px dashed #cadde2;
+    padding-right: 0;
+    padding-bottom: 8px;
+  }
+
+  .ssh-channel-fix-plan-summary button {
+    width: 100%;
   }
 
   .ssh-console {
