@@ -7706,6 +7706,158 @@ pre {
   color: var(--red);
 }
 
+.security-ssh-experience-summary {
+  min-width: 0;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 14px;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: minmax(190px, 0.58fr) minmax(0, 1.42fr);
+  gap: 12px;
+  align-items: stretch;
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 18px 18px, rgba(20, 184, 166, 0.22), transparent 34px),
+    linear-gradient(135deg, rgba(240, 253, 250, 0.92), rgba(255, 255, 255, 0.82));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.security-ssh-experience-summary::before {
+  content: '';
+  position: absolute;
+  inset: auto -38px -72px auto;
+  width: 150px;
+  height: 150px;
+  border-radius: 999px;
+  background:
+    conic-gradient(from 220deg, rgba(15, 118, 110, 0.18), rgba(59, 130, 246, 0.16), rgba(15, 118, 110, 0.18));
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+.security-ssh-experience-summary.warn {
+  border-color: rgba(245, 158, 11, 0.28);
+  background:
+    radial-gradient(circle at 18px 18px, rgba(245, 158, 11, 0.18), transparent 34px),
+    linear-gradient(135deg, rgba(255, 251, 235, 0.94), rgba(255, 255, 255, 0.82));
+}
+
+.security-ssh-experience-summary.fail {
+  border-color: rgba(239, 68, 68, 0.28);
+  background:
+    radial-gradient(circle at 18px 18px, rgba(239, 68, 68, 0.16), transparent 34px),
+    linear-gradient(135deg, rgba(255, 241, 242, 0.94), rgba(255, 255, 255, 0.82));
+}
+
+.security-ssh-experience-lead,
+.security-ssh-experience-grid {
+  min-width: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.security-ssh-experience-lead {
+  border-right: 1px solid rgba(15, 118, 110, 0.14);
+  padding-right: 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+}
+
+.security-ssh-experience-summary.warn .security-ssh-experience-lead {
+  border-right-color: rgba(245, 158, 11, 0.18);
+}
+
+.security-ssh-experience-summary.fail .security-ssh-experience-lead {
+  border-right-color: rgba(239, 68, 68, 0.18);
+}
+
+.security-ssh-experience-lead span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #0f766e;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.security-ssh-experience-summary.warn .security-ssh-experience-lead span {
+  color: #b65f00;
+}
+
+.security-ssh-experience-summary.fail .security-ssh-experience-lead span {
+  color: var(--red);
+}
+
+.security-ssh-experience-lead strong {
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.security-ssh-experience-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.security-ssh-experience-card {
+  min-width: 0;
+  border: 1px solid rgba(15, 118, 110, 0.13);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 10px 24px rgba(20, 44, 49, 0.055);
+}
+
+.security-ssh-experience-card.warn {
+  border-color: rgba(245, 158, 11, 0.26);
+  background: rgba(255, 252, 245, 0.82);
+}
+
+.security-ssh-experience-card.fail {
+  border-color: rgba(239, 68, 68, 0.25);
+  background: rgba(255, 248, 248, 0.84);
+}
+
+.security-ssh-experience-card span,
+.security-ssh-experience-card strong,
+.security-ssh-experience-card small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.security-ssh-experience-card span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.07em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: normal;
+}
+
+.security-ssh-experience-card strong {
+  margin: 5px 0 3px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.16;
+  overflow-wrap: anywhere;
+}
+
+.security-ssh-experience-card small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: normal;
+}
+
 .security-ssh-performance-groups {
   min-width: 0;
   display: grid;
@@ -9483,6 +9635,7 @@ pre {
   .security-readiness-card,
   .security-evidence-metrics,
   .security-release-playbook-grid,
+  .security-ssh-experience-grid,
   .security-ssh-lag-report,
   .security-ssh-lag-history-heading,
   .security-ssh-flight-header,
@@ -10116,6 +10269,8 @@ pre {
   .security-release-playbook-heading,
   .security-release-playbook-grid,
   .security-ssh-performance-heading,
+  .security-ssh-experience-summary,
+  .security-ssh-experience-grid,
   .security-ssh-lag-report,
   .security-ssh-flight-header,
   .security-ssh-performance-groups,
@@ -10152,6 +10307,13 @@ pre {
 
   .security-ssh-performance-actions {
     justify-content: flex-start;
+  }
+
+  .security-ssh-experience-lead {
+    border-right: 0;
+    border-bottom: 1px solid rgba(15, 118, 110, 0.14);
+    padding-right: 0;
+    padding-bottom: 10px;
   }
 
   .security-ssh-flight-actions {

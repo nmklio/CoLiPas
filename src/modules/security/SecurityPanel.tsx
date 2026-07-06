@@ -6,6 +6,7 @@ import {
   Clock3,
   Download,
   Fingerprint,
+  Gauge,
   LockKeyhole,
   RefreshCw,
   Rocket,
@@ -146,6 +147,20 @@ interface SshPerformanceGroup {
   metrics: SshPerformanceMetric[];
 }
 
+interface SshExperienceCard {
+  id: 'state' | 'evidence' | 'bottleneck' | 'action';
+  label: string;
+  value: string;
+  detail: string;
+  tone: SshPerformanceMetric['tone'];
+}
+
+interface SshExperienceSummary {
+  title: string;
+  lead: string;
+  cards: SshExperienceCard[];
+}
+
 interface SshPerformanceSummary {
   tone: 'ok' | 'warn' | 'fail';
   status: string;
@@ -155,6 +170,7 @@ interface SshPerformanceSummary {
   reportFindings: string[];
   reportContext: string[];
   reportText: string;
+  experience: SshExperienceSummary;
   metrics: SshPerformanceMetric[];
   groups: SshPerformanceGroup[];
 }
@@ -850,6 +866,21 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
             </button>
           </div>
         </div>
+        <section className={`security-ssh-experience-summary ${sshPerformance.tone}`} data-ssh-experience-summary="true" aria-label={sshPerformance.experience.title}>
+          <div className="security-ssh-experience-lead">
+            <span><Gauge size={15} /> {sshPerformance.experience.title}</span>
+            <strong>{sshPerformance.experience.lead}</strong>
+          </div>
+          <div className="security-ssh-experience-grid">
+            {sshPerformance.experience.cards.map((card) => (
+              <article key={card.id} className={`security-ssh-experience-card ${card.tone}`}>
+                <span>{card.label}</span>
+                <strong>{card.value}</strong>
+                <small>{card.detail}</small>
+              </article>
+            ))}
+          </div>
+        </section>
         <div className="security-ssh-performance-groups">
           {sshPerformance.groups.map((group) => (
             <section key={group.id} className={`security-ssh-performance-group ${group.id}`} aria-label={group.title}>
@@ -2055,6 +2086,16 @@ function buildSshPerformanceSummary(
   ];
   const status = tone === 'fail' ? copy.statusFail : tone === 'warn' ? copy.statusWarn : copy.statusOk;
   const nextAction = !hasEvidence ? copy.nextActionNoEvidence : tone === 'fail' ? copy.nextActionFail : tone === 'warn' ? copy.nextActionWarn : copy.nextActionOk;
+  const likelyBottleneckValue = lastSelfTest
+    ? copy.bottleneckValue(lastSelfTest.bottleneck)
+    : errors > 0
+      ? copy.websocketErrors
+      : copy.experienceBottleneckUnknown;
+  const likelyBottleneckDetail = lastSelfTest
+    ? copy.bottleneckDetail(lastSelfTest.bottleneck, lastSelfTest.rttMs, lastSelfTest.throughputBytesPerSecond)
+    : errors > 0
+      ? copy.websocketErrorsDetail(errors)
+      : copy.bottleneckNone;
   const reportHeadline = copy.reportHeadline(status, hasEvidence);
   const reportFindings = [
     copy.reportFindingInput(inputEvents, inputFlushes, inputRatio),
@@ -2072,9 +2113,45 @@ function buildSshPerformanceSummary(
     copy.reportEvidenceLevel(hasEvidence, sessionReplays.length, Boolean(lastSelfTest)),
     copy.reportSanitizedBadge,
   ];
+  const experience: SshExperienceSummary = {
+    title: copy.experienceTitle,
+    lead: copy.experienceLead(status, hasEvidence),
+    cards: [
+      {
+        id: 'state',
+        label: copy.experienceStateLabel,
+        value: status,
+        detail: copy.experienceStateDetail(tone, errors),
+        tone,
+      },
+      {
+        id: 'evidence',
+        label: copy.experienceEvidenceLabel,
+        value: copy.experienceEvidenceValue(hasEvidence, sessionReplays.length, Boolean(lastSelfTest), Boolean(websocket)),
+        detail: copy.experienceEvidenceDetail(inputEvents, outputEvents, sessionReplays.length),
+        tone: hasEvidence ? 'ok' : 'warn',
+      },
+      {
+        id: 'bottleneck',
+        label: copy.experienceBottleneckLabel,
+        value: likelyBottleneckValue,
+        detail: likelyBottleneckDetail,
+        tone: bottleneckTone,
+      },
+      {
+        id: 'action',
+        label: copy.experienceActionLabel,
+        value: copy.experienceActionValue(tone, hasEvidence),
+        detail: nextAction,
+        tone: !hasEvidence ? 'warn' : tone,
+      },
+    ],
+  };
   const copyText = [
     `# ${copy.title}`,
     `${copy.summaryStatus}: ${status}`,
+    `[${copy.experienceTitle}]`,
+    ...experience.cards.map((card) => `${card.label}: ${card.value} (${card.detail})`),
     ...groups.flatMap((group) => [
       `[${group.title}]`,
       ...group.metrics.map((metric) => `${metric.label}: ${metric.value} (${metric.detail})`),
@@ -2102,6 +2179,7 @@ function buildSshPerformanceSummary(
     reportFindings,
     reportContext,
     reportText,
+    experience,
     metrics,
     groups,
   };
@@ -2944,6 +3022,17 @@ interface SshPerformanceCopy {
   reportEvidenceLabel: string;
   reportSanitizedBadge: string;
   reportSanitizedNote: string;
+  experienceTitle: string;
+  experienceLead: (status: string, hasEvidence: boolean) => string;
+  experienceStateLabel: string;
+  experienceEvidenceLabel: string;
+  experienceBottleneckLabel: string;
+  experienceActionLabel: string;
+  experienceStateDetail: (tone: SshPerformanceSummary['tone'], errors: number) => string;
+  experienceEvidenceValue: (hasEvidence: boolean, replays: number, hasSelfTest: boolean, hasSocket: boolean) => string;
+  experienceEvidenceDetail: (inputEvents: number, outputEvents: number, replays: number) => string;
+  experienceBottleneckUnknown: string;
+  experienceActionValue: (tone: SshPerformanceSummary['tone'], hasEvidence: boolean) => string;
   historyTitle: string;
   historyDescription: string;
   historyEmpty: string;
@@ -3085,6 +3174,17 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     reportEvidenceLabel: '关键证据',
     reportSanitizedBadge: '已脱敏',
     reportSanitizedNote: '报告仅包含脱敏聚合指标，不包含服务器地址、命令正文、密钥或用户数据。',
+    experienceTitle: 'SSH 体验结论',
+    experienceLead: (status, hasEvidence) => hasEvidence ? `当前结论：${status}。先看瓶颈和下一步，不需要翻完整日志。` : '还没有足够证据，先运行一次安全测速生成基线。',
+    experienceStateLabel: '体验状态',
+    experienceEvidenceLabel: '证据来源',
+    experienceBottleneckLabel: '最可能瓶颈',
+    experienceActionLabel: '下一步动作',
+    experienceStateDetail: (tone, errors) => tone === 'fail' ? `记录到 ${errors} 个连接错误，优先排查链路。` : tone === 'warn' ? '存在可观察信号，建议继续采样真实命令。' : '输入、输出和错误指标处于可接受区间。',
+    experienceEvidenceValue: (hasEvidence, replays, hasSelfTest, hasSocket) => hasEvidence ? [hasSelfTest ? '测速' : '', replays > 0 ? `${replays} 段回放` : '', hasSocket ? '实时通道' : ''].filter(Boolean).join(' / ') || '实时指标' : '待采集',
+    experienceEvidenceDetail: (inputEvents, outputEvents, replays) => `${inputEvents} 次输入 · ${outputEvents} 次输出 · ${replays} 段回放`,
+    experienceBottleneckUnknown: '待测速',
+    experienceActionValue: (tone, hasEvidence) => !hasEvidence ? '先生成基线' : tone === 'fail' ? '先修连接' : tone === 'warn' ? '继续观测' : '保持基线',
     historyTitle: '本地诊断快照',
     historyDescription: '仅保存在当前浏览器，用于对比优化前后的脱敏报告。',
     historyEmpty: '暂无历史快照，保存一次当前报告后即可对比。',
@@ -3224,6 +3324,17 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     reportEvidenceLabel: 'Key evidence',
     reportSanitizedBadge: 'Sanitized',
     reportSanitizedNote: 'This report only includes sanitized aggregate metrics. It excludes server addresses, command text, keys, and user data.',
+    experienceTitle: 'SSH experience brief',
+    experienceLead: (status, hasEvidence) => hasEvidence ? `Current conclusion: ${status}. Read bottleneck and next action first instead of scanning the full log.` : 'Evidence is not strong enough yet. Run one safe speed test to create a baseline.',
+    experienceStateLabel: 'Experience state',
+    experienceEvidenceLabel: 'Evidence source',
+    experienceBottleneckLabel: 'Most likely bottleneck',
+    experienceActionLabel: 'Next move',
+    experienceStateDetail: (tone, errors) => tone === 'fail' ? `${errors} connection error(s) were recorded; inspect the transport path first.` : tone === 'warn' ? 'One or more watch signals exist; sample real commands before declaring it solved.' : 'Input, output, and socket indicators are within the expected range.',
+    experienceEvidenceValue: (hasEvidence, replays, hasSelfTest, hasSocket) => hasEvidence ? [hasSelfTest ? 'safe test' : '', replays > 0 ? `${replays} replay(s)` : '', hasSocket ? 'live channel' : ''].filter(Boolean).join(' / ') || 'live metrics' : 'not collected',
+    experienceEvidenceDetail: (inputEvents, outputEvents, replays) => `${inputEvents} input · ${outputEvents} output · ${replays} replay(s)`,
+    experienceBottleneckUnknown: 'Needs test',
+    experienceActionValue: (tone, hasEvidence) => !hasEvidence ? 'Create baseline' : tone === 'fail' ? 'Fix transport' : tone === 'warn' ? 'Keep sampling' : 'Keep baseline',
     historyTitle: 'Local diagnosis snapshots',
     historyDescription: 'Stored only in this browser so you can compare sanitized reports before and after tuning.',
     historyEmpty: 'No snapshots yet. Save the current report once to start comparing.',
@@ -3363,6 +3474,17 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     reportEvidenceLabel: '主な証跡',
     reportSanitizedBadge: '匿名化済み',
     reportSanitizedNote: 'このレポートは匿名化された集計指標のみを含み、サーバーアドレス、コマンド本文、キー、ユーザーデータは含みません。',
+    experienceTitle: 'SSH 体験サマリー',
+    experienceLead: (status, hasEvidence) => hasEvidence ? `現在の結論：${status}。詳細ログより先にボトルネックと次の対応を確認してください。` : '証跡がまだ不足しています。安全な速度テストを 1 回実行して基準を作成してください。',
+    experienceStateLabel: '体験状態',
+    experienceEvidenceLabel: '証跡ソース',
+    experienceBottleneckLabel: '最有力ボトルネック',
+    experienceActionLabel: '次の対応',
+    experienceStateDetail: (tone, errors) => tone === 'fail' ? `${errors} 件の接続エラーを記録。まず通信経路を確認します。` : tone === 'warn' ? '観察シグナルがあります。実コマンドで追加サンプルを取得してください。' : '入力、出力、ソケット指標は想定範囲内です。',
+    experienceEvidenceValue: (hasEvidence, replays, hasSelfTest, hasSocket) => hasEvidence ? [hasSelfTest ? '速度テスト' : '', replays > 0 ? `${replays} 件再生` : '', hasSocket ? 'ライブ経路' : ''].filter(Boolean).join(' / ') || 'ライブ指標' : '未収集',
+    experienceEvidenceDetail: (inputEvents, outputEvents, replays) => `${inputEvents} 入力 · ${outputEvents} 出力 · ${replays} 件再生`,
+    experienceBottleneckUnknown: 'テスト待ち',
+    experienceActionValue: (tone, hasEvidence) => !hasEvidence ? '基準を作成' : tone === 'fail' ? '通信を修正' : tone === 'warn' ? '継続観察' : '基準を保持',
     historyTitle: 'ローカル診断スナップショット',
     historyDescription: 'このブラウザだけに保存し、調整前後の匿名化レポートを比較します。',
     historyEmpty: 'スナップショットはまだありません。現在のレポートを保存すると比較できます。',
