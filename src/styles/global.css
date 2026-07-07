@@ -5845,6 +5845,22 @@ td span,
   white-space: nowrap;
 }
 
+.ssh-terminal-refresh-mode {
+  min-height: 24px;
+  border: 1px solid rgba(94, 234, 212, 0.24);
+  border-radius: 999px;
+  padding: 4px 9px;
+  background:
+    linear-gradient(135deg, rgba(20, 184, 166, 0.18), rgba(14, 165, 233, 0.12));
+  color: #b7fff1;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.18);
+}
+
 .ssh-terminal-network {
   min-height: 24px;
   max-width: 250px;

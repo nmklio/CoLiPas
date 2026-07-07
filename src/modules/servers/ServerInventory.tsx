@@ -73,8 +73,10 @@ const terminalWriteImmediateThreshold = 256;
 const terminalCompatibleInputFlushMs = 4;
 const terminalRuntimePrefetchDelayMs = 1500;
 const terminalRuntimeIdleTimeoutMs = 4500;
-const terminalNetworkUiRefreshMs = 900;
-const terminalTelemetryUiRefreshMs = 500;
+const terminalNetworkUiRefreshMs = 1500;
+const terminalTelemetryUiRefreshMs = 900;
+const terminalRenderForceLagMs = 48;
+const terminalRenderForceBacklogThreshold = terminalWriteLargeBacklogThreshold * 2;
 const terminalWebSocketOpenTimeoutMs = 1400;
 const terminalWebSocketReadyTimeoutMs = 14000;
 const terminalWebSocketFallbackCacheMs = 2 * 60 * 1000;
@@ -1705,6 +1707,13 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                           : t('servers.sshSelfTestBadge', { lines: terminalSelfTest.lines, duration: Math.round(terminalSelfTest.durationMs) })}
                       </span>
                     )}
+                    <span
+                      className="ssh-terminal-refresh-mode"
+                      data-ssh-terminal-refresh-mode="true"
+                      title={t('servers.terminalRefreshModeDetail')}
+                    >
+                      {t('servers.terminalRefreshModeLabel')}
+                    </span>
                     <div className="ssh-terminal-state">
                       <span className={terminalShellId ? 'live' : sshRunning ? 'pending' : ''} aria-hidden="true" />
                       <small>{sshInterrupting ? t('servers.sshInterrupting') : terminalShellId ? t('servers.sshConnected') : sshRunning ? t('servers.runningSsh') : t('servers.sshConnect')}</small>
@@ -2853,7 +2862,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       renderLagMs: Math.max(0, renderLagMs),
       pendingBytes,
       peakPendingBytes: Math.max(current.peakPendingBytes, pendingBytes),
-    }), { force: renderLagMs >= 24 || pendingBytes === 0 });
+    }), { force: renderLagMs >= terminalRenderForceLagMs || pendingBytes >= terminalRenderForceBacklogThreshold });
   }
 
   function persistTerminalBottleneckSnapshot(reason: TerminalBottleneckSnapshotReason) {
