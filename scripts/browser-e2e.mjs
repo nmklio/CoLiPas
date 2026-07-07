@@ -352,6 +352,15 @@ async function assertReleaseEvidenceBrief(targetPage) {
   if (sshPerfSelectedCount !== 1) {
     throw new Error(`SSH performance card should keep exactly one selected metric for detail review, got ${sshPerfSelectedCount}`);
   }
+  await targetPage.locator('[data-ssh-experience-score="true"]').waitFor({ timeout: 5000 });
+  const sshExperienceScoreText = await targetPage.locator('[data-ssh-experience-score="true"]').innerText();
+  const sshExperienceScoreSegmentCount = await targetPage.locator('[data-ssh-experience-score-segment]').count();
+  if (sshExperienceScoreSegmentCount !== 4 || !/SSH experience score/i.test(sshExperienceScoreText) || !/Field usability/i.test(sshExperienceScoreText) || !/Channel/i.test(sshExperienceScoreText) || !/Input/i.test(sshExperienceScoreText) || !/Output/i.test(sshExperienceScoreText) || !/Render/i.test(sshExperienceScoreText)) {
+    throw new Error(`SSH experience score did not render the four usability lanes: ${sshExperienceScoreText}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(sshExperienceScoreText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(sshExperienceScoreText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(sshExperienceScoreText)) {
+    throw new Error('SSH experience score rendered a raw IP address or secret');
+  }
   await targetPage.locator('[data-ssh-experience-summary="true"]').waitFor({ timeout: 5000 });
   const sshExperienceCardCount = await targetPage.locator('.security-ssh-experience-card').count();
   if (sshExperienceCardCount !== 4) {
@@ -368,7 +377,7 @@ async function assertReleaseEvidenceBrief(targetPage) {
     throw new Error(`SSH performance detail panel did not switch to the selected metric: ${sshPerfDetailText}`);
   }
   const sshPerfText = await targetPage.locator('.security-ssh-performance-card').innerText();
-  if (!/SSH experience brief/i.test(sshPerfText) || !/full metric detail/i.test(sshPerfText) || !/track/i.test(sshPerfText) || !/latency/i.test(sshPerfText) || !/audit/i.test(sshPerfText) || !/input batching/i.test(sshPerfText) || !/socket errors/i.test(sshPerfText) || !/last safe test/i.test(sshPerfText) || !/response split/i.test(sshPerfText) || !/safe test trend/i.test(sshPerfText) || !/likely bottleneck/i.test(sshPerfText) || !/session replay/i.test(sshPerfText)) {
+  if (!/SSH experience score/i.test(sshPerfText) || !/SSH experience brief/i.test(sshPerfText) || !/full metric detail/i.test(sshPerfText) || !/track/i.test(sshPerfText) || !/latency/i.test(sshPerfText) || !/audit/i.test(sshPerfText) || !/input batching/i.test(sshPerfText) || !/socket errors/i.test(sshPerfText) || !/last safe test/i.test(sshPerfText) || !/response split/i.test(sshPerfText) || !/safe test trend/i.test(sshPerfText) || !/likely bottleneck/i.test(sshPerfText) || !/session replay/i.test(sshPerfText)) {
     throw new Error(`SSH performance card did not render batching/error evidence: ${sshPerfText}`);
   }
   await targetPage.locator('[data-ssh-lag-report="true"]').waitFor({ timeout: 5000 });
@@ -607,7 +616,7 @@ async function assertReleaseEvidenceBrief(targetPage) {
   }
   await targetPage.getByRole('button', { name: /copy summary|复制摘要|サマリーをコピー/i }).click();
   const copiedSshPerfText = await targetPage.evaluate(() => window.__colipasCopiedSshPerformanceText ?? '');
-  if (!/SSH terminal performance|Input batching/i.test(copiedSshPerfText) || !/\[SSH experience brief\]/i.test(copiedSshPerfText) || !/\[Track\]/i.test(copiedSshPerfText) || !/\[Latency\]/i.test(copiedSshPerfText) || !/\[Audit\]/i.test(copiedSshPerfText) || !/Experience state/i.test(copiedSshPerfText) || !/Evidence source/i.test(copiedSshPerfText) || !/Socket errors/i.test(copiedSshPerfText) || !/Last safe test/i.test(copiedSshPerfText) || !/Response split/i.test(copiedSshPerfText) || !/Safe test trend/i.test(copiedSshPerfText) || !/Likely bottleneck/i.test(copiedSshPerfText) || !/Session replay/i.test(copiedSshPerfText)) {
+  if (!/SSH terminal performance|Input batching/i.test(copiedSshPerfText) || !/\[SSH experience score\]/i.test(copiedSshPerfText) || !/Score:/i.test(copiedSshPerfText) || !/Channel:/i.test(copiedSshPerfText) || !/Render:/i.test(copiedSshPerfText) || !/\[SSH experience brief\]/i.test(copiedSshPerfText) || !/\[Track\]/i.test(copiedSshPerfText) || !/\[Latency\]/i.test(copiedSshPerfText) || !/\[Audit\]/i.test(copiedSshPerfText) || !/Experience state/i.test(copiedSshPerfText) || !/Evidence source/i.test(copiedSshPerfText) || !/Socket errors/i.test(copiedSshPerfText) || !/Last safe test/i.test(copiedSshPerfText) || !/Response split/i.test(copiedSshPerfText) || !/Safe test trend/i.test(copiedSshPerfText) || !/Likely bottleneck/i.test(copiedSshPerfText) || !/Session replay/i.test(copiedSshPerfText)) {
     throw new Error(`SSH performance copy output is incomplete: ${copiedSshPerfText}`);
   }
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshPerfText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshPerfText)) {

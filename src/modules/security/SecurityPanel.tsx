@@ -290,6 +290,26 @@ interface SshExperienceSummary {
   cards: SshExperienceCard[];
 }
 
+interface SshExperienceScoreSegment {
+  id: 'channel' | 'input' | 'output' | 'render';
+  label: string;
+  value: string;
+  detail: string;
+  score: number;
+  tone: 'ok' | 'warn' | 'fail';
+}
+
+interface SshExperienceScoreSummary {
+  title: string;
+  subtitle: string;
+  label: string;
+  value: number;
+  detail: string;
+  action: string;
+  tone: 'ok' | 'warn' | 'fail';
+  segments: SshExperienceScoreSegment[];
+}
+
 interface SshPerformanceSummary {
   tone: 'ok' | 'warn' | 'fail';
   status: string;
@@ -300,6 +320,7 @@ interface SshPerformanceSummary {
   reportContext: string[];
   reportText: string;
   experience: SshExperienceSummary;
+  score: SshExperienceScoreSummary;
   metrics: SshPerformanceMetric[];
   groups: SshPerformanceGroup[];
 }
@@ -1737,6 +1758,33 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
             </button>
           </div>
         </div>
+        <section className={`security-ssh-scoreboard ${sshPerformance.score.tone}`} data-ssh-experience-score="true" aria-label={sshPerformance.score.title}>
+          <div className="security-ssh-scoreboard-meter">
+            <span>{sshPerformance.score.label}</span>
+            <strong>{sshPerformance.score.value}</strong>
+            <small>{sshPerformance.score.subtitle}</small>
+            <i style={{ width: `${sshPerformance.score.value}%` }} />
+          </div>
+          <div className="security-ssh-scoreboard-copy">
+            <span>{sshPerformance.score.title}</span>
+            <strong>{sshPerformance.score.detail}</strong>
+            <p>{sshPerformance.score.action}</p>
+          </div>
+          <div className="security-ssh-scoreboard-lanes">
+            {sshPerformance.score.segments.map((segment) => (
+              <article key={segment.id} className={segment.tone} data-ssh-experience-score-segment={segment.id}>
+                <div>
+                  <span>{segment.label}</span>
+                  <strong>{segment.value}</strong>
+                </div>
+                <i>
+                  <b style={{ width: `${segment.score}%` }} />
+                </i>
+                <small>{segment.detail}</small>
+              </article>
+            ))}
+          </div>
+        </section>
         <section className={`security-ssh-support-bundle ${sshSupportBundle.tone}`} data-ssh-support-bundle="true" aria-label={sshPerformanceCopy.supportBundleTitle}>
           <div className="security-ssh-support-bundle-copy">
             <span><ClipboardCheck size={15} /> {sshPerformanceCopy.supportBundleTitle}</span>
@@ -3670,6 +3718,84 @@ function buildSshPerformanceSummary(
     copy.reportEvidenceLevel(hasEvidence, sessionReplays.length, Boolean(lastSelfTest)),
     copy.reportSanitizedBadge,
   ];
+  const channelScore = clampSshExperienceScore(
+    100
+    - (errors * 18)
+    - (lastSelfTest?.status === 'failed' ? 25 : lastSelfTest?.status === 'timeout' ? 16 : 0)
+    - (lastSelfTest?.bottleneck === 'connection' ? 24 : 0)
+    - (activeSessions > 8 ? 8 : 0)
+    - (!hasEvidence ? 24 : 0),
+  );
+  const inputScore = clampSshExperienceScore(
+    100
+    - (inputEvents >= 8 && inputRatio < 1.2 ? 22 : 0)
+    - (inputEvents >= 8 && inputRatio < 1.5 ? 8 : 0)
+    - (latestReplay && latestReplay.inputSubmits > 12 ? 4 : 0)
+    - (!hasEvidence ? 18 : 0),
+  );
+  const outputScore = clampSshExperienceScore(
+    100
+    - (outputEvents >= 8 && outputRatio < 1.2 ? 18 : 0)
+    - (lastSelfTest && lastSelfTest.outputSpanMs >= 2500 ? 18 : 0)
+    - (latestReplay && latestReplay.outputLines > 600 ? 6 : 0)
+    - (!hasEvidence ? 18 : 0),
+  );
+  const renderScore = clampSshExperienceScore(
+    100
+    - (lastSelfTest && lastSelfTest.firstResponseMs >= 2000 ? 18 : 0)
+    - (latestReplay && latestReplay.errorCount > 0 ? 14 : 0)
+    - (selfTestTrend?.direction === 'degrading' ? 10 : 0)
+    - (!hasEvidence ? 18 : 0),
+  );
+  const scoreValue = clampSshExperienceScore(Math.round((channelScore * 0.34) + (inputScore * 0.22) + (outputScore * 0.22) + (renderScore * 0.22)));
+  const scoreTone: SshExperienceScoreSummary['tone'] = tone === 'fail' || scoreValue < 65
+    ? 'fail'
+    : tone === 'warn' || scoreValue < 86
+      ? 'warn'
+      : 'ok';
+  const score: SshExperienceScoreSummary = {
+    title: copy.experienceScoreTitle,
+    subtitle: copy.experienceScoreSubtitle,
+    label: copy.experienceScoreLabel,
+    value: scoreValue,
+    detail: copy.experienceScoreDetail(scoreValue, hasEvidence),
+    action: copy.experienceScoreAction(scoreTone, hasEvidence),
+    tone: scoreTone,
+    segments: [
+      {
+        id: 'channel',
+        label: copy.experienceScoreChannel,
+        value: `${channelScore}`,
+        detail: errors > 0 ? copy.websocketErrorsDetail(errors) : copy.experienceScoreSegmentDetail(channelScore),
+        score: channelScore,
+        tone: mapSshScoreTone(channelScore),
+      },
+      {
+        id: 'input',
+        label: copy.experienceScoreInput,
+        value: inputFlushes > 0 ? `${formatBatchRatio(inputRatio)}x` : `${inputScore}`,
+        detail: copy.inputBatchDetail(inputEvents, inputFlushes),
+        score: inputScore,
+        tone: mapSshScoreTone(inputScore),
+      },
+      {
+        id: 'output',
+        label: copy.experienceScoreOutput,
+        value: outputFlushes > 0 ? `${formatBatchRatio(outputRatio)}x` : `${outputScore}`,
+        detail: copy.outputBatchDetail(outputEvents, outputFlushes),
+        score: outputScore,
+        tone: mapSshScoreTone(outputScore),
+      },
+      {
+        id: 'render',
+        label: copy.experienceScoreRender,
+        value: lastSelfTest ? `${Math.round(lastSelfTest.firstResponseMs)}ms` : `${renderScore}`,
+        detail: lastSelfTest ? copy.responseSplitDetail(lastSelfTest.firstResponseMs, lastSelfTest.outputSpanMs) : copy.responseSplitNone,
+        score: renderScore,
+        tone: mapSshScoreTone(renderScore),
+      },
+    ],
+  };
   const experience: SshExperienceSummary = {
     title: copy.experienceTitle,
     lead: copy.experienceLead(status, hasEvidence),
@@ -3707,6 +3833,11 @@ function buildSshPerformanceSummary(
   const copyText = [
     `# ${copy.title}`,
     `${copy.summaryStatus}: ${status}`,
+    `[${copy.experienceScoreTitle}]`,
+    `${copy.experienceScoreLabel}: ${score.value}`,
+    `${copy.reportHeadlineLabel}: ${score.detail}`,
+    `${copy.summaryNextAction}: ${score.action}`,
+    ...score.segments.map((segment) => `${segment.label}: ${segment.value} / ${segment.detail}`),
     `[${copy.experienceTitle}]`,
     ...experience.cards.map((card) => `${card.label}: ${card.value} (${card.detail})`),
     ...groups.flatMap((group) => [
@@ -3737,9 +3868,27 @@ function buildSshPerformanceSummary(
     reportContext,
     reportText,
     experience,
+    score,
     metrics,
     groups,
   };
+}
+
+function clampSshExperienceScore(value: number) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function mapSshScoreTone(score: number): 'ok' | 'warn' | 'fail' {
+  if (score < 65) {
+    return 'fail';
+  }
+  if (score < 86) {
+    return 'warn';
+  }
+  return 'ok';
 }
 
 function calculateBatchRatio(events: number, flushes: number) {
@@ -5298,6 +5447,16 @@ interface SshPerformanceCopy {
   experienceEvidenceDetail: (inputEvents: number, outputEvents: number, replays: number) => string;
   experienceBottleneckUnknown: string;
   experienceActionValue: (tone: SshPerformanceSummary['tone'], hasEvidence: boolean) => string;
+  experienceScoreTitle: string;
+  experienceScoreSubtitle: string;
+  experienceScoreLabel: string;
+  experienceScoreDetail: (score: number, hasEvidence: boolean) => string;
+  experienceScoreAction: (tone: 'ok' | 'warn' | 'fail', hasEvidence: boolean) => string;
+  experienceScoreChannel: string;
+  experienceScoreInput: string;
+  experienceScoreOutput: string;
+  experienceScoreRender: string;
+  experienceScoreSegmentDetail: (score: number) => string;
   historyTitle: string;
   historyDescription: string;
   historyEmpty: string;
@@ -5557,6 +5716,16 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     experienceEvidenceDetail: (inputEvents, outputEvents, replays) => `${inputEvents} 次输入 · ${outputEvents} 次输出 · ${replays} 段回放`,
     experienceBottleneckUnknown: '待测速',
     experienceActionValue: (tone, hasEvidence) => !hasEvidence ? '先生成基线' : tone === 'fail' ? '先修连接' : tone === 'warn' ? '继续观测' : '保持基线',
+    experienceScoreTitle: 'SSH 体验评分',
+    experienceScoreSubtitle: '现场可用度',
+    experienceScoreLabel: '评分',
+    experienceScoreDetail: (score, hasEvidence) => hasEvidence ? `当前 SSH 现场可用度 ${score}/100。` : `暂无足够现场证据，临时评分 ${score}/100。`,
+    experienceScoreAction: (tone, hasEvidence) => !hasEvidence ? '打开 SSH 终端执行一次安全命令或测速，建立真实基线。' : tone === 'fail' ? '优先处理连接错误、代理升级头和终端会话释放链路。' : tone === 'warn' ? '继续采集粘贴、大输出和弱网样本，观察分段评分变化。' : '当前链路可作为基线，保留评分用于后续用户反馈对比。',
+    experienceScoreChannel: '通道',
+    experienceScoreInput: '输入',
+    experienceScoreOutput: '输出',
+    experienceScoreRender: '渲染',
+    experienceScoreSegmentDetail: (score) => `区間 ${score}/100`,
     historyTitle: '本地诊断快照',
     historyDescription: '仅保存在当前浏览器，用于对比优化前后的脱敏报告。',
     historyEmpty: '暂无历史快照，保存一次当前报告后即可对比。',
@@ -5814,6 +5983,16 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     experienceEvidenceDetail: (inputEvents, outputEvents, replays) => `${inputEvents} input · ${outputEvents} output · ${replays} replay(s)`,
     experienceBottleneckUnknown: 'Needs test',
     experienceActionValue: (tone, hasEvidence) => !hasEvidence ? 'Create baseline' : tone === 'fail' ? 'Fix transport' : tone === 'warn' ? 'Keep sampling' : 'Keep baseline',
+    experienceScoreTitle: 'SSH experience score',
+    experienceScoreSubtitle: 'Field usability',
+    experienceScoreLabel: 'Score',
+    experienceScoreDetail: (score, hasEvidence) => hasEvidence ? `Current SSH field usability is ${score}/100.` : `Evidence is not ready yet; provisional score is ${score}/100.`,
+    experienceScoreAction: (tone, hasEvidence) => !hasEvidence ? 'Open SSH and run one safe command or speed test to create a real baseline.' : tone === 'fail' ? 'Fix transport errors, proxy upgrade headers, and terminal session cleanup first.' : tone === 'warn' ? 'Keep sampling paste bursts, large output, and weak-network sessions; watch the segment scores.' : 'Use this path as the baseline and compare future user lag reports against it.',
+    experienceScoreChannel: 'Channel',
+    experienceScoreInput: 'Input',
+    experienceScoreOutput: 'Output',
+    experienceScoreRender: 'Render',
+    experienceScoreSegmentDetail: (score) => `Segment ${score}/100`,
     historyTitle: 'Local diagnosis snapshots',
     historyDescription: 'Stored only in this browser so you can compare sanitized reports before and after tuning.',
     historyEmpty: 'No snapshots yet. Save the current report once to start comparing.',
@@ -6071,6 +6250,16 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     experienceEvidenceDetail: (inputEvents, outputEvents, replays) => `${inputEvents} 入力 · ${outputEvents} 出力 · ${replays} 件再生`,
     experienceBottleneckUnknown: 'テスト待ち',
     experienceActionValue: (tone, hasEvidence) => !hasEvidence ? '基準を作成' : tone === 'fail' ? '通信を修正' : tone === 'warn' ? '継続観察' : '基準を保持',
+    experienceScoreTitle: 'SSH 体験スコア',
+    experienceScoreSubtitle: '現場利用度',
+    experienceScoreLabel: 'スコア',
+    experienceScoreDetail: (score, hasEvidence) => hasEvidence ? `現在の SSH 現場利用度は ${score}/100 です。` : `証跡が不足しているため、暫定スコアは ${score}/100 です。`,
+    experienceScoreAction: (tone, hasEvidence) => !hasEvidence ? 'SSH 端末で安全なコマンドまたは速度テストを 1 回実行し、実基準を作成します。' : tone === 'fail' ? '通信エラー、プロキシの upgrade ヘッダー、端末セッション解放を先に確認します。' : tone === 'warn' ? '貼り付け、大量出力、弱回線のサンプルを継続収集し、分段スコアを見ます。' : 'この経路を基準として保持し、今後の遅延報告と比較します。',
+    experienceScoreChannel: '通信',
+    experienceScoreInput: '入力',
+    experienceScoreOutput: '出力',
+    experienceScoreRender: '描画',
+    experienceScoreSegmentDetail: (score) => `分段 ${score}/100`,
     historyTitle: 'ローカル診断スナップショット',
     historyDescription: 'このブラウザだけに保存し、調整前後の匿名化レポートを比較します。',
     historyEmpty: 'スナップショットはまだありません。現在のレポートを保存すると比較できます。',
