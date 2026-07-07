@@ -364,7 +364,7 @@ async function assertReleaseEvidenceBrief(targetPage) {
   }
   await targetPage.locator('[data-ssh-experience-sla="true"]').waitFor({ timeout: 5000 });
   const sshExperienceSlaText = await targetPage.locator('[data-ssh-experience-sla="true"]').innerText();
-  if (!/SSH experience SLA trend/i.test(sshExperienceSlaText) || !/Latest/i.test(sshExperienceSlaText) || !/Average/i.test(sshExperienceSlaText) || !/Direction/i.test(sshExperienceSlaText) || !/Record score/i.test(sshExperienceSlaText) || !/Copy trend/i.test(sshExperienceSlaText)) {
+  if (!/SSH experience SLA trend/i.test(sshExperienceSlaText) || !/Latest/i.test(sshExperienceSlaText) || !/Average/i.test(sshExperienceSlaText) || !/Direction/i.test(sshExperienceSlaText) || !/Current vs baseline/i.test(sshExperienceSlaText) || !/Record score/i.test(sshExperienceSlaText) || !/Copy trend/i.test(sshExperienceSlaText)) {
     throw new Error(`SSH experience SLA trend did not render baseline controls: ${sshExperienceSlaText}`);
   }
   const sshSlaLaneCount = await targetPage.locator('[data-ssh-experience-sla-lane]').count();
@@ -537,7 +537,7 @@ async function assertReleaseEvidenceBrief(targetPage) {
   }
   await targetPage.locator('[data-ssh-experience-sla-copy="true"]').click();
   const copiedSshExperienceSlaText = await targetPage.evaluate(() => window.__colipasCopiedSshExperienceSlaText ?? '');
-  if (!/SSH experience SLA trend/i.test(copiedSshExperienceSlaText) || !/Current score/i.test(copiedSshExperienceSlaText) || !/Historical average/i.test(copiedSshExperienceSlaText) || !/Trend direction/i.test(copiedSshExperienceSlaText) || !/Recent score samples/i.test(copiedSshExperienceSlaText) || !/does not store server addresses/i.test(copiedSshExperienceSlaText)) {
+  if (!/SSH experience SLA trend/i.test(copiedSshExperienceSlaText) || !/Current score/i.test(copiedSshExperienceSlaText) || !/Historical average/i.test(copiedSshExperienceSlaText) || !/Trend direction/i.test(copiedSshExperienceSlaText) || !/Current vs baseline/i.test(copiedSshExperienceSlaText) || !/Recent score samples/i.test(copiedSshExperienceSlaText) || !/does not store server addresses/i.test(copiedSshExperienceSlaText)) {
     throw new Error(`SSH experience SLA trend copy output is incomplete: ${copiedSshExperienceSlaText}`);
   }
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshExperienceSlaText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshExperienceSlaText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(copiedSshExperienceSlaText)) {

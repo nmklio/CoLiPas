@@ -334,6 +334,7 @@ interface SshExperienceSlaTrend {
   latestLabel: string;
   averageLabel: string;
   directionLabel: string;
+  baselineLabel: string;
   action: string;
   copyText: string;
   currentSegments: SshExperienceSlaSnapshot['segments'];
@@ -1862,6 +1863,7 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
               <small>{sshExperienceSlaTrend.latestLabel}</small>
               <small>{sshExperienceSlaTrend.averageLabel}</small>
               <small>{sshExperienceSlaTrend.directionLabel}</small>
+              <small className={sshExperienceSlaTrend.tone}>{sshExperienceSlaTrend.baselineLabel}</small>
               <button type="button" className="tool-button" onClick={recordSshExperienceSlaSnapshot} data-ssh-experience-sla-record="true">
                 <Download size={15} />
                 {sshPerformanceCopy.experienceSlaRecord}
@@ -4074,18 +4076,26 @@ function buildSshExperienceSlaTrend(
     .filter(isSshExperienceSlaSnapshot)
     .filter((snapshot) => !containsSensitiveReportText(JSON.stringify(snapshot)))
     .slice(0, sshExperienceSlaHistoryVisibleLimit);
+  const currentValue = clampSshExperienceScore(currentScore.value);
   const latest = snapshots[0] ?? null;
   const previous = snapshots[1] ?? null;
-  const latestValue = latest?.value ?? clampSshExperienceScore(currentScore.value);
+  const latestValue = latest?.value ?? currentValue;
   const average = snapshots.length > 0
     ? clampSshExperienceScore(snapshots.reduce((sum, snapshot) => sum + snapshot.value, 0) / snapshots.length)
-    : clampSshExperienceScore(currentScore.value);
+    : currentValue;
   const delta = previous ? latestValue - previous.value : 0;
+  const baselineDelta = latest ? currentValue - latest.value : 0;
   const direction: SshExperienceSlaDirection = delta >= 4 ? 'improving' : delta <= -4 ? 'degrading' : 'stable';
   const scoreTone = mapSshScoreTone(latestValue);
-  const tone: SshExperienceSlaTrend['tone'] = scoreTone === 'fail'
+  const currentTone = mapSshScoreTone(currentValue);
+  const baselineTone: SshExperienceSlaTrend['tone'] = latest && baselineDelta <= -14
     ? 'fail'
-    : direction === 'degrading' || scoreTone === 'warn'
+    : latest && baselineDelta <= -6
+      ? 'warn'
+      : currentTone;
+  const tone: SshExperienceSlaTrend['tone'] = scoreTone === 'fail' || baselineTone === 'fail'
+    ? 'fail'
+    : direction === 'degrading' || scoreTone === 'warn' || baselineTone === 'warn'
       ? 'warn'
       : 'ok';
   const directionLabel = direction === 'improving'
@@ -4101,8 +4111,13 @@ function buildSshExperienceSlaTrend(
     : copy.experienceScoreDetail(currentScore.value, false);
   const latestLabel = copy.experienceSlaLatest(latestValue);
   const averageLabel = copy.experienceSlaAverage(average, snapshots.length);
+  const baselineLabel = latest
+    ? copy.experienceSlaBaseline(currentValue, latest.value, baselineDelta)
+    : copy.experienceSlaBaselineEmpty(currentValue);
   const action = snapshots.length > 0
-    ? copy.experienceSlaAction(direction, tone)
+    ? baselineDelta <= -6
+      ? copy.experienceSlaBaselineAction(tone)
+      : copy.experienceSlaAction(direction, tone)
     : currentScore.action;
   const currentSegments = currentScore.segments.map((segment) => ({
     id: segment.id,
@@ -4115,9 +4130,10 @@ function buildSshExperienceSlaTrend(
     `# ${copy.experienceSlaReportTitle}`,
     `${copy.experienceSlaReportGenerated}: ${generatedAt}`,
     `${copy.summaryStatus}: ${status}`,
-    `${copy.experienceSlaReportCurrent}: ${currentScore.value}/100`,
+    `${copy.experienceSlaReportCurrent}: ${currentValue}/100`,
     `${copy.experienceSlaReportAverage}: ${average}/100 (${snapshots.length})`,
     `${copy.experienceSlaReportDirection}: ${directionLabel}`,
+    `${copy.experienceSlaReportBaseline}: ${baselineLabel}`,
     '',
     `[${copy.experienceScoreTitle}]`,
     ...currentSegments.map((segment) => `- ${segment.label}: ${segment.score}/100 (${segment.tone})`),
@@ -4138,6 +4154,7 @@ function buildSshExperienceSlaTrend(
     latestLabel,
     averageLabel,
     directionLabel: `${copy.experienceSlaDirection}: ${directionLabel}`,
+    baselineLabel,
     action,
     copyText,
     currentSegments,
@@ -5753,9 +5770,12 @@ interface SshPerformanceCopy {
   experienceSlaDirectionStable: (delta: number) => string;
   experienceSlaDirectionImproving: (delta: number) => string;
   experienceSlaDirectionDegrading: (delta: number) => string;
+  experienceSlaBaseline: (current: number, baseline: number, delta: number) => string;
+  experienceSlaBaselineEmpty: (current: number) => string;
   experienceSlaTrendTitle: (direction: SshExperienceSlaDirection, score: number, delta: number) => string;
   experienceSlaTrendDetail: (samples: number, average: number, latest: number, delta: number) => string;
   experienceSlaAction: (direction: SshExperienceSlaDirection, tone: 'ok' | 'warn' | 'fail') => string;
+  experienceSlaBaselineAction: (tone: 'ok' | 'warn' | 'fail') => string;
   experienceSlaSampleLabel: (index: number) => string;
   experienceSlaSampleDetail: (time: string, status: string) => string;
   experienceSlaSanitizedNote: string;
@@ -5764,6 +5784,7 @@ interface SshPerformanceCopy {
   experienceSlaReportCurrent: string;
   experienceSlaReportAverage: string;
   experienceSlaReportDirection: string;
+  experienceSlaReportBaseline: string;
   experienceSlaReportRecent: string;
   experienceSlaReportAction: string;
   historyTitle: string;
@@ -6048,9 +6069,12 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     experienceSlaDirectionStable: () => '稳定',
     experienceSlaDirectionImproving: (delta) => `恢复 +${Math.abs(delta)}`,
     experienceSlaDirectionDegrading: (delta) => `变慢 -${Math.abs(delta)}`,
+    experienceSlaBaseline: (current, baseline, delta) => `当前对比基线 ${current}/${baseline}（${delta >= 0 ? '+' : ''}${delta}）`,
+    experienceSlaBaselineEmpty: (current) => `当前对比基线 ${current}/--`,
     experienceSlaTrendTitle: (direction, score, delta) => direction === 'improving' ? `SSH 体验正在恢复到 ${score}/100（+${Math.abs(delta)}）` : direction === 'degrading' ? `SSH 体验降至 ${score}/100（-${Math.abs(delta)}）` : `SSH 体验稳定在 ${score}/100`,
     experienceSlaTrendDetail: (samples, average, latest, delta) => `${samples} 条本地脱敏样本，最新 ${latest}/100，均值 ${average}/100，差值 ${delta >= 0 ? '+' : ''}${delta}。`,
     experienceSlaAction: (direction, tone) => direction === 'degrading' || tone === 'fail' ? '优先复测连接、输入批处理和大输出场景，定位最近一次变慢的链路。' : tone === 'warn' ? '继续记录高峰期和弱网评分，观察是否持续低于 86。' : '当前 SLA 可作为健康基线，后续用户反馈卡顿时直接对比趋势。',
+    experienceSlaBaselineAction: (tone) => tone === 'fail' ? '当前评分明显低于基线，先回到 SSH 终端复测安全命令、大输出和断开释放链路。' : '当前评分低于基线，建议再记录一次高峰期样本并检查代理、WebSocket 与终端渲染。',
     experienceSlaSampleLabel: (index) => `样本 #${index}`,
     experienceSlaSampleDetail: (time, status) => `${time} · ${status}`,
     experienceSlaSanitizedNote: 'SLA 趋势只保存评分、分段分数、状态和建议，不保存服务器地址、命令正文、密钥或用户数据。',
@@ -6059,6 +6083,7 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     experienceSlaReportCurrent: '当前评分',
     experienceSlaReportAverage: '历史均值',
     experienceSlaReportDirection: '变化方向',
+    experienceSlaReportBaseline: '当前对比基线',
     experienceSlaReportRecent: '最近评分样本',
     experienceSlaReportAction: '建议动作',
     historyTitle: '本地诊断快照',
@@ -6341,9 +6366,12 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     experienceSlaDirectionStable: () => 'Stable',
     experienceSlaDirectionImproving: (delta) => `Recovering +${Math.abs(delta)}`,
     experienceSlaDirectionDegrading: (delta) => `Slowing -${Math.abs(delta)}`,
+    experienceSlaBaseline: (current, baseline, delta) => `Current vs baseline ${current}/${baseline} (${delta >= 0 ? '+' : ''}${delta})`,
+    experienceSlaBaselineEmpty: (current) => `Current vs baseline ${current}/--`,
     experienceSlaTrendTitle: (direction, score, delta) => direction === 'improving' ? `SSH experience is recovering to ${score}/100 (+${Math.abs(delta)})` : direction === 'degrading' ? `SSH experience dropped to ${score}/100 (-${Math.abs(delta)})` : `SSH experience is stable at ${score}/100`,
     experienceSlaTrendDetail: (samples, average, latest, delta) => `${samples} local sanitized sample(s), latest ${latest}/100, average ${average}/100, delta ${delta >= 0 ? '+' : ''}${delta}.`,
     experienceSlaAction: (direction, tone) => direction === 'degrading' || tone === 'fail' ? 'Retest transport, input batching, and large-output scenarios first to locate the latest slowdown.' : tone === 'warn' ? 'Keep recording peak-hour and weak-network scores until the score stays above 86.' : 'Use this SLA as the healthy baseline and compare future lag reports against it.',
+    experienceSlaBaselineAction: (tone) => tone === 'fail' ? 'The current score is well below baseline. Re-run safe commands, large output, and disconnect cleanup in the SSH terminal first.' : 'The current score is below baseline. Record another peak-hour sample and inspect proxy, WebSocket, and terminal rendering.',
     experienceSlaSampleLabel: (index) => `Sample #${index}`,
     experienceSlaSampleDetail: (time, status) => `${time} · ${status}`,
     experienceSlaSanitizedNote: 'SLA trend only stores scores, segment scores, status, and recommendations. It does not store server addresses, command text, keys, or user data.',
@@ -6352,6 +6380,7 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     experienceSlaReportCurrent: 'Current score',
     experienceSlaReportAverage: 'Historical average',
     experienceSlaReportDirection: 'Trend direction',
+    experienceSlaReportBaseline: 'Current vs baseline',
     experienceSlaReportRecent: 'Recent score samples',
     experienceSlaReportAction: 'Recommended action',
     historyTitle: 'Local diagnosis snapshots',
@@ -6634,9 +6663,12 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     experienceSlaDirectionStable: () => '安定',
     experienceSlaDirectionImproving: (delta) => `回復 +${Math.abs(delta)}`,
     experienceSlaDirectionDegrading: (delta) => `低下 -${Math.abs(delta)}`,
+    experienceSlaBaseline: (current, baseline, delta) => `現在と基準 ${current}/${baseline}（${delta >= 0 ? '+' : ''}${delta}）`,
+    experienceSlaBaselineEmpty: (current) => `現在と基準 ${current}/--`,
     experienceSlaTrendTitle: (direction, score, delta) => direction === 'improving' ? `SSH 体験は ${score}/100 まで回復（+${Math.abs(delta)}）` : direction === 'degrading' ? `SSH 体験は ${score}/100 まで低下（-${Math.abs(delta)}）` : `SSH 体験は ${score}/100 で安定`,
     experienceSlaTrendDetail: (samples, average, latest, delta) => `${samples} 件のローカル匿名化サンプル、最新 ${latest}/100、平均 ${average}/100、差分 ${delta >= 0 ? '+' : ''}${delta}。`,
     experienceSlaAction: (direction, tone) => direction === 'degrading' || tone === 'fail' ? '通信、入力バッチ、大量出力を先に再テストし、直近の低下箇所を特定します。' : tone === 'warn' ? 'ピーク時間と弱回線のスコアを記録し、86 以上で安定するか確認します。' : 'この SLA を健全な基準として保持し、今後の遅延報告と比較します。',
+    experienceSlaBaselineAction: (tone) => tone === 'fail' ? '現在スコアが基準を大きく下回っています。SSH 端末で安全コマンド、大量出力、切断解放を先に再テストします。' : '現在スコアが基準を下回っています。ピーク時間のサンプルを追加し、プロキシ、WebSocket、端末描画を確認します。',
     experienceSlaSampleLabel: (index) => `サンプル #${index}`,
     experienceSlaSampleDetail: (time, status) => `${time} · ${status}`,
     experienceSlaSanitizedNote: 'SLA 傾向はスコア、分段スコア、状態、推奨のみを保存し、サーバーアドレス、コマンド本文、キー、ユーザーデータは保存しません。',
@@ -6645,6 +6677,7 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     experienceSlaReportCurrent: '現在スコア',
     experienceSlaReportAverage: '履歴平均',
     experienceSlaReportDirection: '変化方向',
+    experienceSlaReportBaseline: '現在と基準',
     experienceSlaReportRecent: '最近のスコアサンプル',
     experienceSlaReportAction: '推奨アクション',
     historyTitle: 'ローカル診断スナップショット',

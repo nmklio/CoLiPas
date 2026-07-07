@@ -12509,6 +12509,21 @@ pre {
   white-space: nowrap;
 }
 
+.security-ssh-sla-trend-actions small.ok {
+  border-color: rgba(15, 118, 110, 0.16);
+  color: #0f766e;
+}
+
+.security-ssh-sla-trend-actions small.warn {
+  border-color: rgba(245, 158, 11, 0.24);
+  color: #b65f00;
+}
+
+.security-ssh-sla-trend-actions small.fail {
+  border-color: rgba(239, 68, 68, 0.24);
+  color: var(--red);
+}
+
 .security-ssh-sla-trend-rail {
   min-width: 0;
   display: grid;
