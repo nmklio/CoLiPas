@@ -393,6 +393,17 @@ async function assertReleaseEvidenceBrief(targetPage) {
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(releaseCockpitText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(releaseCockpitText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(releaseCockpitText)) {
     throw new Error('Release cockpit rendered a raw IP address or secret');
   }
+  const releaseSyncItemCount = await targetPage.locator('[data-release-sync-item]').count();
+  if (releaseSyncItemCount !== 4) {
+    throw new Error(`Release sync radar should expose four sync signals, got ${releaseSyncItemCount}`);
+  }
+  const releaseSyncRadarText = await targetPage.locator('[data-release-sync-radar="true"]').innerText();
+  if (!/Release sync radar/i.test(releaseSyncRadarText) || !/Version sync/i.test(releaseSyncRadarText) || !/Gate decision/i.test(releaseSyncRadarText) || !/Evidence depth/i.test(releaseSyncRadarText) || !/SSH field/i.test(releaseSyncRadarText) || !/sanitized/i.test(releaseSyncRadarText)) {
+    throw new Error(`Release sync radar did not render sync-control signals: ${releaseSyncRadarText}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(releaseSyncRadarText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(releaseSyncRadarText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(releaseSyncRadarText)) {
+    throw new Error('Release sync radar rendered a raw IP address or secret');
+  }
   const releaseHandoffSectionCount = await targetPage.locator('[data-release-handoff-section]').count();
   if (releaseHandoffSectionCount !== 4) {
     throw new Error(`Release handoff pack should expose four handoff sections, got ${releaseHandoffSectionCount}`);
@@ -408,6 +419,7 @@ async function assertReleaseEvidenceBrief(targetPage) {
   if (metricCount !== 4) {
     throw new Error(`Release evidence brief should expose four aggregate metrics, got ${metricCount}`);
   }
+  await captureVisualEvidence(targetPage, 'desktop-release-sync-radar', ['[data-release-sync-radar="true"]']);
   const playbookCount = await targetPage.locator('.security-release-playbook-item').count();
   if (playbookCount !== 3) {
     throw new Error(`Release failure playbook should expose three diagnostic cards, got ${playbookCount}`);

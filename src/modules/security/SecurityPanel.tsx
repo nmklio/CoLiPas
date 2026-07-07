@@ -183,6 +183,24 @@ interface ReleaseCockpitSummary {
   copyText: string;
 }
 
+interface ReleaseSyncRadarItem {
+  id: 'version' | 'gate' | 'evidence' | 'field';
+  label: string;
+  value: string;
+  detail: string;
+  tone: 'ok' | 'warn' | 'fail';
+}
+
+interface ReleaseSyncRadarSummary {
+  tone: 'ok' | 'warn' | 'fail';
+  title: string;
+  lead: string;
+  status: string;
+  generatedLabel: string;
+  items: ReleaseSyncRadarItem[];
+  copyText: string;
+}
+
 interface ReleaseHandoffPackSection {
   id: 'cockpit' | 'evidence' | 'ssh' | 'policy';
   label: string;
@@ -697,6 +715,17 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
     }),
     [activeAuditIssues.blocked, activeAuditIssues.failed, copy, diagnosticBundle, evidenceBrief, locale, readiness, successRate],
   );
+  const releaseSyncRadar = useMemo(
+    () => buildReleaseSyncRadar({
+      releaseCockpit,
+      evidenceBrief,
+      readiness,
+      diagnostic: diagnosticBundle,
+      copy,
+      locale,
+    }),
+    [copy, diagnosticBundle, evidenceBrief, locale, readiness, releaseCockpit],
+  );
   const sshPerformance = useMemo(
     () => buildSshPerformanceSummary(diagnosticBundle, sshPerformanceCopy, locale),
     [diagnosticBundle, locale, sshPerformanceCopy],
@@ -1130,6 +1159,23 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
       setRemediationError(false);
     } catch {
       setRemediationMessage(releaseCockpit.copyText);
+      setRemediationError(false);
+    }
+  }
+
+  async function copyReleaseSyncRadar() {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) {
+      setRemediationMessage(releaseSyncRadar.copyText);
+      setRemediationError(false);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(releaseSyncRadar.copyText);
+      setRemediationMessage(copy.releaseSyncCopied);
+      setRemediationError(false);
+    } catch {
+      setRemediationMessage(releaseSyncRadar.copyText);
       setRemediationError(false);
     }
   }
@@ -2149,6 +2195,38 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
           <button type="button" className="tool-button" onClick={copyReleaseCockpit} disabled={!releaseCockpit.copyText}>
             <ClipboardCheck size={15} />
             {copy.releaseCockpitCopy}
+          </button>
+        </div>
+      </article>
+
+      <article className={`security-release-sync-radar ${releaseSyncRadar.tone}`} data-release-sync-radar="true" aria-labelledby="security-release-sync-radar-title">
+        <div className="security-release-sync-radar-heading">
+          <div>
+            <span>{copy.releaseSyncKicker}</span>
+            <h3 id="security-release-sync-radar-title"><Activity size={18} /> {releaseSyncRadar.title}</h3>
+            <p>{releaseSyncRadar.lead}</p>
+          </div>
+          <div className="security-release-sync-radar-status">
+            <small>{copy.releaseSyncStatusLabel}</small>
+            <strong>{releaseSyncRadar.status}</strong>
+            <span>{releaseSyncRadar.generatedLabel}</span>
+          </div>
+        </div>
+        <div className="security-release-sync-radar-grid" aria-label={copy.releaseSyncItemsLabel}>
+          {releaseSyncRadar.items.map((item) => (
+            <div key={item.id} className={`security-release-sync-radar-item ${item.tone}`} data-release-sync-item={item.id}>
+              <span className="security-release-sync-radar-dot" aria-hidden="true" />
+              <small>{item.label}</small>
+              <strong>{item.value}</strong>
+              <p>{item.detail}</p>
+            </div>
+          ))}
+        </div>
+        <div className="security-release-sync-radar-footer">
+          <small>{copy.releaseSyncSanitizedNote}</small>
+          <button type="button" className="tool-button" onClick={copyReleaseSyncRadar} disabled={!releaseSyncRadar.copyText}>
+            <ClipboardCheck size={15} />
+            {copy.releaseSyncCopy}
           </button>
         </div>
       </article>
@@ -3870,6 +3948,86 @@ function buildReleaseCockpitSummary(input: {
     gate,
     lanes,
     nextAction,
+    copyText,
+  };
+}
+
+function buildReleaseSyncRadar(input: {
+  releaseCockpit: ReleaseCockpitSummary;
+  evidenceBrief: ReleaseEvidenceBrief;
+  readiness: ReleaseReadinessResponse | null;
+  diagnostic: DiagnosticExportResponse | null;
+  copy: SecurityCopy;
+  locale: string;
+}): ReleaseSyncRadarSummary {
+  const { releaseCockpit, evidenceBrief, readiness, diagnostic, copy, locale } = input;
+  const deployment = evidenceBrief.deployment;
+  const lastSelfTest = diagnostic?.sshTerminal?.lastSelfTest ?? null;
+  const websocket = diagnostic?.sshTerminal?.websocket ?? null;
+  const commit = sanitizeEvidenceBriefText(deployment?.gitCommit || '--');
+  const versionTone: ReleaseSyncRadarItem['tone'] = deployment?.configured && commit !== '--' ? 'ok' : 'warn';
+  const evidenceTone: ReleaseSyncRadarItem['tone'] = readiness?.status === 'ready'
+    ? 'ok'
+    : readiness?.status === 'blocked'
+      ? 'fail'
+      : 'warn';
+  const fieldTone = getReleaseCockpitSshTone(lastSelfTest, websocket);
+  const fieldValue = lastSelfTest
+    ? copy.releaseCockpitSshStatus(lastSelfTest.status)
+    : String(diagnostic?.sshTerminal.activeSessions ?? 0);
+  const fieldDetail = buildReleaseCockpitSshDetail(diagnostic, copy);
+  const items: ReleaseSyncRadarItem[] = [
+    {
+      id: 'version',
+      label: copy.releaseSyncItemVersion,
+      value: commit,
+      detail: deployment ? copy.releaseSyncVersionDetail(deployment.targetName, deployment.deploymentMode) : copy.releaseCockpitVersionMissing,
+      tone: versionTone,
+    },
+    {
+      id: 'gate',
+      label: copy.releaseSyncItemGate,
+      value: releaseCockpit.gate.status,
+      detail: copy.releaseSyncGateDetail(releaseCockpit.gate.detail, releaseCockpit.gate.rules),
+      tone: releaseCockpit.gate.tone,
+    },
+    {
+      id: 'evidence',
+      label: copy.releaseSyncItemEvidence,
+      value: readiness ? `${readiness.score}/100` : '--',
+      detail: readiness ? copy.releaseSyncEvidenceDetail(readiness.summary.passed, readiness.summary.totalChecks, readiness.blockers.length) : copy.readinessCalculating,
+      tone: evidenceTone,
+    },
+    {
+      id: 'field',
+      label: copy.releaseSyncItemField,
+      value: fieldValue,
+      detail: copy.releaseSyncFieldDetail(fieldDetail),
+      tone: fieldTone,
+    },
+  ];
+  const tone = items.reduce<ReleaseSyncRadarSummary['tone']>((current, item) => (
+    getSshToneRank(item.tone) > getSshToneRank(current) ? item.tone : current
+  ), 'ok');
+  const status = tone === 'ok' ? copy.releaseSyncStatusOk : tone === 'fail' ? copy.releaseSyncStatusFail : copy.releaseSyncStatusWarn;
+  const generatedLabel = diagnostic?.generatedAt
+    ? new Date(diagnostic.generatedAt).toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' })
+    : evidenceBrief.generatedLabel;
+  const copyText = [
+    `# ${copy.releaseSyncTitle}`,
+    `${copy.releaseSyncStatusLabel}: ${status}`,
+    copy.evidenceBriefGenerated(generatedLabel),
+    ...items.map((item) => `${item.label}: ${item.value} (${item.detail})`),
+    copy.releaseSyncSanitizedNote,
+  ].map(sanitizeEvidenceBriefText).join('\n');
+
+  return {
+    tone,
+    title: copy.releaseSyncTitle,
+    lead: copy.releaseSyncLead,
+    status,
+    generatedLabel,
+    items,
     copyText,
   };
 }
@@ -6720,6 +6878,25 @@ interface SecurityCopy {
   releaseCockpitCopy: string;
   releaseCockpitCopied: string;
   releaseCockpitSanitizedNote: string;
+  releaseSyncTitle: string;
+  releaseSyncLead: string;
+  releaseSyncKicker: string;
+  releaseSyncStatusLabel: string;
+  releaseSyncStatusOk: string;
+  releaseSyncStatusWarn: string;
+  releaseSyncStatusFail: string;
+  releaseSyncItemsLabel: string;
+  releaseSyncCopy: string;
+  releaseSyncCopied: string;
+  releaseSyncSanitizedNote: string;
+  releaseSyncItemVersion: string;
+  releaseSyncItemGate: string;
+  releaseSyncItemEvidence: string;
+  releaseSyncItemField: string;
+  releaseSyncVersionDetail: (target: string, mode: string) => string;
+  releaseSyncGateDetail: (detail: string, rules: string) => string;
+  releaseSyncEvidenceDetail: (passed: number, total: number, blockers: number) => string;
+  releaseSyncFieldDetail: (detail: string) => string;
   releaseHandoffTitle: string;
   releaseHandoffLead: string;
   releaseHandoffKicker: string;
@@ -8212,6 +8389,25 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     releaseCockpitCopy: '复制驾驶舱',
     releaseCockpitCopied: '发布健康驾驶舱已复制',
     releaseCockpitSanitizedNote: '驾驶舱只包含脱敏后的版本、聚合评分、计数和建议，不包含服务器地址、命令正文、密钥或用户数据。',
+    releaseSyncTitle: '发布同步雷达',
+    releaseSyncLead: '把 GitHub 版本、服务器部署证据、发布门禁和 SSH 现场信号合成一张同步确认图。',
+    releaseSyncKicker: '同步雷达',
+    releaseSyncStatusLabel: '同步状态',
+    releaseSyncStatusOk: '同步证据完整',
+    releaseSyncStatusWarn: '需要继续确认',
+    releaseSyncStatusFail: '存在阻断信号',
+    releaseSyncItemsLabel: '发布同步信号',
+    releaseSyncCopy: '复制同步雷达',
+    releaseSyncCopied: '发布同步雷达已复制',
+    releaseSyncSanitizedNote: '同步雷达只展示脱敏后的提交号、聚合状态和计数，不包含服务器地址、密钥、命令正文或用户数据。',
+    releaseSyncItemVersion: '版本同步',
+    releaseSyncItemGate: '门禁判定',
+    releaseSyncItemEvidence: '证据完整度',
+    releaseSyncItemField: 'SSH 现场',
+    releaseSyncVersionDetail: (target, mode) => `${target} / ${mode}`,
+    releaseSyncGateDetail: (detail, rules) => `${detail} / ${rules}`,
+    releaseSyncEvidenceDetail: (passed, total, blockers) => `${passed}/${total} 项通过 / ${blockers} 个阻断`,
+    releaseSyncFieldDetail: (detail) => detail,
     releaseHandoffTitle: '发布交接包',
     releaseHandoffLead: '把发布状态、上线证据和 SSH 诊断合成一份可直接交给运维复核的脱敏文本。',
     releaseHandoffKicker: '交接封套',
@@ -8546,6 +8742,25 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     releaseCockpitCopy: 'Copy cockpit',
     releaseCockpitCopied: 'Release cockpit copied',
     releaseCockpitSanitizedNote: 'The cockpit only includes sanitized version, aggregate scores, counts, and recommendations; no server addresses, command text, keys, or user data.',
+    releaseSyncTitle: 'Release sync radar',
+    releaseSyncLead: 'Combines GitHub version, server deployment evidence, release gate, and SSH field signals into one sync confirmation view.',
+    releaseSyncKicker: 'Sync radar',
+    releaseSyncStatusLabel: 'Sync state',
+    releaseSyncStatusOk: 'Sync evidence complete',
+    releaseSyncStatusWarn: 'Needs confirmation',
+    releaseSyncStatusFail: 'Blocking signal found',
+    releaseSyncItemsLabel: 'Release sync signals',
+    releaseSyncCopy: 'Copy sync radar',
+    releaseSyncCopied: 'Release sync radar copied',
+    releaseSyncSanitizedNote: 'The sync radar only shows sanitized commit IDs, aggregate states, and counts; no server addresses, keys, command text, or user data.',
+    releaseSyncItemVersion: 'Version sync',
+    releaseSyncItemGate: 'Gate decision',
+    releaseSyncItemEvidence: 'Evidence depth',
+    releaseSyncItemField: 'SSH field',
+    releaseSyncVersionDetail: (target, mode) => `${target} / ${mode}`,
+    releaseSyncGateDetail: (detail, rules) => `${detail} / ${rules}`,
+    releaseSyncEvidenceDetail: (passed, total, blockers) => `${passed}/${total} checks passed / ${blockers} blocker(s)`,
+    releaseSyncFieldDetail: (detail) => detail,
     releaseHandoffTitle: 'Release handoff pack',
     releaseHandoffLead: 'Combines release state, publish evidence, and SSH diagnostics into one sanitized text pack for operator review.',
     releaseHandoffKicker: 'Handoff sleeve',
@@ -8880,6 +9095,25 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     releaseCockpitCopy: 'コックピットをコピー',
     releaseCockpitCopied: 'リリース健康コックピットをコピーしました',
     releaseCockpitSanitizedNote: 'コックピットには脱敏済みのバージョン、集計スコア、件数、推奨のみが含まれ、サーバーアドレス、コマンド本文、鍵、ユーザーデータは含みません。',
+    releaseSyncTitle: 'リリース同期レーダー',
+    releaseSyncLead: 'GitHub バージョン、サーバーデプロイ証跡、リリースゲート、SSH 現場信号を 1 つの同期確認ビューにまとめます。',
+    releaseSyncKicker: '同期レーダー',
+    releaseSyncStatusLabel: '同期状態',
+    releaseSyncStatusOk: '同期証跡は揃っています',
+    releaseSyncStatusWarn: '追加確認が必要',
+    releaseSyncStatusFail: 'ブロック信号あり',
+    releaseSyncItemsLabel: 'リリース同期シグナル',
+    releaseSyncCopy: '同期レーダーをコピー',
+    releaseSyncCopied: 'リリース同期レーダーをコピーしました',
+    releaseSyncSanitizedNote: '同期レーダーは脱敏済みのコミット ID、集計状態、件数のみを表示し、サーバーアドレス、鍵、コマンド本文、ユーザーデータは含みません。',
+    releaseSyncItemVersion: 'バージョン同期',
+    releaseSyncItemGate: 'ゲート判定',
+    releaseSyncItemEvidence: '証跡の厚み',
+    releaseSyncItemField: 'SSH 現場',
+    releaseSyncVersionDetail: (target, mode) => `${target} / ${mode}`,
+    releaseSyncGateDetail: (detail, rules) => `${detail} / ${rules}`,
+    releaseSyncEvidenceDetail: (passed, total, blockers) => `${passed}/${total} チェック通過 / ${blockers} 件ブロック`,
+    releaseSyncFieldDetail: (detail) => detail,
     releaseHandoffTitle: 'リリース引き継ぎパック',
     releaseHandoffLead: 'リリース状態、公開証跡、SSH 診断を、運用レビュー向けの脱敏済みテキストにまとめます。',
     releaseHandoffKicker: '引き継ぎ封筒',

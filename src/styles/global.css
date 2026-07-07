@@ -11349,6 +11349,152 @@ pre {
   padding-top: 2px;
 }
 
+.security-release-sync-radar {
+  min-width: 0;
+  border: 1px solid rgba(15, 76, 92, 0.18);
+  border-radius: 16px;
+  padding: 15px;
+  background:
+    radial-gradient(circle at 8% 12%, rgba(14, 165, 233, 0.14), transparent 26%),
+    radial-gradient(circle at 96% 16%, rgba(45, 212, 191, 0.18), transparent 28%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(246, 252, 252, 0.96));
+  box-shadow: 0 20px 46px rgba(20, 44, 49, 0.07);
+  display: grid;
+  gap: 13px;
+}
+
+.security-release-sync-radar.warn {
+  border-color: rgba(245, 158, 11, 0.32);
+  background:
+    radial-gradient(circle at 8% 12%, rgba(245, 158, 11, 0.13), transparent 26%),
+    radial-gradient(circle at 96% 16%, rgba(14, 165, 233, 0.12), transparent 28%),
+    #fffdf8;
+}
+
+.security-release-sync-radar.fail {
+  border-color: rgba(239, 68, 68, 0.32);
+  background:
+    radial-gradient(circle at 8% 12%, rgba(239, 68, 68, 0.12), transparent 26%),
+    radial-gradient(circle at 96% 16%, rgba(245, 158, 11, 0.12), transparent 28%),
+    #fffafa;
+}
+
+.security-release-sync-radar-heading,
+.security-release-sync-radar-footer {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.security-release-sync-radar-heading span,
+.security-release-sync-radar-status small,
+.security-release-sync-radar-item small,
+.security-release-sync-radar-footer small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.security-release-sync-radar-heading h3 {
+  margin: 4px 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text);
+}
+
+.security-release-sync-radar-heading p,
+.security-release-sync-radar-item p,
+.security-release-sync-radar-footer small {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.security-release-sync-radar-status {
+  min-width: 150px;
+  border: 1px solid #dce8eb;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.security-release-sync-radar-status strong {
+  display: block;
+  margin: 4px 0;
+  color: var(--text);
+}
+
+.security-release-sync-radar-status span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.security-release-sync-radar-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.security-release-sync-radar-item {
+  position: relative;
+  min-width: 0;
+  border: 1px solid #dce8eb;
+  border-left: 4px solid #0f766e;
+  border-radius: 12px;
+  padding: 11px 11px 11px 14px;
+  background: rgba(255, 255, 255, 0.88);
+  overflow: hidden;
+}
+
+.security-release-sync-radar-item.warn {
+  border-left-color: var(--orange);
+  background: #fffdf8;
+}
+
+.security-release-sync-radar-item.fail {
+  border-left-color: var(--red);
+  background: #fff8f8;
+}
+
+.security-release-sync-radar-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  display: inline-block;
+  background: #0f766e;
+  box-shadow: 0 0 0 5px rgba(15, 118, 110, 0.1);
+  margin-bottom: 9px;
+}
+
+.security-release-sync-radar-item.warn .security-release-sync-radar-dot {
+  background: var(--orange);
+  box-shadow: 0 0 0 5px rgba(245, 158, 11, 0.12);
+}
+
+.security-release-sync-radar-item.fail .security-release-sync-radar-dot {
+  background: var(--red);
+  box-shadow: 0 0 0 5px rgba(239, 68, 68, 0.12);
+}
+
+.security-release-sync-radar-item strong {
+  display: block;
+  margin: 4px 0;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.security-release-sync-radar-footer {
+  align-items: center;
+}
+
 .security-release-handoff {
   min-width: 0;
   border: 1px solid #cfe0e3;
@@ -16266,6 +16412,7 @@ pre {
   .security-release-fix-checklist-heading,
   .security-release-fix-checklist-item,
   .security-release-cockpit-radar,
+  .security-release-sync-radar-grid,
   .security-release-handoff,
   .security-release-handoff-grid,
   .security-release-timeline-heading,
@@ -16980,6 +17127,9 @@ pre {
   .security-release-cockpit-hero,
   .security-release-cockpit-radar,
   .security-release-cockpit-footer,
+  .security-release-sync-radar-heading,
+  .security-release-sync-radar-grid,
+  .security-release-sync-radar-footer,
   .security-release-handoff,
   .security-release-handoff-heading,
   .security-release-handoff-grid,
@@ -17022,6 +17172,8 @@ pre {
   .security-ops-preflight-actions,
   .security-release-cockpit-status,
   .security-release-cockpit-footer .tool-button,
+  .security-release-sync-radar-status,
+  .security-release-sync-radar-footer .tool-button,
   .security-release-fix-router-actions,
   .security-release-fix-action,
   .security-release-fix-checklist-actions,
