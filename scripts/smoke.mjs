@@ -3061,6 +3061,49 @@ if (
 }
 console.log('ok /api/audit/readiness/report exports sanitized Markdown evidence');
 
+const productionProbeRecordResponse = await fetch(`${baseUrl}/api/audit/ssh-production-probes`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    targetLabel: 'verify-local',
+    deploymentMode: 'node',
+    ok: true,
+    durationMs: 96,
+    activeShellsAfter: 0,
+    inventory: {
+      total: 4,
+      connected: 2,
+      modes: {
+        real: 1,
+        simulate: 1,
+      },
+    },
+    probes: [
+      {
+        kind: 'temporary-simulated',
+        mode: 'simulate',
+        ok: true,
+        sessionReady: true,
+        durationMs: 72,
+      },
+    ],
+  }),
+});
+if (!productionProbeRecordResponse.ok) {
+  throw new Error(`/api/audit/ssh-production-probes returned HTTP ${productionProbeRecordResponse.status}`);
+}
+const productionProbeRecordBody = await productionProbeRecordResponse.json();
+if (
+  productionProbeRecordBody.ok !== true
+  || productionProbeRecordBody.audit?.action !== 'SSH_PRODUCTION_PROBE'
+  || productionProbeRecordBody.sample?.targetLabel !== 'verify-local'
+  || productionProbeRecordBody.sample?.roundTripMs !== 72
+  || productionProbeRecordBody.sample?.cleanupOk !== true
+) {
+  throw new Error('/api/audit/ssh-production-probes returned unexpected sanitized probe payload');
+}
+console.log('ok /api/audit/ssh-production-probes records sanitized live SSH evidence');
+
 const diagnosticExportResponse = await fetch(`${baseUrl}/api/audit/diagnostics/export`, { headers: authHeaders });
 if (!diagnosticExportResponse.ok) {
   throw new Error(`/api/audit/diagnostics/export returned HTTP ${diagnosticExportResponse.status}`);
@@ -3092,6 +3135,18 @@ if (
   || diagnosticExportBody.sshTerminal?.selfTestTrend?.latestDurationMs !== 48
   || diagnosticExportBody.sshTerminal?.selfTestTrend?.previousDurationMs !== 80
   || diagnosticExportBody.sshTerminal?.selfTestTrend?.latestBottleneck !== 'healthy'
+  || diagnosticExportBody.sshTerminal?.productionProbeTrend?.samples < 1
+  || diagnosticExportBody.sshTerminal?.productionProbeTrend?.targetLabel !== 'verify-local'
+  || diagnosticExportBody.sshTerminal?.productionProbeTrend?.deploymentMode !== 'node'
+  || diagnosticExportBody.sshTerminal?.productionProbeTrend?.successRate !== 100
+  || diagnosticExportBody.sshTerminal?.productionProbeTrend?.sessionReadyRate !== 100
+  || diagnosticExportBody.sshTerminal?.productionProbeTrend?.cleanupRate !== 100
+  || diagnosticExportBody.sshTerminal?.productionProbeTrend?.latestRoundTripMs !== 72
+  || diagnosticExportBody.sshTerminal?.productionProbeTrend?.averageRoundTripMs !== 72
+  || diagnosticExportBody.sshTerminal?.productionProbeTrend?.direction !== 'unknown'
+  || !Array.isArray(diagnosticExportBody.sshTerminal?.productionProbeTrend?.recent)
+  || diagnosticExportBody.sshTerminal?.productionProbeTrend?.recent?.[0]?.primaryKind !== 'temporary-simulated'
+  || diagnosticExportBody.sshTerminal?.productionProbeTrend?.recent?.[0]?.primaryMode !== 'simulate'
   || !Array.isArray(diagnosticExportBody.sshTerminal?.sessionReplays)
   || !diagnosticExportBody.sshTerminal.sessionReplays.some((item) => item.inputEvents > 0 && item.inputBytes > 0 && item.inputSubmits > 0 && item.outputEvents > 0 && item.outputBytes > 0 && item.outputLines > 0 && Array.isArray(item.timeline) && item.timeline.some((event) => event.type === 'input' && event.bytes > 0) && item.timeline.some((event) => event.type === 'stdout' && event.lines > 0))
   || typeof diagnosticExportBody.sshTerminal?.lastSelfTest?.recordedAt !== 'string'
@@ -3107,6 +3162,8 @@ if (
   || diagnosticExportBody.sshTerminal.websocket.outputFlushes < 1
   || !Array.isArray(diagnosticExportBody.sshTerminal.recentEvidence)
   || !diagnosticExportBody.sshTerminal.recentEvidence.some((item) => item.transcriptLines > 0 && item.transcriptChars > 0)
+  || !Array.isArray(diagnosticExportBody.sshTerminal.productionProbeTrend.recent)
+  || !diagnosticExportBody.sshTerminal.productionProbeTrend.recent.some((item) => item.targetLabel === 'verify-local' && item.cleanupOk === true && item.tone === 'ok')
   || !diagnosticExportBody.sshTerminal.sessionReplays.some((item) => item.timeline.filter((event) => event.type === 'start').length === 1)
   || !diagnosticExportBody.sshTerminal.sessionReplays.every((item) => !('sessionId' in item) && !('serverId' in item) && item.timeline.filter((event) => event.type === 'start').length <= 1 && item.timeline.every((event) => !('content' in event) && !('message' in event)))
 ) {
@@ -6452,9 +6509,11 @@ function assertProductionSshProbeGuards() {
     'COLIPAS_PROBE_ADMIN_PASSWORD',
     'COLIPAS_PROBE_EXISTING',
     'COLIPAS_PROBE_SKIP_TEMP',
+    'COLIPAS_PROBE_RECORD',
     'temporary-simulated',
     'existing-connected',
     'deleteServer(baseUrl, cookie, tempServerId)',
+    '/api/audit/ssh-production-probes',
     'activeShellsAfter',
     'sanitizeError(error)',
     "replace(password, '[password]')",

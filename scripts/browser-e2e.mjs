@@ -417,6 +417,7 @@ async function assertReleaseEvidenceBrief(targetPage) {
     window.__colipasCopiedSshLagReportText = '';
     window.__colipasCopiedSshFlightText = '';
     window.__colipasCopiedSshSamplerText = '';
+    window.__colipasCopiedSshProductionProbeText = '';
     window.__colipasCopiedSshBottleneckTrendText = '';
     window.__colipasCopiedSshSupportBundleText = '';
     window.__colipasCopiedSshSupportTicketText = '';
@@ -445,6 +446,8 @@ async function assertReleaseEvidenceBrief(targetPage) {
             window.__colipasCopiedSshFlightText = text;
           } else if (/SSH real interaction sampler/i.test(text)) {
             window.__colipasCopiedSshSamplerText = text;
+          } else if (/SSH production probe report/i.test(text)) {
+            window.__colipasCopiedSshProductionProbeText = text;
           } else if (/SSH bottleneck trend report/i.test(text)) {
             window.__colipasCopiedSshBottleneckTrendText = text;
           } else if (/SSH experience SLA trend/i.test(text)) {
@@ -621,6 +624,27 @@ async function assertReleaseEvidenceBrief(targetPage) {
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshSamplerText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshSamplerText)) {
     throw new Error('SSH interaction sampler copy output leaked a raw IP address or API key');
   }
+  await targetPage.locator('[data-ssh-production-probe="true"]').waitFor({ timeout: 5000 });
+  const sshProductionProbeText = await targetPage.locator('[data-ssh-production-probe="true"]').innerText();
+  if (!/SSH production probe|SSH 线上探针|SSH 本番プローブ/i.test(sshProductionProbeText) || !/verify-local/i.test(sshProductionProbeText) || !/Success rate|成功率|成功率/i.test(sshProductionProbeText) || !/Round trip|往返耗时|往復時間/i.test(sshProductionProbeText) || !/Cleanup|清理释放|クリーンアップ/i.test(sshProductionProbeText)) {
+    throw new Error(`SSH production probe panel did not render live probe evidence: ${sshProductionProbeText}`);
+  }
+  const sshProductionProbeStatCount = await targetPage.locator('[data-ssh-production-probe-stat]').count();
+  const sshProductionProbeRunCount = await targetPage.locator('[data-ssh-production-probe-run=\"true\"]').count();
+  if (sshProductionProbeStatCount < 3 || sshProductionProbeRunCount < 1) {
+    throw new Error(`SSH production probe panel should render three stats and at least one recent probe, got ${sshProductionProbeStatCount}/${sshProductionProbeRunCount}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(sshProductionProbeText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(sshProductionProbeText)) {
+    throw new Error('SSH production probe panel leaked a raw IP address or API key');
+  }
+  await targetPage.getByRole('button', { name: /copy probe summary|复制探针摘要|プローブ要約をコピー/i }).click();
+  const copiedSshProductionProbeText = await targetPage.evaluate(() => window.__colipasCopiedSshProductionProbeText ?? '');
+  if (!/SSH production probe report/i.test(copiedSshProductionProbeText) || !/verify-local/i.test(copiedSshProductionProbeText) || !/Only sanitized production probe metrics are included/i.test(copiedSshProductionProbeText)) {
+    throw new Error(`SSH production probe copy output is incomplete: ${copiedSshProductionProbeText}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshProductionProbeText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshProductionProbeText)) {
+    throw new Error('SSH production probe copy output leaked a raw IP address or API key');
+  }
   await targetPage.locator('[data-ssh-bottleneck-trend="true"]').waitFor({ timeout: 5000 });
   const sshBottleneckTrendText = await targetPage.locator('[data-ssh-bottleneck-trend="true"]').innerText();
   if (!/SSH bottleneck trend/i.test(sshBottleneckTrendText) || !/Network/i.test(sshBottleneckTrendText) || !/Input/i.test(sshBottleneckTrendText) || !/Output/i.test(sshBottleneckTrendText) || !/Render/i.test(sshBottleneckTrendText)) {
@@ -656,7 +680,7 @@ async function assertReleaseEvidenceBrief(targetPage) {
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshPerfText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshPerfText)) {
     throw new Error('SSH performance copy output leaked a raw IP address or API key');
   }
-  const text = `${releaseFixText}\n${releaseFixChecklistText}\n${releaseCockpitText}\n${releaseHandoffText}\n${await targetPage.locator('.security-evidence-brief').innerText()}\n${await targetPage.locator('.security-release-playbook').innerText()}\n${sshPerfText}`;
+  const text = `${releaseFixText}\n${releaseFixChecklistText}\n${releaseCockpitText}\n${releaseHandoffText}\n${await targetPage.locator('.security-evidence-brief').innerText()}\n${await targetPage.locator('.security-release-playbook').innerText()}\n${sshPerfText}\n${sshProductionProbeText}`;
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(text) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(text)) {
     throw new Error('Release fix router, cockpit, handoff pack, evidence, failure playbook, or SSH performance card rendered a raw IP address or API key');
   }
@@ -666,6 +690,7 @@ async function assertReleaseEvidenceBrief(targetPage) {
   await assertElementHorizontallyWithinViewport(targetPage, '[data-release-handoff-pack="true"]', 'desktop release handoff pack');
   await assertElementHorizontallyWithinViewport(targetPage, '.security-evidence-brief', 'desktop release evidence brief');
   await assertElementHorizontallyWithinViewport(targetPage, '.security-release-playbook', 'desktop release failure playbook');
+  await assertElementHorizontallyWithinViewport(targetPage, '[data-ssh-production-probe="true"]', 'desktop SSH production probe');
   await assertElementHorizontallyWithinViewport(targetPage, '.security-ssh-performance-card', 'desktop SSH performance card');
 }
 
@@ -2305,6 +2330,7 @@ async function assertMobileModuleLayoutSweep() {
       '.security-readiness-card',
       '.security-evidence-brief',
       '.security-release-playbook',
+      '.security-ssh-production-probe',
       '.security-ssh-sla-trend',
       '.security-ssh-bottleneck-trend',
       '.security-kpi-grid',
@@ -2317,6 +2343,7 @@ async function assertMobileModuleLayoutSweep() {
     await assertSingleColumnStack(mobilePage, '.security-release-playbook-grid', 'mobile release failure playbook');
     await assertElementHorizontallyWithinViewport(mobilePage, '.security-evidence-brief', 'mobile release evidence brief');
     await assertElementHorizontallyWithinViewport(mobilePage, '.security-release-playbook', 'mobile release failure playbook');
+    await assertElementHorizontallyWithinViewport(mobilePage, '.security-ssh-production-probe', 'mobile SSH production probe');
     await assertElementHorizontallyWithinViewport(mobilePage, '.security-ssh-sla-trend', 'mobile SSH experience SLA trend');
     await assertElementHorizontallyWithinViewport(mobilePage, '.security-ssh-bottleneck-trend', 'mobile SSH bottleneck trend');
     await assertSingleColumnStack(mobilePage, '.security-control-grid', 'mobile security control grid');

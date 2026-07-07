@@ -380,6 +380,34 @@ export interface DiagnosticExportResponse {
       previousDurationMs: number | null;
       latestBottleneck: 'healthy' | 'network' | 'throughput' | 'terminal' | 'connection' | null;
     };
+    productionProbeTrend: {
+      samples: number;
+      tone: 'ok' | 'warn' | 'fail';
+      targetLabel: string | null;
+      deploymentMode: string | null;
+      successRate: number;
+      sessionReadyRate: number;
+      cleanupRate: number;
+      latestRoundTripMs: number | null;
+      averageRoundTripMs: number | null;
+      previousRoundTripMs: number | null;
+      direction: 'unknown' | 'stable' | 'improving' | 'degrading';
+      recent: Array<{
+        id: string;
+        recordedAt: string;
+        targetLabel: string;
+        deploymentMode: string;
+        ok: boolean;
+        cleanupOk: boolean;
+        roundTripMs: number | null;
+        probeCount: number;
+        failedProbeCount: number;
+        sessionReadyCount: number;
+        primaryKind: string;
+        primaryMode: string;
+        tone: 'ok' | 'warn' | 'fail';
+      }>;
+    };
     recentEvidence: Array<{
       serverName: string;
       mode: SshVerifyMode;

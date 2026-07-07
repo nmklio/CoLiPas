@@ -503,6 +503,36 @@ interface SshBottleneckTrendSummary {
   recent: SshBottleneckRadarSnapshot[];
 }
 
+interface SshProductionProbeStat {
+  id: string;
+  label: string;
+  value: string;
+  detail: string;
+  tone: 'ok' | 'warn' | 'fail';
+}
+
+interface SshProductionProbeRun {
+  id: string;
+  label: string;
+  meta: string;
+  detail: string;
+  tone: 'ok' | 'warn' | 'fail';
+}
+
+interface SshProductionProbeSummary {
+  tone: 'ok' | 'warn' | 'fail';
+  eyebrow: string;
+  title: string;
+  detail: string;
+  action: string;
+  note: string;
+  emptyTitle: string;
+  emptyDetail: string;
+  stats: SshProductionProbeStat[];
+  recent: SshProductionProbeRun[];
+  copyText: string;
+}
+
 interface SshSupportBundleSection {
   id: 'summary' | 'lag-report' | 'flight' | 'sampler' | 'trend' | 'terminal-pack';
   title: string;
@@ -538,6 +568,7 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
   const copy = securityCopyByLanguage[language] ?? securityCopyByLanguage.zh;
   const diagnosticCopy = diagnosticCopyByLanguage[language] ?? diagnosticCopyByLanguage.zh;
   const sshPerformanceCopy = sshPerformanceCopyByLanguage[language] ?? sshPerformanceCopyByLanguage.zh;
+  const sshProductionProbeCopy = useMemo(() => getSshProductionProbeCopy(language), [language]);
   const locale = getLocale(language);
   const [config, setConfig] = useState<ConfigSummary | null>(null);
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
@@ -653,6 +684,10 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
   const sshBottleneckTrend = useMemo(
     () => buildSshBottleneckTrend(sshBottleneckRadarHistory, sshPerformanceCopy, locale),
     [locale, sshBottleneckRadarHistory, sshPerformanceCopy],
+  );
+  const sshProductionProbe = useMemo(
+    () => buildSshProductionProbeSummary(diagnosticBundle?.sshTerminal?.productionProbeTrend ?? null, sshProductionProbeCopy, locale),
+    [diagnosticBundle, locale, sshProductionProbeCopy],
   );
   const sshSupportBundle = useMemo(
     () => buildSshSupportBundle({
@@ -1219,6 +1254,23 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
       setRemediationError(false);
     } catch {
       setRemediationMessage(sshBottleneckTrend.copyText);
+      setRemediationError(false);
+    }
+  }
+
+  async function copySshProductionProbeSummary() {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) {
+      setRemediationMessage(sshProductionProbe.copyText);
+      setRemediationError(false);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(sshProductionProbe.copyText);
+      setRemediationMessage(sshProductionProbeCopy.copied);
+      setRemediationError(false);
+    } catch {
+      setRemediationMessage(sshProductionProbe.copyText);
       setRemediationError(false);
     }
   }
@@ -1898,6 +1950,50 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
           )}
           <p>{sshExperienceSlaTrend.action}</p>
           <small className="security-ssh-sla-trend-note">{sshPerformanceCopy.experienceSlaSanitizedNote}</small>
+        </section>
+        <section className={`security-ssh-production-probe ${sshProductionProbe.tone}`} data-ssh-production-probe="true" aria-label={sshProductionProbe.eyebrow}>
+          <div className="security-ssh-production-probe-head">
+            <div>
+              <span><Gauge size={15} /> {sshProductionProbe.eyebrow}</span>
+              <strong>{sshProductionProbe.title}</strong>
+              <p>{sshProductionProbe.detail}</p>
+              <small>{sshProductionProbe.note}</small>
+            </div>
+            <div className="security-ssh-production-probe-actions">
+              <button type="button" className="tool-button" onClick={copySshProductionProbeSummary} data-ssh-production-probe-copy="true">
+                <ClipboardCheck size={15} />
+                {sshProductionProbeCopy.copy}
+              </button>
+            </div>
+          </div>
+          {sshProductionProbe.recent.length > 0 ? (
+            <>
+              <div className="security-ssh-production-probe-stats">
+                {sshProductionProbe.stats.map((stat) => (
+                  <article key={stat.id} className={stat.tone} data-ssh-production-probe-stat={stat.id}>
+                    <span>{stat.label}</span>
+                    <strong>{stat.value}</strong>
+                    <small>{stat.detail}</small>
+                  </article>
+                ))}
+              </div>
+              <div className="security-ssh-production-probe-runway">
+                {sshProductionProbe.recent.map((run) => (
+                  <article key={run.id} className={run.tone} data-ssh-production-probe-run="true">
+                    <span>{run.label}</span>
+                    <strong>{run.meta}</strong>
+                    <small>{run.detail}</small>
+                  </article>
+                ))}
+              </div>
+              <p>{sshProductionProbe.action}</p>
+            </>
+          ) : (
+            <div className="security-ssh-production-probe-empty">
+              <strong>{sshProductionProbe.emptyTitle}</strong>
+              <p>{sshProductionProbe.emptyDetail}</p>
+            </div>
+          )}
         </section>
         <section className={`security-ssh-support-bundle ${sshSupportBundle.tone}`} data-ssh-support-bundle="true" aria-label={sshPerformanceCopy.supportBundleTitle}>
           <div className="security-ssh-support-bundle-copy">
@@ -5422,6 +5518,265 @@ function sanitizeEvidenceBriefText(value: string) {
     .replace(/\bsk-[A-Za-z0-9_-]{12,}\b/g, '[redacted-api-key]')
     .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, '[redacted-ip]')
     .replace(/\b(password|passwd|pwd|token|secret|api[_-]?key)\s*[:=]\s*[^,\s;]+/gi, '$1=[redacted]');
+}
+
+interface SshProductionProbeCopy {
+  eyebrow: string;
+  copy: string;
+  copied: string;
+  emptyTitle: string;
+  emptyDetail: string;
+  successRate: string;
+  roundTrip: string;
+  cleanup: string;
+  target: string;
+  latest: string;
+  average: string;
+  sessionReady: string;
+  latestSample: string;
+  previousSample: string;
+  latestRun: (time: string) => string;
+  targetDetail: (targetLabel: string, deploymentMode: string, direction: string) => string;
+  actionOk: string;
+  actionWarn: string;
+  actionFail: string;
+  note: string;
+  reportTitle: string;
+  reportAction: string;
+  reportRecent: string;
+  reportNote: string;
+}
+
+const sshProductionProbeCopyByLanguage: Record<string, SshProductionProbeCopy> = {
+  zh: {
+    eyebrow: 'SSH 线上探针',
+    copy: '复制探针摘要',
+    copied: 'SSH 线上探针摘要已复制',
+    emptyTitle: '等待线上探针',
+    emptyDetail: '运行 `npm run probe:ssh-production` 并设置 `COLIPAS_PROBE_RECORD=1` 后，这里会显示脱敏后的真实线上 SSH 可用性趋势。',
+    successRate: '成功率',
+    roundTrip: '往返耗时',
+    cleanup: '清理释放',
+    target: '目标',
+    latest: '最近',
+    average: '平均',
+    sessionReady: '就绪率',
+    latestSample: '最近探针',
+    previousSample: '对比基线',
+    latestRun: (time) => `记录于 ${time}`,
+    targetDetail: (targetLabel, deploymentMode, direction) => `${targetLabel} / ${deploymentMode} / ${direction}`,
+    actionOk: '把这组线上探针当成老板反馈前的健康基线，后续只要对比是否掉速或清理失败即可。',
+    actionWarn: '先复测高峰时段与弱网环境；如果最近探针继续变慢，再回到 SSH 面板核对输入批处理和输出吞吐。',
+    actionFail: '先处理真实线上链路问题：探针失败、终端未就绪或 shell 未释放都说明用户卡顿并非纯 UI 假象。',
+    note: '该面板只保留脱敏后的成功率、时延、就绪率与清理结果，不保存域名、IP、命令正文、密钥或用户数据。',
+    reportTitle: 'SSH production probe report',
+    reportAction: 'Recommended action',
+    reportRecent: 'Recent probes',
+    reportNote: 'Only sanitized production probe metrics are included.',
+  },
+  en: {
+    eyebrow: 'SSH production probe',
+    copy: 'Copy probe summary',
+    copied: 'SSH production probe summary copied',
+    emptyTitle: 'Waiting for a live production probe',
+    emptyDetail: 'Run `npm run probe:ssh-production` with `COLIPAS_PROBE_RECORD=1` and this panel will show sanitized live SSH trend evidence.',
+    successRate: 'Success rate',
+    roundTrip: 'Round trip',
+    cleanup: 'Cleanup',
+    target: 'Target',
+    latest: 'Latest',
+    average: 'Average',
+    sessionReady: 'Ready rate',
+    latestSample: 'Latest probe',
+    previousSample: 'Baseline',
+    latestRun: (time) => `Recorded ${time}`,
+    targetDetail: (targetLabel, deploymentMode, direction) => `${targetLabel} / ${deploymentMode} / ${direction}`,
+    actionOk: 'Use this live probe lane as the production SSH baseline and compare future lag reports against it.',
+    actionWarn: 'Retest peak-hour and weak-network paths first. If live probes keep slowing down, return to the SSH panel and inspect batching plus throughput.',
+    actionFail: 'Treat this as a real transport problem first: failed probes, not-ready sessions, or unreleased shells mean the lag is not just cosmetic UI jitter.',
+    note: 'This panel only keeps sanitized success, latency, ready-rate, and cleanup evidence. It excludes hostnames, IPs, command text, keys, and user data.',
+    reportTitle: 'SSH production probe report',
+    reportAction: 'Recommended action',
+    reportRecent: 'Recent probes',
+    reportNote: 'Only sanitized production probe metrics are included.',
+  },
+  ja: {
+    eyebrow: 'SSH 本番プローブ',
+    copy: 'プローブ要約をコピー',
+    copied: 'SSH 本番プローブ要約をコピーしました',
+    emptyTitle: '本番プローブ待ち',
+    emptyDetail: '`COLIPAS_PROBE_RECORD=1` を付けて `npm run probe:ssh-production` を実行すると、匿名化した本番 SSH 傾向がここに表示されます。',
+    successRate: '成功率',
+    roundTrip: '往復時間',
+    cleanup: 'クリーンアップ',
+    target: 'ターゲット',
+    latest: '最新',
+    average: '平均',
+    sessionReady: '準備完了率',
+    latestSample: '最新プローブ',
+    previousSample: '比較基準',
+    latestRun: (time) => `${time} に記録`,
+    targetDetail: (targetLabel, deploymentMode, direction) => `${targetLabel} / ${deploymentMode} / ${direction}`,
+    actionOk: 'この本番プローブを健全な SSH 基準として保持し、今後の遅延報告と比較してください。',
+    actionWarn: 'ピーク時間帯と弱い回線を先に再計測してください。引き続き遅くなる場合は SSH パネルで入力バッチと出力スループットを確認します。',
+    actionFail: 'まず本番経路の問題として扱ってください。プローブ失敗、未準備セッション、未解放 shell は UI だけの問題ではありません。',
+    note: 'この面板は匿名化した成功率、遅延、準備完了率、解放結果だけを保持し、ホスト名、IP、コマンド本文、鍵、ユーザーデータは保存しません。',
+    reportTitle: 'SSH production probe report',
+    reportAction: 'Recommended action',
+    reportRecent: 'Recent probes',
+    reportNote: 'Only sanitized production probe metrics are included.',
+  },
+};
+
+function getSshProductionProbeCopy(language: string) {
+  return sshProductionProbeCopyByLanguage[language] ?? sshProductionProbeCopyByLanguage.zh;
+}
+
+function formatSshProductionProbeTitle(tone: 'ok' | 'warn' | 'fail', target: string, language: string) {
+  if (language === 'en') {
+    return tone === 'fail'
+      ? `${target} still shows live-path risk`
+      : tone === 'warn'
+        ? `${target} needs more live confirmation`
+        : `${target} is holding the live SSH baseline`;
+  }
+  if (language === 'ja') {
+    return tone === 'fail'
+      ? `${target} は本番経路リスクが残っています`
+      : tone === 'warn'
+        ? `${target} は追加の本番確認が必要です`
+        : `${target} は本番 SSH 基準を維持しています`;
+  }
+  return tone === 'fail'
+    ? `${target} 仍存在真实链路风险`
+    : tone === 'warn'
+      ? `${target} 还需要继续做真实线上验证`
+      : `${target} 已稳定维持线上 SSH 基线`;
+}
+
+function formatSshProductionProbeSampleDetail(
+  item: DiagnosticExportResponse['sshTerminal']['productionProbeTrend']['recent'][number],
+  copy: SshProductionProbeCopy,
+  locale: string,
+  language: string,
+) {
+  const recorded = copy.latestRun(new Date(item.recordedAt).toLocaleString(locale));
+  if (language === 'en') {
+    const issueLabel = item.failedProbeCount > 0 ? `${item.failedProbeCount}/${item.probeCount} issue` : `${item.sessionReadyCount}/${item.probeCount} ready`;
+    return `${recorded} · ${issueLabel} · ${item.cleanupOk ? 'cleanup ok' : 'cleanup pending'}`;
+  }
+  if (language === 'ja') {
+    const issueLabel = item.failedProbeCount > 0 ? `${item.failedProbeCount}/${item.probeCount} 件要確認` : `${item.sessionReadyCount}/${item.probeCount} 件準備完了`;
+    return `${recorded} · ${issueLabel} · ${item.cleanupOk ? '解放確認済み' : '解放待ち'}`;
+  }
+  const issueLabel = item.failedProbeCount > 0 ? `${item.failedProbeCount}/${item.probeCount} 项异常` : `${item.sessionReadyCount}/${item.probeCount} 项就绪`;
+  return `${recorded} · ${issueLabel} · ${item.cleanupOk ? '已确认释放' : '待确认释放'}`;
+}
+
+function formatSshProductionProbeRetained(samples: number, language: string) {
+  if (language === 'en') {
+    return `${samples} sample(s) retained`;
+  }
+  if (language === 'ja') {
+    return `${samples} 件のサンプルを保持`;
+  }
+  return `保留 ${samples} 份样本`;
+}
+
+function buildSshProductionProbeSummary(
+  trend: DiagnosticExportResponse['sshTerminal']['productionProbeTrend'] | null,
+  copy: SshProductionProbeCopy,
+  locale: string,
+): SshProductionProbeSummary {
+  const trendLanguage = locale.startsWith('zh') ? 'zh' : locale.startsWith('ja') ? 'ja' : 'en';
+  if (!trend || trend.samples === 0 || trend.recent.length === 0) {
+    const fallbackText = [
+      copy.reportTitle,
+      copy.emptyTitle,
+      copy.emptyDetail,
+      copy.reportNote,
+    ].join('\n');
+    return {
+      tone: 'warn',
+      eyebrow: copy.eyebrow,
+      title: copy.emptyTitle,
+      detail: copy.emptyDetail,
+      action: copy.emptyDetail,
+      note: copy.note,
+      emptyTitle: copy.emptyTitle,
+      emptyDetail: copy.emptyDetail,
+      stats: [],
+      recent: [],
+      copyText: fallbackText,
+    };
+  }
+
+  const latest = trend.recent[0];
+  const latestTarget = trend.targetLabel ?? latest.targetLabel;
+  const direction = formatTrendValue(trend.direction, Math.max(trend.samples, 1), trendLanguage);
+  const latestRoundTrip = trend.latestRoundTripMs === null ? '--' : `${Math.round(trend.latestRoundTripMs)}ms`;
+  const averageRoundTrip = trend.averageRoundTripMs === null ? '--' : `${Math.round(trend.averageRoundTripMs)}ms`;
+  const previousRoundTrip = trend.previousRoundTripMs === null ? '--' : `${Math.round(trend.previousRoundTripMs)}ms`;
+  const stats: SshProductionProbeStat[] = [
+    {
+      id: 'success',
+      label: copy.successRate,
+      value: `${trend.successRate}%`,
+      detail: formatSshProductionProbeRetained(trend.samples, trendLanguage),
+      tone: trend.successRate < 100 ? 'warn' : 'ok',
+    },
+    {
+      id: 'latency',
+      label: copy.roundTrip,
+      value: latestRoundTrip,
+      detail: `${copy.average} ${averageRoundTrip} · ${copy.previousSample} ${previousRoundTrip}`,
+      tone: trend.latestRoundTripMs !== null && trend.latestRoundTripMs >= 1800 ? 'warn' : trend.tone,
+    },
+    {
+      id: 'cleanup',
+      label: copy.cleanup,
+      value: `${trend.cleanupRate}%`,
+      detail: `${copy.sessionReady} ${trend.sessionReadyRate}%`,
+      tone: trend.cleanupRate < 100 || trend.sessionReadyRate < 100 ? 'fail' : 'ok',
+    },
+  ];
+  const recent = trend.recent.map((item, index) => ({
+    id: item.id,
+    tone: item.tone,
+    label: index === 0 ? `${copy.latestSample} · ${item.targetLabel}` : `${copy.previousSample} #${index}`,
+    meta: `${item.roundTripMs === null ? '--' : `${Math.round(item.roundTripMs)}ms`} · ${item.primaryMode}`,
+    detail: formatSshProductionProbeSampleDetail(item, copy, locale, trendLanguage),
+  }));
+  const action = trend.tone === 'fail' ? copy.actionFail : trend.tone === 'warn' ? copy.actionWarn : copy.actionOk;
+  const title = formatSshProductionProbeTitle(trend.tone, latestTarget, trendLanguage);
+  const detail = copy.targetDetail(latestTarget, trend.deploymentMode ?? 'production', direction);
+  const copyText = [
+    copy.reportTitle,
+    `${copy.target}: ${latestTarget}`,
+    `${copy.latest}: ${latestRoundTrip}`,
+    `${copy.average}: ${averageRoundTrip}`,
+    `${copy.successRate}: ${trend.successRate}%`,
+    `${copy.cleanup}: ${trend.cleanupRate}%`,
+    `${copy.sessionReady}: ${trend.sessionReadyRate}%`,
+    `${copy.reportAction}: ${action}`,
+    `${copy.reportRecent}:`,
+    ...recent.map((item) => `- ${item.label} / ${item.meta} / ${item.detail}`),
+    copy.reportNote,
+  ].join('\n');
+
+  return {
+    tone: trend.tone,
+    eyebrow: copy.eyebrow,
+    title,
+    detail,
+    action,
+    note: copy.note,
+    emptyTitle: copy.emptyTitle,
+    emptyDetail: copy.emptyDetail,
+    stats,
+    recent,
+    copyText,
+  };
 }
 
 interface SecurityCopy {

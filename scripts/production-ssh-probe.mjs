@@ -6,6 +6,7 @@ const password = process.env.COLIPAS_PROBE_ADMIN_PASSWORD || process.env.SMOKE_A
 const simulatedCredentialField = 'pass' + 'word';
 const probeExisting = process.env.COLIPAS_PROBE_EXISTING === '1';
 const skipTemp = process.env.COLIPAS_PROBE_SKIP_TEMP === '1';
+const recordProbe = process.env.COLIPAS_PROBE_RECORD === '1';
 const timeoutMs = readIntegerEnv('COLIPAS_PROBE_TIMEOUT_MS', 12_000, 3_000, 60_000);
 
 if (!password) {
@@ -33,6 +34,7 @@ async function probeBaseUrl(baseUrl) {
   let tempServerId = '';
 
   try {
+    const health = await fetchHealth(baseUrl);
     cookie = await login(baseUrl);
     const inventory = await requestJson(baseUrl, '/api/servers', cookie);
     const servers = Array.isArray(inventory.body?.items) ? inventory.body.items : [];
@@ -49,6 +51,7 @@ async function probeBaseUrl(baseUrl) {
       tempServerId = tempServer.id;
       probes.push({
         kind: 'temporary-simulated',
+        mode: 'simulate',
         ...(await websocketRoundTrip(baseUrl, cookie, tempServerId)),
       });
       await deleteServer(baseUrl, cookie, tempServerId);
@@ -64,9 +67,11 @@ async function probeBaseUrl(baseUrl) {
     }
 
     const status = await requestJson(baseUrl, '/api/servers/shells/status', cookie);
-    return {
+    const result = {
       baseUrl,
       ok: probes.every((probe) => probe.ok && probe.sessionReady) && status.body?.activeCount === 0,
+      targetLabel: sanitizeTargetLabel(health?.release?.targetName || 'Production target'),
+      deploymentMode: sanitizeTargetLabel(health?.release?.deploymentMode || 'production'),
       login: 'ok',
       inventory: {
         total: servers.length,
@@ -77,6 +82,10 @@ async function probeBaseUrl(baseUrl) {
       activeShellsAfter: status.body?.activeCount ?? null,
       durationMs: Date.now() - startedAt,
     };
+    if (recordProbe) {
+      await uploadProbeResult(baseUrl, cookie, result);
+    }
+    return result;
   } catch (error) {
     if (tempServerId && cookie) {
       await deleteServer(baseUrl, cookie, tempServerId).catch(() => undefined);
@@ -87,6 +96,18 @@ async function probeBaseUrl(baseUrl) {
       error: sanitizeError(error),
       durationMs: Date.now() - startedAt,
     };
+  }
+}
+
+async function fetchHealth(baseUrl) {
+  const response = await fetch(`${baseUrl}/api/health`);
+  if (!response.ok) {
+    return null;
+  }
+  try {
+    return await response.json();
+  } catch {
+    return null;
   }
 }
 
@@ -200,6 +221,33 @@ async function websocketRoundTrip(baseUrl, cookie, serverId) {
   });
 }
 
+async function uploadProbeResult(baseUrl, cookie, result) {
+  const payload = {
+    targetLabel: result.targetLabel,
+    deploymentMode: result.deploymentMode,
+    ok: result.ok,
+    durationMs: result.durationMs,
+    activeShellsAfter: result.activeShellsAfter,
+    inventory: result.inventory,
+    probes: result.probes.map((probe) => ({
+      kind: probe.kind,
+      mode: probe.mode || 'unknown',
+      ok: probe.ok,
+      sessionReady: probe.sessionReady,
+      durationMs: probe.durationMs ?? null,
+    })),
+    recordedAt: new Date().toISOString(),
+  };
+  const response = await requestJson(baseUrl, '/api/audit/ssh-production-probes', cookie, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!response.response.ok) {
+    throw new Error(`production probe upload failed with HTTP ${response.response.status}`);
+  }
+}
+
 async function requestJson(baseUrl, path, cookie, options = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
     ...options,
@@ -251,6 +299,16 @@ function sanitizeError(error) {
     .replace(password, '[password]')
     .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, '[ip]')
     .replace(/\bsk-[A-Za-z0-9_-]{12,}\b/g, '[api-key]');
+}
+
+function sanitizeTargetLabel(value) {
+  return String(value || '')
+    .replace(/https?:\/\/\S+/gi, ' ')
+    .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, ' ')
+    .replace(/[^\p{L}\p{N}\s._-]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80) || 'Production target';
 }
 
 function fail(message) {

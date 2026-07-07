@@ -19,6 +19,7 @@ import { buildDiagnosticExport } from './services/diagnosticService.js';
 import { createOperationTask, preflightOperationTask } from './services/operationsService.js';
 import { buildReleaseReadiness, buildReleaseReadinessReport, recordReleaseReadinessSnapshot } from './services/releaseReadinessService.js';
 import { buildReleaseVerification, isReleaseVerificationAuthorized, isReleaseVerificationEnabled } from './services/releaseVerificationService.js';
+import { recordSshProductionProbe } from './services/sshProductionProbeService.js';
 import { createSshRunbookCommand, deleteSshRunbookCommand, importSshRunbookCommands, listSshRunbookCommands, markSshRunbookCommandUsed, reorderSshRunbookCommands, updateSshRunbookCommand, updateSshRunbookCommandPin } from './services/sshRunbookService.js';
 import {
   buildServerInventorySnapshot,
@@ -785,6 +786,15 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
 
   app.get('/api/audit/diagnostics/export', (_request, response) => {
     response.json(buildDiagnosticExport(config));
+  });
+
+  app.post('/api/audit/ssh-production-probes', (request, response, next) => {
+    try {
+      const session = requireSession(request, config);
+      response.status(201).json(recordSshProductionProbe(request.body, session.user.username));
+    } catch (error) {
+      next(error);
+    }
   });
 
   app.post('/api/audit/remediate', (request, response, next) => {
