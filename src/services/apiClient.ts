@@ -1111,6 +1111,7 @@ export function connectServerShellSocket(
   onError: (error: Error) => void,
   onMetrics?: (metrics: ServerShellSocketMetrics) => void,
   onClose?: (event: ServerShellSocketCloseEvent) => void,
+  onOpen?: () => void,
 ) {
   const shellSocketInputFlushMs = 2;
   const shellSocketInputChunkSize = 8000;
@@ -1229,6 +1230,7 @@ export function connectServerShellSocket(
   socket.addEventListener('open', () => {
     opened = true;
     socket.send(JSON.stringify({ type: 'open', serverId, ...dimensions }));
+    onOpen?.();
   });
 
   socket.addEventListener('message', (event) => {

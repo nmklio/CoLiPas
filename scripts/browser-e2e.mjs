@@ -1566,9 +1566,24 @@ async function assertSshTerminalPanel(targetPage) {
     if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(terminalBottleneckText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(terminalBottleneckText)) {
       throw new Error('SSH terminal bottleneck radar rendered a raw IP address or API key');
     }
+    await targetPage.locator('[data-ssh-terminal-lag-action="true"]').waitFor({ timeout: 5000 });
+    const terminalLagActionText = await targetPage.locator('[data-ssh-terminal-lag-action="true"]').innerText();
+    if (!/Next action/i.test(terminalLagActionText) || !/(Terminal path is usable|Check line latency first|Narrow large output first|Browser render is backing up|Retest the input path)/i.test(terminalLagActionText)) {
+      throw new Error(`SSH terminal lag action did not render a focused next step: ${terminalLagActionText}`);
+    }
+    if (!/(WebSocket live channel|Compatible stream)/i.test(terminalLagActionText) || !/(rate|first|pending)/i.test(terminalLagActionText)) {
+      throw new Error(`SSH terminal lag action did not expose sanitized evidence: ${terminalLagActionText}`);
+    }
+    const terminalLagActionButtonText = await targetPage.locator('[data-ssh-terminal-lag-action="true"] button').innerText();
+    if (!/Run safe speed test|Clear, keep session/i.test(terminalLagActionButtonText)) {
+      throw new Error(`SSH terminal lag action button is not actionable: ${terminalLagActionButtonText}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(terminalLagActionText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(terminalLagActionText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(terminalLagActionText)) {
+      throw new Error('SSH terminal lag action rendered a raw IP address or secret');
+    }
     console.log(`ok browser e2e SSH burst output rendered in ${burstOutputDurationMs}ms with max long task ${maxBurstLongTaskMs}ms`);
     await assertElementWithinViewport(targetPage, '.ssh-console', 'desktop SSH console');
-    await captureVisualEvidence(targetPage, 'desktop-ssh-terminal-network', ['.ssh-console', '.ssh-terminal-network', '.ssh-terminal-quality', '[data-ssh-terminal-telemetry="true"]', '[data-ssh-terminal-bottleneck="true"]']);
+    await captureVisualEvidence(targetPage, 'desktop-ssh-terminal-network', ['.ssh-console', '.ssh-terminal-network', '.ssh-terminal-quality', '[data-ssh-terminal-telemetry="true"]', '[data-ssh-terminal-bottleneck="true"]', '[data-ssh-terminal-lag-action="true"]']);
     await targetPage.getByRole('button', { name: /disconnect/i }).click();
     await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });
     const disconnectMessage = targetPage.locator('.action-message').filter({ hasText: /disconnected/i });

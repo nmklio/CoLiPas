@@ -65,6 +65,9 @@ const terminalRuntimePrefetchDelayMs = 1500;
 const terminalRuntimeIdleTimeoutMs = 4500;
 const terminalNetworkUiRefreshMs = 900;
 const terminalTelemetryUiRefreshMs = 500;
+const terminalWebSocketOpenTimeoutMs = 1400;
+const terminalWebSocketReadyTimeoutMs = 14000;
+const terminalWebSocketFallbackCacheMs = 2 * 60 * 1000;
 const terminalPasteReviewMinBytes = 2048;
 const terminalPasteReviewMinLines = 3;
 const terminalPasteReviewPreviewLines = 8;
@@ -218,6 +221,15 @@ interface TerminalBottleneckAdvisor {
   action: string;
   primaryLabel: string;
   items: TerminalBottleneckItem[];
+}
+
+interface TerminalLagAction {
+  tone: TerminalNetworkQuality['tone'];
+  title: string;
+  detail: string;
+  evidence: string;
+  action: 'self-test' | 'clear';
+  buttonLabel: string;
 }
 
 type SshConnectionDoctorStepId = 'asset' | 'credential' | 'backend' | 'shell' | 'terminal';
@@ -507,6 +519,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const terminalNetworkRenderedAtRef = useRef(0);
   const terminalTelemetryRef = useRef<TerminalTelemetryState>(emptyTerminalTelemetry);
   const terminalTelemetryRenderedAtRef = useRef(0);
+  const terminalWebSocketFallbackUntilRef = useRef(0);
   const terminalLastBottleneckSnapshotRef = useRef<{ signature: string; savedAt: number } | null>(null);
   const terminalSelfTestRef = useRef<TerminalSelfTestTracker | null>(null);
   const terminalPasteReviewRef = useRef<TerminalPasteReview | null>(null);
@@ -551,6 +564,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const sshRunbookManualView = sshRunbookView === 'manual';
   const terminalTelemetryInsight = getTerminalTelemetryInsight(terminalTelemetry, terminalNetworkStats, terminalTransport, Boolean(terminalShellId), t);
   const terminalBottleneckAdvisor = getTerminalBottleneckAdvisor(terminalTelemetry, terminalNetworkStats, terminalTransport, Boolean(terminalShellId), t);
+  const terminalLagAction = getTerminalLagAction(terminalBottleneckAdvisor, terminalTelemetry, terminalNetworkStats, terminalTransport, Boolean(terminalShellId), t);
   const sshRunbookRecommendations = useMemo(
     () => buildSshRunbookRecommendations(sshRunbookCommands, sshDoctorReport, terminalBottleneckAdvisor, Boolean(terminalShellId), t),
     [sshRunbookCommands, sshDoctorReport, terminalBottleneckAdvisor, terminalShellId, t],
@@ -1625,6 +1639,23 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     ))}
                   </div>
                 </div>
+                {terminalLagAction && (
+                  <div className={`ssh-terminal-lag-action ${terminalLagAction.tone}`} data-ssh-terminal-lag-action="true" aria-live="polite" onClick={(event) => event.stopPropagation()}>
+                    <div className="ssh-terminal-lag-action-copy">
+                      <span><Sparkles size={14} /> {t('servers.terminalLagActionEyebrow')}</span>
+                      <strong>{terminalLagAction.title}</strong>
+                      <small>{terminalLagAction.detail}</small>
+                    </div>
+                    <code>{terminalLagAction.evidence}</code>
+                    <button
+                      type="button"
+                      onClick={() => runTerminalLagAction(terminalLagAction.action)}
+                      disabled={!terminalShellId || sshInterrupting || (terminalLagAction.action === 'self-test' && terminalSelfTestRunning)}
+                    >
+                      {terminalLagAction.buttonLabel}
+                    </button>
+                  </div>
+                )}
                 {terminalPasteReview && (
                   <div className="ssh-paste-review" data-ssh-paste-review="true" onClick={(event) => event.stopPropagation()}>
                     <div className="ssh-paste-review-summary">
@@ -2328,9 +2359,41 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   }
 
   function openWebSocketTerminalTransport(server: ServerNode, terminal: XTerm, lifecycleSeq: number) {
+    if (Date.now() < terminalWebSocketFallbackUntilRef.current) {
+      return Promise.reject(new Error('SSH WebSocket recently failed; using compatible stream first'));
+    }
+
     return new Promise<void>((resolve, reject) => {
       let settled = false;
       let ready = false;
+      let openTimeout: number | null = null;
+      let readyTimeout: number | null = null;
+
+      const clearConnectTimers = () => {
+        if (openTimeout !== null) {
+          window.clearTimeout(openTimeout);
+          openTimeout = null;
+        }
+        if (readyTimeout !== null) {
+          window.clearTimeout(readyTimeout);
+          readyTimeout = null;
+        }
+      };
+
+      const fallback = (error: Error) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearConnectTimers();
+        terminalWebSocketFallbackUntilRef.current = Date.now() + terminalWebSocketFallbackCacheMs;
+        terminalShellSocketRef.current = null;
+        terminalShellTransportRef.current = null;
+        setTerminalTransport(null);
+        socket.close();
+        reject(error);
+      };
+
       const socket = connectServerShellSocket(
         server.id,
         getTerminalDimensions(),
@@ -2351,19 +2414,13 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
           refreshShellStatus();
           if (!settled) {
             settled = true;
-            window.clearTimeout(timeout);
+            clearConnectTimers();
             resolve();
           }
         },
         (error) => {
           if (!ready && !settled) {
-            settled = true;
-            window.clearTimeout(timeout);
-            terminalShellSocketRef.current = null;
-            terminalShellTransportRef.current = null;
-            setTerminalTransport(null);
-            socket.close();
-            reject(error);
+            fallback(error);
             return;
           }
           if (terminalShellIdRef.current && sshConsoleOpenRef.current) {
@@ -2374,20 +2431,24 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
         },
         (metrics) => updateTerminalNetworkStats(metrics),
         (event) => handleTerminalSocketClose(server, terminal, lifecycleSeq, event),
+        () => {
+          if (settled) {
+            return;
+          }
+          if (openTimeout !== null) {
+            window.clearTimeout(openTimeout);
+            openTimeout = null;
+          }
+          readyTimeout = window.setTimeout(() => {
+            fallback(new Error('SSH WebSocket opened but shell was not ready in time'));
+          }, terminalWebSocketReadyTimeoutMs);
+        },
       );
       terminalShellSocketRef.current = socket;
       terminalShellTransportRef.current = 'websocket';
-      const timeout = window.setTimeout(() => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        terminalShellSocketRef.current = null;
-        terminalShellTransportRef.current = null;
-        setTerminalTransport(null);
-        socket.close();
-        reject(new Error('SSH WebSocket connection timed out'));
-      }, 5000);
+      openTimeout = window.setTimeout(() => {
+        fallback(new Error('SSH WebSocket did not open quickly'));
+      }, terminalWebSocketOpenTimeoutMs);
     });
   }
 
@@ -3345,6 +3406,14 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       });
   }
 
+  function runTerminalLagAction(action: TerminalLagAction['action']) {
+    if (action === 'clear') {
+      clearTerminalOutput();
+      return;
+    }
+    runTerminalSelfTest();
+  }
+
   function runTerminalSelfTest() {
     const sessionId = terminalShellId;
     if (!sessionId) {
@@ -4287,6 +4356,84 @@ function getTerminalBottleneckAdvisor(
       : t('servers.bottleneckIdleAction'),
     primaryLabel: t('servers.bottleneckPrimaryLabel', { target: primary.label }),
     items,
+  };
+}
+
+function getTerminalLagAction(
+  advisor: TerminalBottleneckAdvisor,
+  telemetry: TerminalTelemetryState,
+  stats: TerminalNetworkStats | null,
+  transport: 'websocket' | 'compatible' | null,
+  connected: boolean,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): TerminalLagAction | null {
+  if (!connected) {
+    return null;
+  }
+
+  const primary = advisor.items.reduce((best, item) => (item.level > best.level ? item : best), advisor.items[0]);
+  const evidence = t('servers.terminalLagActionEvidence', {
+    target: primary.label,
+    value: primary.value,
+    transport: getTerminalTransportLabel(transport, t),
+    rate: formatBytesPerSecond(stats?.throughputBytesPerSecond ?? 0),
+    first: telemetry.latestFirstOutputMs === null ? '--' : `${Math.round(telemetry.latestFirstOutputMs)}ms`,
+    pending: formatCompactBytes(telemetry.pendingBytes),
+  });
+
+  if (primary.id === 'render' && primary.level >= 50) {
+    return {
+      tone: primary.tone,
+      title: t('servers.terminalLagActionRenderTitle'),
+      detail: t('servers.terminalLagActionRenderDetail'),
+      evidence,
+      action: 'clear',
+      buttonLabel: t('servers.terminalLagActionClearButton'),
+    };
+  }
+
+  if (primary.id === 'network' && primary.level >= 50) {
+    return {
+      tone: primary.tone,
+      title: t('servers.terminalLagActionNetworkTitle'),
+      detail: t('servers.terminalLagActionNetworkDetail'),
+      evidence,
+      action: 'self-test',
+      buttonLabel: t('servers.terminalLagActionSelfTestButton'),
+    };
+  }
+
+  if (primary.id === 'output' && primary.level >= 50) {
+    return {
+      tone: primary.tone,
+      title: t('servers.terminalLagActionOutputTitle'),
+      detail: t('servers.terminalLagActionOutputDetail'),
+      evidence,
+      action: 'self-test',
+      buttonLabel: t('servers.terminalLagActionSelfTestButton'),
+    };
+  }
+
+  if (primary.id === 'input' && primary.level >= 35) {
+    return {
+      tone: primary.tone,
+      title: t('servers.terminalLagActionInputTitle'),
+      detail: t('servers.terminalLagActionInputDetail'),
+      evidence,
+      action: 'self-test',
+      buttonLabel: t('servers.terminalLagActionSelfTestButton'),
+    };
+  }
+
+  return {
+    tone: advisor.tone === 'pending' ? 'good' : advisor.tone,
+    title: t('servers.terminalLagActionGoodTitle'),
+    detail: transport === 'compatible'
+      ? t('servers.terminalLagActionCompatibleDetail')
+      : t('servers.terminalLagActionGoodDetail'),
+    evidence,
+    action: 'self-test',
+    buttonLabel: t('servers.terminalLagActionSelfTestButton'),
   };
 }
 
