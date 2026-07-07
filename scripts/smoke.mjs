@@ -5886,6 +5886,39 @@ function assertSshTerminalRealtimeGuards() {
   if (missingToolLabels.length) {
     throw new Error(`SSH terminal tool i18n or UI wiring is incomplete: ${missingToolLabels.join(', ')}`);
   }
+  const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const terminalSupportBundleI18nKeys = [
+    'servers.terminalSupportBundleEyebrow',
+    'servers.terminalSupportBundleTitle',
+    'servers.terminalSupportBundleDetail',
+    'servers.terminalSupportBundleCopy',
+    'servers.terminalSupportBundleCopied',
+    'servers.terminalSupportBundleGenerated',
+    'servers.terminalSupportBundleSanitized',
+    'servers.terminalSupportBundleSafeNote',
+    'servers.terminalSupportBundleChannel',
+    'servers.terminalSupportBundleTelemetry',
+    'servers.terminalSupportBundleBottleneck',
+    'servers.terminalSupportBundleRecovery',
+    'servers.terminalSupportBundleNoNetwork',
+    'servers.terminalSupportBundleNoSelfTest',
+    'servers.terminalSupportBundleRecoveryReady',
+    'servers.terminalSupportBundleInputBytes',
+    'servers.terminalSupportBundleOutputBytes',
+  ];
+  const placeholderRegressions = terminalSupportBundleI18nKeys.flatMap((key) => {
+    const matches = [...i18nSource.matchAll(new RegExp(`'${escapeRegExp(key)}'\\s*:\\s*'([^']*)'`, 'g'))];
+    if (matches.length < 3) {
+      return [`${key}: missing language copy`];
+    }
+    return matches
+      .map((match) => String(match[1] ?? ''))
+      .filter((value) => /\?{3,}/.test(value) || value.trim() === '')
+      .map((value) => `${key}: ${value || '[empty]'}`);
+  });
+  if (placeholderRegressions.length) {
+    throw new Error(`SSH terminal support bundle i18n regressed to placeholders: ${placeholderRegressions.join(', ')}`);
+  }
   if (!inventorySource.includes('servers.quickCommand.${item.id}.title') || !inventorySource.includes('servers.quickCommand.${item.id}.label')) {
     throw new Error('SSH terminal quick command deck must resolve per-command dynamic i18n labels');
   }
