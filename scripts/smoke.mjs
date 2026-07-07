@@ -5622,6 +5622,14 @@ function assertSshTerminalRealtimeGuards() {
     'terminalWebSocketFallbackUntilRef',
     'data-ssh-terminal-lag-action="true"',
     'function runTerminalLagAction(',
+    'TerminalSelfDiagnosticGuide',
+    'function buildTerminalSelfDiagnosticGuide(',
+    'const terminalSelfDiagnosticGuide = useMemo',
+    'data-ssh-self-diagnostic-wizard="true"',
+    'data-ssh-self-diagnostic-step={step.id}',
+    'function runTerminalSelfDiagnosticAction(',
+    'terminalSupportBundleSelfDiagnostic',
+    'terminalSelfDiagnosticTitle',
     'TerminalSupportBundle',
     'function buildTerminalSupportBundle(',
     'const terminalSupportBundle = useMemo',
@@ -6237,7 +6245,7 @@ function assertSshTerminalRealtimeGuards() {
   if (!globalCssSource.includes('.ssh-terminal-self-test') || !globalCssSource.includes('.ssh-terminal-self-test.complete')) {
     throw new Error('SSH terminal self-test result chip styles are missing');
   }
-  if (!globalCssSource.includes('.ssh-quick-command-deck') || !globalCssSource.includes('.ssh-runbook-workspace') || !globalCssSource.includes('.ssh-runbook-form') || !globalCssSource.includes('.ssh-runbook-form.editing') || !globalCssSource.includes('.ssh-runbook-lens') || !globalCssSource.includes('.ssh-runbook-categories button.active') || !globalCssSource.includes('.ssh-runbook-views button.active') || !globalCssSource.includes('.ssh-runbook-view-hint') || !globalCssSource.includes('.ssh-runbook-clear-filter') || !globalCssSource.includes('.ssh-runbook-recommendations') || !globalCssSource.includes('.ssh-runbook-recommendation-grid') || !globalCssSource.includes('.ssh-runbook-pack-dock') || !globalCssSource.includes('.ssh-runbook-pack-grid') || !globalCssSource.includes('.ssh-quick-command-grid') || !globalCssSource.includes('.ssh-quick-command-grid article.custom.pinned') || !globalCssSource.includes('.ssh-quick-command-grid .ssh-runbook-usage') || !globalCssSource.includes('.ssh-quick-command-grid button.pin') || !globalCssSource.includes('.ssh-quick-command-grid button.sort') || !globalCssSource.includes('grid-template-rows: 38px auto auto auto minmax(0, 250px) minmax(160px, 1fr)')) {
+  if (!globalCssSource.includes('.ssh-quick-command-deck') || !globalCssSource.includes('.ssh-runbook-workspace') || !globalCssSource.includes('.ssh-runbook-form') || !globalCssSource.includes('.ssh-runbook-form.editing') || !globalCssSource.includes('.ssh-runbook-lens') || !globalCssSource.includes('.ssh-runbook-categories button.active') || !globalCssSource.includes('.ssh-runbook-views button.active') || !globalCssSource.includes('.ssh-runbook-view-hint') || !globalCssSource.includes('.ssh-runbook-clear-filter') || !globalCssSource.includes('.ssh-runbook-recommendations') || !globalCssSource.includes('.ssh-runbook-recommendation-grid') || !globalCssSource.includes('.ssh-runbook-pack-dock') || !globalCssSource.includes('.ssh-runbook-pack-grid') || !globalCssSource.includes('.ssh-quick-command-grid') || !globalCssSource.includes('.ssh-quick-command-grid article.custom.pinned') || !globalCssSource.includes('.ssh-quick-command-grid .ssh-runbook-usage') || !globalCssSource.includes('.ssh-quick-command-grid button.pin') || !globalCssSource.includes('.ssh-quick-command-grid button.sort') || !globalCssSource.includes('flex-direction: column') || !globalCssSource.includes('flex: 0 1 230px') || !globalCssSource.includes('flex: 1 1 260px') || !globalCssSource.includes('min-height: 220px')) {
     throw new Error('SSH terminal quick command deck styles are missing or the terminal grid does not reserve space for it');
   }
 

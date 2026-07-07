@@ -5766,8 +5766,8 @@ td span,
   color: #e8f1e8;
   box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.03);
   overflow: hidden;
-  display: grid;
-  grid-template-rows: 38px auto auto auto minmax(0, 250px) minmax(160px, 1fr);
+  display: flex;
+  flex-direction: column;
 }
 
 .ssh-terminal-titlebar {
@@ -6432,6 +6432,220 @@ td span,
   opacity: 0.55;
 }
 
+.ssh-terminal-self-diagnostic {
+  min-height: 92px;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(126, 161, 166, 0.13);
+  background:
+    radial-gradient(circle at 0 20%, rgba(20, 184, 166, 0.16), transparent 30%),
+    radial-gradient(circle at 100% 0, rgba(14, 165, 233, 0.13), transparent 34%),
+    linear-gradient(135deg, rgba(5, 15, 22, 0.99), rgba(3, 7, 8, 0.99));
+  display: grid;
+  grid-template-columns: minmax(210px, 0.56fr) minmax(0, 1.44fr) minmax(138px, auto);
+  gap: 10px;
+  align-items: stretch;
+}
+
+.ssh-terminal-self-diagnostic.good {
+  background:
+    radial-gradient(circle at 0 20%, rgba(34, 197, 94, 0.13), transparent 30%),
+    radial-gradient(circle at 100% 0, rgba(45, 212, 191, 0.11), transparent 34%),
+    linear-gradient(135deg, rgba(5, 21, 15, 0.99), rgba(3, 7, 8, 0.99));
+}
+
+.ssh-terminal-self-diagnostic.warn {
+  background:
+    radial-gradient(circle at 0 20%, rgba(250, 204, 21, 0.13), transparent 30%),
+    linear-gradient(135deg, rgba(31, 22, 7, 0.99), rgba(3, 7, 8, 0.99));
+}
+
+.ssh-terminal-self-diagnostic.slow {
+  background:
+    radial-gradient(circle at 0 20%, rgba(251, 113, 133, 0.15), transparent 30%),
+    linear-gradient(135deg, rgba(35, 11, 15, 0.99), rgba(3, 7, 8, 0.99));
+}
+
+.ssh-terminal-self-diagnostic-copy {
+  min-width: 0;
+  border-right: 1px solid rgba(125, 211, 252, 0.16);
+  padding-right: 10px;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+}
+
+.ssh-terminal-self-diagnostic-copy span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #67e8f9;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ssh-terminal-self-diagnostic.good .ssh-terminal-self-diagnostic-copy span {
+  color: #93f0a4;
+}
+
+.ssh-terminal-self-diagnostic.warn .ssh-terminal-self-diagnostic-copy span {
+  color: #facc15;
+}
+
+.ssh-terminal-self-diagnostic.slow .ssh-terminal-self-diagnostic-copy span {
+  color: #fb7185;
+}
+
+.ssh-terminal-self-diagnostic-copy strong {
+  color: #f4fffb;
+  font-size: 13px;
+  font-weight: 950;
+  line-height: 1.22;
+}
+
+.ssh-terminal-self-diagnostic-copy small {
+  color: #9eb4ba;
+  font-size: 10px;
+  font-weight: 730;
+  line-height: 1.35;
+}
+
+.ssh-terminal-self-diagnostic-copy i {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.17);
+}
+
+.ssh-terminal-self-diagnostic-copy i b {
+  display: block;
+  height: 100%;
+  min-width: 8px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #22d3ee, #5eead4);
+  box-shadow: 0 0 16px rgba(45, 212, 191, 0.22);
+}
+
+.ssh-terminal-self-diagnostic-steps {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.ssh-terminal-self-diagnostic-steps article {
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(125, 211, 252, 0.16);
+  border-radius: 14px;
+  padding: 8px 9px;
+  background: rgba(255, 255, 255, 0.045);
+  display: grid;
+  align-content: start;
+  gap: 3px;
+}
+
+.ssh-terminal-self-diagnostic-steps article.done::after,
+.ssh-terminal-self-diagnostic-steps article.active::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: #22d3ee;
+}
+
+.ssh-terminal-self-diagnostic-steps article.done::after {
+  background: #5ef08c;
+}
+
+.ssh-terminal-self-diagnostic-steps article.good {
+  border-color: rgba(94, 240, 140, 0.23);
+  background: rgba(20, 83, 45, 0.12);
+}
+
+.ssh-terminal-self-diagnostic-steps article.warn {
+  border-color: rgba(250, 204, 21, 0.25);
+  background: rgba(113, 63, 18, 0.15);
+}
+
+.ssh-terminal-self-diagnostic-steps article.slow {
+  border-color: rgba(251, 113, 133, 0.28);
+  background: rgba(127, 29, 29, 0.16);
+}
+
+.ssh-terminal-self-diagnostic-steps article.pending {
+  border-color: rgba(148, 163, 184, 0.18);
+  background: rgba(30, 41, 59, 0.18);
+}
+
+.ssh-terminal-self-diagnostic-steps span,
+.ssh-terminal-self-diagnostic-steps strong,
+.ssh-terminal-self-diagnostic-steps small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ssh-terminal-self-diagnostic-steps span {
+  color: #a9bdd1;
+  font-size: 9px;
+  font-weight: 950;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ssh-terminal-self-diagnostic-steps strong {
+  color: #f8fffb;
+  font-size: 11px;
+  font-weight: 920;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.ssh-terminal-self-diagnostic-steps small {
+  color: #8da7ad;
+  font-size: 10px;
+  font-weight: 720;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.ssh-terminal-self-diagnostic > button {
+  align-self: center;
+  min-width: 134px;
+  border: 1px solid rgba(103, 232, 249, 0.3);
+  border-radius: 16px;
+  padding: 9px 12px;
+  background: linear-gradient(135deg, rgba(8, 145, 178, 0.26), rgba(20, 184, 166, 0.16));
+  color: #e8fff8;
+  cursor: pointer;
+  display: grid;
+  gap: 2px;
+  justify-items: start;
+  font-size: 11px;
+  font-weight: 940;
+  white-space: nowrap;
+}
+
+.ssh-terminal-self-diagnostic > button small {
+  color: #9fe9ee;
+  font-size: 9px;
+  font-weight: 760;
+}
+
+.ssh-terminal-self-diagnostic > button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(103, 232, 249, 0.48);
+}
+
+.ssh-terminal-self-diagnostic > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .ssh-terminal-support-bundle {
   min-height: 74px;
   padding: 10px 14px;
@@ -6512,7 +6726,7 @@ td span,
 .ssh-terminal-support-bundle-grid {
   min-width: 0;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 7px;
 }
 
@@ -6679,7 +6893,9 @@ td span,
 }
 
 .ssh-quick-command-deck {
+  flex: 0 1 230px;
   min-height: 0;
+  max-height: 230px;
   padding: 10px 14px 11px;
   overflow-y: auto;
   border-bottom: 1px solid rgba(126, 161, 166, 0.12);
@@ -7471,7 +7687,8 @@ td span,
 }
 
 .ssh-terminal-screen {
-  min-height: 0;
+  flex: 1 1 260px;
+  min-height: 220px;
   padding: 10px 12px;
   overflow: hidden;
   background: #030708;
@@ -15891,6 +16108,32 @@ pre {
   }
 
   .ssh-terminal-lag-action button {
+    justify-self: stretch;
+  }
+
+  .ssh-terminal-self-diagnostic {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 9px 12px 11px;
+  }
+
+  .ssh-terminal-self-diagnostic-copy {
+    border-right: 0;
+    border-bottom: 1px solid rgba(125, 211, 252, 0.16);
+    padding-right: 0;
+    padding-bottom: 7px;
+  }
+
+  .ssh-terminal-self-diagnostic-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .ssh-terminal-self-diagnostic-steps small {
+    white-space: normal;
+  }
+
+  .ssh-terminal-self-diagnostic > button {
     justify-self: stretch;
   }
 

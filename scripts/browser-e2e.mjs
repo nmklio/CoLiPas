@@ -1582,14 +1582,30 @@ async function assertSshTerminalPanel(targetPage) {
     if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(terminalLagActionText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(terminalLagActionText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(terminalLagActionText)) {
       throw new Error('SSH terminal lag action rendered a raw IP address or secret');
     }
+    await targetPage.locator('[data-ssh-self-diagnostic-wizard="true"]').waitFor({ timeout: 5000 });
+    const terminalSelfDiagnosticText = await targetPage.locator('[data-ssh-self-diagnostic-wizard="true"]').innerText();
+    if (!/Production SSH self-diagnostic guide/i.test(terminalSelfDiagnosticText) || !/One-click doctor/i.test(terminalSelfDiagnosticText) || !/Channel/i.test(terminalSelfDiagnosticText) || !/Speed/i.test(terminalSelfDiagnosticText) || !/Bottleneck/i.test(terminalSelfDiagnosticText) || !/Handoff/i.test(terminalSelfDiagnosticText)) {
+      throw new Error(`SSH terminal self-diagnostic wizard did not render the full guided chain: ${terminalSelfDiagnosticText}`);
+    }
+    const selfDiagnosticStepCount = await targetPage.locator('[data-ssh-self-diagnostic-step]').count();
+    if (selfDiagnosticStepCount !== 4) {
+      throw new Error(`SSH terminal self-diagnostic wizard should expose four steps, got ${selfDiagnosticStepCount}`);
+    }
+    const selfDiagnosticButtonText = await targetPage.locator('[data-ssh-self-diagnostic-wizard="true"] button').innerText();
+    if (!/(Start self-diagnosis|Copy handoff pack|Clear render pressure|Collecting|Waiting)/i.test(selfDiagnosticButtonText)) {
+      throw new Error(`SSH terminal self-diagnostic wizard action is not useful: ${selfDiagnosticButtonText}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(terminalSelfDiagnosticText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(terminalSelfDiagnosticText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(terminalSelfDiagnosticText)) {
+      throw new Error('SSH terminal self-diagnostic wizard rendered a raw IP address or secret');
+    }
     await targetPage.locator('[data-ssh-terminal-support-bundle="true"]').waitFor({ timeout: 5000 });
     const terminalSupportBundleText = await targetPage.locator('[data-ssh-terminal-support-bundle="true"]').innerText();
-    if (!/SSH sanitized diagnosis pack/i.test(terminalSupportBundleText) || !/Field evidence pack/i.test(terminalSupportBundleText) || !/Channel state/i.test(terminalSupportBundleText) || !/Live telemetry/i.test(terminalSupportBundleText) || !/Bottleneck radar/i.test(terminalSupportBundleText) || !/Recovery action/i.test(terminalSupportBundleText)) {
+    if (!/SSH sanitized diagnosis pack/i.test(terminalSupportBundleText) || !/Field evidence pack/i.test(terminalSupportBundleText) || !/Channel state/i.test(terminalSupportBundleText) || !/Live telemetry/i.test(terminalSupportBundleText) || !/Bottleneck radar/i.test(terminalSupportBundleText) || !/Recovery action/i.test(terminalSupportBundleText) || !/Self-diagnosis guide/i.test(terminalSupportBundleText)) {
       throw new Error(`SSH terminal support bundle did not render all field evidence sections: ${terminalSupportBundleText}`);
     }
     const terminalSupportSectionCount = await targetPage.locator('[data-ssh-terminal-support-section]').count();
-    if (terminalSupportSectionCount !== 4) {
-      throw new Error(`SSH terminal support bundle should expose four evidence sections, got ${terminalSupportSectionCount}`);
+    if (terminalSupportSectionCount !== 5) {
+      throw new Error(`SSH terminal support bundle should expose five evidence sections, got ${terminalSupportSectionCount}`);
     }
     if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(terminalSupportBundleText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(terminalSupportBundleText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(terminalSupportBundleText)) {
       throw new Error('SSH terminal support bundle rendered a raw IP address or secret');
@@ -1599,7 +1615,7 @@ async function assertSshTerminalPanel(targetPage) {
     });
     await targetPage.getByRole('button', { name: /copy diagnosis pack/i }).click();
     const copiedTerminalSupportBundleText = await targetPage.evaluate(() => window.__colipasCopiedTerminalText ?? '');
-    if (!/SSH sanitized diagnosis pack/i.test(copiedTerminalSupportBundleText) || !/Generated at/i.test(copiedTerminalSupportBundleText) || !/Sanitized/i.test(copiedTerminalSupportBundleText) || !/Channel state/i.test(copiedTerminalSupportBundleText) || !/Live telemetry/i.test(copiedTerminalSupportBundleText) || !/Bottleneck radar/i.test(copiedTerminalSupportBundleText) || !/Recovery action/i.test(copiedTerminalSupportBundleText) || !/aggregate telemetry/i.test(copiedTerminalSupportBundleText)) {
+    if (!/SSH sanitized diagnosis pack/i.test(copiedTerminalSupportBundleText) || !/Generated at/i.test(copiedTerminalSupportBundleText) || !/Sanitized/i.test(copiedTerminalSupportBundleText) || !/Channel state/i.test(copiedTerminalSupportBundleText) || !/Live telemetry/i.test(copiedTerminalSupportBundleText) || !/Bottleneck radar/i.test(copiedTerminalSupportBundleText) || !/Recovery action/i.test(copiedTerminalSupportBundleText) || !/Self-diagnosis guide/i.test(copiedTerminalSupportBundleText) || !/aggregate telemetry/i.test(copiedTerminalSupportBundleText)) {
       throw new Error(`SSH terminal support bundle copy output is incomplete: ${copiedTerminalSupportBundleText}`);
     }
     if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedTerminalSupportBundleText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedTerminalSupportBundleText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(copiedTerminalSupportBundleText)) {
@@ -1612,7 +1628,7 @@ async function assertSshTerminalPanel(targetPage) {
       || parsedTerminalSupportSnapshot.source !== 'terminal-copy'
       || !/SSH sanitized diagnosis pack/i.test(parsedTerminalSupportSnapshot.text ?? '')
       || !Array.isArray(parsedTerminalSupportSnapshot.sections)
-      || parsedTerminalSupportSnapshot.sections.length !== 4
+      || parsedTerminalSupportSnapshot.sections.length !== 5
       || parsedTerminalSupportSnapshot.sections.some((section) => !section.label || !section.value || !['pending', 'good', 'warn', 'slow'].includes(section.tone))
     ) {
       throw new Error(`SSH terminal support snapshot storage is incomplete: ${storedTerminalSupportSnapshot}`);

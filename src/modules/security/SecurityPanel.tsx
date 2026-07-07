@@ -1703,7 +1703,7 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
               <p>{sshTerminalSupportSnapshot.detail}</p>
               <small>{sshPerformanceCopy.terminalSnapshotLatest}: {new Date(sshTerminalSupportSnapshot.createdAt).toLocaleString(locale)}</small>
               <div>
-                {sshTerminalSupportSnapshot.sections.slice(0, 4).map((section) => (
+                {sshTerminalSupportSnapshot.sections.slice(0, 5).map((section) => (
                   <small key={section.id} className={mapTerminalSnapshotTone(section.tone)}>
                     <b>{section.label}</b>
                     {section.value}

@@ -239,8 +239,31 @@ interface TerminalLagAction {
   buttonLabel: string;
 }
 
+type TerminalSelfDiagnosticStepId = 'channel' | 'speed' | 'bottleneck' | 'handoff';
+type TerminalSelfDiagnosticAction = 'wait' | 'self-test' | 'clear' | 'copy-pack';
+
+interface TerminalSelfDiagnosticStep {
+  id: TerminalSelfDiagnosticStepId;
+  label: string;
+  value: string;
+  detail: string;
+  tone: TerminalNetworkQuality['tone'];
+  state: 'done' | 'active' | 'todo';
+}
+
+interface TerminalSelfDiagnosticGuide {
+  tone: TerminalNetworkQuality['tone'];
+  title: string;
+  detail: string;
+  progress: number;
+  action: TerminalSelfDiagnosticAction;
+  actionLabel: string;
+  actionDetail: string;
+  steps: TerminalSelfDiagnosticStep[];
+}
+
 interface TerminalSupportBundleSection {
-  id: 'channel' | 'telemetry' | 'bottleneck' | 'recovery';
+  id: 'channel' | 'telemetry' | 'bottleneck' | 'recovery' | 'self-diagnostic';
   label: string;
   value: string;
   detail: string;
@@ -590,19 +613,32 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const terminalTelemetryInsight = getTerminalTelemetryInsight(terminalTelemetry, terminalNetworkStats, terminalTransport, Boolean(terminalShellId), t);
   const terminalBottleneckAdvisor = getTerminalBottleneckAdvisor(terminalTelemetry, terminalNetworkStats, terminalTransport, Boolean(terminalShellId), t);
   const terminalLagAction = getTerminalLagAction(terminalBottleneckAdvisor, terminalTelemetry, terminalNetworkStats, terminalTransport, Boolean(terminalShellId), t);
-  const terminalSupportBundle = useMemo(
-    () => buildTerminalSupportBundle({
+  const terminalSelfDiagnosticGuide = useMemo(
+    () => buildTerminalSelfDiagnosticGuide({
       telemetry: terminalTelemetry,
-      telemetryInsight: terminalTelemetryInsight,
       bottleneckAdvisor: terminalBottleneckAdvisor,
-      lagAction: terminalLagAction,
       networkStats: terminalNetworkStats,
       transport: terminalTransport,
       selfTest: terminalSelfTest,
       connected: Boolean(terminalShellId),
       t,
     }),
-    [terminalTelemetry, terminalTelemetryInsight, terminalBottleneckAdvisor, terminalLagAction, terminalNetworkStats, terminalTransport, terminalSelfTest, terminalShellId, t],
+    [terminalTelemetry, terminalBottleneckAdvisor, terminalNetworkStats, terminalTransport, terminalSelfTest, terminalShellId, t],
+  );
+  const terminalSupportBundle = useMemo(
+    () => buildTerminalSupportBundle({
+      telemetry: terminalTelemetry,
+      telemetryInsight: terminalTelemetryInsight,
+      bottleneckAdvisor: terminalBottleneckAdvisor,
+      lagAction: terminalLagAction,
+      selfDiagnosticGuide: terminalSelfDiagnosticGuide,
+      networkStats: terminalNetworkStats,
+      transport: terminalTransport,
+      selfTest: terminalSelfTest,
+      connected: Boolean(terminalShellId),
+      t,
+    }),
+    [terminalTelemetry, terminalTelemetryInsight, terminalBottleneckAdvisor, terminalLagAction, terminalSelfDiagnosticGuide, terminalNetworkStats, terminalTransport, terminalSelfTest, terminalShellId, t],
   );
   const sshRunbookRecommendations = useMemo(
     () => buildSshRunbookRecommendations(sshRunbookCommands, sshDoctorReport, terminalBottleneckAdvisor, Boolean(terminalShellId), t),
@@ -1702,6 +1738,33 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                       disabled={!terminalShellId || sshInterrupting || (terminalLagAction.action === 'self-test' && terminalSelfTestRunning)}
                     >
                       {terminalLagAction.buttonLabel}
+                    </button>
+                  </div>
+                )}
+                {terminalSelfDiagnosticGuide && (
+                  <div className={`ssh-terminal-self-diagnostic ${terminalSelfDiagnosticGuide.tone}`} data-ssh-self-diagnostic-wizard="true" aria-live="polite" onClick={(event) => event.stopPropagation()}>
+                    <div className="ssh-terminal-self-diagnostic-copy">
+                      <span><ShieldCheck size={14} /> {t('servers.terminalSelfDiagnosticEyebrow')}</span>
+                      <strong>{terminalSelfDiagnosticGuide.title}</strong>
+                      <small>{terminalSelfDiagnosticGuide.detail}</small>
+                      <i aria-hidden="true"><b style={{ width: `${terminalSelfDiagnosticGuide.progress}%` }} /></i>
+                    </div>
+                    <div className="ssh-terminal-self-diagnostic-steps">
+                      {terminalSelfDiagnosticGuide.steps.map((step) => (
+                        <article key={step.id} className={`${step.tone} ${step.state}`} data-ssh-self-diagnostic-step={step.id}>
+                          <span>{step.label}</span>
+                          <strong>{step.value}</strong>
+                          <small>{step.detail}</small>
+                        </article>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => runTerminalSelfDiagnosticAction(terminalSelfDiagnosticGuide.action)}
+                      disabled={!terminalShellId || sshInterrupting || terminalSelfDiagnosticGuide.action === 'wait' || (terminalSelfDiagnosticGuide.action === 'self-test' && terminalSelfTestRunning)}
+                    >
+                      {terminalSelfDiagnosticGuide.actionLabel}
+                      <small>{terminalSelfDiagnosticGuide.actionDetail}</small>
                     </button>
                   </div>
                 )}
@@ -3340,6 +3403,25 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     }
   }
 
+  function runTerminalSelfDiagnosticAction(action: TerminalSelfDiagnosticAction) {
+    if (action === 'wait') {
+      showActionMessage(t('servers.terminalSelfDiagnosticWaiting'));
+      xtermRef.current?.focus();
+      return;
+    }
+    if (action === 'self-test') {
+      runTerminalSelfTest();
+      return;
+    }
+    if (action === 'clear') {
+      clearTerminalOutput();
+      return;
+    }
+    if (action === 'copy-pack') {
+      void copyTerminalSupportBundle();
+    }
+  }
+
   function persistTerminalSupportBundleSnapshot(bundle: TerminalSupportBundle) {
     if (typeof window === 'undefined') {
       return;
@@ -4590,11 +4672,149 @@ function getTerminalLagAction(
   };
 }
 
+function buildTerminalSelfDiagnosticGuide({
+  telemetry,
+  bottleneckAdvisor,
+  networkStats,
+  transport,
+  selfTest,
+  connected,
+  t,
+}: {
+  telemetry: TerminalTelemetryState;
+  bottleneckAdvisor: TerminalBottleneckAdvisor;
+  networkStats: TerminalNetworkStats | null;
+  transport: 'websocket' | 'compatible' | null;
+  selfTest: TerminalSelfTestState | null;
+  connected: boolean;
+  t: (key: string, vars?: Record<string, string | number>) => string;
+}): TerminalSelfDiagnosticGuide {
+  const transportLabel = getTerminalTransportLabel(transport, t);
+  const speedDone = selfTest?.status === 'complete' && selfTest.lines >= 40;
+  const speedActive = connected && (!selfTest || selfTest.status === 'running');
+  const liveSamplesReady = connected && (
+    Boolean(networkStats)
+    || telemetry.inputEvents > 0
+    || telemetry.outputBytes > 0
+    || telemetry.latestFirstOutputMs !== null
+  );
+  const primary = getPrimaryBottleneckItem(bottleneckAdvisor) ?? bottleneckAdvisor.items[0];
+  const selfTestValue = selfTest
+    ? `${selfTest.lines} ${t('servers.sshTroubleshootingReportLines')} / ${Math.round(selfTest.durationMs)}ms`
+    : t('servers.terminalSelfDiagnosticSpeedMissing');
+  const speedTone: TerminalNetworkQuality['tone'] = selfTest?.status === 'failed' || selfTest?.status === 'timeout'
+    ? 'slow'
+    : selfTest?.status === 'running'
+      ? 'warn'
+      : speedDone
+        ? 'good'
+        : connected
+          ? 'pending'
+          : 'pending';
+  const channelTone: TerminalNetworkQuality['tone'] = !connected
+    ? 'pending'
+    : transport === 'compatible'
+      ? 'warn'
+      : 'good';
+  const steps: TerminalSelfDiagnosticStep[] = [
+    {
+      id: 'channel',
+      label: t('servers.terminalSelfDiagnosticStepChannel'),
+      value: connected ? transportLabel : t('servers.terminalSelfDiagnosticChannelWaiting'),
+      detail: connected
+        ? t(transport === 'compatible' ? 'servers.terminalSelfDiagnosticChannelCompatible' : 'servers.terminalSelfDiagnosticChannelLive')
+        : t('servers.terminalSelfDiagnosticChannelPending'),
+      tone: channelTone,
+      state: connected ? 'done' : 'active',
+    },
+    {
+      id: 'speed',
+      label: t('servers.terminalSelfDiagnosticStepSpeed'),
+      value: selfTestValue,
+      detail: selfTest?.status === 'running'
+        ? t('servers.terminalSelfDiagnosticSpeedRunning')
+        : speedDone
+          ? t('servers.terminalSelfDiagnosticSpeedDone', { first: Math.round(selfTest.firstResponseMs), span: Math.round(selfTest.outputSpanMs) })
+          : selfTest
+            ? t('servers.terminalSelfDiagnosticSpeedRetry')
+            : t('servers.terminalSelfDiagnosticSpeedPending'),
+      tone: speedTone,
+      state: speedDone ? 'done' : speedActive ? 'active' : 'todo',
+    },
+    {
+      id: 'bottleneck',
+      label: t('servers.terminalSelfDiagnosticStepBottleneck'),
+      value: connected && primary ? `${primary.label}: ${primary.value}` : t('servers.terminalSelfDiagnosticBottleneckWaiting'),
+      detail: connected
+        ? t('servers.terminalSelfDiagnosticBottleneckDone', { target: primary?.label ?? '--', level: primary ? Math.round(primary.level) : 0 })
+        : t('servers.terminalSelfDiagnosticBottleneckPending'),
+      tone: connected ? bottleneckAdvisor.tone : 'pending',
+      state: liveSamplesReady ? 'done' : connected ? 'active' : 'todo',
+    },
+    {
+      id: 'handoff',
+      label: t('servers.terminalSelfDiagnosticStepHandoff'),
+      value: speedDone ? t('servers.terminalSelfDiagnosticHandoffReady') : t('servers.terminalSelfDiagnosticHandoffWaiting'),
+      detail: speedDone
+        ? t('servers.terminalSelfDiagnosticHandoffDone')
+        : t('servers.terminalSelfDiagnosticHandoffPending'),
+      tone: speedDone ? bottleneckAdvisor.tone : 'pending',
+      state: speedDone ? 'done' : connected ? 'todo' : 'todo',
+    },
+  ];
+  const doneCount = steps.filter((step) => step.state === 'done').length;
+  const progress = Math.round((doneCount / steps.length) * 100);
+  const tone: TerminalNetworkQuality['tone'] = steps.some((step) => step.tone === 'slow')
+    ? 'slow'
+    : steps.some((step) => step.tone === 'warn')
+      ? 'warn'
+      : doneCount === steps.length
+        ? 'good'
+        : connected
+          ? 'pending'
+          : 'pending';
+  const action: TerminalSelfDiagnosticAction = !connected || selfTest?.status === 'running'
+    ? 'wait'
+    : !speedDone
+      ? 'self-test'
+      : primary?.id === 'render' && primary.level >= 50
+        ? 'clear'
+        : 'copy-pack';
+  const actionLabel = action === 'self-test'
+    ? t('servers.terminalSelfDiagnosticActionRun')
+    : action === 'clear'
+      ? t('servers.terminalSelfDiagnosticActionClear')
+      : action === 'copy-pack'
+        ? t('servers.terminalSelfDiagnosticActionCopy')
+        : selfTest?.status === 'running'
+          ? t('servers.terminalSelfDiagnosticActionCollecting')
+          : t('servers.terminalSelfDiagnosticActionWaiting');
+  const actionDetail = action === 'self-test'
+    ? t('servers.terminalSelfDiagnosticActionRunDetail')
+    : action === 'clear'
+      ? t('servers.terminalSelfDiagnosticActionClearDetail')
+      : action === 'copy-pack'
+        ? t('servers.terminalSelfDiagnosticActionCopyDetail')
+        : t('servers.terminalSelfDiagnosticActionWaitingDetail');
+
+  return {
+    tone,
+    title: t('servers.terminalSelfDiagnosticTitle'),
+    detail: t('servers.terminalSelfDiagnosticDetail', { progress }),
+    progress,
+    action,
+    actionLabel,
+    actionDetail,
+    steps,
+  };
+}
+
 function buildTerminalSupportBundle({
   telemetry,
   telemetryInsight,
   bottleneckAdvisor,
   lagAction,
+  selfDiagnosticGuide,
   networkStats,
   transport,
   selfTest,
@@ -4605,6 +4825,7 @@ function buildTerminalSupportBundle({
   telemetryInsight: TerminalTelemetryInsight;
   bottleneckAdvisor: TerminalBottleneckAdvisor;
   lagAction: TerminalLagAction | null;
+  selfDiagnosticGuide: TerminalSelfDiagnosticGuide;
   networkStats: TerminalNetworkStats | null;
   transport: 'websocket' | 'compatible' | null;
   selfTest: TerminalSelfTestState | null;
@@ -4656,6 +4877,13 @@ function buildTerminalSupportBundle({
       detail: recoveryDetail,
       tone: lagAction?.tone ?? bottleneckAdvisor.tone,
     },
+    {
+      id: 'self-diagnostic',
+      label: t('servers.terminalSupportBundleSelfDiagnostic'),
+      value: `${selfDiagnosticGuide.progress}% / ${selfDiagnosticGuide.actionLabel}`,
+      detail: `${selfDiagnosticGuide.title} / ${selfDiagnosticGuide.actionDetail}`,
+      tone: selfDiagnosticGuide.tone,
+    },
   ];
   const sections: TerminalSupportBundleSection[] = rawSections.map((section) => ({
     ...section,
@@ -4684,6 +4912,11 @@ function buildTerminalSupportBundle({
     `[${t('servers.terminalSupportBundleRecovery')}]`,
     `- ${recoveryTitle}`,
     `- ${recoveryDetail}`,
+    '',
+    `[${t('servers.terminalSupportBundleSelfDiagnostic')}]`,
+    `- ${t('servers.terminalSelfDiagnosticProgress')}: ${selfDiagnosticGuide.progress}%`,
+    `- ${t('servers.terminalSelfDiagnosticNextAction')}: ${selfDiagnosticGuide.actionLabel}`,
+    ...selfDiagnosticGuide.steps.map((step) => `- ${step.label}: ${step.value} (${step.detail})`),
     '',
     t('servers.terminalSupportBundleSafeNote'),
   ].join('\n'));
