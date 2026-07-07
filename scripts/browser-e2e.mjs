@@ -107,6 +107,8 @@ async function assertLaunchGuide(targetPage) {
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b|sk-[A-Za-z0-9_-]{12,}|BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY|password=|passphrase=/i.test(launchText)) {
     throw new Error('Launch guide leaked a raw IP address or secret');
   }
+  await targetPage.locator('[data-launch-guide-recheck="true"]').click();
+  await targetPage.locator('.launch-guide-message').filter({ hasText: /Launch evidence refreshed|Unable to refresh/i }).waitFor({ timeout: 10000 });
   await targetPage.evaluate(() => {
     window.__colipasCopiedLaunchGuideReport = '';
     Object.defineProperty(navigator, 'clipboard', {
@@ -133,7 +135,7 @@ async function assertLaunchGuide(targetPage) {
   await targetPage.locator('[data-launch-guide-item="ai"]').click();
   await targetPage.waitForURL(/#ai$/, { timeout: 10000 });
   await targetPage.locator('.ai-workbench').waitFor({ timeout: 10000 });
-  console.log('ok browser e2e covers first-run launch checklist routing and sanitization');
+  console.log('ok browser e2e covers first-run launch checklist routing, recheck, and sanitization');
 }
 
 function isExpectedBrowserConsoleNoise(text) {

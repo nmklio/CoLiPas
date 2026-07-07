@@ -243,6 +243,7 @@ export function App() {
     return window.localStorage.getItem(launchGuideStorageKey) !== 'dismissed';
   });
   const [launchGuideMessage, setLaunchGuideMessage] = useState('');
+  const [launchGuideRefreshing, setLaunchGuideRefreshing] = useState(false);
   const appMountedRef = useRef(true);
   const sessionAuthenticatedRef = useRef(false);
   const overviewRefreshInFlightRef = useRef(false);
@@ -251,22 +252,24 @@ export function App() {
 
   async function refreshOverview() {
     if ((!session?.authenticated && !sessionAuthenticatedRef.current) || overviewRefreshInFlightRef.current) {
-      return;
+      return false;
     }
     overviewRefreshInFlightRef.current = true;
     try {
       const { data, source } = await fetchOverview();
       if (!appMountedRef.current || !sessionAuthenticatedRef.current) {
-        return;
+        return false;
       }
       setOverview(data);
       setDataSource(source);
       setLastRefreshedAt(new Date());
+      return true;
     } catch (error) {
       if (appMountedRef.current && error instanceof AuthRequiredError) {
         setSession(null);
         setAiCollapsed(true);
       }
+      return false;
     } finally {
       overviewRefreshInFlightRef.current = false;
     }
@@ -274,19 +277,21 @@ export function App() {
 
   async function refreshConfigSummary() {
     if (!session?.authenticated && !sessionAuthenticatedRef.current) {
-      return;
+      return false;
     }
     try {
       const nextConfig = await fetchConfigSummary();
       if (!appMountedRef.current || !sessionAuthenticatedRef.current) {
-        return;
+        return false;
       }
       setConfigSummary(nextConfig);
+      return true;
     } catch (error) {
       if (appMountedRef.current && error instanceof AuthRequiredError) {
         setSession(null);
         setAiCollapsed(true);
       }
+      return false;
     }
   }
 
@@ -854,6 +859,31 @@ export function App() {
     }
   }
 
+  async function refreshLaunchGuideEvidence() {
+    if (launchGuideRefreshing) {
+      return;
+    }
+    setLaunchGuideRefreshing(true);
+    try {
+      const [overviewUpdated, configUpdated] = await Promise.all([
+        refreshOverview(),
+        refreshConfigSummary(),
+      ]);
+      if (!appMountedRef.current || !sessionAuthenticatedRef.current) {
+        return;
+      }
+      showLaunchGuideMessage(
+        overviewUpdated || configUpdated
+          ? t('launchGuide.rechecked')
+          : t('launchGuide.recheckFailed'),
+      );
+    } finally {
+      if (appMountedRef.current) {
+        setLaunchGuideRefreshing(false);
+      }
+    }
+  }
+
   function startTopLaunchFix() {
     const [firstStep] = launchChecklist.remediationSteps;
     if (firstStep) {
@@ -1167,6 +1197,16 @@ export function App() {
                     <ClipboardCheck size={15} />
                     {t('launchGuide.copyReport')}
                   </button>
+                  <button
+                    type="button"
+                    className="tool-button"
+                    data-launch-guide-recheck="true"
+                    onClick={refreshLaunchGuideEvidence}
+                    disabled={launchGuideRefreshing}
+                  >
+                    <RefreshCw size={15} className={launchGuideRefreshing ? 'spin-icon' : undefined} />
+                    {launchGuideRefreshing ? t('launchGuide.rechecking') : t('launchGuide.recheck')}
+                  </button>
                   <button type="button" className="tool-button" onClick={dismissLaunchGuide}>
                     {t('launchGuide.dismiss')}
                   </button>
@@ -1289,7 +1329,9 @@ export function App() {
               filters={filters}
               onFiltersChange={setFilters}
               onTriageDraftOpen={openServerTriageOperationsDraft}
-              onServerConnected={refreshOverview}
+              onServerConnected={() => {
+                void refreshOverview();
+              }}
               onAuditTraceOpen={openSecurityTrace}
               releaseFocusAnchor={activeReleaseFixAnchor === 'server-ssh' ? activeReleaseFixAnchor : undefined}
               allServers={overview.servers}
@@ -1303,7 +1345,9 @@ export function App() {
               servers={overview.servers}
               draft={operationDraft}
               onDraftPreflight={recordOverviewDraftPreflight}
-              onTaskFinished={refreshOverview}
+              onTaskFinished={() => {
+                void refreshOverview();
+              }}
               onAuditTraceOpen={openSecurityTrace}
               releaseFocusAnchor={activeReleaseFixAnchor === 'operations-builder' ? activeReleaseFixAnchor : undefined}
             />
@@ -1389,7 +1433,9 @@ export function App() {
               onNavigate={(section, focus) => {
                 navigateToSection(section, focus);
               }}
-              onRemediated={refreshOverview}
+              onRemediated={() => {
+                void refreshOverview();
+              }}
               focusTraceId={securityTraceFocusId}
               onTraceFocused={() => setSecurityTraceFocusId('')}
               onTraceFilterChange={handleSecurityTraceFilterChange}
@@ -1405,7 +1451,9 @@ export function App() {
           onCollapse={() => setAiCollapsed(true)}
           onExpand={() => setAiCollapsed(false)}
           onSeedQuestionConsumed={() => setAiSeedQuestion('')}
-          onTaskFinished={refreshOverview}
+          onTaskFinished={() => {
+            void refreshOverview();
+          }}
           releaseFocusAnchor={releaseFixFocus?.targetSection === 'ai' ? releaseFixFocus.anchor : undefined}
         />
 

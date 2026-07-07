@@ -3333,11 +3333,13 @@ function assertAccountUiGuards() {
     'data-launch-guide-item={item.id}',
     'data-launch-guide-open="true"',
     'data-launch-guide-copy-report="true"',
+    'data-launch-guide-recheck="true"',
     'data-launch-guide-start-top-fix="true"',
     'data-launch-guide-fix-queue="true"',
     'data-launch-guide-fix-step={step.item.id}',
     'openLaunchChecklistItem',
     'copyLaunchGuideReport',
+    'refreshLaunchGuideEvidence',
     'startTopLaunchFix',
     'buildLaunchChecklistReport',
     'checklist.remediationSteps.map',
@@ -3351,7 +3353,7 @@ function assertAccountUiGuards() {
     '.launch-guide-fix-queue',
     '.launch-guide-fix-step',
     'async function assertLaunchGuide',
-    'first-run launch checklist routing and sanitization',
+    'first-run launch checklist routing, recheck, and sanitization',
     'Launch guide copied report leaked a raw IP address or secret',
     'Launch guide priority remediation queue is incomplete',
   ];
@@ -3360,7 +3362,7 @@ function assertAccountUiGuards() {
   if (missingLaunchGuide.length) {
     throw new Error(`First-run launch guide is incomplete: ${missingLaunchGuide.join(', ')}`);
   }
-  for (const key of ['launchGuide.title', 'launchGuide.runtimeTitle', 'launchGuide.assetsTitle', 'launchGuide.sshTitle', 'launchGuide.aiTitle', 'launchGuide.preflightTitle', 'launchGuide.auditTitle', 'launchGuide.copyReport', 'launchGuide.reportSanitizedNote', 'launchGuide.fixQueueTitle', 'launchGuide.fixReasonRuntime', 'launchGuide.startTopFix']) {
+  for (const key of ['launchGuide.title', 'launchGuide.runtimeTitle', 'launchGuide.assetsTitle', 'launchGuide.sshTitle', 'launchGuide.aiTitle', 'launchGuide.preflightTitle', 'launchGuide.auditTitle', 'launchGuide.copyReport', 'launchGuide.recheck', 'launchGuide.rechecked', 'launchGuide.reportSanitizedNote', 'launchGuide.fixQueueTitle', 'launchGuide.fixReasonRuntime', 'launchGuide.startTopFix']) {
     const count = (i18nSource.match(new RegExp(key.replace('.', '\\.'), 'g')) ?? []).length;
     if (count < 3) {
       throw new Error(`Launch guide i18n key is missing languages: ${key}`);
