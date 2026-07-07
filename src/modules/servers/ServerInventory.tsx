@@ -232,6 +232,23 @@ interface TerminalLagAction {
   buttonLabel: string;
 }
 
+interface TerminalSupportBundleSection {
+  id: 'channel' | 'telemetry' | 'bottleneck' | 'recovery';
+  label: string;
+  value: string;
+  detail: string;
+  tone: TerminalNetworkQuality['tone'];
+}
+
+interface TerminalSupportBundle {
+  tone: TerminalNetworkQuality['tone'];
+  generatedAt: string;
+  title: string;
+  detail: string;
+  sections: TerminalSupportBundleSection[];
+  text: string;
+}
+
 type SshConnectionDoctorStepId = 'asset' | 'credential' | 'backend' | 'shell' | 'terminal';
 const sshConnectionDoctorStepIds: SshConnectionDoctorStepId[] = ['asset', 'credential', 'backend', 'shell', 'terminal'];
 
@@ -566,6 +583,20 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const terminalTelemetryInsight = getTerminalTelemetryInsight(terminalTelemetry, terminalNetworkStats, terminalTransport, Boolean(terminalShellId), t);
   const terminalBottleneckAdvisor = getTerminalBottleneckAdvisor(terminalTelemetry, terminalNetworkStats, terminalTransport, Boolean(terminalShellId), t);
   const terminalLagAction = getTerminalLagAction(terminalBottleneckAdvisor, terminalTelemetry, terminalNetworkStats, terminalTransport, Boolean(terminalShellId), t);
+  const terminalSupportBundle = useMemo(
+    () => buildTerminalSupportBundle({
+      telemetry: terminalTelemetry,
+      telemetryInsight: terminalTelemetryInsight,
+      bottleneckAdvisor: terminalBottleneckAdvisor,
+      lagAction: terminalLagAction,
+      networkStats: terminalNetworkStats,
+      transport: terminalTransport,
+      selfTest: terminalSelfTest,
+      connected: Boolean(terminalShellId),
+      t,
+    }),
+    [terminalTelemetry, terminalTelemetryInsight, terminalBottleneckAdvisor, terminalLagAction, terminalNetworkStats, terminalTransport, terminalSelfTest, terminalShellId, t],
+  );
   const sshRunbookRecommendations = useMemo(
     () => buildSshRunbookRecommendations(sshRunbookCommands, sshDoctorReport, terminalBottleneckAdvisor, Boolean(terminalShellId), t),
     [sshRunbookCommands, sshDoctorReport, terminalBottleneckAdvisor, terminalShellId, t],
@@ -1664,6 +1695,27 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                       disabled={!terminalShellId || sshInterrupting || (terminalLagAction.action === 'self-test' && terminalSelfTestRunning)}
                     >
                       {terminalLagAction.buttonLabel}
+                    </button>
+                  </div>
+                )}
+                {terminalSupportBundle && (
+                  <div className={`ssh-terminal-support-bundle ${terminalSupportBundle.tone}`} data-ssh-terminal-support-bundle="true" aria-live="polite" onClick={(event) => event.stopPropagation()}>
+                    <div className="ssh-terminal-support-bundle-copy">
+                      <span><FileText size={14} /> {t('servers.terminalSupportBundleEyebrow')}</span>
+                      <strong>{terminalSupportBundle.title}</strong>
+                      <small>{terminalSupportBundle.detail}</small>
+                    </div>
+                    <div className="ssh-terminal-support-bundle-grid">
+                      {terminalSupportBundle.sections.map((section) => (
+                        <article key={section.id} className={section.tone} data-ssh-terminal-support-section={section.id}>
+                          <span>{section.label}</span>
+                          <strong>{section.value}</strong>
+                          <small>{section.detail}</small>
+                        </article>
+                      ))}
+                    </div>
+                    <button type="button" onClick={copyTerminalSupportBundle} disabled={!terminalShellId}>
+                      {t('servers.terminalSupportBundleCopy')}
                     </button>
                   </div>
                 )}
@@ -3265,6 +3317,21 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     }
   }
 
+  async function copyTerminalSupportBundle() {
+    if (!terminalSupportBundle) {
+      return;
+    }
+
+    try {
+      await writeClipboardText(terminalSupportBundle.text);
+      showActionMessage(t('servers.terminalSupportBundleCopied'));
+    } catch {
+      showActionMessage(t('servers.terminalCopyFailed'));
+    } finally {
+      xtermRef.current?.focus();
+    }
+  }
+
   function clearTerminalOutput() {
     const terminal = xtermRef.current;
     if (!terminal) {
@@ -4478,6 +4545,122 @@ function getTerminalLagAction(
     evidence,
     action: 'self-test',
     buttonLabel: t('servers.terminalLagActionSelfTestButton'),
+  };
+}
+
+function buildTerminalSupportBundle({
+  telemetry,
+  telemetryInsight,
+  bottleneckAdvisor,
+  lagAction,
+  networkStats,
+  transport,
+  selfTest,
+  connected,
+  t,
+}: {
+  telemetry: TerminalTelemetryState;
+  telemetryInsight: TerminalTelemetryInsight;
+  bottleneckAdvisor: TerminalBottleneckAdvisor;
+  lagAction: TerminalLagAction | null;
+  networkStats: TerminalNetworkStats | null;
+  transport: 'websocket' | 'compatible' | null;
+  selfTest: TerminalSelfTestState | null;
+  connected: boolean;
+  t: (key: string, vars?: Record<string, string | number>) => string;
+}): TerminalSupportBundle | null {
+  if (!connected) {
+    return null;
+  }
+
+  const generatedAt = new Date().toISOString();
+  const transportLabel = getTerminalTransportLabel(transport, t);
+  const networkLabel = networkStats
+    ? `${formatTerminalRtt(networkStats.rttMs)} / ${formatBytesPerSecond(networkStats.throughputBytesPerSecond)}`
+    : t('servers.terminalSupportBundleNoNetwork');
+  const selfTestLabel = selfTest
+    ? `${selfTest.status} / ${selfTest.lines} ${t('servers.sshTroubleshootingReportLines')} / ${Math.round(selfTest.durationMs)}ms`
+    : t('servers.terminalSupportBundleNoSelfTest');
+  const primary = getPrimaryBottleneckItem(bottleneckAdvisor) ?? bottleneckAdvisor.items[0];
+  const recoveryTitle = lagAction?.title ?? t('servers.terminalSupportBundleRecoveryReady');
+  const recoveryDetail = lagAction ? `${lagAction.detail} / ${lagAction.evidence}` : bottleneckAdvisor.action;
+
+  const rawSections: TerminalSupportBundleSection[] = [
+    {
+      id: 'channel',
+      label: t('servers.terminalSupportBundleChannel'),
+      value: transportLabel,
+      detail: `${networkLabel} / ${selfTestLabel}`,
+      tone: networkStats ? getTerminalNetworkQuality(networkStats, t).tone : 'pending',
+    },
+    {
+      id: 'telemetry',
+      label: t('servers.terminalSupportBundleTelemetry'),
+      value: telemetryInsight.title,
+      detail: telemetryInsight.cards.map((card) => `${card.label}: ${card.value}`).join(' / '),
+      tone: telemetryInsight.tone,
+    },
+    {
+      id: 'bottleneck',
+      label: t('servers.terminalSupportBundleBottleneck'),
+      value: primary ? `${primary.label}: ${primary.value}` : bottleneckAdvisor.title,
+      detail: `${bottleneckAdvisor.detail} / ${bottleneckAdvisor.action}`,
+      tone: bottleneckAdvisor.tone,
+    },
+    {
+      id: 'recovery',
+      label: t('servers.terminalSupportBundleRecovery'),
+      value: recoveryTitle,
+      detail: recoveryDetail,
+      tone: lagAction?.tone ?? bottleneckAdvisor.tone,
+    },
+  ];
+  const sections: TerminalSupportBundleSection[] = rawSections.map((section) => ({
+    ...section,
+    value: sanitizeSshDoctorText(section.value),
+    detail: sanitizeSshDoctorText(section.detail),
+  }));
+
+  const text = sanitizeSshDoctorText([
+    `# ${t('servers.terminalSupportBundleTitle')}`,
+    `${t('servers.terminalSupportBundleGenerated', { time: generatedAt })}`,
+    `${t('servers.terminalSupportBundleSanitized')}`,
+    '',
+    `[${t('servers.terminalSupportBundleChannel')}]`,
+    `- ${transportLabel}`,
+    `- ${networkLabel}`,
+    `- ${selfTestLabel}`,
+    '',
+    `[${t('servers.terminalSupportBundleTelemetry')}]`,
+    ...telemetryInsight.cards.map((card) => `- ${card.label}: ${card.value} (${card.detail})`),
+    `- ${t('servers.terminalSupportBundleInputBytes')}: ${formatCompactBytes(telemetry.inputBytes)}`,
+    `- ${t('servers.terminalSupportBundleOutputBytes')}: ${formatCompactBytes(telemetry.outputBytes)}`,
+    '',
+    `[${t('servers.terminalSupportBundleBottleneck')}]`,
+    ...bottleneckAdvisor.items.map((item) => `- ${item.label}: ${Math.round(item.level)}% / ${item.value} / ${item.detail}`),
+    '',
+    `[${t('servers.terminalSupportBundleRecovery')}]`,
+    `- ${recoveryTitle}`,
+    `- ${recoveryDetail}`,
+    '',
+    t('servers.terminalSupportBundleSafeNote'),
+  ].join('\n'));
+
+  const tone: TerminalNetworkQuality['tone'] = sections.some((section) => section.tone === 'slow')
+    ? 'slow'
+    : sections.some((section) => section.tone === 'warn')
+      ? 'warn'
+      : sections.some((section) => section.tone === 'pending')
+        ? 'pending'
+        : 'good';
+
+  return {
+    generatedAt,
+    tone,
+    title: t('servers.terminalSupportBundleTitle'),
+    detail: t('servers.terminalSupportBundleDetail', { sections: sections.length }),
+    sections,
+    text,
   };
 }
 

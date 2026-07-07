@@ -1581,6 +1581,29 @@ async function assertSshTerminalPanel(targetPage) {
     if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(terminalLagActionText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(terminalLagActionText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(terminalLagActionText)) {
       throw new Error('SSH terminal lag action rendered a raw IP address or secret');
     }
+    await targetPage.locator('[data-ssh-terminal-support-bundle="true"]').waitFor({ timeout: 5000 });
+    const terminalSupportBundleText = await targetPage.locator('[data-ssh-terminal-support-bundle="true"]').innerText();
+    if (!/SSH sanitized diagnosis pack/i.test(terminalSupportBundleText) || !/Field evidence pack/i.test(terminalSupportBundleText) || !/Channel state/i.test(terminalSupportBundleText) || !/Live telemetry/i.test(terminalSupportBundleText) || !/Bottleneck radar/i.test(terminalSupportBundleText) || !/Recovery action/i.test(terminalSupportBundleText)) {
+      throw new Error(`SSH terminal support bundle did not render all field evidence sections: ${terminalSupportBundleText}`);
+    }
+    const terminalSupportSectionCount = await targetPage.locator('[data-ssh-terminal-support-section]').count();
+    if (terminalSupportSectionCount !== 4) {
+      throw new Error(`SSH terminal support bundle should expose four evidence sections, got ${terminalSupportSectionCount}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(terminalSupportBundleText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(terminalSupportBundleText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(terminalSupportBundleText)) {
+      throw new Error('SSH terminal support bundle rendered a raw IP address or secret');
+    }
+    await targetPage.evaluate(() => {
+      window.__colipasCopiedTerminalText = '';
+    });
+    await targetPage.getByRole('button', { name: /copy diagnosis pack/i }).click();
+    const copiedTerminalSupportBundleText = await targetPage.evaluate(() => window.__colipasCopiedTerminalText ?? '');
+    if (!/SSH sanitized diagnosis pack/i.test(copiedTerminalSupportBundleText) || !/Generated at/i.test(copiedTerminalSupportBundleText) || !/Sanitized/i.test(copiedTerminalSupportBundleText) || !/Channel state/i.test(copiedTerminalSupportBundleText) || !/Live telemetry/i.test(copiedTerminalSupportBundleText) || !/Bottleneck radar/i.test(copiedTerminalSupportBundleText) || !/Recovery action/i.test(copiedTerminalSupportBundleText) || !/aggregate telemetry/i.test(copiedTerminalSupportBundleText)) {
+      throw new Error(`SSH terminal support bundle copy output is incomplete: ${copiedTerminalSupportBundleText}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedTerminalSupportBundleText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedTerminalSupportBundleText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(copiedTerminalSupportBundleText)) {
+      throw new Error('SSH terminal support bundle copy output leaked a raw IP address or secret');
+    }
     const channelSwitchButton = targetPage.locator('[data-ssh-channel-switch="true"]');
     await channelSwitchButton.waitFor({ timeout: 5000 });
     const initialChannelSwitchLabel = await channelSwitchButton.getAttribute('aria-label');
@@ -1621,7 +1644,7 @@ async function assertSshTerminalPanel(targetPage) {
     }, undefined, { timeout: 10000 });
     console.log(`ok browser e2e SSH burst output rendered in ${burstOutputDurationMs}ms with max long task ${maxBurstLongTaskMs}ms`);
     await assertElementWithinViewport(targetPage, '.ssh-console', 'desktop SSH console');
-    await captureVisualEvidence(targetPage, 'desktop-ssh-terminal-network', ['.ssh-console', '.ssh-terminal-network', '.ssh-terminal-quality', '[data-ssh-terminal-telemetry="true"]', '[data-ssh-terminal-bottleneck="true"]', '[data-ssh-terminal-lag-action="true"]']);
+    await captureVisualEvidence(targetPage, 'desktop-ssh-terminal-network', ['.ssh-console', '.ssh-terminal-network', '.ssh-terminal-quality', '[data-ssh-terminal-telemetry="true"]', '[data-ssh-terminal-bottleneck="true"]', '[data-ssh-terminal-lag-action="true"]', '[data-ssh-terminal-support-bundle="true"]']);
     await targetPage.getByRole('button', { name: /disconnect/i }).click();
     await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });
     const disconnectMessage = targetPage.locator('.action-message').filter({ hasText: /disconnected/i });
