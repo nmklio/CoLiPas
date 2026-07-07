@@ -12413,6 +12413,243 @@ pre {
   -webkit-box-orient: vertical;
 }
 
+.security-ssh-sla-trend {
+  min-width: 0;
+  border: 1px solid rgba(37, 99, 235, 0.14);
+  border-radius: 18px;
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+  background:
+    linear-gradient(90deg, rgba(37, 99, 235, 0.055) 1px, transparent 1px) 0 0 / 20px 20px,
+    radial-gradient(circle at 6% 0%, rgba(37, 99, 235, 0.16), transparent 28%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(244, 248, 255, 0.9));
+  box-shadow: 0 16px 38px rgba(37, 99, 235, 0.055);
+}
+
+.security-ssh-sla-trend.warn {
+  border-color: rgba(245, 158, 11, 0.28);
+  background:
+    linear-gradient(90deg, rgba(245, 158, 11, 0.055) 1px, transparent 1px) 0 0 / 20px 20px,
+    radial-gradient(circle at 6% 0%, rgba(245, 158, 11, 0.18), transparent 28%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(255, 249, 237, 0.9));
+}
+
+.security-ssh-sla-trend.fail {
+  border-color: rgba(239, 68, 68, 0.28);
+  background:
+    linear-gradient(90deg, rgba(239, 68, 68, 0.055) 1px, transparent 1px) 0 0 / 20px 20px,
+    radial-gradient(circle at 6% 0%, rgba(239, 68, 68, 0.15), transparent 28%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(255, 245, 245, 0.9));
+}
+
+.security-ssh-sla-trend-head {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.security-ssh-sla-trend-head > div {
+  min-width: 0;
+}
+
+.security-ssh-sla-trend-head span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.security-ssh-sla-trend.warn .security-ssh-sla-trend-head span {
+  color: #b65f00;
+}
+
+.security-ssh-sla-trend.fail .security-ssh-sla-trend-head span {
+  color: var(--red);
+}
+
+.security-ssh-sla-trend-head strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--text);
+  font-size: 17px;
+  line-height: 1.22;
+}
+
+.security-ssh-sla-trend-head p,
+.security-ssh-sla-trend-head small {
+  display: block;
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.security-ssh-sla-trend-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.security-ssh-sla-trend-actions small {
+  border: 1px solid rgba(37, 99, 235, 0.12);
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.security-ssh-sla-trend-rail {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.security-ssh-sla-trend-rail article {
+  min-width: 0;
+  border: 1px solid rgba(37, 99, 235, 0.12);
+  border-radius: 14px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.security-ssh-sla-trend-rail article.warn {
+  border-color: rgba(245, 158, 11, 0.24);
+  background: rgba(255, 251, 241, 0.82);
+}
+
+.security-ssh-sla-trend-rail article.fail {
+  border-color: rgba(239, 68, 68, 0.24);
+  background: rgba(255, 247, 247, 0.84);
+}
+
+.security-ssh-sla-trend-rail span {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.security-ssh-sla-trend-rail strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.security-ssh-sla-trend-rail i {
+  display: block;
+  margin-top: 8px;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.security-ssh-sla-trend-rail i b {
+  display: block;
+  min-width: 4px;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2563eb, #0f766e);
+}
+
+.security-ssh-sla-trend-rail article.warn i b {
+  background: linear-gradient(90deg, #f59e0b, #d97706);
+}
+
+.security-ssh-sla-trend-rail article.fail i b {
+  background: linear-gradient(90deg, #fb7185, #dc2626);
+}
+
+.security-ssh-sla-trend-timeline {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+}
+
+.security-ssh-sla-trend-timeline article {
+  min-width: 0;
+  border: 1px solid rgba(37, 99, 235, 0.12);
+  border-left-width: 4px;
+  border-radius: 12px;
+  padding: 9px 10px;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.security-ssh-sla-trend-timeline article.warn {
+  border-color: rgba(245, 158, 11, 0.26);
+}
+
+.security-ssh-sla-trend-timeline article.fail {
+  border-color: rgba(239, 68, 68, 0.26);
+}
+
+.security-ssh-sla-trend-timeline span {
+  display: block;
+  color: #2563eb;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.security-ssh-sla-trend-timeline strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--text);
+  font-size: 16px;
+}
+
+.security-ssh-sla-trend-timeline small,
+.security-ssh-sla-trend-empty,
+.security-ssh-sla-trend-note {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.security-ssh-sla-trend-empty {
+  margin: 0;
+  border: 1px dashed rgba(37, 99, 235, 0.22);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.security-ssh-sla-trend > p {
+  margin: 0;
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 760;
+  line-height: 1.45;
+}
+
+.security-ssh-sla-trend.warn > p {
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.security-ssh-sla-trend.fail > p {
+  background: rgba(239, 68, 68, 0.1);
+}
+
 .security-ssh-support-bundle {
   min-width: 0;
   border: 1px solid rgba(15, 118, 110, 0.18);
@@ -15192,6 +15429,7 @@ pre {
   .security-release-timeline-item,
   .security-release-playbook-grid,
   .security-ssh-experience-grid,
+  .security-ssh-sla-trend-head,
   .security-ssh-lag-report,
   .security-ssh-lag-history-heading,
   .security-ssh-flight-header,
@@ -15233,6 +15471,7 @@ pre {
 
   .security-ssh-sampler-stats,
   .security-ssh-sampler-steps,
+  .security-ssh-sla-trend-rail,
   .security-ssh-bottleneck-trend-lanes {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -15894,6 +16133,7 @@ pre {
   .security-release-playbook-grid,
   .security-ssh-performance-heading,
   .security-ssh-scoreboard,
+  .security-ssh-sla-trend-head,
   .security-ssh-support-bundle,
   .security-ssh-experience-summary,
   .security-ssh-experience-grid,
@@ -15979,6 +16219,10 @@ pre {
     justify-content: flex-start;
   }
 
+  .security-ssh-sla-trend-actions {
+    justify-content: flex-start;
+  }
+
   .security-ssh-bottleneck-trend-actions {
     justify-content: flex-start;
   }
@@ -15987,6 +16231,7 @@ pre {
   .security-ssh-sampler-stats,
   .security-ssh-sampler-steps,
   .security-ssh-scoreboard-lanes,
+  .security-ssh-sla-trend-rail,
   .security-ssh-support-bundle-sections,
   .security-ssh-bottleneck-trend-lanes,
   .security-ssh-latency-legend,
@@ -16002,6 +16247,7 @@ pre {
   }
 
   .security-ssh-sampler-heading .tool-button,
+  .security-ssh-sla-trend-head .tool-button,
   .security-ssh-bottleneck-trend-heading .tool-button {
     width: 100%;
     justify-content: center;

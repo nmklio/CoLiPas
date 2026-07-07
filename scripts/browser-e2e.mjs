@@ -39,7 +39,7 @@ try {
   await captureVisualEvidence(page, 'desktop-release-cockpit-handoff', ['[data-release-fix-router="true"]', '[data-release-cockpit="true"]', '[data-release-handoff-pack="true"]', '[data-release-evidence-timeline="true"]']);
   await captureVisualEvidence(page, 'desktop-security-trace', ['.security-workbench', '.security-readiness-card', '[data-release-fix-router="true"]', '[data-release-cockpit="true"]', '[data-release-handoff-pack="true"]', '[data-release-evidence-timeline="true"]', '.security-evidence-brief', '.security-release-playbook', '.security-ssh-performance-card']);
   await page.locator('[data-ssh-flight-recorder="true"]').scrollIntoViewIfNeeded();
-  await captureVisualEvidence(page, 'desktop-ssh-flight-recorder', ['[data-ssh-flight-recorder="true"]', '.security-ssh-flight-rail', '[data-ssh-latency-curve="true"]', '[data-ssh-interaction-sampler="true"]', '[data-ssh-bottleneck-trend="true"]']);
+  await captureVisualEvidence(page, 'desktop-ssh-flight-recorder', ['[data-ssh-flight-recorder="true"]', '.security-ssh-flight-rail', '[data-ssh-latency-curve="true"]', '[data-ssh-interaction-sampler="true"]', '[data-ssh-experience-sla="true"]', '[data-ssh-bottleneck-trend="true"]']);
   await page.locator('[data-ssh-bottleneck-trend="true"]').scrollIntoViewIfNeeded();
   await captureVisualEvidence(page, 'desktop-ssh-bottleneck-trend', ['[data-ssh-bottleneck-trend="true"]']);
   await assertOverviewHealthBaseline(page);
@@ -63,6 +63,7 @@ async function createE2ePage(options) {
     window.localStorage.removeItem('colipas.aiConsoleState');
     window.localStorage.removeItem('colipas.aiResponseCache');
     window.localStorage.removeItem('colipas.sshLagReportHistory.v1');
+    window.localStorage.removeItem('colipas.sshExperienceSlaHistory.v1');
     window.localStorage.removeItem('colipas.sshConnectionDoctorHistory.v1');
     window.localStorage.removeItem('colipas.sshTerminalSupportSnapshot.v1');
     window.localStorage.removeItem('colipas.sshTerminalSupportSnapshotHistory.v1');
@@ -361,6 +362,18 @@ async function assertReleaseEvidenceBrief(targetPage) {
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(sshExperienceScoreText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(sshExperienceScoreText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(sshExperienceScoreText)) {
     throw new Error('SSH experience score rendered a raw IP address or secret');
   }
+  await targetPage.locator('[data-ssh-experience-sla="true"]').waitFor({ timeout: 5000 });
+  const sshExperienceSlaText = await targetPage.locator('[data-ssh-experience-sla="true"]').innerText();
+  if (!/SSH experience SLA trend/i.test(sshExperienceSlaText) || !/Latest/i.test(sshExperienceSlaText) || !/Average/i.test(sshExperienceSlaText) || !/Direction/i.test(sshExperienceSlaText) || !/Record score/i.test(sshExperienceSlaText) || !/Copy trend/i.test(sshExperienceSlaText)) {
+    throw new Error(`SSH experience SLA trend did not render baseline controls: ${sshExperienceSlaText}`);
+  }
+  const sshSlaLaneCount = await targetPage.locator('[data-ssh-experience-sla-lane]').count();
+  if (sshSlaLaneCount !== 4) {
+    throw new Error(`SSH experience SLA trend should expose four score lanes, got ${sshSlaLaneCount}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(sshExperienceSlaText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(sshExperienceSlaText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(sshExperienceSlaText)) {
+    throw new Error('SSH experience SLA trend rendered a raw IP address or secret');
+  }
   await targetPage.locator('[data-ssh-experience-summary="true"]').waitFor({ timeout: 5000 });
   const sshExperienceCardCount = await targetPage.locator('.security-ssh-experience-card').count();
   if (sshExperienceCardCount !== 4) {
@@ -400,6 +413,7 @@ async function assertReleaseEvidenceBrief(targetPage) {
     window.__colipasCopiedReleaseCockpitText = '';
     window.__colipasCopiedReleaseHandoffText = '';
     window.__colipasCopiedSshPerformanceText = '';
+    window.__colipasCopiedSshExperienceSlaText = '';
     window.__colipasCopiedSshLagReportText = '';
     window.__colipasCopiedSshFlightText = '';
     window.__colipasCopiedSshSamplerText = '';
@@ -433,6 +447,8 @@ async function assertReleaseEvidenceBrief(targetPage) {
             window.__colipasCopiedSshSamplerText = text;
           } else if (/SSH bottleneck trend report/i.test(text)) {
             window.__colipasCopiedSshBottleneckTrendText = text;
+          } else if (/SSH experience SLA trend/i.test(text)) {
+            window.__colipasCopiedSshExperienceSlaText = text;
           } else {
             window.__colipasCopiedSshPerformanceText = text;
           }
@@ -508,6 +524,24 @@ async function assertReleaseEvidenceBrief(targetPage) {
   });
   if (!/sanitized evidence section/i.test(sshSupportTicketAudit) || /\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(sshSupportTicketAudit) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(sshSupportTicketAudit) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(sshSupportTicketAudit)) {
     throw new Error(`SSH support ticket audit event is missing or unsafe: ${sshSupportTicketAudit}`);
+  }
+  await targetPage.locator('[data-ssh-experience-sla-record="true"]').click();
+  await targetPage.locator('[data-ssh-experience-sla-sample="true"]').first().waitFor({ timeout: 5000 });
+  const savedSshExperienceSlaText = await targetPage.locator('[data-ssh-experience-sla="true"]').innerText();
+  if (!/Sample #1/i.test(savedSshExperienceSlaText) || !/SSH experience SLA trend/i.test(savedSshExperienceSlaText) || !/SLA trend only stores scores/i.test(savedSshExperienceSlaText)) {
+    throw new Error(`SSH experience SLA trend did not persist a visible local sample: ${savedSshExperienceSlaText}`);
+  }
+  const storedSshExperienceSlaHistory = await targetPage.evaluate(() => window.localStorage.getItem('colipas.sshExperienceSlaHistory.v1') ?? '');
+  if (!/"value":/i.test(storedSshExperienceSlaHistory) || !/"segments":/i.test(storedSshExperienceSlaHistory) || /\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(storedSshExperienceSlaHistory) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(storedSshExperienceSlaHistory) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(storedSshExperienceSlaHistory)) {
+    throw new Error(`SSH experience SLA trend storage is missing or unsafe: ${storedSshExperienceSlaHistory}`);
+  }
+  await targetPage.locator('[data-ssh-experience-sla-copy="true"]').click();
+  const copiedSshExperienceSlaText = await targetPage.evaluate(() => window.__colipasCopiedSshExperienceSlaText ?? '');
+  if (!/SSH experience SLA trend/i.test(copiedSshExperienceSlaText) || !/Current score/i.test(copiedSshExperienceSlaText) || !/Historical average/i.test(copiedSshExperienceSlaText) || !/Trend direction/i.test(copiedSshExperienceSlaText) || !/Recent score samples/i.test(copiedSshExperienceSlaText) || !/does not store server addresses/i.test(copiedSshExperienceSlaText)) {
+    throw new Error(`SSH experience SLA trend copy output is incomplete: ${copiedSshExperienceSlaText}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshExperienceSlaText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshExperienceSlaText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(copiedSshExperienceSlaText)) {
+    throw new Error('SSH experience SLA trend copy output leaked a raw IP address or secret');
   }
   await targetPage.getByRole('button', { name: /copy diagnosis report/i }).click();
   const copiedSshLagReportText = await targetPage.evaluate(() => window.__colipasCopiedSshLagReportText ?? '');
@@ -2223,6 +2257,7 @@ async function assertMobileModuleLayoutSweep() {
       '.security-readiness-card',
       '.security-evidence-brief',
       '.security-release-playbook',
+      '.security-ssh-sla-trend',
       '.security-ssh-bottleneck-trend',
       '.security-kpi-grid',
       '.security-control-grid',
@@ -2234,6 +2269,7 @@ async function assertMobileModuleLayoutSweep() {
     await assertSingleColumnStack(mobilePage, '.security-release-playbook-grid', 'mobile release failure playbook');
     await assertElementHorizontallyWithinViewport(mobilePage, '.security-evidence-brief', 'mobile release evidence brief');
     await assertElementHorizontallyWithinViewport(mobilePage, '.security-release-playbook', 'mobile release failure playbook');
+    await assertElementHorizontallyWithinViewport(mobilePage, '.security-ssh-sla-trend', 'mobile SSH experience SLA trend');
     await assertElementHorizontallyWithinViewport(mobilePage, '.security-ssh-bottleneck-trend', 'mobile SSH bottleneck trend');
     await assertSingleColumnStack(mobilePage, '.security-control-grid', 'mobile security control grid');
     await assertMobileAuditRowLayout(mobilePage);

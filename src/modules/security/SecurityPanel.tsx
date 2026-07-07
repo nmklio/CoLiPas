@@ -310,6 +310,36 @@ interface SshExperienceScoreSummary {
   segments: SshExperienceScoreSegment[];
 }
 
+type SshExperienceSlaDirection = 'stable' | 'improving' | 'degrading';
+
+interface SshExperienceSlaSnapshot {
+  id: string;
+  createdAt: string;
+  value: number;
+  tone: 'ok' | 'warn' | 'fail';
+  status: string;
+  action: string;
+  segments: Array<{
+    id: SshExperienceScoreSegment['id'];
+    label: string;
+    score: number;
+    tone: 'ok' | 'warn' | 'fail';
+  }>;
+}
+
+interface SshExperienceSlaTrend {
+  tone: 'ok' | 'warn' | 'fail';
+  title: string;
+  detail: string;
+  latestLabel: string;
+  averageLabel: string;
+  directionLabel: string;
+  action: string;
+  copyText: string;
+  currentSegments: SshExperienceSlaSnapshot['segments'];
+  snapshots: SshExperienceSlaSnapshot[];
+}
+
 interface SshPerformanceSummary {
   tone: 'ok' | 'warn' | 'fail';
   status: string;
@@ -494,6 +524,8 @@ const sshLagReportHistoryStorageKey = 'colipas.sshLagReportHistory.v1';
 const sshLagReportHistoryVisibleLimit = 5;
 const sshBottleneckRadarHistoryStorageKey = 'colipas.sshBottleneckRadarHistory.v1';
 const sshBottleneckRadarHistoryVisibleLimit = 6;
+const sshExperienceSlaHistoryStorageKey = 'colipas.sshExperienceSlaHistory.v1';
+const sshExperienceSlaHistoryVisibleLimit = 8;
 const releaseFixChecklistStorageKey = 'colipas.releaseFixChecklist.v1';
 const releaseFixChecklistStatuses: ReleaseFixChecklistStatus[] = ['open', 'done', 'deferred'];
 
@@ -527,6 +559,7 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
   const [expandedSshMetricId, setExpandedSshMetricId] = useState('');
   const [sshLagReportHistory, setSshLagReportHistory] = useState<SshLagReportSnapshot[]>(() => loadSshLagReportHistory());
   const [sshBottleneckRadarHistory, setSshBottleneckRadarHistory] = useState<SshBottleneckRadarSnapshot[]>(() => loadSshBottleneckRadarHistory());
+  const [sshExperienceSlaHistory, setSshExperienceSlaHistory] = useState<SshExperienceSlaSnapshot[]>(() => loadSshExperienceSlaHistory());
   const [sshTerminalSupportSnapshot, setSshTerminalSupportSnapshot] = useState<SshTerminalSupportSnapshot | null>(() => loadSshTerminalSupportSnapshot());
   const [sshTerminalSupportSnapshotHistory, setSshTerminalSupportSnapshotHistory] = useState<SshTerminalSupportSnapshot[]>(() => loadSshTerminalSupportSnapshotHistory());
   const [releaseFixChecklistState, setReleaseFixChecklistState] = useState<ReleaseFixChecklistState>(() => loadReleaseFixChecklistState());
@@ -595,6 +628,10 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
   const sshPerformance = useMemo(
     () => buildSshPerformanceSummary(diagnosticBundle, sshPerformanceCopy, locale),
     [diagnosticBundle, locale, sshPerformanceCopy],
+  );
+  const sshExperienceSlaTrend = useMemo(
+    () => buildSshExperienceSlaTrend(sshExperienceSlaHistory, sshPerformance.score, sshPerformance.status, sshPerformanceCopy, locale),
+    [locale, sshExperienceSlaHistory, sshPerformance.score, sshPerformance.status, sshPerformanceCopy],
   );
   const sshLagReportComparison = useMemo(
     () => buildSshLagReportComparison(sshPerformance, sshLagReportHistory[0] ?? null, sshPerformanceCopy),
@@ -1196,6 +1233,34 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
     setRemediationError(false);
   }
 
+  function recordSshExperienceSlaSnapshot() {
+    const snapshot = createSshExperienceSlaSnapshot(sshPerformance.score, sshPerformance.status);
+    setSshExperienceSlaHistory((current) => {
+      const next = [snapshot, ...current].slice(0, sshExperienceSlaHistoryVisibleLimit);
+      saveSshExperienceSlaHistory(next);
+      return next;
+    });
+    setRemediationMessage(sshPerformanceCopy.experienceSlaRecorded);
+    setRemediationError(false);
+  }
+
+  async function copySshExperienceSlaTrend() {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) {
+      setRemediationMessage(sshExperienceSlaTrend.copyText);
+      setRemediationError(false);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(sshExperienceSlaTrend.copyText);
+      setRemediationMessage(sshPerformanceCopy.experienceSlaCopied);
+      setRemediationError(false);
+    } catch {
+      setRemediationMessage(sshExperienceSlaTrend.copyText);
+      setRemediationError(false);
+    }
+  }
+
   function refreshSshBottleneckRadarHistory() {
     const next = loadSshBottleneckRadarHistory();
     setSshBottleneckRadarHistory(next);
@@ -1784,6 +1849,53 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
               </article>
             ))}
           </div>
+        </section>
+        <section className={`security-ssh-sla-trend ${sshExperienceSlaTrend.tone}`} data-ssh-experience-sla="true" aria-label={sshPerformanceCopy.experienceSlaTitle}>
+          <div className="security-ssh-sla-trend-head">
+            <div>
+              <span><Activity size={15} /> {sshPerformanceCopy.experienceSlaTitle}</span>
+              <strong>{sshExperienceSlaTrend.title}</strong>
+              <p>{sshPerformanceCopy.experienceSlaDescription}</p>
+              <small>{sshExperienceSlaTrend.detail}</small>
+            </div>
+            <div className="security-ssh-sla-trend-actions">
+              <small>{sshExperienceSlaTrend.latestLabel}</small>
+              <small>{sshExperienceSlaTrend.averageLabel}</small>
+              <small>{sshExperienceSlaTrend.directionLabel}</small>
+              <button type="button" className="tool-button" onClick={recordSshExperienceSlaSnapshot} data-ssh-experience-sla-record="true">
+                <Download size={15} />
+                {sshPerformanceCopy.experienceSlaRecord}
+              </button>
+              <button type="button" className="tool-button" onClick={copySshExperienceSlaTrend} data-ssh-experience-sla-copy="true">
+                <ClipboardCheck size={15} />
+                {sshPerformanceCopy.experienceSlaCopy}
+              </button>
+            </div>
+          </div>
+          <div className="security-ssh-sla-trend-rail">
+            {sshExperienceSlaTrend.currentSegments.map((segment) => (
+              <article key={segment.id} className={segment.tone} data-ssh-experience-sla-lane={segment.id}>
+                <span>{segment.label}</span>
+                <strong>{segment.score}</strong>
+                <i><b style={{ width: `${segment.score}%` }} /></i>
+              </article>
+            ))}
+          </div>
+          {sshExperienceSlaTrend.snapshots.length > 0 ? (
+            <div className="security-ssh-sla-trend-timeline">
+              {sshExperienceSlaTrend.snapshots.map((snapshot, index) => (
+                <article key={snapshot.id} className={snapshot.tone} data-ssh-experience-sla-sample="true">
+                  <span>{sshPerformanceCopy.experienceSlaSampleLabel(index + 1)}</span>
+                  <strong>{snapshot.value}/100</strong>
+                  <small>{sshPerformanceCopy.experienceSlaSampleDetail(new Date(snapshot.createdAt).toLocaleString(locale), snapshot.status)}</small>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="security-ssh-sla-trend-empty">{sshPerformanceCopy.experienceSlaEmpty}</p>
+          )}
+          <p>{sshExperienceSlaTrend.action}</p>
+          <small className="security-ssh-sla-trend-note">{sshPerformanceCopy.experienceSlaSanitizedNote}</small>
         </section>
         <section className={`security-ssh-support-bundle ${sshSupportBundle.tone}`} data-ssh-support-bundle="true" aria-label={sshPerformanceCopy.supportBundleTitle}>
           <div className="security-ssh-support-bundle-copy">
@@ -3891,6 +4003,177 @@ function mapSshScoreTone(score: number): 'ok' | 'warn' | 'fail' {
   return 'ok';
 }
 
+function createSshExperienceSlaSnapshot(
+  score: SshExperienceScoreSummary,
+  status: string,
+): SshExperienceSlaSnapshot {
+  const createdAt = new Date().toISOString();
+  return {
+    id: `${createdAt}-${Math.random().toString(36).slice(2, 8)}`,
+    createdAt,
+    value: clampSshExperienceScore(score.value),
+    tone: score.tone,
+    status: sanitizeSshExperienceSlaText(status) || 'SSH experience score',
+    action: sanitizeSshExperienceSlaText(score.action) || 'Keep sampling SSH experience.',
+    segments: score.segments.map((segment) => ({
+      id: segment.id,
+      label: sanitizeSshExperienceSlaText(segment.label) || segment.id,
+      score: clampSshExperienceScore(segment.score),
+      tone: segment.tone,
+    })),
+  };
+}
+
+function loadSshExperienceSlaHistory(): SshExperienceSlaSnapshot[] {
+  if (typeof window === 'undefined') {
+    return [];
+  }
+
+  try {
+    const raw = window.localStorage.getItem(sshExperienceSlaHistoryStorageKey);
+    if (!raw || containsSensitiveReportText(raw)) {
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed
+      .filter(isSshExperienceSlaSnapshot)
+      .filter((snapshot) => !containsSensitiveReportText(JSON.stringify(snapshot)))
+      .slice(0, sshExperienceSlaHistoryVisibleLimit);
+  } catch {
+    return [];
+  }
+}
+
+function saveSshExperienceSlaHistory(history: SshExperienceSlaSnapshot[]) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    const safeHistory = history
+      .filter(isSshExperienceSlaSnapshot)
+      .filter((snapshot) => !containsSensitiveReportText(JSON.stringify(snapshot)))
+      .slice(0, sshExperienceSlaHistoryVisibleLimit);
+    window.localStorage.setItem(sshExperienceSlaHistoryStorageKey, JSON.stringify(safeHistory));
+  } catch {
+    // Keep Security usable if localStorage is disabled or full.
+  }
+}
+
+function buildSshExperienceSlaTrend(
+  history: SshExperienceSlaSnapshot[],
+  currentScore: SshExperienceScoreSummary,
+  status: string,
+  copy: SshPerformanceCopy,
+  locale: string,
+): SshExperienceSlaTrend {
+  const snapshots = history
+    .filter(isSshExperienceSlaSnapshot)
+    .filter((snapshot) => !containsSensitiveReportText(JSON.stringify(snapshot)))
+    .slice(0, sshExperienceSlaHistoryVisibleLimit);
+  const latest = snapshots[0] ?? null;
+  const previous = snapshots[1] ?? null;
+  const latestValue = latest?.value ?? clampSshExperienceScore(currentScore.value);
+  const average = snapshots.length > 0
+    ? clampSshExperienceScore(snapshots.reduce((sum, snapshot) => sum + snapshot.value, 0) / snapshots.length)
+    : clampSshExperienceScore(currentScore.value);
+  const delta = previous ? latestValue - previous.value : 0;
+  const direction: SshExperienceSlaDirection = delta >= 4 ? 'improving' : delta <= -4 ? 'degrading' : 'stable';
+  const scoreTone = mapSshScoreTone(latestValue);
+  const tone: SshExperienceSlaTrend['tone'] = scoreTone === 'fail'
+    ? 'fail'
+    : direction === 'degrading' || scoreTone === 'warn'
+      ? 'warn'
+      : 'ok';
+  const directionLabel = direction === 'improving'
+    ? copy.experienceSlaDirectionImproving(delta)
+    : direction === 'degrading'
+      ? copy.experienceSlaDirectionDegrading(delta)
+      : copy.experienceSlaDirectionStable(delta);
+  const title = snapshots.length > 0
+    ? copy.experienceSlaTrendTitle(direction, latestValue, delta)
+    : copy.experienceSlaEmpty;
+  const detail = snapshots.length > 0
+    ? copy.experienceSlaTrendDetail(snapshots.length, average, latestValue, delta)
+    : copy.experienceScoreDetail(currentScore.value, false);
+  const latestLabel = copy.experienceSlaLatest(latestValue);
+  const averageLabel = copy.experienceSlaAverage(average, snapshots.length);
+  const action = snapshots.length > 0
+    ? copy.experienceSlaAction(direction, tone)
+    : currentScore.action;
+  const currentSegments = currentScore.segments.map((segment) => ({
+    id: segment.id,
+    label: sanitizeSshExperienceSlaText(segment.label) || segment.id,
+    score: clampSshExperienceScore(segment.score),
+    tone: segment.tone,
+  }));
+  const generatedAt = new Date().toLocaleString(locale);
+  const copyText = [
+    `# ${copy.experienceSlaReportTitle}`,
+    `${copy.experienceSlaReportGenerated}: ${generatedAt}`,
+    `${copy.summaryStatus}: ${status}`,
+    `${copy.experienceSlaReportCurrent}: ${currentScore.value}/100`,
+    `${copy.experienceSlaReportAverage}: ${average}/100 (${snapshots.length})`,
+    `${copy.experienceSlaReportDirection}: ${directionLabel}`,
+    '',
+    `[${copy.experienceScoreTitle}]`,
+    ...currentSegments.map((segment) => `- ${segment.label}: ${segment.score}/100 (${segment.tone})`),
+    '',
+    `[${copy.experienceSlaReportRecent}]`,
+    ...(snapshots.length > 0
+      ? snapshots.map((snapshot, index) => `- ${copy.experienceSlaSampleLabel(index + 1)}: ${snapshot.value}/100 / ${copy.experienceSlaSampleDetail(new Date(snapshot.createdAt).toLocaleString(locale), snapshot.status)}`)
+      : [`- ${copy.experienceSlaEmpty}`]),
+    '',
+    `${copy.experienceSlaReportAction}: ${action}`,
+    copy.experienceSlaSanitizedNote,
+  ].join('\n');
+
+  return {
+    tone,
+    title,
+    detail,
+    latestLabel,
+    averageLabel,
+    directionLabel: `${copy.experienceSlaDirection}: ${directionLabel}`,
+    action,
+    copyText,
+    currentSegments,
+    snapshots,
+  };
+}
+
+function isSshExperienceSlaSnapshot(value: unknown): value is SshExperienceSlaSnapshot {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const candidate = value as Partial<SshExperienceSlaSnapshot>;
+  return typeof candidate.id === 'string'
+    && typeof candidate.createdAt === 'string'
+    && Number.isFinite(Number(candidate.value))
+    && ['ok', 'warn', 'fail'].includes(String(candidate.tone))
+    && typeof candidate.status === 'string'
+    && typeof candidate.action === 'string'
+    && Array.isArray(candidate.segments)
+    && candidate.segments.every((segment) => {
+      if (!segment || typeof segment !== 'object') {
+        return false;
+      }
+      const item = segment as Partial<SshExperienceSlaSnapshot['segments'][number]>;
+      return ['channel', 'input', 'output', 'render'].includes(String(item.id))
+        && typeof item.label === 'string'
+        && Number.isFinite(Number(item.score))
+        && ['ok', 'warn', 'fail'].includes(String(item.tone));
+    });
+}
+
+function sanitizeSshExperienceSlaText(value: string) {
+  const text = value.replace(/\s+/g, ' ').trim().slice(0, 220);
+  return containsSensitiveReportText(text) ? '' : text;
+}
+
 function calculateBatchRatio(events: number, flushes: number) {
   if (events <= 0 || flushes <= 0) {
     return 0;
@@ -5457,6 +5740,32 @@ interface SshPerformanceCopy {
   experienceScoreOutput: string;
   experienceScoreRender: string;
   experienceScoreSegmentDetail: (score: number) => string;
+  experienceSlaTitle: string;
+  experienceSlaDescription: string;
+  experienceSlaRecord: string;
+  experienceSlaRecorded: string;
+  experienceSlaCopy: string;
+  experienceSlaCopied: string;
+  experienceSlaEmpty: string;
+  experienceSlaLatest: (score: number) => string;
+  experienceSlaAverage: (score: number, samples: number) => string;
+  experienceSlaDirection: string;
+  experienceSlaDirectionStable: (delta: number) => string;
+  experienceSlaDirectionImproving: (delta: number) => string;
+  experienceSlaDirectionDegrading: (delta: number) => string;
+  experienceSlaTrendTitle: (direction: SshExperienceSlaDirection, score: number, delta: number) => string;
+  experienceSlaTrendDetail: (samples: number, average: number, latest: number, delta: number) => string;
+  experienceSlaAction: (direction: SshExperienceSlaDirection, tone: 'ok' | 'warn' | 'fail') => string;
+  experienceSlaSampleLabel: (index: number) => string;
+  experienceSlaSampleDetail: (time: string, status: string) => string;
+  experienceSlaSanitizedNote: string;
+  experienceSlaReportTitle: string;
+  experienceSlaReportGenerated: string;
+  experienceSlaReportCurrent: string;
+  experienceSlaReportAverage: string;
+  experienceSlaReportDirection: string;
+  experienceSlaReportRecent: string;
+  experienceSlaReportAction: string;
   historyTitle: string;
   historyDescription: string;
   historyEmpty: string;
@@ -5725,7 +6034,33 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     experienceScoreInput: '输入',
     experienceScoreOutput: '输出',
     experienceScoreRender: '渲染',
-    experienceScoreSegmentDetail: (score) => `区間 ${score}/100`,
+    experienceScoreSegmentDetail: (score) => `分段 ${score}/100`,
+    experienceSlaTitle: 'SSH 体验 SLA 趋势',
+    experienceSlaDescription: '把当前体验评分保存为本地基线，持续对比 SSH 是否变慢、恢复或稳定。',
+    experienceSlaRecord: '记录评分',
+    experienceSlaRecorded: 'SSH 体验 SLA 评分已记录在当前浏览器',
+    experienceSlaCopy: '复制趋势',
+    experienceSlaCopied: 'SSH 体验 SLA 趋势已复制',
+    experienceSlaEmpty: '等待 SLA 基线',
+    experienceSlaLatest: (score) => `最新 ${score}/100`,
+    experienceSlaAverage: (score, samples) => `均值 ${score}/100 · ${samples} 条`,
+    experienceSlaDirection: '方向',
+    experienceSlaDirectionStable: () => '稳定',
+    experienceSlaDirectionImproving: (delta) => `恢复 +${Math.abs(delta)}`,
+    experienceSlaDirectionDegrading: (delta) => `变慢 -${Math.abs(delta)}`,
+    experienceSlaTrendTitle: (direction, score, delta) => direction === 'improving' ? `SSH 体验正在恢复到 ${score}/100（+${Math.abs(delta)}）` : direction === 'degrading' ? `SSH 体验降至 ${score}/100（-${Math.abs(delta)}）` : `SSH 体验稳定在 ${score}/100`,
+    experienceSlaTrendDetail: (samples, average, latest, delta) => `${samples} 条本地脱敏样本，最新 ${latest}/100，均值 ${average}/100，差值 ${delta >= 0 ? '+' : ''}${delta}。`,
+    experienceSlaAction: (direction, tone) => direction === 'degrading' || tone === 'fail' ? '优先复测连接、输入批处理和大输出场景，定位最近一次变慢的链路。' : tone === 'warn' ? '继续记录高峰期和弱网评分，观察是否持续低于 86。' : '当前 SLA 可作为健康基线，后续用户反馈卡顿时直接对比趋势。',
+    experienceSlaSampleLabel: (index) => `样本 #${index}`,
+    experienceSlaSampleDetail: (time, status) => `${time} · ${status}`,
+    experienceSlaSanitizedNote: 'SLA 趋势只保存评分、分段分数、状态和建议，不保存服务器地址、命令正文、密钥或用户数据。',
+    experienceSlaReportTitle: 'SSH 体验 SLA 趋势',
+    experienceSlaReportGenerated: '生成时间',
+    experienceSlaReportCurrent: '当前评分',
+    experienceSlaReportAverage: '历史均值',
+    experienceSlaReportDirection: '变化方向',
+    experienceSlaReportRecent: '最近评分样本',
+    experienceSlaReportAction: '建议动作',
     historyTitle: '本地诊断快照',
     historyDescription: '仅保存在当前浏览器，用于对比优化前后的脱敏报告。',
     historyEmpty: '暂无历史快照，保存一次当前报告后即可对比。',
@@ -5993,6 +6328,32 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     experienceScoreOutput: 'Output',
     experienceScoreRender: 'Render',
     experienceScoreSegmentDetail: (score) => `Segment ${score}/100`,
+    experienceSlaTitle: 'SSH experience SLA trend',
+    experienceSlaDescription: 'Save the current experience score as a local baseline and see whether SSH is slowing down, recovering, or stable.',
+    experienceSlaRecord: 'Record score',
+    experienceSlaRecorded: 'SSH experience SLA score saved in this browser',
+    experienceSlaCopy: 'Copy trend',
+    experienceSlaCopied: 'SSH experience SLA trend copied',
+    experienceSlaEmpty: 'Waiting for SLA baseline',
+    experienceSlaLatest: (score) => `Latest ${score}/100`,
+    experienceSlaAverage: (score, samples) => `Average ${score}/100 · ${samples} sample(s)`,
+    experienceSlaDirection: 'Direction',
+    experienceSlaDirectionStable: () => 'Stable',
+    experienceSlaDirectionImproving: (delta) => `Recovering +${Math.abs(delta)}`,
+    experienceSlaDirectionDegrading: (delta) => `Slowing -${Math.abs(delta)}`,
+    experienceSlaTrendTitle: (direction, score, delta) => direction === 'improving' ? `SSH experience is recovering to ${score}/100 (+${Math.abs(delta)})` : direction === 'degrading' ? `SSH experience dropped to ${score}/100 (-${Math.abs(delta)})` : `SSH experience is stable at ${score}/100`,
+    experienceSlaTrendDetail: (samples, average, latest, delta) => `${samples} local sanitized sample(s), latest ${latest}/100, average ${average}/100, delta ${delta >= 0 ? '+' : ''}${delta}.`,
+    experienceSlaAction: (direction, tone) => direction === 'degrading' || tone === 'fail' ? 'Retest transport, input batching, and large-output scenarios first to locate the latest slowdown.' : tone === 'warn' ? 'Keep recording peak-hour and weak-network scores until the score stays above 86.' : 'Use this SLA as the healthy baseline and compare future lag reports against it.',
+    experienceSlaSampleLabel: (index) => `Sample #${index}`,
+    experienceSlaSampleDetail: (time, status) => `${time} · ${status}`,
+    experienceSlaSanitizedNote: 'SLA trend only stores scores, segment scores, status, and recommendations. It does not store server addresses, command text, keys, or user data.',
+    experienceSlaReportTitle: 'SSH experience SLA trend',
+    experienceSlaReportGenerated: 'Generated',
+    experienceSlaReportCurrent: 'Current score',
+    experienceSlaReportAverage: 'Historical average',
+    experienceSlaReportDirection: 'Trend direction',
+    experienceSlaReportRecent: 'Recent score samples',
+    experienceSlaReportAction: 'Recommended action',
     historyTitle: 'Local diagnosis snapshots',
     historyDescription: 'Stored only in this browser so you can compare sanitized reports before and after tuning.',
     historyEmpty: 'No snapshots yet. Save the current report once to start comparing.',
@@ -6260,6 +6621,32 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     experienceScoreOutput: '出力',
     experienceScoreRender: '描画',
     experienceScoreSegmentDetail: (score) => `分段 ${score}/100`,
+    experienceSlaTitle: 'SSH 体験 SLA 傾向',
+    experienceSlaDescription: '現在の体験スコアをローカル基準として保存し、SSH が遅くなったか、回復したか、安定しているかを比較します。',
+    experienceSlaRecord: 'スコア記録',
+    experienceSlaRecorded: 'SSH 体験 SLA スコアをこのブラウザに保存しました',
+    experienceSlaCopy: '傾向をコピー',
+    experienceSlaCopied: 'SSH 体験 SLA 傾向をコピーしました',
+    experienceSlaEmpty: 'SLA 基準待ち',
+    experienceSlaLatest: (score) => `最新 ${score}/100`,
+    experienceSlaAverage: (score, samples) => `平均 ${score}/100 · ${samples} 件`,
+    experienceSlaDirection: '方向',
+    experienceSlaDirectionStable: () => '安定',
+    experienceSlaDirectionImproving: (delta) => `回復 +${Math.abs(delta)}`,
+    experienceSlaDirectionDegrading: (delta) => `低下 -${Math.abs(delta)}`,
+    experienceSlaTrendTitle: (direction, score, delta) => direction === 'improving' ? `SSH 体験は ${score}/100 まで回復（+${Math.abs(delta)}）` : direction === 'degrading' ? `SSH 体験は ${score}/100 まで低下（-${Math.abs(delta)}）` : `SSH 体験は ${score}/100 で安定`,
+    experienceSlaTrendDetail: (samples, average, latest, delta) => `${samples} 件のローカル匿名化サンプル、最新 ${latest}/100、平均 ${average}/100、差分 ${delta >= 0 ? '+' : ''}${delta}。`,
+    experienceSlaAction: (direction, tone) => direction === 'degrading' || tone === 'fail' ? '通信、入力バッチ、大量出力を先に再テストし、直近の低下箇所を特定します。' : tone === 'warn' ? 'ピーク時間と弱回線のスコアを記録し、86 以上で安定するか確認します。' : 'この SLA を健全な基準として保持し、今後の遅延報告と比較します。',
+    experienceSlaSampleLabel: (index) => `サンプル #${index}`,
+    experienceSlaSampleDetail: (time, status) => `${time} · ${status}`,
+    experienceSlaSanitizedNote: 'SLA 傾向はスコア、分段スコア、状態、推奨のみを保存し、サーバーアドレス、コマンド本文、キー、ユーザーデータは保存しません。',
+    experienceSlaReportTitle: 'SSH 体験 SLA 傾向',
+    experienceSlaReportGenerated: '生成日時',
+    experienceSlaReportCurrent: '現在スコア',
+    experienceSlaReportAverage: '履歴平均',
+    experienceSlaReportDirection: '変化方向',
+    experienceSlaReportRecent: '最近のスコアサンプル',
+    experienceSlaReportAction: '推奨アクション',
     historyTitle: 'ローカル診断スナップショット',
     historyDescription: 'このブラウザだけに保存し、調整前後の匿名化レポートを比較します。',
     historyEmpty: 'スナップショットはまだありません。現在のレポートを保存すると比較できます。',
