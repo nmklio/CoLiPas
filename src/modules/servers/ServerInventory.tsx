@@ -469,6 +469,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const [terminalTelemetry, setTerminalTelemetry] = useState<TerminalTelemetryState>(emptyTerminalTelemetry);
   const [terminalSelfTest, setTerminalSelfTest] = useState<TerminalSelfTestState | null>(null);
   const [terminalTransport, setTerminalTransport] = useState<'websocket' | 'compatible' | null>(null);
+  const [terminalChannelSwitching, setTerminalChannelSwitching] = useState(false);
   const [terminalPasteReview, setTerminalPasteReview] = useState<TerminalPasteReview | null>(null);
   const [terminalPasteSending, setTerminalPasteSending] = useState(false);
   const [sshRunbookCommands, setSshRunbookCommands] = useState<SshRunbookCommand[]>([]);
@@ -1560,6 +1561,16 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                       </button>
                       <button type="button" aria-label={t('servers.runTerminalSelfTest')} title={t('servers.runTerminalSelfTest')} onClick={runTerminalSelfTest} disabled={!terminalShellId || sshInterrupting || terminalSelfTestRunning}>
                         <Cpu size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        data-ssh-channel-switch="true"
+                        aria-label={terminalTransport === 'compatible' ? t('servers.retryWebSocketChannel') : t('servers.switchToCompatibleChannel')}
+                        title={terminalTransport === 'compatible' ? t('servers.retryWebSocketChannel') : t('servers.switchToCompatibleChannel')}
+                        onClick={switchTerminalChannel}
+                        disabled={!terminalShellId || sshRunning || sshInterrupting || terminalChannelSwitching}
+                      >
+                        <Network size={14} />
                       </button>
                       <button type="button" aria-label={t('servers.sendCtrlC')} title={t('servers.sendCtrlC')} onClick={interruptTerminalCommand} disabled={!terminalShellId || sshInterrupting}>
                         <span className="ssh-terminal-shortcut-glyph" aria-hidden="true">^C</span>
@@ -3412,6 +3423,39 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       return;
     }
     runTerminalSelfTest();
+  }
+
+  async function switchTerminalChannel() {
+    const server = activeSshServer;
+    const sessionId = terminalShellIdRef.current;
+    if (!server?.ssh?.connected || !sessionId) {
+      showActionMessage(t('servers.quickCommandUnavailable'));
+      return;
+    }
+
+    const forceCompatible = terminalShellTransportRef.current !== 'compatible';
+    terminalWebSocketFallbackUntilRef.current = forceCompatible ? Date.now() + terminalWebSocketFallbackCacheMs : 0;
+    terminalLifecycleSeqRef.current += 1;
+    const lifecycleSeq = terminalLifecycleSeqRef.current;
+    setTerminalChannelSwitching(true);
+    showActionMessage(t(forceCompatible ? 'servers.switchingToCompatibleChannel' : 'servers.retryingWebSocketChannel'), { autoDismissMs: 7000 });
+
+    closeActiveShellSession();
+    clearTerminalNetworkStats();
+    resetTerminalTelemetry();
+    setTerminalTransport(null);
+    setLoginProbe(null);
+
+    try {
+      await startTerminalLogin(server);
+      if (terminalLifecycleSeqRef.current === lifecycleSeq && terminalShellIdRef.current) {
+        showActionMessage(t(forceCompatible ? 'servers.switchedToCompatibleChannel' : 'servers.retriedWebSocketChannel'), { autoDismissMs: 7000 });
+      }
+    } finally {
+      if (terminalLifecycleSeqRef.current === lifecycleSeq) {
+        setTerminalChannelSwitching(false);
+      }
+    }
   }
 
   function runTerminalSelfTest() {

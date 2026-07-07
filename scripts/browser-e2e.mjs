@@ -1581,6 +1581,44 @@ async function assertSshTerminalPanel(targetPage) {
     if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(terminalLagActionText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(terminalLagActionText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(terminalLagActionText)) {
       throw new Error('SSH terminal lag action rendered a raw IP address or secret');
     }
+    const channelSwitchButton = targetPage.locator('[data-ssh-channel-switch="true"]');
+    await channelSwitchButton.waitFor({ timeout: 5000 });
+    const initialChannelSwitchLabel = await channelSwitchButton.getAttribute('aria-label');
+    if (!/Switch to compatible stream/i.test(initialChannelSwitchLabel ?? '')) {
+      throw new Error(`SSH channel switch should offer compatible fallback first: ${initialChannelSwitchLabel}`);
+    }
+    await channelSwitchButton.click();
+    await targetPage.locator('.action-message').filter({ hasText: /compatible stream/i }).waitFor({ timeout: 10000 });
+    await targetPage.waitForFunction(() => {
+      const quality = document.querySelector('.ssh-terminal-quality')?.textContent ?? '';
+      const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
+      return /Compatible channel active|Compatible stream/i.test(quality) && terminalText.includes('simulated$');
+    }, undefined, { timeout: 10000 });
+    await targetPage.locator('.ssh-terminal-screen').click();
+    await targetPage.keyboard.type('channel-compatible-ok', { delay: 1 });
+    await targetPage.keyboard.press('Enter');
+    await targetPage.waitForFunction(() => {
+      const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
+      return terminalText.includes('simulated$ channel-compatible-ok') && terminalText.includes('command simulated.');
+    }, undefined, { timeout: 10000 });
+    const compatibleSwitchLabel = await channelSwitchButton.getAttribute('aria-label');
+    if (!/Retry WebSocket channel/i.test(compatibleSwitchLabel ?? '')) {
+      throw new Error(`SSH channel switch should offer WebSocket retry after compatible fallback: ${compatibleSwitchLabel}`);
+    }
+    await channelSwitchButton.click();
+    await targetPage.locator('.action-message').filter({ hasText: /WebSocket live channel|WebSocket/i }).waitFor({ timeout: 10000 });
+    await targetPage.waitForFunction(() => {
+      const quality = document.querySelector('.ssh-terminal-quality')?.textContent ?? '';
+      const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
+      return /WebSocket live channel|Collecting quality data|Interaction is smooth/i.test(quality) && terminalText.includes('simulated$');
+    }, undefined, { timeout: 10000 });
+    await targetPage.locator('.ssh-terminal-screen').click();
+    await targetPage.keyboard.type('channel-websocket-ok', { delay: 1 });
+    await targetPage.keyboard.press('Enter');
+    await targetPage.waitForFunction(() => {
+      const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
+      return terminalText.includes('simulated$ channel-websocket-ok') && terminalText.includes('command simulated.');
+    }, undefined, { timeout: 10000 });
     console.log(`ok browser e2e SSH burst output rendered in ${burstOutputDurationMs}ms with max long task ${maxBurstLongTaskMs}ms`);
     await assertElementWithinViewport(targetPage, '.ssh-console', 'desktop SSH console');
     await captureVisualEvidence(targetPage, 'desktop-ssh-terminal-network', ['.ssh-console', '.ssh-terminal-network', '.ssh-terminal-quality', '[data-ssh-terminal-telemetry="true"]', '[data-ssh-terminal-bottleneck="true"]', '[data-ssh-terminal-lag-action="true"]']);
