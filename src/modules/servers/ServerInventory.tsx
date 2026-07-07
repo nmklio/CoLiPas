@@ -39,9 +39,12 @@ import { formatRegionName, percentClass, statusLabel } from '../../utils/format'
 import { ServerFilters } from './serverFilters';
 import { baseCloudProviders, customProviderFilterValue, resolveServerLifecycleStatus } from '../../shared/serverFilters';
 import {
+  addSshTerminalSupportSnapshotToHistory,
   normalizeSshTerminalSupportSnapshot,
+  normalizeSshTerminalSupportSnapshotHistory,
   sanitizeSshTerminalSupportSnapshotText,
   sshTerminalSupportSnapshotEventName,
+  sshTerminalSupportSnapshotHistoryStorageKey,
   sshTerminalSupportSnapshotStorageKey,
   type SshTerminalSupportSnapshot,
 } from '../../shared/sshTerminalSupportSnapshot';
@@ -3449,7 +3452,20 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     }
 
     try {
+      const rawHistory = window.localStorage.getItem(sshTerminalSupportSnapshotHistoryStorageKey);
+      let parsedHistory: unknown = [];
+      try {
+        parsedHistory = rawHistory ? JSON.parse(rawHistory) : [];
+      } catch {
+        parsedHistory = [];
+      }
+      const history = addSshTerminalSupportSnapshotToHistory(
+        snapshot,
+        parsedHistory,
+        6,
+      );
       window.localStorage.setItem(sshTerminalSupportSnapshotStorageKey, JSON.stringify(snapshot));
+      window.localStorage.setItem(sshTerminalSupportSnapshotHistoryStorageKey, JSON.stringify(normalizeSshTerminalSupportSnapshotHistory(history, 6)));
       window.dispatchEvent(new CustomEvent(sshTerminalSupportSnapshotEventName, { detail: snapshot }));
     } catch {
       // Local snapshot persistence is best-effort and must never block terminal use or clipboard copy.

@@ -12475,6 +12475,108 @@ pre {
   -webkit-box-orient: vertical;
 }
 
+.security-ssh-terminal-inbox {
+  grid-column: 1 / -2;
+  min-width: 0;
+  border: 1px solid rgba(79, 70, 229, 0.14);
+  border-radius: 16px;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+  background:
+    linear-gradient(135deg, rgba(79, 70, 229, 0.08), transparent 45%),
+    rgba(255, 255, 255, 0.76);
+}
+
+.security-ssh-terminal-inbox-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.security-ssh-terminal-inbox-head > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.security-ssh-terminal-inbox-head span {
+  color: #4f46e5;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.security-ssh-terminal-inbox-head strong {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.security-ssh-terminal-inbox-head .tool-button {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 5px 8px;
+  font-size: 11px;
+}
+
+.security-ssh-terminal-inbox p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.security-ssh-terminal-inbox-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 7px;
+}
+
+.security-ssh-terminal-inbox-list article {
+  min-width: 0;
+  border: 1px solid rgba(79, 70, 229, 0.12);
+  border-radius: 12px;
+  padding: 8px;
+  display: grid;
+  gap: 3px;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.security-ssh-terminal-inbox-list article.warn {
+  border-color: rgba(245, 158, 11, 0.22);
+  background: rgba(255, 251, 241, 0.78);
+}
+
+.security-ssh-terminal-inbox-list article.fail {
+  border-color: rgba(239, 68, 68, 0.22);
+  background: rgba(255, 247, 247, 0.78);
+}
+
+.security-ssh-terminal-inbox-list span {
+  color: #4f46e5;
+  font-size: 10px;
+  font-weight: 950;
+}
+
+.security-ssh-terminal-inbox-list strong {
+  color: var(--text);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.security-ssh-terminal-inbox-list small {
+  color: var(--muted);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .security-ssh-terminal-snapshot-empty {
   min-width: 0;
   margin: 0;
@@ -15642,6 +15744,14 @@ pre {
   .security-ssh-support-bundle-actions {
     grid-template-columns: 1fr;
     justify-items: stretch;
+  }
+
+  .security-ssh-terminal-inbox {
+    grid-column: 1 / -1;
+  }
+
+  .security-ssh-terminal-inbox-head {
+    display: grid;
   }
 
   .ops-preflight-history-item {

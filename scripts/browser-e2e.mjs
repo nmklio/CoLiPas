@@ -65,6 +65,7 @@ async function createE2ePage(options) {
     window.localStorage.removeItem('colipas.sshLagReportHistory.v1');
     window.localStorage.removeItem('colipas.sshConnectionDoctorHistory.v1');
     window.localStorage.removeItem('colipas.sshTerminalSupportSnapshot.v1');
+    window.localStorage.removeItem('colipas.sshTerminalSupportSnapshotHistory.v1');
     window.localStorage.removeItem('colipas.launchGuide.dismissed.v1');
   });
   targetPage.on('console', (message) => {
@@ -1391,11 +1392,14 @@ async function assertSshTerminalPanel(targetPage) {
     await targetPage.evaluate(() => {
       window.__colipasCopiedTerminalText = '';
       window.__colipasCopiedSshTerminalSnapshotText = '';
+      window.__colipasCopiedSshTerminalInboxText = '';
       Object.defineProperty(navigator, 'clipboard', {
         configurable: true,
         value: {
           writeText: async (text) => {
-            if (/SSH sanitized diagnosis pack/i.test(text)) {
+            if (/SSH terminal field evidence inbox/i.test(text)) {
+              window.__colipasCopiedSshTerminalInboxText = text;
+            } else if (/SSH sanitized diagnosis pack/i.test(text)) {
               window.__colipasCopiedSshTerminalSnapshotText = text;
               window.__colipasCopiedTerminalText = text;
             } else {
@@ -1645,6 +1649,19 @@ async function assertSshTerminalPanel(targetPage) {
     if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(storedTerminalSupportSnapshot) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(storedTerminalSupportSnapshot) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(storedTerminalSupportSnapshot)) {
       throw new Error('SSH terminal support snapshot storage leaked a raw IP address or secret');
     }
+    const storedTerminalSupportHistory = await targetPage.evaluate(() => window.localStorage.getItem('colipas.sshTerminalSupportSnapshotHistory.v1') ?? '');
+    const parsedTerminalSupportHistory = JSON.parse(storedTerminalSupportHistory || '[]');
+    if (
+      !Array.isArray(parsedTerminalSupportHistory)
+      || parsedTerminalSupportHistory.length !== 1
+      || !/SSH sanitized diagnosis pack/i.test(parsedTerminalSupportHistory[0]?.text ?? '')
+      || parsedTerminalSupportHistory[0]?.sections?.length !== 5
+    ) {
+      throw new Error(`SSH terminal support snapshot history storage is incomplete: ${storedTerminalSupportHistory}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(storedTerminalSupportHistory) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(storedTerminalSupportHistory) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(storedTerminalSupportHistory)) {
+      throw new Error('SSH terminal support snapshot history leaked a raw IP address or secret');
+    }
     const channelSwitchButton = targetPage.locator('[data-ssh-channel-switch="true"]');
     await channelSwitchButton.waitFor({ timeout: 5000 });
     const initialChannelSwitchLabel = await channelSwitchButton.getAttribute('aria-label');
@@ -1745,6 +1762,20 @@ async function assertSshTerminalPanel(targetPage) {
     }
     if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshTerminalSnapshotText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshTerminalSnapshotText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(copiedSshTerminalSnapshotText)) {
       throw new Error('Security terminal snapshot copy output leaked a raw IP address or secret');
+    }
+    await targetPage.locator('[data-ssh-terminal-support-inbox="true"]').waitFor({ timeout: 5000 });
+    const securityTerminalInboxText = await targetPage.locator('[data-ssh-terminal-support-inbox="true"]').innerText();
+    const securityTerminalInboxCount = await targetPage.locator('[data-ssh-terminal-inbox-item="true"]').count();
+    if (!/SSH terminal field evidence inbox/i.test(securityTerminalInboxText) || !/1 recent field pack/i.test(securityTerminalInboxText) || !/Copy inbox/i.test(securityTerminalInboxText) || securityTerminalInboxCount !== 1) {
+      throw new Error(`Security terminal evidence inbox did not render the retained snapshot: ${securityTerminalInboxText}`);
+    }
+    await targetPage.getByRole('button', { name: /copy inbox/i }).click();
+    const copiedSshTerminalInboxText = await targetPage.evaluate(() => window.__colipasCopiedSshTerminalInboxText ?? '');
+    if (!/SSH terminal field evidence inbox/i.test(copiedSshTerminalInboxText) || !/SSH sanitized diagnosis pack/i.test(copiedSshTerminalInboxText) || !/Self-diagnosis guide/i.test(copiedSshTerminalInboxText)) {
+      throw new Error(`Security terminal evidence inbox copy output is incomplete: ${copiedSshTerminalInboxText}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshTerminalInboxText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshTerminalInboxText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(copiedSshTerminalInboxText)) {
+      throw new Error('Security terminal evidence inbox copy output leaked a raw IP address or secret');
     }
     const securitySupportBundleText = await targetPage.locator('[data-ssh-support-bundle="true"]').innerText();
     if (!/Terminal field pack/i.test(securitySupportBundleText) || !/Latest terminal field evidence/i.test(securitySupportBundleText)) {

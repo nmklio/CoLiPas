@@ -26,7 +26,9 @@ import type { SecurityRemediationResponse } from '../../services/apiClient';
 import type { DiagnosticExportResponse, ReleaseDeploymentEvidence, ReleaseReadinessResponse } from '../../types';
 import {
   normalizeSshTerminalSupportSnapshot,
+  normalizeSshTerminalSupportSnapshotHistory,
   sshTerminalSupportSnapshotEventName,
+  sshTerminalSupportSnapshotHistoryStorageKey,
   sshTerminalSupportSnapshotStorageKey,
   type SshTerminalSupportSnapshot,
 } from '../../shared/sshTerminalSupportSnapshot';
@@ -505,6 +507,7 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
   const [sshLagReportHistory, setSshLagReportHistory] = useState<SshLagReportSnapshot[]>(() => loadSshLagReportHistory());
   const [sshBottleneckRadarHistory, setSshBottleneckRadarHistory] = useState<SshBottleneckRadarSnapshot[]>(() => loadSshBottleneckRadarHistory());
   const [sshTerminalSupportSnapshot, setSshTerminalSupportSnapshot] = useState<SshTerminalSupportSnapshot | null>(() => loadSshTerminalSupportSnapshot());
+  const [sshTerminalSupportSnapshotHistory, setSshTerminalSupportSnapshotHistory] = useState<SshTerminalSupportSnapshot[]>(() => loadSshTerminalSupportSnapshotHistory());
   const [releaseFixChecklistState, setReleaseFixChecklistState] = useState<ReleaseFixChecklistState>(() => loadReleaseFixChecklistState());
 
   const openEvents = useMemo(() => events.filter((event) => event.status === 'open'), [events]);
@@ -599,10 +602,11 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
       sshInteractionSampler,
       sshBottleneckTrend,
       terminalSnapshot: sshTerminalSupportSnapshot,
+      terminalSnapshotHistory: sshTerminalSupportSnapshotHistory,
       copy: sshPerformanceCopy,
       locale,
     }),
-    [locale, sshBottleneckTrend, sshFlightRecorder, sshInteractionSampler, sshPerformance, sshPerformanceCopy, sshTerminalSupportSnapshot],
+    [locale, sshBottleneckTrend, sshFlightRecorder, sshInteractionSampler, sshPerformance, sshPerformanceCopy, sshTerminalSupportSnapshot, sshTerminalSupportSnapshotHistory],
   );
   const releaseHandoffPack = useMemo(
     () => buildReleaseHandoffPack({
@@ -661,18 +665,25 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
 
   useEffect(() => {
     setSshTerminalSupportSnapshot(loadSshTerminalSupportSnapshot());
+    setSshTerminalSupportSnapshotHistory(loadSshTerminalSupportSnapshotHistory());
     function syncTerminalSnapshot(event: Event) {
-      if (event instanceof StorageEvent && event.key !== sshTerminalSupportSnapshotStorageKey) {
+      if (
+        event instanceof StorageEvent
+        && event.key !== sshTerminalSupportSnapshotStorageKey
+        && event.key !== sshTerminalSupportSnapshotHistoryStorageKey
+      ) {
         return;
       }
 
       if (event instanceof CustomEvent) {
         const nextSnapshot = normalizeSshTerminalSupportSnapshot(event.detail);
         setSshTerminalSupportSnapshot(nextSnapshot ?? loadSshTerminalSupportSnapshot());
+        setSshTerminalSupportSnapshotHistory(loadSshTerminalSupportSnapshotHistory());
         return;
       }
 
       setSshTerminalSupportSnapshot(loadSshTerminalSupportSnapshot());
+      setSshTerminalSupportSnapshotHistory(loadSshTerminalSupportSnapshotHistory());
     }
 
     window.addEventListener('storage', syncTerminalSnapshot);
@@ -1019,6 +1030,30 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
       setRemediationError(false);
     } catch {
       setRemediationMessage(sshTerminalSupportSnapshot.text);
+      setRemediationError(false);
+    }
+  }
+
+  async function copySshTerminalSnapshotInbox() {
+    const text = buildSshTerminalSnapshotInboxText(sshTerminalSupportSnapshotHistory, sshPerformanceCopy, locale);
+    if (!text) {
+      setRemediationMessage(sshPerformanceCopy.terminalSnapshotInboxEmpty);
+      setRemediationError(false);
+      return;
+    }
+
+    if (typeof navigator === 'undefined' || !navigator.clipboard) {
+      setRemediationMessage(text);
+      setRemediationError(false);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setRemediationMessage(sshPerformanceCopy.terminalSnapshotInboxCopied(sshTerminalSupportSnapshotHistory.length));
+      setRemediationError(false);
+    } catch {
+      setRemediationMessage(text);
       setRemediationError(false);
     }
   }
@@ -1746,6 +1781,31 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
               {sshPerformanceCopy.terminalSnapshotEmpty}
             </p>
           )}
+          {sshTerminalSupportSnapshotHistory.length > 0 ? (
+            <div className="security-ssh-terminal-inbox" data-ssh-terminal-support-inbox="true">
+              <div className="security-ssh-terminal-inbox-head">
+                <div>
+                  <span>{sshPerformanceCopy.terminalSnapshotInboxTitle}</span>
+                  <strong>{sshPerformanceCopy.terminalSnapshotInboxDetail(sshTerminalSupportSnapshotHistory.length)}</strong>
+                </div>
+                <button type="button" className="tool-button" onClick={copySshTerminalSnapshotInbox} data-ssh-terminal-inbox-copy="true">
+                  <ClipboardCheck size={14} />
+                  {sshPerformanceCopy.terminalSnapshotInboxCopy}
+                </button>
+              </div>
+              <p>{sshPerformanceCopy.terminalSnapshotInboxDescription}</p>
+              <div className="security-ssh-terminal-inbox-list">
+                {sshTerminalSupportSnapshotHistory.slice(0, 6).map((snapshot, index) => (
+                  <article key={`${snapshot.createdAt}-${index}`} className={mapTerminalSnapshotTone(snapshot.tone)} data-ssh-terminal-inbox-item="true">
+                    <span>{index === 0 ? sshPerformanceCopy.terminalSnapshotInboxLatest : `#${index + 1}`}</span>
+                    <strong>{snapshot.title}</strong>
+                    <small>{new Date(snapshot.createdAt).toLocaleString(locale)}</small>
+                    <small>{snapshot.sections[0]?.label}: {snapshot.sections[0]?.value}</small>
+                  </article>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <div className="security-ssh-support-bundle-actions">
             <button type="button" className="tool-button" onClick={copySshSupportBundle}>
               <ClipboardCheck size={15} />
@@ -3744,12 +3804,31 @@ function loadSshTerminalSupportSnapshot(): SshTerminalSupportSnapshot | null {
 
   try {
     const raw = window.localStorage.getItem(sshTerminalSupportSnapshotStorageKey);
-    if (!raw || containsSensitiveReportText(raw)) {
-      return null;
+    if (raw && !containsSensitiveReportText(raw)) {
+      const snapshot = normalizeSshTerminalSupportSnapshot(JSON.parse(raw));
+      if (snapshot) {
+        return snapshot;
+      }
     }
-    return normalizeSshTerminalSupportSnapshot(JSON.parse(raw));
   } catch {
-    return null;
+    // Fall back to the bounded history below.
+  }
+  return loadSshTerminalSupportSnapshotHistory()[0] ?? null;
+}
+
+function loadSshTerminalSupportSnapshotHistory(): SshTerminalSupportSnapshot[] {
+  if (typeof window === 'undefined') {
+    return [];
+  }
+
+  try {
+    const raw = window.localStorage.getItem(sshTerminalSupportSnapshotHistoryStorageKey);
+    if (!raw || containsSensitiveReportText(raw)) {
+      return [];
+    }
+    return normalizeSshTerminalSupportSnapshotHistory(JSON.parse(raw), 6);
+  } catch {
+    return [];
   }
 }
 
@@ -3866,6 +3945,7 @@ function buildSshSupportBundle({
   sshInteractionSampler,
   sshBottleneckTrend,
   terminalSnapshot,
+  terminalSnapshotHistory,
   copy,
   locale,
 }: {
@@ -3874,6 +3954,7 @@ function buildSshSupportBundle({
   sshInteractionSampler: SshInteractionSamplerSummary;
   sshBottleneckTrend: SshBottleneckTrendSummary;
   terminalSnapshot: SshTerminalSupportSnapshot | null;
+  terminalSnapshotHistory: SshTerminalSupportSnapshot[];
   copy: SshPerformanceCopy;
   locale: string;
 }): SshSupportBundleSummary {
@@ -3912,7 +3993,7 @@ function buildSshSupportBundle({
       id: 'terminal-pack',
       title: copy.supportBundleSectionTerminal,
       detail: terminalSnapshot
-        ? `${terminalSnapshot.title} / ${copy.terminalSnapshotLatest}: ${new Date(terminalSnapshot.createdAt).toLocaleString(locale)}`
+        ? `${terminalSnapshot.title} / ${copy.terminalSnapshotLatest}: ${new Date(terminalSnapshot.createdAt).toLocaleString(locale)} / ${copy.terminalSnapshotInboxDetail(terminalSnapshotHistory.length)}`
         : copy.terminalSnapshotEmpty,
       tone: terminalSnapshot ? mapTerminalSnapshotTone(terminalSnapshot.tone) : 'warn',
     },
@@ -3949,6 +4030,7 @@ function buildSshSupportBundle({
     '',
     `[${copy.supportBundleSectionTerminal}]`,
     terminalSnapshot ? terminalSnapshot.text : copy.terminalSnapshotEmpty,
+    terminalSnapshotHistory.length > 0 ? copy.terminalSnapshotInboxDetail(terminalSnapshotHistory.length) : '',
     '',
     copy.supportBundleSanitizedNote,
   ].join('\n');
@@ -4034,6 +4116,29 @@ function mapBottleneckSnapshotTone(tone: SshBottleneckSnapshotTone): SshBottlene
     return 'warn';
   }
   return 'ok';
+}
+
+function buildSshTerminalSnapshotInboxText(history: SshTerminalSupportSnapshot[], copy: SshPerformanceCopy, locale: string) {
+  const normalizedHistory = normalizeSshTerminalSupportSnapshotHistory(history, 6);
+  if (normalizedHistory.length === 0) {
+    return '';
+  }
+
+  return [
+    `# ${copy.terminalSnapshotInboxTitle}`,
+    copy.terminalSnapshotInboxDetail(normalizedHistory.length),
+    copy.supportBundleSanitizedNote,
+    '',
+    ...normalizedHistory.flatMap((snapshot, index) => [
+      `## ${index + 1}. ${snapshot.title}`,
+      `${copy.terminalSnapshotLatest}: ${new Date(snapshot.createdAt).toLocaleString(locale)}`,
+      `${copy.summaryStatus}: ${mapTerminalSnapshotTone(snapshot.tone)}`,
+      ...snapshot.sections.slice(0, 5).map((section) => `- ${section.label}: ${section.value} / ${section.detail}`),
+      '',
+      snapshot.text,
+      '',
+    ]),
+  ].join('\n').trim();
 }
 
 function mapTerminalSnapshotTone(tone: SshTerminalSupportSnapshot['tone']): SshSupportBundleSection['tone'] {
@@ -5153,6 +5258,13 @@ interface SshPerformanceCopy {
   terminalSnapshotCopy: string;
   terminalSnapshotCopied: string;
   terminalSnapshotCopyEmpty: string;
+  terminalSnapshotInboxTitle: string;
+  terminalSnapshotInboxDescription: string;
+  terminalSnapshotInboxDetail: (count: number) => string;
+  terminalSnapshotInboxCopy: string;
+  terminalSnapshotInboxCopied: (count: number) => string;
+  terminalSnapshotInboxEmpty: string;
+  terminalSnapshotInboxLatest: string;
   activeSessions: string;
   inputBatch: string;
   outputBatch: string;
@@ -5405,6 +5517,13 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     terminalSnapshotCopy: '复制现场包',
     terminalSnapshotCopied: 'SSH 终端现场包已复制',
     terminalSnapshotCopyEmpty: '暂无可复制的 SSH 终端现场包',
+    terminalSnapshotInboxTitle: 'SSH 现场证据收件箱',
+    terminalSnapshotInboxDescription: '自动保留最近 6 次终端诊断包，用于对比偶发卡顿、断连和大输出现场。',
+    terminalSnapshotInboxDetail: (count) => `已保留 ${count} 份最近现场包`,
+    terminalSnapshotInboxCopy: '复制收件箱',
+    terminalSnapshotInboxCopied: (count) => `已复制 ${count} 份 SSH 现场包`,
+    terminalSnapshotInboxEmpty: '暂无可复制的 SSH 现场证据收件箱',
+    terminalSnapshotInboxLatest: '最新',
     activeSessions: '活跃会话',
     inputBatch: '输入合并',
     outputBatch: '输出合并',
@@ -5655,6 +5774,13 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     terminalSnapshotCopy: 'Copy terminal pack',
     terminalSnapshotCopied: 'SSH terminal field pack copied',
     terminalSnapshotCopyEmpty: 'No SSH terminal field pack is ready to copy',
+    terminalSnapshotInboxTitle: 'SSH terminal field evidence inbox',
+    terminalSnapshotInboxDescription: 'Keeps the latest 6 terminal diagnosis packs so intermittent lag, disconnects, and large-output cases can be compared.',
+    terminalSnapshotInboxDetail: (count) => `${count} recent field pack(s) retained`,
+    terminalSnapshotInboxCopy: 'Copy inbox',
+    terminalSnapshotInboxCopied: (count) => `${count} SSH field pack(s) copied`,
+    terminalSnapshotInboxEmpty: 'No SSH terminal field evidence inbox is ready to copy',
+    terminalSnapshotInboxLatest: 'Latest',
     activeSessions: 'Active sessions',
     inputBatch: 'Input batching',
     outputBatch: 'Output batching',
@@ -5905,6 +6031,13 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     terminalSnapshotCopy: '端末パックをコピー',
     terminalSnapshotCopied: 'SSH 端末現場パックをコピーしました',
     terminalSnapshotCopyEmpty: 'コピー可能な SSH 端末現場パックはありません',
+    terminalSnapshotInboxTitle: 'SSH 端末現場証跡インボックス',
+    terminalSnapshotInboxDescription: '直近 6 件の端末診断パックを保持し、断続的な遅延、切断、大量出力の現場を比較できます。',
+    terminalSnapshotInboxDetail: (count) => `直近の現場パック ${count} 件を保持`,
+    terminalSnapshotInboxCopy: 'インボックスをコピー',
+    terminalSnapshotInboxCopied: (count) => `SSH 現場パック ${count} 件をコピーしました`,
+    terminalSnapshotInboxEmpty: 'コピー可能な SSH 端末現場証跡インボックスはありません',
+    terminalSnapshotInboxLatest: '最新',
     activeSessions: 'アクティブセッション',
     inputBatch: '入力バッチ',
     outputBatch: '出力バッチ',

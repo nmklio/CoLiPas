@@ -1,4 +1,5 @@
 export const sshTerminalSupportSnapshotStorageKey = 'colipas.sshTerminalSupportSnapshot.v1';
+export const sshTerminalSupportSnapshotHistoryStorageKey = 'colipas.sshTerminalSupportSnapshotHistory.v1';
 export const sshTerminalSupportSnapshotEventName = 'colipas:ssh-terminal-support-snapshot';
 
 export type SshTerminalSupportSnapshotTone = 'pending' | 'good' | 'warn' | 'slow';
@@ -24,6 +25,7 @@ export interface SshTerminalSupportSnapshot {
 
 const validSnapshotTones = new Set<SshTerminalSupportSnapshotTone>(['pending', 'good', 'warn', 'slow']);
 const maxSnapshotSections = 8;
+const maxSnapshotHistory = 6;
 
 export function sanitizeSshTerminalSupportSnapshotText(value: string, maxLength = 6000) {
   return String(value || '')
@@ -75,6 +77,28 @@ export function normalizeSshTerminalSupportSnapshot(value: unknown): SshTerminal
     sections,
     text: sanitizeSshTerminalSupportSnapshotText(snapshot.text, 6000),
   };
+}
+
+export function normalizeSshTerminalSupportSnapshotHistory(value: unknown, limit = maxSnapshotHistory): SshTerminalSupportSnapshot[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const boundedLimit = Math.max(1, Math.min(maxSnapshotHistory, Math.floor(limit)));
+  return value
+    .map((item) => normalizeSshTerminalSupportSnapshot(item))
+    .filter((item): item is SshTerminalSupportSnapshot => Boolean(item))
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    .filter((item, index, list) => list.findIndex((candidate) => candidate.createdAt === item.createdAt || candidate.text === item.text) === index)
+    .slice(0, boundedLimit);
+}
+
+export function addSshTerminalSupportSnapshotToHistory(
+  snapshot: SshTerminalSupportSnapshot,
+  history: unknown,
+  limit = maxSnapshotHistory,
+) {
+  return normalizeSshTerminalSupportSnapshotHistory([snapshot, ...normalizeSshTerminalSupportSnapshotHistory(history, limit)], limit);
 }
 
 function normalizeSshTerminalSupportSnapshotSection(value: unknown): SshTerminalSupportSnapshotSection | null {
