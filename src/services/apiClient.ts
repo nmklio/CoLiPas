@@ -242,6 +242,27 @@ export interface SshSupportTicketCopyAuditPayload {
   tone: 'ok' | 'warn' | 'fail';
 }
 
+export interface SshProductionProbePayload {
+  targetLabel: string;
+  deploymentMode: string;
+  ok: boolean;
+  durationMs: number;
+  activeShellsAfter: number | null;
+  inventory: {
+    total: number;
+    connected: number;
+    modes: Record<string, number>;
+  };
+  probes: Array<{
+    kind: string;
+    mode: string;
+    ok: boolean;
+    sessionReady: boolean;
+    durationMs: number | null;
+  }>;
+  recordedAt?: string;
+}
+
 export interface ServerActionResponse extends ServerCommandResponse {
   id: string;
   action: 'powerOn' | 'shutdown' | 'reboot';
@@ -1079,6 +1100,27 @@ export async function recordSshSupportTicketCopy(
       target: 'ssh-support-ticket';
       detail: string;
     };
+  };
+}
+
+export async function recordSshProductionProbe(
+  payload: SshProductionProbePayload,
+  fetcher: typeof fetch = fetch,
+) {
+  const response = await fetcher('/api/audit/ssh-production-probes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as {
+    ok: true;
+    trend: DiagnosticExportResponse['sshTerminal']['productionProbeTrend'];
   };
 }
 

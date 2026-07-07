@@ -21,7 +21,7 @@ import {
 import { getLocale, useI18n } from '../../i18n';
 import { OperationEvent } from '../../types';
 import type { OverviewPreflightSnapshot } from '../overview/MonitoringOverview';
-import { fetchDiagnosticExport, fetchReleaseReadiness, fetchReleaseReadinessReport, recordReleaseReadinessSnapshot, recordSshSupportTicketCopy, remediateSecurityRisk } from '../../services/apiClient';
+import { connectServer, connectServerShellSocket, deleteServer, fetchDiagnosticExport, fetchReleaseReadiness, fetchReleaseReadinessReport, fetchServerShellStatus, recordReleaseReadinessSnapshot, recordSshProductionProbe, recordSshSupportTicketCopy, remediateSecurityRisk } from '../../services/apiClient';
 import type { SecurityRemediationResponse } from '../../services/apiClient';
 import type { DiagnosticExportResponse, ReleaseDeploymentEvidence, ReleaseReadinessResponse } from '../../types';
 import {
@@ -588,6 +588,7 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
   const [recordingSnapshot, setRecordingSnapshot] = useState(false);
   const [exportingReadinessReport, setExportingReadinessReport] = useState(false);
   const [exportingDiagnostic, setExportingDiagnostic] = useState(false);
+  const [runningSshProductionProbe, setRunningSshProductionProbe] = useState(false);
   const [expandedSshMetricId, setExpandedSshMetricId] = useState('');
   const [sshLagReportHistory, setSshLagReportHistory] = useState<SshLagReportSnapshot[]>(() => loadSshLagReportHistory());
   const [sshBottleneckRadarHistory, setSshBottleneckRadarHistory] = useState<SshBottleneckRadarSnapshot[]>(() => loadSshBottleneckRadarHistory());
@@ -1272,6 +1273,80 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
     } catch {
       setRemediationMessage(sshProductionProbe.copyText);
       setRemediationError(false);
+    }
+  }
+
+  async function runSshProductionBrowserProbe() {
+    if (runningSshProductionProbe) {
+      return;
+    }
+
+    setRunningSshProductionProbe(true);
+    setRemediationMessage('');
+    setRemediationError(false);
+    const startedAt = performance.now();
+    let tempServerId = '';
+    try {
+      const beforeStatus = await fetchServerShellStatus().catch(() => ({ activeCount: 0 }));
+      const suffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+      const simulatedPassword = 'temporary-simulated-only';
+      const tempServer = await connectServer({
+        name: `browser-ssh-probe-${suffix}`,
+        provider: 'Probe Lab',
+        region: 'US - Los Angeles',
+        publicIp: '198.51.100.241',
+        privateIp: '10.99.0.241',
+        os: 'Debian 12',
+        tags: ['probe', 'temporary', 'ssh'],
+        ssh: {
+          host: 'browser-probe.local',
+          port: 22,
+          username: 'root',
+          authType: 'password',
+          password: simulatedPassword,
+          verifyMode: 'simulate',
+        },
+      });
+      tempServerId = tempServer.id;
+      const probe = await runSshProductionBrowserRoundTrip(tempServerId);
+      const afterStatus = await fetchServerShellStatus().catch(() => ({ activeCount: beforeStatus.activeCount }));
+      const activeShellDelta = Math.max(0, afterStatus.activeCount - beforeStatus.activeCount);
+      await deleteServer(tempServerId);
+      tempServerId = '';
+      const health = await fetchProductionHealthLabel();
+      await recordSshProductionProbe({
+        targetLabel: health.targetLabel,
+        deploymentMode: health.deploymentMode,
+        ok: probe.ok && probe.sessionReady && activeShellDelta === 0,
+        durationMs: Math.round(performance.now() - startedAt),
+        activeShellsAfter: activeShellDelta,
+        inventory: {
+          total: diagnosticBundle?.inventory.servers.total ?? 0,
+          connected: diagnosticBundle?.inventory.servers.connectedSsh ?? 0,
+          modes: diagnosticBundle?.sshTerminal.byMode ?? {},
+        },
+        probes: [
+          {
+            kind: 'browser-simulated',
+            mode: 'simulate',
+            ok: probe.ok,
+            sessionReady: probe.sessionReady,
+            durationMs: probe.durationMs,
+          },
+        ],
+        recordedAt: new Date().toISOString(),
+      });
+      await refreshSecurityData();
+      setRemediationMessage(sshProductionProbeCopy.runSuccess(probe.durationMs));
+      setRemediationError(false);
+    } catch (error) {
+      if (tempServerId) {
+        await deleteServer(tempServerId).catch(() => undefined);
+      }
+      setRemediationMessage(error instanceof Error ? error.message : sshProductionProbeCopy.runFailed);
+      setRemediationError(true);
+    } finally {
+      setRunningSshProductionProbe(false);
     }
   }
 
@@ -1960,6 +2035,10 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
               <small>{sshProductionProbe.note}</small>
             </div>
             <div className="security-ssh-production-probe-actions">
+              <button type="button" className="tool-button" onClick={runSshProductionBrowserProbe} disabled={runningSshProductionProbe} data-ssh-production-probe-run-button="true">
+                <Rocket size={15} />
+                {runningSshProductionProbe ? sshProductionProbeCopy.running : sshProductionProbeCopy.run}
+              </button>
               <button type="button" className="tool-button" onClick={copySshProductionProbeSummary} data-ssh-production-probe-copy="true">
                 <ClipboardCheck size={15} />
                 {sshProductionProbeCopy.copy}
@@ -5524,6 +5603,10 @@ interface SshProductionProbeCopy {
   eyebrow: string;
   copy: string;
   copied: string;
+  run: string;
+  running: string;
+  runSuccess: (durationMs: number) => string;
+  runFailed: string;
   emptyTitle: string;
   emptyDetail: string;
   successRate: string;
@@ -5552,6 +5635,10 @@ const sshProductionProbeCopyByLanguage: Record<string, SshProductionProbeCopy> =
     eyebrow: 'SSH 线上探针',
     copy: '复制探针摘要',
     copied: 'SSH 线上探针摘要已复制',
+    run: '运行浏览器探针',
+    running: '探针运行中',
+    runSuccess: (durationMs) => `SSH 浏览器探针完成：${Math.round(durationMs)}ms`,
+    runFailed: 'SSH 浏览器探针失败',
     emptyTitle: '等待线上探针',
     emptyDetail: '运行 `npm run probe:ssh-production` 并设置 `COLIPAS_PROBE_RECORD=1` 后，这里会显示脱敏后的真实线上 SSH 可用性趋势。',
     successRate: '成功率',
@@ -5578,6 +5665,10 @@ const sshProductionProbeCopyByLanguage: Record<string, SshProductionProbeCopy> =
     eyebrow: 'SSH production probe',
     copy: 'Copy probe summary',
     copied: 'SSH production probe summary copied',
+    run: 'Run browser probe',
+    running: 'Running probe',
+    runSuccess: (durationMs) => `SSH browser probe completed in ${Math.round(durationMs)}ms`,
+    runFailed: 'SSH browser probe failed',
     emptyTitle: 'Waiting for a live production probe',
     emptyDetail: 'Run `npm run probe:ssh-production` with `COLIPAS_PROBE_RECORD=1` and this panel will show sanitized live SSH trend evidence.',
     successRate: 'Success rate',
@@ -5604,6 +5695,10 @@ const sshProductionProbeCopyByLanguage: Record<string, SshProductionProbeCopy> =
     eyebrow: 'SSH 本番プローブ',
     copy: 'プローブ要約をコピー',
     copied: 'SSH 本番プローブ要約をコピーしました',
+    run: 'ブラウザプローブを実行',
+    running: 'プローブ実行中',
+    runSuccess: (durationMs) => `SSH ブラウザプローブが ${Math.round(durationMs)}ms で完了しました`,
+    runFailed: 'SSH ブラウザプローブに失敗しました',
     emptyTitle: '本番プローブ待ち',
     emptyDetail: '`COLIPAS_PROBE_RECORD=1` を付けて `npm run probe:ssh-production` を実行すると、匿名化した本番 SSH 傾向がここに表示されます。',
     successRate: '成功率',
@@ -5630,6 +5725,94 @@ const sshProductionProbeCopyByLanguage: Record<string, SshProductionProbeCopy> =
 
 function getSshProductionProbeCopy(language: string) {
   return sshProductionProbeCopyByLanguage[language] ?? sshProductionProbeCopyByLanguage.zh;
+}
+
+function runSshProductionBrowserRoundTrip(serverId: string) {
+  return new Promise<{ ok: boolean; sessionReady: boolean; durationMs: number }>((resolve, reject) => {
+    const marker = `__colipas_browser_probe_${Date.now().toString(36)}__`;
+    const startedAt = performance.now();
+    let controller: ReturnType<typeof connectServerShellSocket> | null = null;
+    let sessionReady = false;
+    let output = '';
+    let settled = false;
+
+    const cleanup = () => {
+      if (timer !== null) {
+        window.clearTimeout(timer);
+      }
+    };
+
+    const finish = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      resolve({
+        ok: output.includes(marker),
+        sessionReady,
+        durationMs: Math.round(performance.now() - startedAt),
+      });
+    };
+
+    const fail = (error: Error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      controller?.close();
+      reject(error);
+    };
+
+    const timer = window.setTimeout(() => {
+      controller?.close();
+      fail(new Error('SSH browser probe timed out'));
+    }, 12_000);
+
+    controller = connectServerShellSocket(
+      serverId,
+      { cols: 100, rows: 28 },
+      (event) => {
+        if (typeof event.content === 'string') {
+          output += event.content;
+          if (output.includes(marker)) {
+            controller?.close();
+          }
+        }
+      },
+      () => {
+        sessionReady = true;
+        controller?.sendInput(`printf "${marker}\\n"\n`);
+      },
+      (error) => {
+        if (!settled) {
+          fail(error);
+        }
+      },
+      undefined,
+      finish,
+    );
+  });
+}
+
+async function fetchProductionHealthLabel() {
+  try {
+    const response = await fetch('/api/health');
+    if (!response.ok) {
+      throw new Error('health unavailable');
+    }
+    const body = await response.json() as { release?: { targetName?: string; deploymentMode?: string } };
+    return {
+      targetLabel: body.release?.targetName || 'browser-live',
+      deploymentMode: body.release?.deploymentMode || 'browser',
+    };
+  } catch {
+    return {
+      targetLabel: 'browser-live',
+      deploymentMode: 'browser',
+    };
+  }
 }
 
 function formatSshProductionProbeTitle(tone: 'ok' | 'warn' | 'fail', target: string, language: string) {

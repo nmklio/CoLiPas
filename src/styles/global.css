@@ -13009,6 +13009,9 @@ pre {
 .security-ssh-production-probe-actions {
   display: flex;
   align-items: flex-start;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .security-ssh-production-probe-stats {

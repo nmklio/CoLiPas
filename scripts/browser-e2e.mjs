@@ -637,6 +637,18 @@ async function assertReleaseEvidenceBrief(targetPage) {
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(sshProductionProbeText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(sshProductionProbeText)) {
     throw new Error('SSH production probe panel leaked a raw IP address or API key');
   }
+  await targetPage.locator('[data-ssh-production-probe-run-button="true"]').click();
+  await targetPage.waitForFunction(() => {
+    const button = document.querySelector('[data-ssh-production-probe-run-button="true"]');
+    return button && !button.hasAttribute('disabled');
+  }, null, { timeout: 20000 });
+  const browserProbeDiagnostic = await targetPage.evaluate(async () => {
+    const response = await fetch('/api/audit/diagnostics/export');
+    return response.json();
+  });
+  if (!browserProbeDiagnostic.sshTerminal?.productionProbeTrend?.recent?.some((item) => item.primaryKind === 'browser-simulated' && item.cleanupOk === true && item.tone === 'ok')) {
+    throw new Error(`SSH browser production probe did not persist a sanitized successful sample: ${JSON.stringify(browserProbeDiagnostic.sshTerminal?.productionProbeTrend)}`);
+  }
   await targetPage.getByRole('button', { name: /copy probe summary|复制探针摘要|プローブ要約をコピー/i }).click();
   const copiedSshProductionProbeText = await targetPage.evaluate(() => window.__colipasCopiedSshProductionProbeText ?? '');
   if (!/SSH production probe report/i.test(copiedSshProductionProbeText) || !/verify-local/i.test(copiedSshProductionProbeText) || !/Only sanitized production probe metrics are included/i.test(copiedSshProductionProbeText)) {
