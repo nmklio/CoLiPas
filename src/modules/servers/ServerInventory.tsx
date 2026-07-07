@@ -242,6 +242,27 @@ interface TerminalLagAction {
   buttonLabel: string;
 }
 
+type TerminalLagRootCauseLaneId = 'input' | 'first-output' | 'output' | 'release';
+
+interface TerminalLagRootCauseLane {
+  id: TerminalLagRootCauseLaneId;
+  label: string;
+  value: string;
+  detail: string;
+  level: number;
+  tone: TerminalNetworkQuality['tone'];
+}
+
+interface TerminalLagRootCause {
+  tone: TerminalNetworkQuality['tone'];
+  title: string;
+  detail: string;
+  confidence: number;
+  confidenceLabel: string;
+  summary: string;
+  lanes: TerminalLagRootCauseLane[];
+}
+
 type TerminalSelfDiagnosticStepId = 'channel' | 'speed' | 'bottleneck' | 'handoff';
 type TerminalSelfDiagnosticAction = 'wait' | 'self-test' | 'clear' | 'copy-pack';
 
@@ -615,6 +636,18 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const sshRunbookManualView = sshRunbookView === 'manual';
   const terminalTelemetryInsight = getTerminalTelemetryInsight(terminalTelemetry, terminalNetworkStats, terminalTransport, Boolean(terminalShellId), t);
   const terminalBottleneckAdvisor = getTerminalBottleneckAdvisor(terminalTelemetry, terminalNetworkStats, terminalTransport, Boolean(terminalShellId), t);
+  const terminalLagRootCause = useMemo(
+    () => getTerminalLagRootCause({
+      telemetry: terminalTelemetry,
+      bottleneckAdvisor: terminalBottleneckAdvisor,
+      networkStats: terminalNetworkStats,
+      transport: terminalTransport,
+      selfTest: terminalSelfTest,
+      connected: Boolean(terminalShellId),
+      t,
+    }),
+    [terminalTelemetry, terminalBottleneckAdvisor, terminalNetworkStats, terminalTransport, terminalSelfTest, terminalShellId, t],
+  );
   const terminalLagAction = getTerminalLagAction(terminalBottleneckAdvisor, terminalTelemetry, terminalNetworkStats, terminalTransport, Boolean(terminalShellId), t);
   const terminalSelfDiagnosticGuide = useMemo(
     () => buildTerminalSelfDiagnosticGuide({
@@ -1723,6 +1756,30 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                         </div>
                         <i aria-hidden="true"><b style={{ width: `${item.level}%` }} /></i>
                         <small>{item.detail}</small>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+                <div className={`ssh-terminal-root-cause ${terminalLagRootCause.tone}`} data-ssh-terminal-root-cause="true" aria-live="polite">
+                  <div className="ssh-terminal-root-cause-summary">
+                    <span><Sparkles size={14} /> {t('servers.rootCauseEyebrow')}</span>
+                    <strong>{terminalLagRootCause.title}</strong>
+                    <small>{terminalLagRootCause.detail}</small>
+                  </div>
+                  <div className="ssh-terminal-root-cause-meter" aria-label={terminalLagRootCause.confidenceLabel}>
+                    <b>{terminalLagRootCause.confidenceLabel}</b>
+                    <i aria-hidden="true"><em style={{ width: `${terminalLagRootCause.confidence}%` }} /></i>
+                    <small>{terminalLagRootCause.summary}</small>
+                  </div>
+                  <div className="ssh-terminal-root-cause-lanes">
+                    {terminalLagRootCause.lanes.map((lane) => (
+                      <article key={lane.id} className={lane.tone} data-ssh-terminal-root-cause-lane={lane.id}>
+                        <div>
+                          <span>{lane.label}</span>
+                          <strong>{lane.value}</strong>
+                        </div>
+                        <i aria-hidden="true"><b style={{ width: `${lane.level}%` }} /></i>
+                        <small>{lane.detail}</small>
                       </article>
                     ))}
                   </div>
@@ -4697,6 +4754,121 @@ function getTerminalLagAction(
     evidence,
     action: 'self-test',
     buttonLabel: t('servers.terminalLagActionSelfTestButton'),
+  };
+}
+
+function getTerminalLagRootCause({
+  telemetry,
+  bottleneckAdvisor,
+  networkStats,
+  transport,
+  selfTest,
+  connected,
+  t,
+}: {
+  telemetry: TerminalTelemetryState;
+  bottleneckAdvisor: TerminalBottleneckAdvisor;
+  networkStats: TerminalNetworkStats | null;
+  transport: 'websocket' | 'compatible' | null;
+  selfTest: TerminalSelfTestState | null;
+  connected: boolean;
+  t: (key: string, vars?: Record<string, string | number>) => string;
+}): TerminalLagRootCause {
+  const inputBottleneck = bottleneckAdvisor.items.find((item) => item.id === 'input') ?? bottleneckAdvisor.items[0];
+  const outputBottleneck = bottleneckAdvisor.items.find((item) => item.id === 'output') ?? bottleneckAdvisor.items[0];
+  const renderBottleneck = bottleneckAdvisor.items.find((item) => item.id === 'render') ?? bottleneckAdvisor.items[0];
+  const firstOutputMs = telemetry.latestFirstOutputMs ?? (selfTest?.firstResponseMs && selfTest.firstResponseMs > 0 ? selfTest.firstResponseMs : null);
+  const firstOutputLevel = !connected
+    ? 0
+    : firstOutputMs === null
+      ? 18
+      : firstOutputMs >= 2000
+        ? 94
+        : firstOutputMs >= 900
+          ? 72
+          : firstOutputMs >= 350
+            ? 46
+            : 14;
+  const releaseLevel = Math.max(renderBottleneck.level, telemetry.peakPendingBytes >= terminalWriteLargeBacklogThreshold ? 84 : 0);
+  const lanes: TerminalLagRootCauseLane[] = [
+    {
+      id: 'input',
+      label: t('servers.rootCauseLaneInput'),
+      value: telemetry.inputEvents > 0 ? t('servers.telemetryInputValue', { count: telemetry.inputEvents }) : '--',
+      detail: t('servers.rootCauseLaneInputDetail', {
+        bytes: formatCompactBytes(telemetry.inputBytes),
+        avg: formatCompactBytes(Math.round(telemetry.inputBytes / Math.max(1, telemetry.inputEvents))),
+      }),
+      level: inputBottleneck.level,
+      tone: inputBottleneck.tone,
+    },
+    {
+      id: 'first-output',
+      label: t('servers.rootCauseLaneFirstOutput'),
+      value: firstOutputMs === null ? '--' : `${Math.round(firstOutputMs)}ms`,
+      detail: t('servers.rootCauseLaneFirstOutputDetail', {
+        lines: selfTest?.lines ?? telemetry.outputLines,
+        status: selfTest?.status ?? t('servers.rootCauseLaneUnverified'),
+      }),
+      level: firstOutputLevel,
+      tone: getBottleneckTone(firstOutputLevel, connected && firstOutputMs !== null),
+    },
+    {
+      id: 'output',
+      label: t('servers.rootCauseLaneOutput'),
+      value: formatBytesPerSecond(networkStats?.throughputBytesPerSecond ?? 0),
+      detail: t('servers.rootCauseLaneOutputDetail', {
+        bytes: formatCompactBytes(telemetry.outputBytes),
+        lines: telemetry.outputLines,
+      }),
+      level: outputBottleneck.level,
+      tone: outputBottleneck.tone,
+    },
+    {
+      id: 'release',
+      label: t('servers.rootCauseLaneRelease'),
+      value: `${Math.round(telemetry.renderLagMs)}ms`,
+      detail: t('servers.rootCauseLaneReleaseDetail', {
+        pending: formatCompactBytes(telemetry.pendingBytes),
+        peak: formatCompactBytes(telemetry.peakPendingBytes),
+      }),
+      level: releaseLevel,
+      tone: getBottleneckTone(releaseLevel, connected),
+    },
+  ];
+  const primary = lanes.reduce((best, lane) => (lane.level > best.level ? lane : best), lanes[0]);
+  const evidenceScore = [
+    connected,
+    Boolean(networkStats),
+    telemetry.inputEvents > 0,
+    telemetry.outputBytes > 0,
+    firstOutputMs !== null,
+    selfTest?.status === 'complete',
+  ].reduce((score, item) => score + (item ? 11 : 0), 0);
+  const confidence = connected
+    ? Math.max(24, Math.min(96, Math.round(24 + evidenceScore + Math.min(28, primary.level * 0.36))))
+    : 8;
+  const tone = connected ? getBottleneckTone(primary.level, true) : 'pending';
+  return {
+    tone,
+    title: !connected
+      ? t('servers.rootCausePendingTitle')
+      : tone === 'slow'
+        ? t('servers.rootCauseSlowTitle', { target: primary.label })
+        : tone === 'warn'
+          ? t('servers.rootCauseWarnTitle', { target: primary.label })
+          : t('servers.rootCauseGoodTitle'),
+    detail: connected
+      ? t('servers.rootCauseDetail', { target: primary.label, confidence })
+      : t('servers.rootCausePendingDetail'),
+    confidence,
+    confidenceLabel: t('servers.rootCauseConfidence', { confidence }),
+    summary: t('servers.rootCauseSummary', {
+      target: primary.label,
+      transport: getTerminalTransportLabel(transport, t),
+      level: Math.round(primary.level),
+    }),
+    lanes,
   };
 }
 

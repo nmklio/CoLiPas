@@ -1648,6 +1648,29 @@ async function assertSshTerminalPanel(targetPage) {
     if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(terminalBottleneckText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(terminalBottleneckText)) {
       throw new Error('SSH terminal bottleneck radar rendered a raw IP address or API key');
     }
+    await targetPage.locator('[data-ssh-terminal-root-cause="true"]').waitFor({ timeout: 5000 });
+    const terminalRootCauseText = await targetPage.locator('[data-ssh-terminal-root-cause="true"]').innerText();
+    if (!/Real-time lag root cause/i.test(terminalRootCauseText) || !/Confidence \d+%/i.test(terminalRootCauseText) || !/Input echo/i.test(terminalRootCauseText) || !/First output/i.test(terminalRootCauseText) || !/Output throughput/i.test(terminalRootCauseText) || !/Close cleanup/i.test(terminalRootCauseText)) {
+      throw new Error(`SSH terminal root-cause panel did not render confidence and all evidence lanes: ${terminalRootCauseText}`);
+    }
+    if (!/(No clear lag root cause|may be slowing interaction|most likely root cause|Waiting for SSH field samples)/i.test(terminalRootCauseText)) {
+      throw new Error(`SSH terminal root-cause panel did not render an actionable summary: ${terminalRootCauseText}`);
+    }
+    const rootCauseLaneCount = await targetPage.locator('[data-ssh-terminal-root-cause-lane]').count();
+    if (rootCauseLaneCount !== 4) {
+      throw new Error(`SSH terminal root-cause panel should expose four evidence lanes, got ${rootCauseLaneCount}`);
+    }
+    const rootCauseClass = await targetPage.locator('[data-ssh-terminal-root-cause="true"]').getAttribute('class');
+    if (!/\b(good|warn|slow|pending)\b/.test(rootCauseClass ?? '')) {
+      throw new Error(`SSH terminal root-cause panel did not expose a quality tone: ${rootCauseClass}`);
+    }
+    const rootCauseWidths = await targetPage.locator('[data-ssh-terminal-root-cause-lane] i b').evaluateAll((bars) => bars.map((bar) => Number.parseFloat(getComputedStyle(bar).width)));
+    if (rootCauseWidths.length !== 4 || rootCauseWidths.some((width) => !Number.isFinite(width) || width <= 0)) {
+      throw new Error(`SSH terminal root-cause lanes did not render measurable widths: ${rootCauseWidths.join(', ')}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(terminalRootCauseText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(terminalRootCauseText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(terminalRootCauseText)) {
+      throw new Error('SSH terminal root-cause panel rendered a raw IP address or secret');
+    }
     await targetPage.locator('[data-ssh-terminal-lag-action="true"]').waitFor({ timeout: 5000 });
     const terminalLagActionText = await targetPage.locator('[data-ssh-terminal-lag-action="true"]').innerText();
     if (!/Next action/i.test(terminalLagActionText) || !/(Terminal path is usable|Check line latency first|Narrow large output first|Browser render is backing up|Retest the input path)/i.test(terminalLagActionText)) {
@@ -1770,7 +1793,7 @@ async function assertSshTerminalPanel(targetPage) {
     }, undefined, { timeout: 10000 });
     console.log(`ok browser e2e SSH burst output rendered in ${burstOutputDurationMs}ms with max long task ${maxBurstLongTaskMs}ms`);
     await assertElementWithinViewport(targetPage, '.ssh-console', 'desktop SSH console');
-    await captureVisualEvidence(targetPage, 'desktop-ssh-terminal-network', ['.ssh-console', '.ssh-terminal-network', '.ssh-terminal-quality', '[data-ssh-terminal-telemetry="true"]', '[data-ssh-terminal-bottleneck="true"]', '[data-ssh-terminal-lag-action="true"]', '[data-ssh-terminal-support-bundle="true"]']);
+    await captureVisualEvidence(targetPage, 'desktop-ssh-terminal-network', ['.ssh-console', '.ssh-terminal-network', '.ssh-terminal-quality', '[data-ssh-terminal-telemetry="true"]', '[data-ssh-terminal-bottleneck="true"]', '[data-ssh-terminal-root-cause="true"]', '[data-ssh-terminal-lag-action="true"]', '[data-ssh-terminal-support-bundle="true"]']);
     await targetPage.getByRole('button', { name: /disconnect/i }).click();
     await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });
     const disconnectMessage = targetPage.locator('.action-message').filter({ hasText: /disconnected/i });

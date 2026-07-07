@@ -4330,6 +4330,10 @@ function assertSqlitePersistenceGuards() {
     'data-ssh-terminal-telemetry="true"',
     'getTerminalBottleneckAdvisor',
     'data-ssh-terminal-bottleneck="true"',
+    'TerminalLagRootCause',
+    'getTerminalLagRootCause',
+    'data-ssh-terminal-root-cause="true"',
+    'data-ssh-terminal-root-cause-lane',
     'getTerminalLagAction',
     'data-ssh-terminal-lag-action="true"',
     'data-ssh-channel-switch="true"',
@@ -4344,6 +4348,9 @@ function assertSqlitePersistenceGuards() {
     'bringTerminalScreenIntoView',
     '.ssh-terminal-bottleneck',
     '.ssh-terminal-bottleneck-radar',
+    '.ssh-terminal-root-cause',
+    '.ssh-terminal-root-cause-meter',
+    '.ssh-terminal-root-cause-lanes',
     '.ssh-terminal-lag-action',
     '.ssh-terminal-telemetry',
     '.ssh-paste-review',
@@ -5645,6 +5652,11 @@ function assertSshTerminalRealtimeGuards() {
     'function getTerminalBottleneckAdvisor(',
     'function getBottleneckTone(',
     'data-ssh-terminal-bottleneck="true"',
+    'TerminalLagRootCause',
+    'function getTerminalLagRootCause(',
+    'const terminalLagRootCause = useMemo',
+    'data-ssh-terminal-root-cause="true"',
+    'data-ssh-terminal-root-cause-lane={lane.id}',
     'TerminalLagAction',
     'function getTerminalLagAction(',
     'terminalWebSocketFallbackUntilRef',
@@ -5870,6 +5882,15 @@ function assertSshTerminalRealtimeGuards() {
     'servers.bottleneckInputLabel',
     'servers.bottleneckOutputLabel',
     'servers.bottleneckRenderLabel',
+    'servers.rootCauseEyebrow',
+    'servers.rootCauseConfidence',
+    'servers.rootCauseGoodTitle',
+    'servers.rootCauseWarnTitle',
+    'servers.rootCauseSlowTitle',
+    'servers.rootCauseLaneInput',
+    'servers.rootCauseLaneFirstOutput',
+    'servers.rootCauseLaneOutput',
+    'servers.rootCauseLaneRelease',
     'servers.terminalLagActionEyebrow',
     'servers.terminalLagActionEvidence',
     'servers.terminalLagActionGoodTitle',
@@ -6275,7 +6296,7 @@ function assertSshTerminalRealtimeGuards() {
   if (!globalCssSource.includes('.ssh-terminal-self-test') || !globalCssSource.includes('.ssh-terminal-self-test.complete')) {
     throw new Error('SSH terminal self-test result chip styles are missing');
   }
-  if (!globalCssSource.includes('.ssh-quick-command-deck') || !globalCssSource.includes('.ssh-runbook-workspace') || !globalCssSource.includes('.ssh-runbook-form') || !globalCssSource.includes('.ssh-runbook-form.editing') || !globalCssSource.includes('.ssh-runbook-lens') || !globalCssSource.includes('.ssh-runbook-categories button.active') || !globalCssSource.includes('.ssh-runbook-views button.active') || !globalCssSource.includes('.ssh-runbook-view-hint') || !globalCssSource.includes('.ssh-runbook-clear-filter') || !globalCssSource.includes('.ssh-runbook-recommendations') || !globalCssSource.includes('.ssh-runbook-recommendation-grid') || !globalCssSource.includes('.ssh-runbook-pack-dock') || !globalCssSource.includes('.ssh-runbook-pack-grid') || !globalCssSource.includes('.ssh-quick-command-grid') || !globalCssSource.includes('.ssh-quick-command-grid article.custom.pinned') || !globalCssSource.includes('.ssh-quick-command-grid .ssh-runbook-usage') || !globalCssSource.includes('.ssh-quick-command-grid button.pin') || !globalCssSource.includes('.ssh-quick-command-grid button.sort') || !globalCssSource.includes('flex-direction: column') || !globalCssSource.includes('overflow-y: auto') || !globalCssSource.includes('order: 2') || !globalCssSource.includes('flex: 1 0 clamp(320px, 52vh, 520px)') || !globalCssSource.includes('min-height: clamp(300px, 46vh, 500px)')) {
+  if (!globalCssSource.includes('.ssh-quick-command-deck') || !globalCssSource.includes('.ssh-runbook-workspace') || !globalCssSource.includes('.ssh-runbook-form') || !globalCssSource.includes('.ssh-runbook-form.editing') || !globalCssSource.includes('.ssh-runbook-lens') || !globalCssSource.includes('.ssh-runbook-categories button.active') || !globalCssSource.includes('.ssh-runbook-views button.active') || !globalCssSource.includes('.ssh-runbook-view-hint') || !globalCssSource.includes('.ssh-runbook-clear-filter') || !globalCssSource.includes('.ssh-runbook-recommendations') || !globalCssSource.includes('.ssh-runbook-recommendation-grid') || !globalCssSource.includes('.ssh-runbook-pack-dock') || !globalCssSource.includes('.ssh-runbook-pack-grid') || !globalCssSource.includes('.ssh-quick-command-grid') || !globalCssSource.includes('.ssh-quick-command-grid article.custom.pinned') || !globalCssSource.includes('.ssh-quick-command-grid .ssh-runbook-usage') || !globalCssSource.includes('.ssh-quick-command-grid button.pin') || !globalCssSource.includes('.ssh-quick-command-grid button.sort') || !globalCssSource.includes('.ssh-terminal-root-cause') || !globalCssSource.includes('.ssh-terminal-root-cause-meter') || !globalCssSource.includes('.ssh-terminal-root-cause-lanes') || !globalCssSource.includes('flex-direction: column') || !globalCssSource.includes('overflow-y: auto') || !globalCssSource.includes('order: 2') || !globalCssSource.includes('flex: 1 0 clamp(320px, 52vh, 520px)') || !globalCssSource.includes('min-height: clamp(300px, 46vh, 500px)')) {
     throw new Error('SSH terminal quick command deck styles are missing or the terminal grid does not reserve space for it');
   }
 
