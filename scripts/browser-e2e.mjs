@@ -121,7 +121,7 @@ async function assertLaunchGuide(targetPage) {
   await targetPage.locator('[data-launch-guide-copy-report="true"]').click();
   await targetPage.waitForFunction(() => Boolean(window.__colipasCopiedLaunchGuideReport), null, { timeout: 5000 });
   const copiedLaunchReport = await targetPage.evaluate(() => window.__colipasCopiedLaunchGuideReport);
-  if (!/CoLiPas launch checklist report|Checklist items|sanitized/i.test(copiedLaunchReport)) {
+  if (!/CoLiPas launch checklist report|Priority remediation queue|P1 Runtime security|Checklist items|sanitized/i.test(copiedLaunchReport)) {
     throw new Error(`Launch guide copied report is incomplete: ${copiedLaunchReport}`);
   }
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b|sk-[A-Za-z0-9_-]{12,}|BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY|password=|passphrase=/i.test(copiedLaunchReport)) {

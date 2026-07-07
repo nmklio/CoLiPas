@@ -3340,6 +3340,7 @@ function assertAccountUiGuards() {
     'copyLaunchGuideReport',
     'startTopLaunchFix',
     'buildLaunchChecklistReport',
+    'checklist.remediationSteps.map',
     'sanitizeLaunchChecklistReport',
     'buildLaunchRemediationQueue',
     'getLaunchRemediationReason',

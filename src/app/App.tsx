@@ -1784,6 +1784,11 @@ function buildLaunchChecklistReport(input: {
     `${t('launchGuide.reportStatus')}: ${checklist.status} (${checklist.done}/${checklist.total})`,
     `${t('launchGuide.reportNextAction')}: ${checklist.nextAction}`,
     '',
+    `## ${t('launchGuide.fixQueueTitle')}`,
+    ...(checklist.remediationSteps.length > 0
+      ? checklist.remediationSteps.map((step) => `- ${step.priority} ${step.item.title}: ${step.reason} -> ${step.item.action}`)
+      : [`- ${t('launchGuide.fixQueueEmpty')}`]),
+    '',
     `## ${t('launchGuide.reportItemsTitle')}`,
     ...checklist.items.map((item) => `- [${toneLabel[item.tone]}] ${item.title}: ${item.detail} -> ${item.action}`),
     '',
