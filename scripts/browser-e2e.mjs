@@ -657,6 +657,38 @@ async function assertReleaseEvidenceBrief(targetPage) {
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshProductionProbeText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshProductionProbeText)) {
     throw new Error('SSH production probe copy output leaked a raw IP address or API key');
   }
+  await targetPage.locator('[data-ssh-production-probe-schedule="true"]').waitFor({ timeout: 5000 });
+  const sshProductionProbeScheduleText = await targetPage.locator('[data-ssh-production-probe-schedule="true"]').innerText();
+  if (!/SSH auto-check plan|SSH 自动巡检计划|SSH 自動点検プラン/i.test(sshProductionProbeScheduleText) || !/Enable auto-check plan|启用自动巡检|自動点検を有効化/i.test(sshProductionProbeScheduleText)) {
+    throw new Error(`SSH production probe schedule panel did not render planning controls: ${sshProductionProbeScheduleText}`);
+  }
+  await targetPage.locator('[data-ssh-production-probe-schedule-enabled="true"]').check();
+  await targetPage.locator('[data-ssh-production-probe-schedule-autorun="true"]').check();
+  await targetPage.locator('[data-ssh-production-probe-schedule-interval="true"]').selectOption('30');
+  await targetPage.locator('[data-ssh-production-probe-schedule-save="true"]').click();
+  await targetPage.waitForFunction(() => {
+    const button = document.querySelector('[data-ssh-production-probe-schedule-save="true"]');
+    return button && !button.hasAttribute('disabled');
+  }, null, { timeout: 20000 });
+  await targetPage.waitForFunction(() => {
+    const button = document.querySelector('[data-ssh-production-probe-run-button="true"]');
+    return button && !button.hasAttribute('disabled');
+  }, null, { timeout: 20000 });
+  const browserProbeScheduleDiagnostic = await targetPage.evaluate(async () => {
+    const response = await fetch('/api/audit/diagnostics/export');
+    return response.json();
+  });
+  if (
+    browserProbeScheduleDiagnostic.sshTerminal?.productionProbeSchedule?.enabled !== true
+    || browserProbeScheduleDiagnostic.sshTerminal?.productionProbeSchedule?.autoRunBrowserProbe !== true
+    || browserProbeScheduleDiagnostic.sshTerminal?.productionProbeSchedule?.intervalMinutes !== 30
+    || typeof browserProbeScheduleDiagnostic.sshTerminal?.productionProbeSchedule?.lastAutoRunAt !== 'string'
+  ) {
+    throw new Error(`SSH production probe schedule did not persist or auto-run as expected: ${JSON.stringify(browserProbeScheduleDiagnostic.sshTerminal?.productionProbeSchedule)}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(sshProductionProbeScheduleText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(sshProductionProbeScheduleText)) {
+    throw new Error('SSH production probe schedule panel leaked a raw IP address or API key');
+  }
   await targetPage.locator('[data-ssh-bottleneck-trend="true"]').waitFor({ timeout: 5000 });
   const sshBottleneckTrendText = await targetPage.locator('[data-ssh-bottleneck-trend="true"]').innerText();
   if (!/SSH bottleneck trend/i.test(sshBottleneckTrendText) || !/Network/i.test(sshBottleneckTrendText) || !/Input/i.test(sshBottleneckTrendText) || !/Output/i.test(sshBottleneckTrendText) || !/Render/i.test(sshBottleneckTrendText)) {

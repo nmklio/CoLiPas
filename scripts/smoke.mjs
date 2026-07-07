@@ -3104,6 +3104,83 @@ if (
 }
 console.log('ok /api/audit/ssh-production-probes records sanitized live SSH evidence');
 
+const productionProbeScheduleInitialResponse = await fetch(`${baseUrl}/api/audit/ssh-production-probes/schedule`, { headers: authHeaders });
+if (!productionProbeScheduleInitialResponse.ok) {
+  throw new Error(`/api/audit/ssh-production-probes/schedule initial returned HTTP ${productionProbeScheduleInitialResponse.status}`);
+}
+const productionProbeScheduleInitialBody = await productionProbeScheduleInitialResponse.json();
+if (
+  productionProbeScheduleInitialBody.enabled !== false
+  || productionProbeScheduleInitialBody.autoRunBrowserProbe !== false
+  || productionProbeScheduleInitialBody.intervalMinutes !== 60
+  || !Array.isArray(productionProbeScheduleInitialBody.intervalOptions)
+  || !productionProbeScheduleInitialBody.intervalOptions.includes(30)
+  || productionProbeScheduleInitialBody.lastAutoRunAt !== null
+) {
+  throw new Error('/api/audit/ssh-production-probes/schedule initial payload was unexpected');
+}
+
+const productionProbeScheduleUpdateResponse = await fetch(`${baseUrl}/api/audit/ssh-production-probes/schedule`, {
+  method: 'PUT',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    enabled: true,
+    autoRunBrowserProbe: true,
+    intervalMinutes: 30,
+  }),
+});
+if (!productionProbeScheduleUpdateResponse.ok) {
+  throw new Error(`/api/audit/ssh-production-probes/schedule update returned HTTP ${productionProbeScheduleUpdateResponse.status}`);
+}
+const productionProbeScheduleUpdateBody = await productionProbeScheduleUpdateResponse.json();
+if (
+  productionProbeScheduleUpdateBody.ok !== true
+  || productionProbeScheduleUpdateBody.schedule?.enabled !== true
+  || productionProbeScheduleUpdateBody.schedule?.autoRunBrowserProbe !== true
+  || productionProbeScheduleUpdateBody.schedule?.intervalMinutes !== 30
+  || productionProbeScheduleUpdateBody.schedule?.nextDueAt === null
+  || productionProbeScheduleUpdateBody.schedule?.dueNow !== true
+) {
+  throw new Error('/api/audit/ssh-production-probes/schedule update returned unexpected payload');
+}
+
+const productionProbeScheduleClaimResponse = await fetch(`${baseUrl}/api/audit/ssh-production-probes/schedule/claim`, {
+  method: 'POST',
+  headers: authHeaders,
+});
+if (!productionProbeScheduleClaimResponse.ok) {
+  throw new Error(`/api/audit/ssh-production-probes/schedule/claim returned HTTP ${productionProbeScheduleClaimResponse.status}`);
+}
+const productionProbeScheduleClaimBody = await productionProbeScheduleClaimResponse.json();
+if (
+  productionProbeScheduleClaimBody.ok !== true
+  || productionProbeScheduleClaimBody.claimed !== true
+  || productionProbeScheduleClaimBody.schedule?.enabled !== true
+  || productionProbeScheduleClaimBody.schedule?.autoRunBrowserProbe !== true
+  || typeof productionProbeScheduleClaimBody.schedule?.lastAutoRunAt !== 'string'
+  || productionProbeScheduleClaimBody.schedule?.dueNow !== false
+  || productionProbeScheduleClaimBody.schedule?.overdue !== false
+) {
+  throw new Error('/api/audit/ssh-production-probes/schedule claim returned unexpected payload');
+}
+
+const productionProbeScheduleSecondClaimResponse = await fetch(`${baseUrl}/api/audit/ssh-production-probes/schedule/claim`, {
+  method: 'POST',
+  headers: authHeaders,
+});
+if (!productionProbeScheduleSecondClaimResponse.ok) {
+  throw new Error(`/api/audit/ssh-production-probes/schedule/claim repeat returned HTTP ${productionProbeScheduleSecondClaimResponse.status}`);
+}
+const productionProbeScheduleSecondClaimBody = await productionProbeScheduleSecondClaimResponse.json();
+if (
+  productionProbeScheduleSecondClaimBody.ok !== true
+  || productionProbeScheduleSecondClaimBody.claimed !== false
+  || productionProbeScheduleSecondClaimBody.schedule?.dueNow !== false
+) {
+  throw new Error('/api/audit/ssh-production-probes/schedule repeat claim should not reopen the same window');
+}
+console.log('ok /api/audit/ssh-production-probes/schedule persists cadence and claims auto-run windows safely');
+
 const diagnosticExportResponse = await fetch(`${baseUrl}/api/audit/diagnostics/export`, { headers: authHeaders });
 if (!diagnosticExportResponse.ok) {
   throw new Error(`/api/audit/diagnostics/export returned HTTP ${diagnosticExportResponse.status}`);
@@ -3144,6 +3221,14 @@ if (
   || diagnosticExportBody.sshTerminal?.productionProbeTrend?.latestRoundTripMs !== 72
   || diagnosticExportBody.sshTerminal?.productionProbeTrend?.averageRoundTripMs !== 72
   || diagnosticExportBody.sshTerminal?.productionProbeTrend?.direction !== 'unknown'
+  || diagnosticExportBody.sshTerminal?.productionProbeSchedule?.enabled !== true
+  || diagnosticExportBody.sshTerminal?.productionProbeSchedule?.autoRunBrowserProbe !== true
+  || diagnosticExportBody.sshTerminal?.productionProbeSchedule?.intervalMinutes !== 30
+  || !Array.isArray(diagnosticExportBody.sshTerminal?.productionProbeSchedule?.intervalOptions)
+  || !diagnosticExportBody.sshTerminal?.productionProbeSchedule?.intervalOptions?.includes(30)
+  || typeof diagnosticExportBody.sshTerminal?.productionProbeSchedule?.lastAutoRunAt !== 'string'
+  || diagnosticExportBody.sshTerminal?.productionProbeSchedule?.dueNow !== false
+  || diagnosticExportBody.sshTerminal?.productionProbeSchedule?.overdue !== false
   || !Array.isArray(diagnosticExportBody.sshTerminal?.productionProbeTrend?.recent)
   || diagnosticExportBody.sshTerminal?.productionProbeTrend?.recent?.[0]?.primaryKind !== 'temporary-simulated'
   || diagnosticExportBody.sshTerminal?.productionProbeTrend?.recent?.[0]?.primaryMode !== 'simulate'

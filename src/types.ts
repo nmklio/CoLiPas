@@ -408,6 +408,19 @@ export interface DiagnosticExportResponse {
         tone: 'ok' | 'warn' | 'fail';
       }>;
     };
+    productionProbeSchedule: {
+      enabled: boolean;
+      autoRunBrowserProbe: boolean;
+      intervalMinutes: 30 | 60 | 180 | 720 | 1440;
+      intervalOptions: Array<30 | 60 | 180 | 720 | 1440>;
+      lastAutoRunAt: string | null;
+      updatedAt: string | null;
+      updatedBy: string | null;
+      nextDueAt: string | null;
+      dueNow: boolean;
+      overdue: boolean;
+      alertTone: 'ok' | 'warn' | 'fail';
+    };
     recentEvidence: Array<{
       serverName: string;
       mode: SshVerifyMode;

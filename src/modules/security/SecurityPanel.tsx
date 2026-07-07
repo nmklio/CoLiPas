@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -21,7 +21,7 @@ import {
 import { getLocale, useI18n } from '../../i18n';
 import { OperationEvent } from '../../types';
 import type { OverviewPreflightSnapshot } from '../overview/MonitoringOverview';
-import { connectServer, connectServerShellSocket, deleteServer, fetchDiagnosticExport, fetchReleaseReadiness, fetchReleaseReadinessReport, fetchServerShellStatus, recordReleaseReadinessSnapshot, recordSshProductionProbe, recordSshSupportTicketCopy, remediateSecurityRisk } from '../../services/apiClient';
+import { claimSshProductionProbeScheduleRun, connectServer, connectServerShellSocket, deleteServer, fetchDiagnosticExport, fetchReleaseReadiness, fetchReleaseReadinessReport, fetchServerShellStatus, recordReleaseReadinessSnapshot, recordSshProductionProbe, recordSshSupportTicketCopy, remediateSecurityRisk, updateSshProductionProbeSchedule } from '../../services/apiClient';
 import type { SecurityRemediationResponse } from '../../services/apiClient';
 import type { DiagnosticExportResponse, ReleaseDeploymentEvidence, ReleaseReadinessResponse } from '../../types';
 import {
@@ -533,6 +533,14 @@ interface SshProductionProbeSummary {
   copyText: string;
 }
 
+type SshProductionProbeSchedule = DiagnosticExportResponse['sshTerminal']['productionProbeSchedule'];
+
+interface SshProductionProbeScheduleDraft {
+  enabled: boolean;
+  autoRunBrowserProbe: boolean;
+  intervalMinutes: SshProductionProbeSchedule['intervalMinutes'];
+}
+
 interface SshSupportBundleSection {
   id: 'summary' | 'lag-report' | 'flight' | 'sampler' | 'trend' | 'terminal-pack';
   title: string;
@@ -589,6 +597,12 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
   const [exportingReadinessReport, setExportingReadinessReport] = useState(false);
   const [exportingDiagnostic, setExportingDiagnostic] = useState(false);
   const [runningSshProductionProbe, setRunningSshProductionProbe] = useState(false);
+  const [savingSshProductionProbeSchedule, setSavingSshProductionProbeSchedule] = useState(false);
+  const [sshProductionProbeScheduleDraft, setSshProductionProbeScheduleDraft] = useState<SshProductionProbeScheduleDraft>({
+    enabled: false,
+    autoRunBrowserProbe: false,
+    intervalMinutes: 60,
+  });
   const [expandedSshMetricId, setExpandedSshMetricId] = useState('');
   const [sshLagReportHistory, setSshLagReportHistory] = useState<SshLagReportSnapshot[]>(() => loadSshLagReportHistory());
   const [sshBottleneckRadarHistory, setSshBottleneckRadarHistory] = useState<SshBottleneckRadarSnapshot[]>(() => loadSshBottleneckRadarHistory());
@@ -596,6 +610,7 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
   const [sshTerminalSupportSnapshot, setSshTerminalSupportSnapshot] = useState<SshTerminalSupportSnapshot | null>(() => loadSshTerminalSupportSnapshot());
   const [sshTerminalSupportSnapshotHistory, setSshTerminalSupportSnapshotHistory] = useState<SshTerminalSupportSnapshot[]>(() => loadSshTerminalSupportSnapshotHistory());
   const [releaseFixChecklistState, setReleaseFixChecklistState] = useState<ReleaseFixChecklistState>(() => loadReleaseFixChecklistState());
+  const sshProductionProbeAutoClaimInFlightRef = useRef(false);
 
   const openEvents = useMemo(() => events.filter((event) => event.status === 'open'), [events]);
   const filteredAudits = useMemo(() => {
@@ -690,6 +705,7 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
     () => buildSshProductionProbeSummary(diagnosticBundle?.sshTerminal?.productionProbeTrend ?? null, sshProductionProbeCopy, locale),
     [diagnosticBundle, locale, sshProductionProbeCopy],
   );
+  const sshProductionProbeSchedule = diagnosticBundle?.sshTerminal?.productionProbeSchedule ?? null;
   const sshSupportBundle = useMemo(
     () => buildSshSupportBundle({
       sshPerformance,
@@ -746,6 +762,21 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
   useEffect(() => {
     refreshSecurityData().catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (!sshProductionProbeSchedule) {
+      return;
+    }
+    setSshProductionProbeScheduleDraft({
+      enabled: sshProductionProbeSchedule.enabled,
+      autoRunBrowserProbe: sshProductionProbeSchedule.autoRunBrowserProbe,
+      intervalMinutes: sshProductionProbeSchedule.intervalMinutes,
+    });
+  }, [
+    sshProductionProbeSchedule?.enabled,
+    sshProductionProbeSchedule?.autoRunBrowserProbe,
+    sshProductionProbeSchedule?.intervalMinutes,
+  ]);
 
   useEffect(() => {
     setSshBottleneckRadarHistory(loadSshBottleneckRadarHistory());
@@ -833,6 +864,48 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
     };
   }, [activeTraceId, auditEntries]);
 
+  useEffect(() => {
+    if (
+      !sshProductionProbeSchedule
+      || !sshProductionProbeSchedule.enabled
+      || !sshProductionProbeSchedule.autoRunBrowserProbe
+      || !sshProductionProbeSchedule.dueNow
+      || runningSshProductionProbe
+      || sshProductionProbeAutoClaimInFlightRef.current
+      || typeof document === 'undefined'
+      || document.visibilityState !== 'visible'
+    ) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    sshProductionProbeAutoClaimInFlightRef.current = true;
+
+    claimSshProductionProbeScheduleRun()
+      .then(async (result) => {
+        if (cancelled) {
+          return;
+        }
+        mergeSshProductionProbeSchedule(result.schedule);
+        if (result.claimed) {
+          await runSshProductionBrowserProbe({ automated: true });
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        sshProductionProbeAutoClaimInFlightRef.current = false;
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    runningSshProductionProbe,
+    sshProductionProbeSchedule?.autoRunBrowserProbe,
+    sshProductionProbeSchedule?.dueNow,
+    sshProductionProbeSchedule?.enabled,
+  ]);
+
   async function refreshSecurityData() {
     setLoading(true);
     setLoadError('');
@@ -868,6 +941,40 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
       setDiagnosticBundle(null);
     } finally {
       setLoading(false);
+    }
+  }
+
+  function mergeSshProductionProbeSchedule(schedule: SshProductionProbeSchedule) {
+    setDiagnosticBundle((current) => {
+      if (!current) {
+        return current;
+      }
+      return {
+        ...current,
+        sshTerminal: {
+          ...current.sshTerminal,
+          productionProbeSchedule: schedule,
+        },
+      };
+    });
+  }
+
+  async function saveSshProductionProbeSchedule() {
+    setSavingSshProductionProbeSchedule(true);
+    try {
+      const result = await updateSshProductionProbeSchedule(sshProductionProbeScheduleDraft);
+      mergeSshProductionProbeSchedule(result.schedule);
+      setRemediationMessage(sshProductionProbeCopy.scheduleSaved(
+        result.schedule.enabled,
+        result.schedule.intervalMinutes,
+        result.schedule.autoRunBrowserProbe,
+      ));
+      setRemediationError(false);
+    } catch (error) {
+      setRemediationMessage(error instanceof Error ? error.message : sshProductionProbeCopy.scheduleSaveFailed);
+      setRemediationError(true);
+    } finally {
+      setSavingSshProductionProbeSchedule(false);
     }
   }
 
@@ -1276,7 +1383,7 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
     }
   }
 
-  async function runSshProductionBrowserProbe() {
+  async function runSshProductionBrowserProbe(options: { automated?: boolean } = {}) {
     if (runningSshProductionProbe) {
       return;
     }
@@ -1337,13 +1444,15 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
         recordedAt: new Date().toISOString(),
       });
       await refreshSecurityData();
-      setRemediationMessage(sshProductionProbeCopy.runSuccess(probe.durationMs));
+      setRemediationMessage(options.automated
+        ? sshProductionProbeCopy.autoRunSuccess(probe.durationMs)
+        : sshProductionProbeCopy.runSuccess(probe.durationMs));
       setRemediationError(false);
     } catch (error) {
       if (tempServerId) {
         await deleteServer(tempServerId).catch(() => undefined);
       }
-      setRemediationMessage(error instanceof Error ? error.message : sshProductionProbeCopy.runFailed);
+      setRemediationMessage(error instanceof Error ? error.message : (options.automated ? sshProductionProbeCopy.autoRunFailed : sshProductionProbeCopy.runFailed));
       setRemediationError(true);
     } finally {
       setRunningSshProductionProbe(false);
@@ -2035,7 +2144,7 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
               <small>{sshProductionProbe.note}</small>
             </div>
             <div className="security-ssh-production-probe-actions">
-              <button type="button" className="tool-button" onClick={runSshProductionBrowserProbe} disabled={runningSshProductionProbe} data-ssh-production-probe-run-button="true">
+              <button type="button" className="tool-button" onClick={() => { void runSshProductionBrowserProbe(); }} disabled={runningSshProductionProbe} data-ssh-production-probe-run-button="true">
                 <Rocket size={15} />
                 {runningSshProductionProbe ? sshProductionProbeCopy.running : sshProductionProbeCopy.run}
               </button>
@@ -2073,6 +2182,94 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
               <p>{sshProductionProbe.emptyDetail}</p>
             </div>
           )}
+          <div
+            className={`security-ssh-production-probe-schedule ${sshProductionProbeSchedule?.alertTone ?? 'warn'}`}
+            data-ssh-production-probe-schedule="true"
+          >
+            <div className="security-ssh-production-probe-schedule-head">
+              <div>
+                <span>{sshProductionProbeCopy.scheduleTitle}</span>
+                <strong>{sshProductionProbeSchedule?.enabled ? sshProductionProbeCopy.scheduleEnabled : sshProductionProbeCopy.scheduleDisabled}</strong>
+                <p>{sshProductionProbeCopy.scheduleDescription}</p>
+                <small>{sshProductionProbeCopy.scheduleAutoRunHint}</small>
+              </div>
+              <button
+                type="button"
+                className="tool-button"
+                onClick={saveSshProductionProbeSchedule}
+                disabled={savingSshProductionProbeSchedule}
+                data-ssh-production-probe-schedule-save="true"
+              >
+                <ClipboardCheck size={15} />
+                {savingSshProductionProbeSchedule ? sshProductionProbeCopy.scheduleSaving : sshProductionProbeCopy.scheduleSave}
+              </button>
+            </div>
+            <div className="security-ssh-production-probe-schedule-grid">
+              <article className={sshProductionProbeSchedule?.alertTone ?? 'warn'} data-ssh-production-probe-schedule-stat="latest">
+                <span>{sshProductionProbeCopy.scheduleLatestAuto}</span>
+                <strong>{formatSshProductionProbeScheduleTimestamp(sshProductionProbeSchedule?.lastAutoRunAt ?? null, locale, sshProductionProbeCopy.scheduleNoAutoRuns)}</strong>
+                <small>{sshProductionProbeSchedule?.updatedBy ? `${sshProductionProbeCopy.target}: ${sshProductionProbeSchedule.updatedBy}` : sshProductionProbeCopy.scheduleNoAutoRuns}</small>
+              </article>
+              <article className={sshProductionProbeSchedule?.alertTone ?? 'warn'} data-ssh-production-probe-schedule-stat="next">
+                <span>{sshProductionProbeCopy.scheduleNextDue}</span>
+                <strong>{formatSshProductionProbeScheduleTimestamp(
+                  sshProductionProbeSchedule?.nextDueAt ?? null,
+                  locale,
+                  formatSshProductionProbeScheduleState(sshProductionProbeSchedule, sshProductionProbeCopy),
+                )}</strong>
+                <small>{formatSshProductionProbeScheduleState(sshProductionProbeSchedule, sshProductionProbeCopy)}</small>
+              </article>
+              <article className={sshProductionProbeSchedule?.enabled ? 'ok' : 'warn'} data-ssh-production-probe-schedule-stat="cadence">
+                <span>{sshProductionProbeCopy.scheduleCadence}</span>
+                <strong>{formatSshProductionProbeScheduleInterval(sshProductionProbeSchedule?.intervalMinutes ?? sshProductionProbeScheduleDraft.intervalMinutes, language)}</strong>
+                <small>{sshProductionProbeSchedule?.autoRunBrowserProbe ? sshProductionProbeCopy.scheduleModeAssist : sshProductionProbeCopy.scheduleModeManual}</small>
+              </article>
+            </div>
+            <div className="security-ssh-production-probe-schedule-form">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={sshProductionProbeScheduleDraft.enabled}
+                  onChange={(event) => setSshProductionProbeScheduleDraft((current) => ({
+                    ...current,
+                    enabled: event.target.checked,
+                  }))}
+                  data-ssh-production-probe-schedule-enabled="true"
+                />
+                <span>{sshProductionProbeCopy.scheduleEnableLabel}</span>
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={sshProductionProbeScheduleDraft.autoRunBrowserProbe}
+                  disabled={!sshProductionProbeScheduleDraft.enabled}
+                  onChange={(event) => setSshProductionProbeScheduleDraft((current) => ({
+                    ...current,
+                    autoRunBrowserProbe: event.target.checked,
+                  }))}
+                  data-ssh-production-probe-schedule-autorun="true"
+                />
+                <span>{sshProductionProbeCopy.scheduleAutoRunLabel}</span>
+              </label>
+              <label className="security-ssh-production-probe-schedule-select">
+                <span>{sshProductionProbeCopy.scheduleIntervalLabel}</span>
+                <select
+                  value={sshProductionProbeScheduleDraft.intervalMinutes}
+                  onChange={(event) => setSshProductionProbeScheduleDraft((current) => ({
+                    ...current,
+                    intervalMinutes: Number(event.target.value) as SshProductionProbeScheduleDraft['intervalMinutes'],
+                  }))}
+                  data-ssh-production-probe-schedule-interval="true"
+                >
+                  {(sshProductionProbeSchedule?.intervalOptions ?? [30, 60, 180, 720, 1440]).map((interval) => (
+                    <option key={interval} value={interval}>
+                      {formatSshProductionProbeScheduleInterval(interval, language)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </div>
         </section>
         <section className={`security-ssh-support-bundle ${sshSupportBundle.tone}`} data-ssh-support-bundle="true" aria-label={sshPerformanceCopy.supportBundleTitle}>
           <div className="security-ssh-support-bundle-copy">
@@ -5607,6 +5804,8 @@ interface SshProductionProbeCopy {
   running: string;
   runSuccess: (durationMs: number) => string;
   runFailed: string;
+  autoRunSuccess: (durationMs: number) => string;
+  autoRunFailed: string;
   emptyTitle: string;
   emptyDetail: string;
   successRate: string;
@@ -5628,6 +5827,27 @@ interface SshProductionProbeCopy {
   reportAction: string;
   reportRecent: string;
   reportNote: string;
+  scheduleTitle: string;
+  scheduleDescription: string;
+  scheduleLatestAuto: string;
+  scheduleNextDue: string;
+  scheduleCadence: string;
+  scheduleMode: string;
+  scheduleModeAssist: string;
+  scheduleModeManual: string;
+  scheduleDisabled: string;
+  scheduleEnabled: string;
+  scheduleDueNow: string;
+  scheduleOverdue: string;
+  scheduleNoAutoRuns: string;
+  scheduleEnableLabel: string;
+  scheduleAutoRunLabel: string;
+  scheduleAutoRunHint: string;
+  scheduleIntervalLabel: string;
+  scheduleSave: string;
+  scheduleSaving: string;
+  scheduleSaved: (enabled: boolean, intervalMinutes: number, autoRunBrowserProbe: boolean) => string;
+  scheduleSaveFailed: string;
 }
 
 const sshProductionProbeCopyByLanguage: Record<string, SshProductionProbeCopy> = {
@@ -5639,8 +5859,10 @@ const sshProductionProbeCopyByLanguage: Record<string, SshProductionProbeCopy> =
     running: '探针运行中',
     runSuccess: (durationMs) => `SSH 浏览器探针完成：${Math.round(durationMs)}ms`,
     runFailed: 'SSH 浏览器探针失败',
+    autoRunSuccess: (durationMs) => `SSH 自动浏览器探针完成：${Math.round(durationMs)}ms`,
+    autoRunFailed: 'SSH 自动浏览器探针失败',
     emptyTitle: '等待线上探针',
-    emptyDetail: '运行 `npm run probe:ssh-production` 并设置 `COLIPAS_PROBE_RECORD=1` 后，这里会显示脱敏后的真实线上 SSH 可用性趋势。',
+    emptyDetail: '运行 `npm run probe:ssh-production` 并设置 `COLIPAS_PROBE_RECORD=1` 后，这里会显示脱敏后的真实线上 SSH 趋势证据。',
     successRate: '成功率',
     roundTrip: '往返耗时',
     cleanup: '清理释放',
@@ -5652,14 +5874,35 @@ const sshProductionProbeCopyByLanguage: Record<string, SshProductionProbeCopy> =
     previousSample: '对比基线',
     latestRun: (time) => `记录于 ${time}`,
     targetDetail: (targetLabel, deploymentMode, direction) => `${targetLabel} / ${deploymentMode} / ${direction}`,
-    actionOk: '把这组线上探针当成老板反馈前的健康基线，后续只要对比是否掉速或清理失败即可。',
-    actionWarn: '先复测高峰时段与弱网环境；如果最近探针继续变慢，再回到 SSH 面板核对输入批处理和输出吞吐。',
-    actionFail: '先处理真实线上链路问题：探针失败、终端未就绪或 shell 未释放都说明用户卡顿并非纯 UI 假象。',
-    note: '该面板只保留脱敏后的成功率、时延、就绪率与清理结果，不保存域名、IP、命令正文、密钥或用户数据。',
-    reportTitle: 'SSH production probe report',
-    reportAction: 'Recommended action',
-    reportRecent: 'Recent probes',
-    reportNote: 'Only sanitized production probe metrics are included.',
+    actionOk: '把这组线上探针作为 SSH 体验健康基线，后续只要对比是否掉速或释放失败即可。',
+    actionWarn: '优先复测高峰时段与弱网环境；如果最近探针继续变慢，再回到 SSH 面板核对输入批处理和输出吞吐。',
+    actionFail: '先按真实链路问题处理：探针失败、会话未就绪或 shell 未释放都说明卡顿并非单纯 UI 假象。',
+    note: '这里只保留脱敏后的成功率、时延、就绪率与清理结果，不保存域名、IP、命令正文、密钥或用户数据。',
+    reportTitle: 'SSH 线上探针报告',
+    reportAction: '建议动作',
+    reportRecent: '最近探针',
+    reportNote: '报告仅包含脱敏后的线上探针指标。',
+    scheduleTitle: 'SSH 自动巡检计划',
+    scheduleDescription: '利用当前浏览器会话按低频自动运行 SSH 线上探针，提前发现慢连、就绪率下降或 shell 未释放等回归。',
+    scheduleLatestAuto: '最近自动执行',
+    scheduleNextDue: '下次应执行',
+    scheduleCadence: '执行频率',
+    scheduleMode: '执行模式',
+    scheduleModeAssist: '浏览器辅助自动执行',
+    scheduleModeManual: '只保存计划，手动触发',
+    scheduleDisabled: '已关闭',
+    scheduleEnabled: '已开启',
+    scheduleDueNow: '应立即执行',
+    scheduleOverdue: '已超时',
+    scheduleNoAutoRuns: '还没有自动巡检记录',
+    scheduleEnableLabel: '启用自动巡检计划',
+    scheduleAutoRunLabel: '允许当前页面自动运行浏览器探针',
+    scheduleAutoRunHint: '只会保存脱敏后的聚合指标，不会保留域名、IP、命令正文、密钥或用户数据。',
+    scheduleIntervalLabel: '巡检间隔',
+    scheduleSave: '保存计划',
+    scheduleSaving: '保存中',
+    scheduleSaved: (enabled, intervalMinutes, autoRunBrowserProbe) => `SSH 自动巡检计划已${enabled ? '开启' : '关闭'}：间隔 ${intervalMinutes} 分钟，${autoRunBrowserProbe ? '启用浏览器辅助自动执行' : '仅保留手动触发' }。`,
+    scheduleSaveFailed: 'SSH 自动巡检计划保存失败',
   },
   en: {
     eyebrow: 'SSH production probe',
@@ -5669,6 +5912,8 @@ const sshProductionProbeCopyByLanguage: Record<string, SshProductionProbeCopy> =
     running: 'Running probe',
     runSuccess: (durationMs) => `SSH browser probe completed in ${Math.round(durationMs)}ms`,
     runFailed: 'SSH browser probe failed',
+    autoRunSuccess: (durationMs) => `SSH automatic browser probe completed in ${Math.round(durationMs)}ms`,
+    autoRunFailed: 'SSH automatic browser probe failed',
     emptyTitle: 'Waiting for a live production probe',
     emptyDetail: 'Run `npm run probe:ssh-production` with `COLIPAS_PROBE_RECORD=1` and this panel will show sanitized live SSH trend evidence.',
     successRate: 'Success rate',
@@ -5690,21 +5935,44 @@ const sshProductionProbeCopyByLanguage: Record<string, SshProductionProbeCopy> =
     reportAction: 'Recommended action',
     reportRecent: 'Recent probes',
     reportNote: 'Only sanitized production probe metrics are included.',
+    scheduleTitle: 'SSH auto-check plan',
+    scheduleDescription: 'Use the current browser session to run low-frequency production SSH probes and surface slowdown, ready-rate, or cleanup regressions earlier.',
+    scheduleLatestAuto: 'Latest auto run',
+    scheduleNextDue: 'Next due',
+    scheduleCadence: 'Cadence',
+    scheduleMode: 'Mode',
+    scheduleModeAssist: 'Browser-assisted auto-run',
+    scheduleModeManual: 'Plan only (manual trigger)',
+    scheduleDisabled: 'Disabled',
+    scheduleEnabled: 'Enabled',
+    scheduleDueNow: 'Due now',
+    scheduleOverdue: 'Overdue',
+    scheduleNoAutoRuns: 'No automatic probe has run yet',
+    scheduleEnableLabel: 'Enable auto-check plan',
+    scheduleAutoRunLabel: 'Allow this page to run browser probes automatically',
+    scheduleAutoRunHint: 'Only sanitized aggregate metrics are stored. No hostnames, IPs, command bodies, keys, or user data are retained.',
+    scheduleIntervalLabel: 'Probe interval',
+    scheduleSave: 'Save plan',
+    scheduleSaving: 'Saving',
+    scheduleSaved: (enabled, intervalMinutes, autoRunBrowserProbe) => `SSH auto-check ${enabled ? 'enabled' : 'disabled'} at ${intervalMinutes} minute cadence with ${autoRunBrowserProbe ? 'browser-assisted auto-run' : 'manual trigger only'}.`,
+    scheduleSaveFailed: 'SSH auto-check plan could not be saved',
   },
   ja: {
     eyebrow: 'SSH 本番プローブ',
     copy: 'プローブ要約をコピー',
     copied: 'SSH 本番プローブ要約をコピーしました',
-    run: 'ブラウザプローブを実行',
-    running: 'プローブ実行中',
-    runSuccess: (durationMs) => `SSH ブラウザプローブが ${Math.round(durationMs)}ms で完了しました`,
-    runFailed: 'SSH ブラウザプローブに失敗しました',
-    emptyTitle: '本番プローブ待ち',
-    emptyDetail: '`COLIPAS_PROBE_RECORD=1` を付けて `npm run probe:ssh-production` を実行すると、匿名化した本番 SSH 傾向がここに表示されます。',
+    run: 'ブラウザープローブを実行',
+    running: 'プローブを実行中',
+    runSuccess: (durationMs) => `SSH ブラウザープローブが ${Math.round(durationMs)}ms で完了しました`,
+    runFailed: 'SSH ブラウザープローブに失敗しました',
+    autoRunSuccess: (durationMs) => `SSH 自動ブラウザープローブが ${Math.round(durationMs)}ms で完了しました`,
+    autoRunFailed: 'SSH 自動ブラウザープローブに失敗しました',
+    emptyTitle: '本番プローブ待機中',
+    emptyDetail: '`COLIPAS_PROBE_RECORD=1` を設定して `npm run probe:ssh-production` を実行すると、このパネルに匿名化された本番 SSH の傾向証拠が表示されます。',
     successRate: '成功率',
     roundTrip: '往復時間',
-    cleanup: 'クリーンアップ',
-    target: 'ターゲット',
+    cleanup: '解放状態',
+    target: '対象',
     latest: '最新',
     average: '平均',
     sessionReady: '準備完了率',
@@ -5712,19 +5980,100 @@ const sshProductionProbeCopyByLanguage: Record<string, SshProductionProbeCopy> =
     previousSample: '比較基準',
     latestRun: (time) => `${time} に記録`,
     targetDetail: (targetLabel, deploymentMode, direction) => `${targetLabel} / ${deploymentMode} / ${direction}`,
-    actionOk: 'この本番プローブを健全な SSH 基準として保持し、今後の遅延報告と比較してください。',
-    actionWarn: 'ピーク時間帯と弱い回線を先に再計測してください。引き続き遅くなる場合は SSH パネルで入力バッチと出力スループットを確認します。',
-    actionFail: 'まず本番経路の問題として扱ってください。プローブ失敗、未準備セッション、未解放 shell は UI だけの問題ではありません。',
-    note: 'この面板は匿名化した成功率、遅延、準備完了率、解放結果だけを保持し、ホスト名、IP、コマンド本文、鍵、ユーザーデータは保存しません。',
-    reportTitle: 'SSH production probe report',
-    reportAction: 'Recommended action',
-    reportRecent: 'Recent probes',
-    reportNote: 'Only sanitized production probe metrics are included.',
+    actionOk: 'この本番プローブを SSH 体験の基準線として扱い、以後は遅延悪化や解放失敗が起きていないか比較してください。',
+    actionWarn: 'まずピーク時間帯と低品質回線を再計測してください。遅延が続く場合は SSH パネルに戻って入力バッチと出力スループットを確認します。',
+    actionFail: '実際の経路問題として先に扱ってください。プローブ失敗、未準備セッション、未解放 shell は UI だけの問題ではありません。',
+    note: 'このパネルには匿名化した成功率、遅延、準備完了率、解放結果のみを保存し、ホスト名、IP、コマンド本文、鍵、ユーザーデータは保持しません。',
+    reportTitle: 'SSH 本番プローブレポート',
+    reportAction: '推奨アクション',
+    reportRecent: '最近のプローブ',
+    reportNote: 'レポートには匿名化された本番プローブ指標のみを含みます。',
+    scheduleTitle: 'SSH 自動巡回プラン',
+    scheduleDescription: '現在のブラウザーセッションを使って低頻度の SSH 本番プローブを自動実行し、遅延、準備完了率低下、shell 未解放の回帰を早めに検知します。',
+    scheduleLatestAuto: '最新の自動実行',
+    scheduleNextDue: '次回予定',
+    scheduleCadence: '実行間隔',
+    scheduleMode: '実行モード',
+    scheduleModeAssist: 'ブラウザー補助の自動実行',
+    scheduleModeManual: 'プランのみ保存、手動実行',
+    scheduleDisabled: '無効',
+    scheduleEnabled: '有効',
+    scheduleDueNow: '今すぐ実行',
+    scheduleOverdue: '期限超過',
+    scheduleNoAutoRuns: 'まだ自動実行の記録はありません',
+    scheduleEnableLabel: '自動巡回プランを有効化',
+    scheduleAutoRunLabel: 'このページでブラウザープローブの自動実行を許可',
+    scheduleAutoRunHint: '保存するのは匿名化された集計指標のみで、ホスト名、IP、コマンド本文、鍵、ユーザーデータは保持しません。',
+    scheduleIntervalLabel: '巡回間隔',
+    scheduleSave: 'プランを保存',
+    scheduleSaving: '保存中',
+    scheduleSaved: (enabled, intervalMinutes, autoRunBrowserProbe) => `SSH 自動巡回プランを${enabled ? '有効化' : '無効化'}しました。間隔は ${intervalMinutes} 分、${autoRunBrowserProbe ? 'ブラウザー補助の自動実行あり' : '手動実行のみ'}です。`,
+    scheduleSaveFailed: 'SSH 自動巡回プランを保存できませんでした',
   },
 };
 
 function getSshProductionProbeCopy(language: string) {
   return sshProductionProbeCopyByLanguage[language] ?? sshProductionProbeCopyByLanguage.zh;
+}
+
+function formatSshProductionProbeScheduleInterval(intervalMinutes: number, language: string) {
+  if (intervalMinutes % 1440 === 0) {
+    const days = Math.max(1, Math.round(intervalMinutes / 1440));
+    if (language === 'en') {
+      return `${days} day${days === 1 ? '' : 's'}`;
+    }
+    if (language === 'ja') {
+      return `${days}日`;
+    }
+    return `${days}天`;
+  }
+  if (intervalMinutes % 60 === 0) {
+    const hours = Math.max(1, Math.round(intervalMinutes / 60));
+    if (language === 'en') {
+      return `${hours} hour${hours === 1 ? '' : 's'}`;
+    }
+    if (language === 'ja') {
+      return `${hours}時間`;
+    }
+    return `${hours}小时`;
+  }
+  if (language === 'en') {
+    return `${intervalMinutes} minute${intervalMinutes === 1 ? '' : 's'}`;
+  }
+  if (language === 'ja') {
+    return `${intervalMinutes}分`;
+  }
+  return `${intervalMinutes}分钟`;
+}
+
+function formatSshProductionProbeScheduleTimestamp(value: string | null, locale: string, fallback: string) {
+  if (!value) {
+    return fallback;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return fallback;
+  }
+  return parsed.toLocaleString(locale);
+}
+
+function formatSshProductionProbeScheduleState(
+  schedule: SshProductionProbeSchedule | null,
+  copy: SshProductionProbeCopy,
+) {
+  if (!schedule?.enabled) {
+    return copy.scheduleDisabled;
+  }
+  if (!schedule.autoRunBrowserProbe) {
+    return copy.scheduleModeManual;
+  }
+  if (schedule.overdue) {
+    return copy.scheduleOverdue;
+  }
+  if (schedule.dueNow) {
+    return copy.scheduleDueNow;
+  }
+  return copy.scheduleModeAssist;
 }
 
 function runSshProductionBrowserRoundTrip(serverId: string) {

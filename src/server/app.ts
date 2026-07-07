@@ -19,7 +19,7 @@ import { buildDiagnosticExport } from './services/diagnosticService.js';
 import { createOperationTask, preflightOperationTask } from './services/operationsService.js';
 import { buildReleaseReadiness, buildReleaseReadinessReport, recordReleaseReadinessSnapshot } from './services/releaseReadinessService.js';
 import { buildReleaseVerification, isReleaseVerificationAuthorized, isReleaseVerificationEnabled } from './services/releaseVerificationService.js';
-import { recordSshProductionProbe } from './services/sshProductionProbeService.js';
+import { claimSshProductionProbeScheduleRun, getSshProductionProbeSchedule, recordSshProductionProbe, updateSshProductionProbeSchedule } from './services/sshProductionProbeService.js';
 import { createSshRunbookCommand, deleteSshRunbookCommand, importSshRunbookCommands, listSshRunbookCommands, markSshRunbookCommandUsed, reorderSshRunbookCommands, updateSshRunbookCommand, updateSshRunbookCommandPin } from './services/sshRunbookService.js';
 import {
   buildServerInventorySnapshot,
@@ -792,6 +792,28 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
     try {
       const session = requireSession(request, config);
       response.status(201).json(recordSshProductionProbe(request.body, session.user.username));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get('/api/audit/ssh-production-probes/schedule', (_request, response) => {
+    response.json(getSshProductionProbeSchedule());
+  });
+
+  app.put('/api/audit/ssh-production-probes/schedule', (request, response, next) => {
+    try {
+      const session = requireSession(request, config);
+      response.json(updateSshProductionProbeSchedule(request.body, session.user.username));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post('/api/audit/ssh-production-probes/schedule/claim', (request, response, next) => {
+    try {
+      const session = requireSession(request, config);
+      response.json(claimSshProductionProbeScheduleRun(session.user.username));
     } catch (error) {
       next(error);
     }

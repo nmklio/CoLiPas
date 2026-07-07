@@ -263,6 +263,26 @@ export interface SshProductionProbePayload {
   recordedAt?: string;
 }
 
+export interface SshProductionProbeScheduleResponse {
+  enabled: boolean;
+  autoRunBrowserProbe: boolean;
+  intervalMinutes: 30 | 60 | 180 | 720 | 1440;
+  intervalOptions: Array<30 | 60 | 180 | 720 | 1440>;
+  lastAutoRunAt: string | null;
+  updatedAt: string | null;
+  updatedBy: string | null;
+  nextDueAt: string | null;
+  dueNow: boolean;
+  overdue: boolean;
+  alertTone: 'ok' | 'warn' | 'fail';
+}
+
+export interface SshProductionProbeScheduleUpdatePayload {
+  enabled: boolean;
+  autoRunBrowserProbe: boolean;
+  intervalMinutes: SshProductionProbeScheduleResponse['intervalMinutes'];
+}
+
 export interface ServerActionResponse extends ServerCommandResponse {
   id: string;
   action: 'powerOn' | 'shutdown' | 'reboot';
@@ -1121,6 +1141,56 @@ export async function recordSshProductionProbe(
   return (await response.json()) as {
     ok: true;
     trend: DiagnosticExportResponse['sshTerminal']['productionProbeTrend'];
+  };
+}
+
+export async function fetchSshProductionProbeSchedule(fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/audit/ssh-production-probes/schedule', {
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as SshProductionProbeScheduleResponse;
+}
+
+export async function updateSshProductionProbeSchedule(
+  payload: SshProductionProbeScheduleUpdatePayload,
+  fetcher: typeof fetch = fetch,
+) {
+  const response = await fetcher('/api/audit/ssh-production-probes/schedule', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as {
+    ok: true;
+    schedule: SshProductionProbeScheduleResponse;
+  };
+}
+
+export async function claimSshProductionProbeScheduleRun(fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/audit/ssh-production-probes/schedule/claim', {
+    method: 'POST',
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as {
+    ok: true;
+    claimed: boolean;
+    schedule: SshProductionProbeScheduleResponse;
   };
 }
 

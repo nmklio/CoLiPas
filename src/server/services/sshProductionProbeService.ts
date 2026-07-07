@@ -3,8 +3,10 @@ import { recordAudit } from './auditService.js';
 import { readAppSetting, writeAppSetting } from './database.js';
 
 const sshProductionProbeHistoryKey = 'ssh-production-probe-history.v1';
+const sshProductionProbeScheduleKey = 'ssh-production-probe-schedule.v1';
 const sshProductionProbeHistoryLimit = 24;
 const sshProductionProbeRecentLimit = 6;
+const sshProductionProbeScheduleIntervals = [30, 60, 180, 720, 1440] as const;
 
 const probeRecordSchema = z.object({
   targetLabel: z.string().trim().min(1).max(80),
@@ -48,6 +50,35 @@ const storedProbeSchema = z.object({
 });
 
 type StoredSshProductionProbeRecord = z.infer<typeof storedProbeSchema>;
+type SshProductionProbeScheduleInterval = (typeof sshProductionProbeScheduleIntervals)[number];
+
+const storedScheduleSchema = z.object({
+  version: z.literal(1),
+  enabled: z.boolean(),
+  autoRunBrowserProbe: z.boolean(),
+  intervalMinutes: z.union([
+    z.literal(30),
+    z.literal(60),
+    z.literal(180),
+    z.literal(720),
+    z.literal(1440),
+  ]),
+  lastAutoRunAt: z.string().trim().min(1).max(80).nullable(),
+  updatedAt: z.string().trim().min(1).max(80),
+  updatedBy: z.string().trim().min(1).max(80),
+});
+
+const scheduleUpdateSchema = z.object({
+  enabled: z.boolean(),
+  autoRunBrowserProbe: z.boolean(),
+  intervalMinutes: z.coerce.number().refine(
+    (value): value is SshProductionProbeScheduleInterval =>
+      sshProductionProbeScheduleIntervals.includes(value as SshProductionProbeScheduleInterval),
+    'SSH production probe schedule interval is invalid',
+  ),
+});
+
+type StoredSshProductionProbeSchedule = z.infer<typeof storedScheduleSchema>;
 
 export interface SshProductionProbeTrendSummary {
   samples: number;
@@ -76,6 +107,20 @@ export interface SshProductionProbeTrendSummary {
     primaryMode: string;
     tone: 'ok' | 'warn' | 'fail';
   }>;
+}
+
+export interface SshProductionProbeScheduleSummary {
+  enabled: boolean;
+  autoRunBrowserProbe: boolean;
+  intervalMinutes: SshProductionProbeScheduleInterval;
+  intervalOptions: SshProductionProbeScheduleInterval[];
+  lastAutoRunAt: string | null;
+  updatedAt: string | null;
+  updatedBy: string | null;
+  nextDueAt: string | null;
+  dueNow: boolean;
+  overdue: boolean;
+  alertTone: 'ok' | 'warn' | 'fail';
 }
 
 export function recordSshProductionProbe(input: unknown, actor: string) {
@@ -211,6 +256,72 @@ export function getSshProductionProbeTrend(): SshProductionProbeTrendSummary {
   };
 }
 
+export function getSshProductionProbeSchedule(referenceTime = new Date()): SshProductionProbeScheduleSummary {
+  const stored = loadSshProductionProbeSchedule();
+  return buildSshProductionProbeScheduleSummary(stored, referenceTime);
+}
+
+export function updateSshProductionProbeSchedule(input: unknown, actor: string) {
+  const parsed = scheduleUpdateSchema.parse(input);
+  const now = new Date().toISOString();
+  const current = loadSshProductionProbeSchedule();
+  const next: StoredSshProductionProbeSchedule = {
+    version: 1,
+    enabled: parsed.enabled,
+    autoRunBrowserProbe: parsed.autoRunBrowserProbe,
+    intervalMinutes: parsed.intervalMinutes,
+    lastAutoRunAt: current?.lastAutoRunAt ?? null,
+    updatedAt: now,
+    updatedBy: sanitizeActor(actor),
+  };
+  writeAppSetting(sshProductionProbeScheduleKey, next);
+  const audit = recordAudit({
+    action: 'SSH_PRODUCTION_PROBE_SCHEDULE',
+    actor: sanitizeActor(actor),
+    target: 'ssh-production-probe-schedule',
+    status: 'success',
+    detail: `SSH production probe schedule ${next.enabled ? 'enabled' : 'disabled'} with ${next.intervalMinutes} minute cadence; browser assist ${next.autoRunBrowserProbe ? 'on' : 'off'}.`,
+  });
+  return {
+    ok: true,
+    schedule: buildSshProductionProbeScheduleSummary(next),
+    audit,
+  };
+}
+
+export function claimSshProductionProbeScheduleRun(actor: string, referenceTime = new Date()) {
+  const stored = loadSshProductionProbeSchedule();
+  const before = buildSshProductionProbeScheduleSummary(stored, referenceTime);
+  if (!stored || !stored.enabled || !stored.autoRunBrowserProbe || !before.dueNow) {
+    return {
+      ok: true,
+      claimed: false,
+      schedule: before,
+    };
+  }
+
+  const next: StoredSshProductionProbeSchedule = {
+    ...stored,
+    lastAutoRunAt: referenceTime.toISOString(),
+    updatedAt: referenceTime.toISOString(),
+    updatedBy: sanitizeActor(actor),
+  };
+  writeAppSetting(sshProductionProbeScheduleKey, next);
+  const audit = recordAudit({
+    action: 'SSH_PRODUCTION_PROBE_AUTO_RUN',
+    actor: sanitizeActor(actor),
+    target: 'ssh-production-probe-schedule',
+    status: 'success',
+    detail: `SSH production probe auto-run claimed for the next ${next.intervalMinutes} minute window.`,
+  });
+  return {
+    ok: true,
+    claimed: true,
+    schedule: buildSshProductionProbeScheduleSummary(next, referenceTime),
+    audit,
+  };
+}
+
 function loadSshProductionProbeHistory() {
   const row = readAppSetting(sshProductionProbeHistoryKey);
   if (!row) {
@@ -224,6 +335,61 @@ function loadSshProductionProbeHistory() {
   } catch {
     return [];
   }
+}
+
+function loadSshProductionProbeSchedule() {
+  const row = readAppSetting(sshProductionProbeScheduleKey);
+  if (!row) {
+    return null;
+  }
+
+  try {
+    return storedScheduleSchema.parse(JSON.parse(row.payload));
+  } catch {
+    return null;
+  }
+}
+
+function buildSshProductionProbeScheduleSummary(
+  stored: StoredSshProductionProbeSchedule | null,
+  referenceTime = new Date(),
+): SshProductionProbeScheduleSummary {
+  const enabled = stored?.enabled ?? false;
+  const autoRunBrowserProbe = stored?.autoRunBrowserProbe ?? false;
+  const intervalMinutes = stored?.intervalMinutes ?? 60;
+  const lastAutoRunAt = stored?.lastAutoRunAt ?? null;
+  const nextDueAt = enabled && autoRunBrowserProbe
+    ? computeNextDueAt(lastAutoRunAt, intervalMinutes, referenceTime)
+    : null;
+  const nowMs = referenceTime.getTime();
+  const nextDueMs = nextDueAt ? new Date(nextDueAt).getTime() : null;
+  const overdue = nextDueMs !== null && nextDueMs < nowMs;
+  const dueNow = nextDueMs !== null && nextDueMs <= nowMs;
+  const overdueMs = overdue && nextDueMs !== null ? nowMs - nextDueMs : 0;
+  const failThresholdMs = intervalMinutes * 2 * 60_000;
+  const alertTone: SshProductionProbeScheduleSummary['alertTone'] = !enabled
+    ? 'warn'
+    : !autoRunBrowserProbe
+      ? 'warn'
+      : overdue && overdueMs >= failThresholdMs
+        ? 'fail'
+        : overdue || !lastAutoRunAt
+          ? 'warn'
+          : 'ok';
+
+  return {
+    enabled,
+    autoRunBrowserProbe,
+    intervalMinutes,
+    intervalOptions: [...sshProductionProbeScheduleIntervals],
+    lastAutoRunAt,
+    updatedAt: stored?.updatedAt ?? null,
+    updatedBy: stored?.updatedBy ?? null,
+    nextDueAt,
+    dueNow,
+    overdue,
+    alertTone,
+  };
 }
 
 function determineTrendTone(
@@ -269,6 +435,17 @@ function inferDirection(latest: number | null, previous: number | null): SshProd
   return delta < 0 ? 'improving' : 'degrading';
 }
 
+function computeNextDueAt(lastAutoRunAt: string | null, intervalMinutes: SshProductionProbeScheduleInterval, referenceTime: Date) {
+  if (!lastAutoRunAt) {
+    return referenceTime.toISOString();
+  }
+  const parsed = new Date(lastAutoRunAt);
+  if (Number.isNaN(parsed.getTime())) {
+    return referenceTime.toISOString();
+  }
+  return new Date(parsed.getTime() + intervalMinutes * 60_000).toISOString();
+}
+
 function sanitizeHumanLabel(value: string, fallback: string) {
   const sanitized = value
     .replace(/https?:\/\/\S+/gi, ' ')
@@ -297,4 +474,13 @@ function toPercent(value: number, total: number) {
     return 0;
   }
   return Math.round((value / total) * 100);
+}
+
+function sanitizeActor(value: string) {
+  const sanitized = value
+    .replace(/[^\p{L}\p{N}_.@-]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80);
+  return sanitized || 'operator';
 }

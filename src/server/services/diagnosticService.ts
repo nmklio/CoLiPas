@@ -7,7 +7,7 @@ import { listAuditEntries } from './auditService.js';
 import { getServerShellEvidence, getServerShellSelfTest, getServerShellSelfTestTrend, getServerShellSessionReplays, getServerShellStatus, listCloudAccounts, summarizeServerInventory } from './inventoryService.js';
 import { getAiProviderStatus } from './aiSettingsService.js';
 import { getSshShellSocketDiagnostics } from '../sshShellSocket.js';
-import { getSshProductionProbeTrend } from './sshProductionProbeService.js';
+import { getSshProductionProbeSchedule, getSshProductionProbeTrend } from './sshProductionProbeService.js';
 
 export function buildDiagnosticExport(config: RuntimeConfig): DiagnosticExportResponse {
   const generatedAt = new Date().toISOString();
@@ -92,6 +92,7 @@ export function buildDiagnosticExport(config: RuntimeConfig): DiagnosticExportRe
       lastSelfTest: getServerShellSelfTest(),
       selfTestTrend: getServerShellSelfTestTrend(),
       productionProbeTrend: getSshProductionProbeTrend(),
+      productionProbeSchedule: getSshProductionProbeSchedule(),
       recentEvidence: shellEvidence.map((item) => ({
         serverName: item.serverName,
         mode: item.mode,

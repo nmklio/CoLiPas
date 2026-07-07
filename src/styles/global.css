@@ -13076,6 +13076,158 @@ pre {
   gap: 10px;
 }
 
+.security-ssh-production-probe-schedule {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border-radius: 16px;
+  border: 1px solid rgba(37, 99, 235, 0.16);
+  background: rgba(255, 255, 255, 0.82);
+  padding: 12px;
+}
+
+.security-ssh-production-probe-schedule.warn {
+  border-color: rgba(245, 158, 11, 0.26);
+}
+
+.security-ssh-production-probe-schedule.fail {
+  border-color: rgba(239, 68, 68, 0.24);
+}
+
+.security-ssh-production-probe-schedule-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.security-ssh-production-probe-schedule-head > div {
+  min-width: 0;
+}
+
+.security-ssh-production-probe-schedule-head span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #2563eb;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.security-ssh-production-probe-schedule.warn .security-ssh-production-probe-schedule-head span {
+  color: #d97706;
+}
+
+.security-ssh-production-probe-schedule.fail .security-ssh-production-probe-schedule-head span {
+  color: #dc2626;
+}
+
+.security-ssh-production-probe-schedule-head strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.security-ssh-production-probe-schedule-head p,
+.security-ssh-production-probe-schedule-head small,
+.security-ssh-production-probe-schedule-grid small,
+.security-ssh-production-probe-schedule-form span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.security-ssh-production-probe-schedule-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.security-ssh-production-probe-schedule-grid article {
+  min-width: 0;
+  border-radius: 14px;
+  border: 1px solid rgba(37, 99, 235, 0.16);
+  background: rgba(248, 250, 252, 0.82);
+  padding: 10px 11px;
+}
+
+.security-ssh-production-probe-schedule-grid article.warn {
+  border-color: rgba(245, 158, 11, 0.26);
+}
+
+.security-ssh-production-probe-schedule-grid article.fail {
+  border-color: rgba(239, 68, 68, 0.24);
+}
+
+.security-ssh-production-probe-schedule-grid span {
+  display: block;
+  color: #2563eb;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.security-ssh-production-probe-schedule-grid article.warn span {
+  color: #d97706;
+}
+
+.security-ssh-production-probe-schedule-grid article.fail span {
+  color: #dc2626;
+}
+
+.security-ssh-production-probe-schedule-grid strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.security-ssh-production-probe-schedule-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.security-ssh-production-probe-schedule-form label {
+  min-width: 0;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: rgba(248, 250, 252, 0.72);
+  padding: 10px 12px;
+}
+
+.security-ssh-production-probe-schedule-form input[type="checkbox"] {
+  margin: 0;
+  accent-color: #2563eb;
+}
+
+.security-ssh-production-probe-schedule-select {
+  display: grid !important;
+  gap: 6px;
+  align-items: stretch !important;
+}
+
+.security-ssh-production-probe-schedule-select select {
+  width: 100%;
+  min-width: 0;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--text);
+  padding: 9px 10px;
+}
+
 .security-ssh-production-probe > p {
   margin: 0;
   border-radius: 14px;
@@ -15876,6 +16028,8 @@ pre {
   .security-ssh-experience-grid,
   .security-ssh-production-probe-stats,
   .security-ssh-production-probe-runway,
+  .security-ssh-production-probe-schedule-grid,
+  .security-ssh-production-probe-schedule-form,
   .security-ssh-sla-trend-head,
   .security-ssh-lag-report,
   .security-ssh-lag-history-heading,
@@ -16583,6 +16737,9 @@ pre {
   .security-ssh-production-probe-head,
   .security-ssh-production-probe-stats,
   .security-ssh-production-probe-runway,
+  .security-ssh-production-probe-schedule-head,
+  .security-ssh-production-probe-schedule-grid,
+  .security-ssh-production-probe-schedule-form,
   .security-ssh-sla-trend-head,
   .security-ssh-support-bundle,
   .security-ssh-experience-summary,
@@ -16699,6 +16856,7 @@ pre {
   .security-ssh-sampler-heading .tool-button,
   .security-ssh-sla-trend-head .tool-button,
   .security-ssh-production-probe-head .tool-button,
+  .security-ssh-production-probe-schedule-head .tool-button,
   .security-ssh-bottleneck-trend-heading .tool-button {
     width: 100%;
     justify-content: center;
