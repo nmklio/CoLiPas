@@ -10939,16 +10939,73 @@ pre {
   line-height: 1;
 }
 
+.security-launch-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 10px;
+}
+
+.security-launch-summary-card {
+  min-width: 0;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 12px;
+  padding: 10px 11px;
+  background: rgba(255, 255, 255, 0.86);
+  display: grid;
+  gap: 4px;
+}
+
+.security-launch-summary-card.ok {
+  border-color: rgba(16, 185, 129, 0.24);
+  background: linear-gradient(180deg, rgba(240, 253, 250, 0.96), rgba(255, 255, 255, 0.9));
+}
+
+.security-launch-summary-card.warn {
+  border-color: rgba(245, 158, 11, 0.24);
+  background: linear-gradient(180deg, rgba(255, 251, 235, 0.96), rgba(255, 255, 255, 0.9));
+}
+
+.security-launch-summary-card.fail {
+  border-color: rgba(239, 68, 68, 0.22);
+  background: linear-gradient(180deg, rgba(255, 241, 242, 0.96), rgba(255, 255, 255, 0.9));
+}
+
+.security-launch-summary-card span,
+.security-launch-summary-card small {
+  color: var(--muted);
+}
+
+.security-launch-summary-card span {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.security-launch-summary-card strong {
+  color: var(--text);
+  font-size: 20px;
+  line-height: 1.1;
+}
+
+.security-launch-summary-card small {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .security-readiness-card {
   min-width: 0;
-  border: 1px solid #d7e6e8;
-  border-radius: 8px;
-  padding: 14px;
-  background: #ffffff;
-  box-shadow: var(--shadow);
+  border: 1px solid #d6e5e8;
+  border-radius: 14px;
+  padding: 16px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(56, 189, 248, 0.08), transparent 26%),
+    linear-gradient(145deg, rgba(13, 148, 136, 0.08), transparent 34%),
+    #ffffff;
+  box-shadow: 0 18px 44px rgba(20, 44, 49, 0.06);
   display: grid;
-  grid-template-columns: minmax(160px, 0.28fr) minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: minmax(172px, 0.32fr) minmax(0, 1fr);
+  gap: 16px;
   align-items: stretch;
 }
 
@@ -10961,16 +11018,18 @@ pre {
 }
 
 .security-readiness-score {
-  border-radius: 8px;
-  padding: 12px;
-  background: #f4fbfa;
+  border-radius: 12px;
+  padding: 14px;
+  background: linear-gradient(180deg, rgba(240, 253, 250, 0.96), rgba(255, 255, 255, 0.78));
+  border: 1px solid rgba(13, 148, 136, 0.12);
   display: grid;
   align-content: center;
-  gap: 6px;
+  gap: 7px;
 }
 
 .security-readiness-card.blocked .security-readiness-score {
-  background: #fff5f4;
+  background: linear-gradient(180deg, rgba(255, 241, 242, 0.96), rgba(255, 255, 255, 0.84));
+  border-color: rgba(239, 68, 68, 0.12);
 }
 
 .security-readiness-score span,
@@ -10998,7 +11057,7 @@ pre {
 .security-readiness-body {
   min-width: 0;
   display: grid;
-  gap: 9px;
+  gap: 12px;
 }
 
 .security-readiness-meter {
@@ -11020,14 +11079,6 @@ pre {
   background: linear-gradient(90deg, var(--red), var(--orange));
 }
 
-.security-readiness-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: space-between;
-  font-weight: 850;
-}
-
 .security-readiness-body p {
   margin: 0;
   line-height: 1.5;
@@ -11045,8 +11096,8 @@ pre {
 .security-readiness-trend span {
   min-height: 24px;
   border-radius: 999px;
-  padding: 4px 8px;
-  background: #eef5f6;
+  padding: 5px 10px;
+  background: rgba(238, 245, 246, 0.88);
   color: var(--muted);
   font-size: 12px;
   font-weight: 850;
@@ -11725,7 +11776,7 @@ pre {
     #fbfefe;
   box-shadow: 0 18px 44px rgba(20, 44, 49, 0.06);
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 
 .security-release-fix-router.warn {
@@ -11935,7 +11986,7 @@ pre {
     #fcfefe;
   box-shadow: 0 18px 44px rgba(20, 44, 49, 0.06);
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 
 .security-release-fix-checklist.warn {
@@ -16015,6 +16066,7 @@ pre {
   .api-status-strip,
   .api-template-grid,
   .security-readiness-card,
+  .security-launch-summary-grid,
   .security-evidence-metrics,
   .security-release-fix-router-heading,
   .security-release-fix-checklist-heading,
@@ -16714,6 +16766,7 @@ pre {
   .api-template-grid,
   .api-config-panel,
   .security-readiness-card,
+  .security-launch-summary-grid,
   .security-readiness-blockers,
   .security-release-fix-router-heading,
   .security-release-fix-step,

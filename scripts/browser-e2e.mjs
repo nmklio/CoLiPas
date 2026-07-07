@@ -230,6 +230,18 @@ async function assertReleaseEvidenceBrief(targetPage) {
   await targetPage.locator('[data-release-evidence-timeline="true"]').waitFor({ timeout: 10000 });
   await targetPage.locator('.security-release-playbook').waitFor({ timeout: 10000 });
   await targetPage.locator('.security-ssh-performance-card').waitFor({ timeout: 10000 });
+  const readinessSummaryCount = await targetPage.locator('[data-security-readiness-kpi]').count();
+  if (readinessSummaryCount < 4) {
+    throw new Error(`Release readiness summary should expose four KPI cards, got ${readinessSummaryCount}`);
+  }
+  const releaseFixRouterSummaryCount = await targetPage.locator('[data-release-fix-router-stat]').count();
+  if (releaseFixRouterSummaryCount < 3) {
+    throw new Error(`Release fix router summary should expose three stat cards, got ${releaseFixRouterSummaryCount}`);
+  }
+  const releaseFixChecklistSummaryCount = await targetPage.locator('[data-release-fix-checklist-stat]').count();
+  if (releaseFixChecklistSummaryCount < 3) {
+    throw new Error(`Release fix checklist summary should expose three stat cards, got ${releaseFixChecklistSummaryCount}`);
+  }
   await targetPage.getByRole('button', { name: /copy evidence brief/i }).waitFor({ timeout: 5000 });
   await targetPage.getByRole('button', { name: /copy fix route/i }).waitFor({ timeout: 5000 });
   await targetPage.getByRole('button', { name: /copy checklist/i }).waitFor({ timeout: 5000 });

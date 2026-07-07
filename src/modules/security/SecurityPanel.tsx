@@ -754,6 +754,11 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
     () => buildReleaseFixChecklist(releaseFixRouter.steps, releaseFixChecklistState, copy),
     [copy, releaseFixChecklistState, releaseFixRouter.steps],
   );
+  const releaseFixRouterCounts = useMemo(() => ({
+    fail: releaseFixRouter.steps.filter((step) => step.tone === 'fail').length,
+    warn: releaseFixRouter.steps.filter((step) => step.tone === 'warn').length,
+    modules: new Set(releaseFixRouter.steps.map((step) => step.module)).size,
+  }), [releaseFixRouter.steps]);
   const expandedSshMetric = useMemo(
     () => sshPerformance.metrics.find((metric) => metric.id === expandedSshMetricId) ?? sshPerformance.metrics[0] ?? null,
     [expandedSshMetricId, sshPerformance.metrics],
@@ -1673,20 +1678,32 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
           <div className="security-readiness-meter" aria-hidden="true">
             <span style={{ width: `${readiness?.score ?? 0}%` }} />
           </div>
-          <div className="security-readiness-meta">
-            <span>{readiness ? copy.readinessChecks(readiness.summary.passed, readiness.summary.totalChecks) : copy.waitingRefresh}</span>
-            <span>{readiness ? copy.readinessIssues(readiness.summary.failures, readiness.summary.warnings) : copy.readinessCalculating}</span>
-          </div>
-          <p>{readiness?.nextBestAction ?? copy.readinessCalculating}</p>
           {readiness && (
-            <div className="security-readiness-trend">
-              <span>{copy.readinessTrend(readiness.history.trend.direction, readiness.history.trend.deltaScore)}</span>
-              <span>{copy.readinessSnapshotCount(readiness.history.trend.snapshotCount)}</span>
-              {readiness.history.trend.changedBlockers.length > 0 && (
-                <span>{copy.readinessChangedBlockers(readiness.history.trend.changedBlockers.length)}</span>
-              )}
+            <div className="security-launch-summary-grid security-launch-summary-grid-readiness" data-security-readiness-summary="true">
+              <article className="security-launch-summary-card ok" data-security-readiness-kpi="checks">
+                <span>{copy.readinessKpiChecks}</span>
+                <strong>{readiness.summary.passed}/{readiness.summary.totalChecks}</strong>
+                <small>{copy.readinessChecks(readiness.summary.passed, readiness.summary.totalChecks)}</small>
+              </article>
+              <article className={`security-launch-summary-card ${readiness.summary.failures > 0 ? 'fail' : readiness.summary.warnings > 0 ? 'warn' : 'ok'}`} data-security-readiness-kpi="issues">
+                <span>{copy.readinessKpiIssues}</span>
+                <strong>{readiness.summary.failures + readiness.summary.warnings}</strong>
+                <small>{copy.readinessIssues(readiness.summary.failures, readiness.summary.warnings)}</small>
+              </article>
+              <article className="security-launch-summary-card" data-security-readiness-kpi="snapshots">
+                <span>{copy.readinessKpiSnapshots}</span>
+                <strong>{readiness.history.trend.snapshotCount}</strong>
+                <small>{copy.readinessSnapshotCount(readiness.history.trend.snapshotCount)}</small>
+              </article>
+              <article className={`security-launch-summary-card ${readiness.history.trend.changedBlockers.length > 0 ? 'warn' : 'ok'}`} data-security-readiness-kpi="changes">
+                <span>{copy.readinessKpiChanges}</span>
+                <strong>{readiness.history.trend.changedBlockers.length}</strong>
+                <small>{copy.readinessChangedBlockers(readiness.history.trend.changedBlockers.length)}</small>
+              </article>
             </div>
           )}
+          <p>{readiness?.nextBestAction ?? copy.readinessCalculating}</p>
+          {readiness && <div className="security-readiness-trend"><span>{copy.readinessTrend(readiness.history.trend.direction, readiness.history.trend.deltaScore)}</span></div>}
           {readiness && readiness.blockers.length > 0 && (
             <div className="security-readiness-blockers">
               {readiness.blockers.slice(0, 3).map((check) => (
@@ -1772,6 +1789,23 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
             </button>
           </div>
         </div>
+        <div className="security-launch-summary-grid security-launch-summary-grid-release" data-release-fix-router-summary="true">
+          <article className={`${releaseFixRouterCounts.fail > 0 ? 'fail' : 'ok'} security-launch-summary-card`} data-release-fix-router-stat="fail">
+            <span>{copy.releaseFixSummaryFail}</span>
+            <strong>{releaseFixRouterCounts.fail}</strong>
+            <small>{releaseFixRouterCounts.fail > 0 ? copy.releaseFixFindingCount(releaseFixRouterCounts.fail) : copy.noRisk}</small>
+          </article>
+          <article className={`${releaseFixRouterCounts.warn > 0 ? 'warn' : 'ok'} security-launch-summary-card`} data-release-fix-router-stat="warn">
+            <span>{copy.releaseFixSummaryWarn}</span>
+            <strong>{releaseFixRouterCounts.warn}</strong>
+            <small>{releaseFixRouterCounts.warn > 0 ? copy.releaseFixFindingCount(releaseFixRouterCounts.warn) : copy.noRisk}</small>
+          </article>
+          <article className="security-launch-summary-card" data-release-fix-router-stat="modules">
+            <span>{copy.releaseFixSummaryModules}</span>
+            <strong>{releaseFixRouterCounts.modules}</strong>
+            <small>{releaseFixRouter.status}</small>
+          </article>
+        </div>
         {releaseFixRouter.steps.length > 0 ? (
           <div className="security-release-fix-route" aria-label={copy.releaseFixRouteLabel}>
             {releaseFixRouter.steps.map((step, index) => (
@@ -1822,6 +1856,23 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
         </div>
         <div className="security-release-fix-checklist-progress" aria-label={releaseFixChecklist.progressLabel}>
           <span style={{ width: `${releaseFixChecklist.total ? Math.round((releaseFixChecklist.done / releaseFixChecklist.total) * 100) : 100}%` }} />
+        </div>
+        <div className="security-launch-summary-grid security-launch-summary-grid-release" data-release-fix-checklist-summary="true">
+          <article className={`${releaseFixChecklist.open > 0 ? 'fail' : 'ok'} security-launch-summary-card`} data-release-fix-checklist-stat="open">
+            <span>{copy.releaseFixChecklistOpen}</span>
+            <strong>{releaseFixChecklist.open}</strong>
+            <small>{releaseFixChecklist.open > 0 ? copy.releaseFixFindingCount(releaseFixChecklist.open) : copy.noRisk}</small>
+          </article>
+          <article className={`${releaseFixChecklist.done > 0 ? 'ok' : 'warn'} security-launch-summary-card`} data-release-fix-checklist-stat="done">
+            <span>{copy.releaseFixChecklistDone}</span>
+            <strong>{releaseFixChecklist.done}</strong>
+            <small>{releaseFixChecklist.progressLabel}</small>
+          </article>
+          <article className={`${releaseFixChecklist.deferred > 0 ? 'warn' : 'ok'} security-launch-summary-card`} data-release-fix-checklist-stat="deferred">
+            <span>{copy.releaseFixChecklistDeferred}</span>
+            <strong>{releaseFixChecklist.deferred}</strong>
+            <small>{releaseFixChecklist.deferred > 0 ? copy.releaseFixChecklistDeferred : copy.noRisk}</small>
+          </article>
         </div>
         {releaseFixChecklist.items.length > 0 ? (
           <div className="security-release-fix-checklist-list">
@@ -6481,6 +6532,9 @@ interface SecurityCopy {
   releaseFixLead: string;
   releaseFixKicker: string;
   releaseFixStatus: string;
+  releaseFixSummaryFail: string;
+  releaseFixSummaryWarn: string;
+  releaseFixSummaryModules: string;
   releaseFixFindingCount: (count: number) => string;
   releaseFixRouteLabel: string;
   releaseFixCopy: string;
@@ -6532,6 +6586,10 @@ interface SecurityCopy {
   closeEvents: string;
   readinessTitle: string;
   readinessCalculating: string;
+  readinessKpiChecks: string;
+  readinessKpiIssues: string;
+  readinessKpiSnapshots: string;
+  readinessKpiChanges: string;
   riskItems: (count: number) => string;
   readinessChecks: (passed: number, total: number) => string;
   readinessIssues: (failures: number, warnings: number) => string;
@@ -7943,6 +8001,9 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     releaseFixLead: '把每个未通过的上线检查变成可点击的模块入口，先修最高风险项。',
     releaseFixKicker: '修复路线',
     releaseFixStatus: '修复状态',
+    releaseFixSummaryFail: '阻断项',
+    releaseFixSummaryWarn: '预警项',
+    releaseFixSummaryModules: '涉及模块',
     releaseFixFindingCount: (count) => count > 0 ? `${count} 个待处理入口` : '全部检查已路由',
     releaseFixRouteLabel: '发布阻断修复路线',
     releaseFixCopy: '复制修复路线',
@@ -8037,6 +8098,10 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     closeEvents: '关闭事件',
     readinessTitle: '上线就绪评分',
     readinessCalculating: '正在汇总运行时、审计、SSH、AI 和 API 证据',
+    readinessKpiChecks: '通过检查',
+    readinessKpiIssues: '风险总数',
+    readinessKpiSnapshots: '基线快照',
+    readinessKpiChanges: '阻断变化',
     riskItems: (count) => `${count} 风险项`,
     readinessChecks: (passed, total) => `${passed}/${total} 项通过`,
     readinessIssues: (failures, warnings) => `${failures} 阻断 / ${warnings} 预警`,
@@ -8243,6 +8308,9 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     releaseFixLead: 'Turns every failing release check into a clickable module entry so the highest-risk item is fixed first.',
     releaseFixKicker: 'Fix route',
     releaseFixStatus: 'Fix state',
+    releaseFixSummaryFail: 'Blockers',
+    releaseFixSummaryWarn: 'Warnings',
+    releaseFixSummaryModules: 'Modules',
     releaseFixFindingCount: (count) => count > 0 ? `${count} routed finding(s)` : 'All checks routed',
     releaseFixRouteLabel: 'Release blocker fix route',
     releaseFixCopy: 'Copy fix route',
@@ -8337,6 +8405,10 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     closeEvents: 'Close events',
     readinessTitle: 'Release readiness',
     readinessCalculating: 'Aggregating runtime, audit, SSH, AI, and API evidence',
+    readinessKpiChecks: 'Checks passed',
+    readinessKpiIssues: 'Risk total',
+    readinessKpiSnapshots: 'Snapshots',
+    readinessKpiChanges: 'Blocker changes',
     riskItems: (count) => `${count} risk items`,
     readinessChecks: (passed, total) => `${passed}/${total} checks passed`,
     readinessIssues: (failures, warnings) => `${failures} blockers / ${warnings} warnings`,
@@ -8543,6 +8615,9 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     releaseFixLead: '未合格のリリースチェックをクリック可能なモジュール入口に変換し、高リスク項目から修復します。',
     releaseFixKicker: '修復ルート',
     releaseFixStatus: '修復状態',
+    releaseFixSummaryFail: 'ブロック項目',
+    releaseFixSummaryWarn: '警告項目',
+    releaseFixSummaryModules: '対象モジュール',
     releaseFixFindingCount: (count) => count > 0 ? `${count} 件の修復入口` : '全チェックをルーティング済み',
     releaseFixRouteLabel: 'リリースブロッカー修復ルート',
     releaseFixCopy: '修復ルートをコピー',
@@ -8637,6 +8712,10 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     closeEvents: 'イベントを閉じる',
     readinessTitle: 'リリース準備スコア',
     readinessCalculating: '実行環境、監査、SSH、AI、API の証拠を集計中',
+    readinessKpiChecks: '合格チェック',
+    readinessKpiIssues: 'リスク合計',
+    readinessKpiSnapshots: 'スナップショット',
+    readinessKpiChanges: 'ブロッカー変化',
     riskItems: (count) => `${count} 件のリスク`,
     readinessChecks: (passed, total) => `${passed}/${total} 件合格`,
     readinessIssues: (failures, warnings) => `${failures} 件ブロック / ${warnings} 件警告`,
