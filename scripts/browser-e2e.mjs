@@ -1538,7 +1538,13 @@ async function assertOperationsResultTraceRoundTrip(targetPage) {
     if (!/Fix draft suggestion|high-impact action|Create fix draft/i.test(remediationText)) {
       throw new Error(`Operations preflight remediation panel is incomplete: ${remediationText}`);
     }
-    await targetPage.locator('[data-ops-preflight-remediation-action="true"]').click();
+    const advisorPanel = targetPage.locator('[data-ops-preflight-advisor="true"]');
+    await advisorPanel.waitFor({ timeout: 10000 });
+    const advisorText = await advisorPanel.innerText();
+    if (!/Preflight fix queue|high-impact operation|Create fix draft|Restore and review/i.test(advisorText)) {
+      throw new Error(`Operations preflight advisor queue is incomplete: ${advisorText}`);
+    }
+    await targetPage.locator('[data-ops-preflight-advisor-draft="true"]').first().click();
     const remediationDraftBanner = targetPage.locator('[data-ops-draft-banner="true"]');
     await remediationDraftBanner.waitFor({ timeout: 10000 });
     const remediationDraftText = await remediationDraftBanner.innerText();

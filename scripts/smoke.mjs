@@ -6842,6 +6842,12 @@ function assertOperationsTargetSelectionGuards() {
     'data-ops-preflight-evidence-button="true"',
     'event.stopPropagation()',
     'onAuditTraceOpen?.(entry.id)',
+    'buildPreflightAdvisorEntries(preflightHistory)',
+    'data-ops-preflight-advisor="true"',
+    'data-ops-preflight-advisor-item="true"',
+    'data-ops-preflight-advisor-draft="true"',
+    'applyPreflightHistoryFixDraft(entry)',
+    'preflightAdvisorEntries.length',
   ];
   const missingFrontend = frontendRequired.filter((fragment) => !operationsSource.includes(fragment));
   if (missingFrontend.length) {

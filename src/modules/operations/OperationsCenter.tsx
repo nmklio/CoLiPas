@@ -151,6 +151,14 @@ type Copy = {
   preflightFixDraftTitle: string;
   preflightFixReasonBlocked: string;
   preflightFixReasonWarn: string;
+  preflightAdvisorTitle: string;
+  preflightAdvisorHint: string;
+  preflightAdvisorEmpty: string;
+  preflightAdvisorBlocked: string;
+  preflightAdvisorWarn: string;
+  preflightAdvisorReady: string;
+  preflightAdvisorDraft: string;
+  preflightAdvisorReview: string;
   truncatedOutputs?: string;
 };
 
@@ -239,6 +247,15 @@ const copyByLanguage: Record<string, Copy> = {
     preflightFixDraftTitle: '预检修复草稿',
     preflightFixReasonBlocked: '预检阻断后生成的资产巡检草稿',
     preflightFixReasonWarn: '预检确认高影响动作',
+    preflightAdvisorTitle: '预检修复建议中心',
+    preflightAdvisorHint: '聚合最近阻断或需确认的预检，把上线风险转成可恢复、可查看证据、可生成草稿的闭环。',
+    preflightAdvisorEmpty: '暂无待处理建议。预检出现阻断或高影响确认后，会自动进入这里。',
+    preflightAdvisorBlocked: '发现阻断目标，建议先生成资产巡检草稿同步 SSH 状态。',
+    preflightAdvisorWarn: '发现高影响操作，建议恢复上下文并确认审计证据后执行。',
+    preflightAdvisorReady: '最近预检已通过，可作为上线证据。',
+    preflightAdvisorDraft: '生成修复草稿',
+    preflightAdvisorReview: '恢复并复核',
+
   },
   en: {
     running: 'Running',
@@ -319,6 +336,14 @@ const copyByLanguage: Record<string, Copy> = {
     preflightFixDraftTitle: 'Preflight fix draft',
     preflightFixReasonBlocked: 'Asset sweep draft generated after a blocked preflight.',
     preflightFixReasonWarn: 'Confirm high-impact action after preflight review.',
+    preflightAdvisorTitle: 'Preflight fix queue',
+    preflightAdvisorHint: 'Turns recent blocked or confirmation-required preflights into a recoverable release-risk queue with draft and evidence actions.',
+    preflightAdvisorEmpty: 'No pending suggestions. Blocked or high-impact preflights will appear here automatically.',
+    preflightAdvisorBlocked: 'Blocked targets found. Create an asset sweep draft first to resync SSH state.',
+    preflightAdvisorWarn: 'High-impact operation found. Restore the context and review audit evidence before running.',
+    preflightAdvisorReady: 'Latest preflight is ready and can be used as release evidence.',
+    preflightAdvisorDraft: 'Create fix draft',
+    preflightAdvisorReview: 'Restore and review',
   },
   ja: {
     running: '実行中',
@@ -399,6 +424,14 @@ const copyByLanguage: Record<string, Copy> = {
     preflightFixDraftTitle: 'プリフライト修正草案',
     preflightFixReasonBlocked: 'ブロックされたプリフライト後に生成された資産巡回草案。',
     preflightFixReasonWarn: 'プリフライト確認後に高影響操作を確認。',
+    preflightAdvisorTitle: '事前確認の修復キュー',
+    preflightAdvisorHint: '直近のブロックまたは確認が必要な事前確認を、復元・証跡確認・草案生成までつながるリスクキューにします。',
+    preflightAdvisorEmpty: '未処理の提案はありません。ブロックまたは高影響の事前確認が出ると自動で表示されます。',
+    preflightAdvisorBlocked: 'ブロック対象があります。先に資産巡回草案を生成して SSH 状態を同期してください。',
+    preflightAdvisorWarn: '高影響の操作があります。実行前に文脈を復元して監査証跡を確認してください。',
+    preflightAdvisorReady: '最新の事前確認は通過済みで、リリース証跡として利用できます。',
+    preflightAdvisorDraft: '修復草案を生成',
+    preflightAdvisorReview: '復元して確認',
   },
 };
 
@@ -532,6 +565,10 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
     targetMode,
     taskType,
   }) : null, [activeSelectedServerIds, command, copy, preflight, reason, targetMode, taskType]);
+  const preflightAdvisorEntries = useMemo(
+    () => buildPreflightAdvisorEntries(preflightHistory),
+    [preflightHistory],
+  );
 
   useEffect(() => {
     if (sshRequiredTask && targetMode === 'allServers') {
@@ -725,28 +762,51 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
     focusElement(preflightButtonRef.current);
   }
 
-  function applyPreflightFixDraft() {
-    if (!preflightFixDraft) {
-      return;
-    }
+  function applyFixDraftObject(fixDraft: PreflightFixDraft) {
     setBuilderOpen(true);
-    setTaskType(preflightFixDraft.type);
-    setTargetMode(preflightFixDraft.targetMode);
-    setSelectedServerIds(preflightFixDraft.serverIds);
-    setCommand(preflightFixDraft.command || 'hostname && uptime');
-    setReason(preflightFixDraft.reason);
+    setTaskType(fixDraft.type);
+    setTargetMode(fixDraft.targetMode);
+    setSelectedServerIds(fixDraft.serverIds);
+    setCommand(fixDraft.command || 'hostname && uptime');
+    setReason(fixDraft.reason);
     setPreflight(null);
     setMessage('');
     setDraftNotice({
       id: `preflight-fix-${Date.now()}`,
-      title: preflightFixDraft.title,
-      description: preflightFixDraft.detail,
-      type: preflightFixDraft.type,
-      targetMode: preflightFixDraft.targetMode,
-      serverIds: preflightFixDraft.serverIds,
-      command: preflightFixDraft.command,
-      reason: preflightFixDraft.reason,
+      title: fixDraft.title,
+      description: fixDraft.detail,
+      type: fixDraft.type,
+      targetMode: fixDraft.targetMode,
+      serverIds: fixDraft.serverIds,
+      command: fixDraft.command,
+      reason: fixDraft.reason,
     });
+  }
+
+  function applyPreflightFixDraft() {
+    if (!preflightFixDraft) {
+      return;
+    }
+    applyFixDraftObject(preflightFixDraft);
+  }
+
+  function applyPreflightHistoryFixDraft(entry: PreflightHistoryEntry) {
+    const fixDraft = buildPreflightFixDraft({
+      command: entry.command,
+      copy,
+      preflight: entry.preflight,
+      reason: entry.reason,
+      selectedServerIds: entry.serverIds,
+      targetMode: entry.targetMode,
+      taskType: entry.type,
+    });
+
+    if (!fixDraft) {
+      restorePreflightHistory(entry);
+      return;
+    }
+
+    applyFixDraftObject(fixDraft);
   }
 
   function restorePreflightHistory(entry: PreflightHistoryEntry) {
@@ -1115,6 +1175,67 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
             )}
           </div>
 
+          <div className="ops-preflight-advisor" data-ops-preflight-advisor="true">
+            <div className="ops-panel-title">
+              <h3>{copy.preflightAdvisorTitle}</h3>
+              <span>{preflightAdvisorEntries.length}</span>
+            </div>
+            <p>{copy.preflightAdvisorHint}</p>
+            <div className="ops-preflight-advisor-list">
+              {preflightAdvisorEntries.length === 0 ? (
+                <div className="quiet-state">{copy.preflightAdvisorEmpty}</div>
+              ) : (
+                preflightAdvisorEntries.map((entry) => {
+                  const meta = taskMeta[entry.type];
+                  const Icon = meta.icon;
+                  const tone = preflightTone(entry.preflight);
+                  const fixDraft = buildPreflightFixDraft({
+                    command: entry.command,
+                    copy,
+                    preflight: entry.preflight,
+                    reason: entry.reason,
+                    selectedServerIds: entry.serverIds,
+                    targetMode: entry.targetMode,
+                    taskType: entry.type,
+                  });
+                  const summary = tone === 'blocked'
+                    ? copy.preflightAdvisorBlocked
+                    : tone === 'warn'
+                      ? copy.preflightAdvisorWarn
+                      : copy.preflightAdvisorReady;
+                  return (
+                    <article key={`advisor-${entry.id}`} className={`ops-preflight-advisor-item ${tone}`} data-ops-preflight-advisor-item="true">
+                      <div>
+                        <Icon size={16} />
+                        <span>
+                          <strong>{meta.label}</strong>
+                          <small>{formatTaskTime(entry.createdAt, language)} / {formatPreflightSummaryLine(entry.preflight, preflightCopy, copy.preview, entry.targetCount)}</small>
+                        </span>
+                      </div>
+                      <p>{summary}</p>
+                      <div className="ops-preflight-advisor-actions">
+                        <button type="button" data-ops-preflight-advisor-review="true" onClick={() => restorePreflightHistory(entry)}>
+                          <ClipboardList size={13} />
+                          {copy.preflightAdvisorReview}
+                        </button>
+                        {fixDraft && (
+                          <button type="button" data-ops-preflight-advisor-draft="true" onClick={() => applyPreflightHistoryFixDraft(entry)}>
+                            <Workflow size={13} />
+                            {copy.preflightAdvisorDraft}
+                          </button>
+                        )}
+                        <button type="button" data-ops-preflight-advisor-evidence="true" onClick={() => onAuditTraceOpen?.(entry.id)}>
+                          <ShieldCheck size={13} />
+                          {copy.viewPreflightEvidence}
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
           <div className="ops-preflight-history" data-ops-preflight-history="true">
             <div className="ops-panel-title">
               <h3>{copy.preflightHistory}</h3>
@@ -1262,6 +1383,12 @@ interface PreflightFixDraft {
   serverIds: string[];
   command?: string;
   reason: string;
+}
+
+function buildPreflightAdvisorEntries(history: PreflightHistoryEntry[]) {
+  return history
+    .filter((entry) => !entry.preflight.ok || entry.preflight.requiresConfirmation || entry.preflight.issues.some((issue) => issue.severity === 'warn'))
+    .slice(0, 4);
 }
 
 function buildPreflightFixDraft({

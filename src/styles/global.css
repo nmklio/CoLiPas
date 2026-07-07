@@ -7181,6 +7181,8 @@ td span,
 
 .ops-load-list,
 .ops-task-list,
+.ops-preflight-advisor,
+.ops-preflight-advisor-list,
 .ops-preflight-history,
 .ops-preflight-history-list,
 .ops-mini-events {
@@ -7213,6 +7215,138 @@ td span,
 .ops-task-list {
   max-height: 340px;
   overflow: auto;
+}
+
+
+.ops-preflight-advisor {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.ops-preflight-advisor > p {
+  margin: -2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 680;
+  line-height: 1.45;
+}
+
+.ops-preflight-advisor-list {
+  max-height: 290px;
+  overflow: auto;
+}
+
+.ops-preflight-advisor-item {
+  min-width: 0;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-left: 4px solid #0f766e;
+  border-radius: 12px;
+  padding: 11px;
+  background:
+    radial-gradient(circle at top right, rgba(15, 118, 110, 0.1), transparent 36%),
+    linear-gradient(135deg, #f8fdfc, #ffffff);
+  display: grid;
+  gap: 8px;
+  box-shadow: 0 10px 22px rgba(18, 35, 41, 0.05);
+}
+
+.ops-preflight-advisor-item.warn {
+  border-left-color: #d49a24;
+  background:
+    radial-gradient(circle at top right, rgba(245, 158, 11, 0.13), transparent 36%),
+    linear-gradient(135deg, #fffaf0, #ffffff);
+}
+
+.ops-preflight-advisor-item.blocked {
+  border-left-color: #c24135;
+  background:
+    radial-gradient(circle at top right, rgba(220, 38, 38, 0.11), transparent 36%),
+    linear-gradient(135deg, #fff7f6, #ffffff);
+}
+
+.ops-preflight-advisor-item > div:first-child {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+}
+
+.ops-preflight-advisor-item svg {
+  color: var(--brand-strong);
+}
+
+.ops-preflight-advisor-item.warn svg {
+  color: #9a6700;
+}
+
+.ops-preflight-advisor-item.blocked svg {
+  color: #b42318;
+}
+
+.ops-preflight-advisor-item span,
+.ops-preflight-advisor-item strong,
+.ops-preflight-advisor-item small {
+  min-width: 0;
+}
+
+.ops-preflight-advisor-item span {
+  display: grid;
+  gap: 3px;
+}
+
+.ops-preflight-advisor-item strong,
+.ops-preflight-advisor-item small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ops-preflight-advisor-item strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.ops-preflight-advisor-item small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.ops-preflight-advisor-item p {
+  margin: 0;
+  color: #41565e;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ops-preflight-advisor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.ops-preflight-advisor-actions button {
+  border: 1px solid rgba(16, 94, 86, 0.18);
+  border-radius: 999px;
+  padding: 6px 9px;
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--brand-strong);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.ops-preflight-advisor-actions button:hover,
+.ops-preflight-advisor-actions button:focus-visible {
+  border-color: var(--brand-line);
+  box-shadow: 0 8px 18px rgba(15, 118, 110, 0.13);
+  outline: none;
+  transform: translateY(-1px);
 }
 
 .ops-preflight-history {
@@ -13707,6 +13841,7 @@ pre {
   .ops-draft-risk-grid,
   .ops-draft-locator-actions,
   .ops-preflight-remediation,
+  .ops-preflight-advisor-item,
   .ops-runner-footer,
   .ops-output-grid,
   .api-status-strip,
