@@ -11,7 +11,7 @@ export interface ServerFilters {
   status: ServerStatus | 'all';
   region: string | 'all';
   regionScope?: string[];
-  health?: 'resourcePressure' | 'sshMissing';
+  health?: 'resourcePressure' | 'sshMissing' | 'sshSimulated';
 }
 
 const serverSearchTextCache = new WeakMap<ServerNode, { signature: string; searchText: string }>();
@@ -79,6 +79,10 @@ export function buildServerFilterMatcher(filters: ServerFilters) {
     }
 
     if (healthFilter === 'sshMissing' && server.ssh?.connected) {
+      return false;
+    }
+
+    if (healthFilter === 'sshSimulated' && server.ssh?.verifyMode !== 'simulate') {
       return false;
     }
 

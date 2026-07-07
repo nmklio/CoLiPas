@@ -322,6 +322,17 @@ interface SshRunbookRecommendation {
   detail: string;
 }
 
+type ServerFleetTriageCardId = 'resourcePressure' | 'sshMissing' | 'sshSimulated' | 'stopped';
+
+interface ServerFleetTriageCard {
+  id: ServerFleetTriageCardId;
+  count: number;
+  tone: TerminalNetworkQuality['tone'];
+  title: string;
+  detail: string;
+  actionLabel: string;
+}
+
 type TerminalBottleneckSnapshotReason = 'close' | 'remote-close' | 'disconnect';
 
 interface TerminalBottleneckSnapshot {
@@ -493,6 +504,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const identityCacheRef = useRef<Map<string, ServerIdentityResponse>>(new Map());
   const lastAppliedIdentityRef = useRef<{ region: string; os: string } | null>(null);
   const visibleConnectedServerCount = useMemo(() => countConnectedServers(servers), [servers]);
+  const fleetTriageCards = useMemo(() => buildServerFleetTriageCards(allServers, t), [allServers, t]);
   const visibleServerRows = useMemo(() => servers.slice(0, visibleServerLimit), [servers, visibleServerLimit]);
   const hiddenServerCount = Math.max(servers.length - visibleServerRows.length, 0);
   const allServersById = useMemo(() => buildServerById(allServers), [allServers]);
@@ -885,6 +897,37 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
           <small>{visibleProviderCount > 0 ? t('servers.summaryProviders', { count: visibleProviderCount }) : t('common.none')}</small>
         </article>
       </div>
+
+      {fleetTriageCards.length > 0 && (
+        <div className="server-triage-strip" data-server-triage="true" aria-label={t('servers.triageTitle')}>
+          <div className="server-triage-heading">
+            <span><Sparkles size={14} /> {t('servers.triageEyebrow')}</span>
+            <strong>{t('servers.triageTitle')}</strong>
+            <small>{t('servers.triageDetail')}</small>
+          </div>
+          <div className="server-triage-cards">
+            {fleetTriageCards.map((card) => {
+              const active = isServerFleetTriageActive(card.id, filters);
+              return (
+                <button
+                  key={card.id}
+                  type="button"
+                  className={`${card.tone}${active ? ' active' : ''}`}
+                  data-server-triage-card={card.id}
+                  aria-pressed={active}
+                  disabled={card.count === 0}
+                  onClick={() => onFiltersChange(buildServerFleetTriageFilters(card.id, filters))}
+                >
+                  <span>{card.title}</span>
+                  <strong>{card.count}</strong>
+                  <small>{card.detail}</small>
+                  <em>{card.actionLabel}</em>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="filters-row server-filter-row">
         <label>
@@ -3471,6 +3514,77 @@ function countConnectedServers(servers: ServerNode[]) {
     }
   }
   return count;
+}
+
+function buildServerFleetTriageCards(
+  servers: ServerNode[],
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): ServerFleetTriageCard[] {
+  if (servers.length === 0) {
+    return [];
+  }
+  const counts = servers.reduce<Record<ServerFleetTriageCardId, number>>((result, server) => {
+    if (Math.max(server.cpu, server.memory, server.disk) >= 70) {
+      result.resourcePressure += 1;
+    }
+    if (!server.ssh?.connected) {
+      result.sshMissing += 1;
+    }
+    if (server.ssh?.verifyMode === 'simulate') {
+      result.sshSimulated += 1;
+    }
+    if (resolveServerLifecycleStatus(server) === 'stopped') {
+      result.stopped += 1;
+    }
+    return result;
+  }, {
+    resourcePressure: 0,
+    sshMissing: 0,
+    sshSimulated: 0,
+    stopped: 0,
+  });
+
+  return ([
+    ['resourcePressure', counts.resourcePressure, counts.resourcePressure > 0 ? 'warn' : 'good'],
+    ['sshMissing', counts.sshMissing, counts.sshMissing > 0 ? 'slow' : 'good'],
+    ['sshSimulated', counts.sshSimulated, counts.sshSimulated > 0 ? 'warn' : 'good'],
+    ['stopped', counts.stopped, counts.stopped > 0 ? 'pending' : 'good'],
+  ] as const).map(([id, count, tone]) => ({
+    id,
+    count,
+    tone,
+    title: t(`servers.triage.${id}.title`),
+    detail: t(`servers.triage.${id}.detail`, { count }),
+    actionLabel: t(`servers.triage.${id}.action`),
+  }));
+}
+
+function buildServerFleetTriageFilters(id: ServerFleetTriageCardId, current: ServerFilters): ServerFilters {
+  const base: ServerFilters = {
+    ...current,
+    query: '',
+    provider: 'all',
+    region: 'all',
+    regionScope: undefined,
+  };
+  if (id === 'stopped') {
+    return {
+      ...base,
+      status: 'stopped',
+      health: undefined,
+    };
+  }
+  return {
+    ...base,
+    status: 'all',
+    health: id,
+  };
+}
+
+function isServerFleetTriageActive(id: ServerFleetTriageCardId, filters: ServerFilters) {
+  return id === 'stopped'
+    ? filters.status === 'stopped' && !filters.health
+    : filters.status === 'all' && filters.health === id;
 }
 
 function buildServerById(servers: ServerNode[]) {

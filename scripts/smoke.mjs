@@ -4989,9 +4989,10 @@ function assertOverviewMapInteractionGuards() {
 
 
   assertFileContains('src/shared/serverFilters.ts', [
-    "health?: 'resourcePressure' | 'sshMissing'",
+    "health?: 'resourcePressure' | 'sshMissing' | 'sshSimulated'",
     "healthFilter === 'resourcePressure'",
     "healthFilter === 'sshMissing'",
+    "healthFilter === 'sshSimulated'",
   ], 'server health filters');
 
   assertFileContains('src/app/App.tsx', [
@@ -5035,7 +5036,12 @@ function assertOverviewMapInteractionGuards() {
 
   assertFileContains('src/modules/servers/ServerInventory.tsx', [
     'data-health-scope-chip="true"',
+    'data-server-triage="true"',
+    'data-server-triage-card={card.id}',
+    'function buildServerFleetTriageCards(',
+    'function buildServerFleetTriageFilters(',
     'servers.healthScopeLabel',
+    'servers.triageTitle',
     'servers.clearHealthScope',
   ], 'server health filter chip');
   if (overviewSource.includes('new Set(servers.map((server) => server.provider)).size')) {

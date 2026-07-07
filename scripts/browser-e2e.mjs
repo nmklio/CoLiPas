@@ -814,6 +814,28 @@ async function assertSshTerminalPanel(targetPage) {
     await targetPage.locator('.server-workspace-row').filter({ hasText: sshServer.name }).waitFor({ timeout: 10000 });
 
     const sshServerRow = targetPage.locator('.server-workspace-row').filter({ hasText: sshServer.name });
+    await targetPage.locator('[data-server-triage="true"]').waitFor({ timeout: 10000 });
+    const serverTriageText = await targetPage.locator('[data-server-triage="true"]').innerText();
+    if (!/Release health triage|Asset triage/i.test(serverTriageText) || !/Simulated SSH/i.test(serverTriageText) || !/SSH gaps/i.test(serverTriageText)) {
+      throw new Error(`Server fleet triage did not render actionable cards: ${serverTriageText}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(serverTriageText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(serverTriageText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY|password=|passphrase=/i.test(serverTriageText)) {
+      throw new Error('Server fleet triage rendered raw host or secret material');
+    }
+    const serverTriageCardCount = await targetPage.locator('[data-server-triage-card]').count();
+    if (serverTriageCardCount !== 4) {
+      throw new Error(`Server fleet triage should expose four cards, got ${serverTriageCardCount}`);
+    }
+    await targetPage.locator('[data-server-triage-card="sshSimulated"]').click();
+    const simulatedScopeChip = targetPage.locator('[data-health-scope-chip="true"]');
+    await simulatedScopeChip.waitFor({ timeout: 5000 });
+    const simulatedScopeText = await simulatedScopeChip.innerText();
+    if (!/Simulated SSH/i.test(simulatedScopeText)) {
+      throw new Error(`Server fleet triage should focus simulated SSH assets, got ${simulatedScopeText}`);
+    }
+    await targetPage.locator('.server-workspace-row').filter({ hasText: sshServer.name }).waitFor({ timeout: 5000 });
+    await simulatedScopeChip.getByRole('button', { name: /clear health filter/i }).click();
+    await targetPage.locator('[data-health-scope-chip="true"]').waitFor({ state: 'detached', timeout: 5000 });
     await sshServerRow.getByRole('button', { name: /diagnose/i }).click();
     await targetPage.locator('[data-ssh-connection-doctor="true"]').waitFor({ timeout: 10000 });
     const sshDoctorText = await targetPage.locator('[data-ssh-connection-doctor="true"]').innerText();
@@ -1766,6 +1788,7 @@ async function assertMobileModuleLayoutSweep() {
 
     await assertMobileSection(mobilePage, /^Servers$/i, /#servers$/, [
       '.server-summary-grid',
+      '.server-triage-strip',
       '.server-filter-row',
       '.server-workspace-row',
     ]);

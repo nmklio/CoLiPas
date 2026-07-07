@@ -3619,6 +3619,143 @@ main {
   line-height: 1;
 }
 
+.server-triage-strip {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(180px, 0.32fr) minmax(0, 1fr);
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 10px;
+  border: 1px solid rgba(14, 165, 233, 0.16);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(14, 165, 233, 0.16), transparent 28%),
+    linear-gradient(135deg, rgba(239, 246, 255, 0.96), rgba(240, 253, 250, 0.92));
+  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.08);
+}
+
+.server-triage-heading {
+  min-width: 0;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  padding: 4px 10px 4px 4px;
+  border-right: 1px solid rgba(14, 165, 233, 0.16);
+}
+
+.server-triage-heading span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #0369a1;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.server-triage-heading strong {
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.server-triage-heading small {
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.server-triage-cards {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.server-triage-cards button {
+  min-width: 0;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 15px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.78);
+  color: #0f172a;
+  text-align: left;
+  display: grid;
+  gap: 4px;
+  cursor: pointer;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.server-triage-cards button:hover:not(:disabled),
+.server-triage-cards button.active {
+  transform: translateY(-1px);
+  border-color: rgba(14, 165, 233, 0.4);
+  box-shadow: 0 16px 34px rgba(14, 165, 233, 0.14);
+}
+
+.server-triage-cards button:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
+.server-triage-cards button.slow {
+  border-color: rgba(244, 63, 94, 0.28);
+  background: linear-gradient(135deg, rgba(255, 241, 242, 0.94), rgba(255, 255, 255, 0.82));
+}
+
+.server-triage-cards button.warn {
+  border-color: rgba(245, 158, 11, 0.32);
+  background: linear-gradient(135deg, rgba(255, 251, 235, 0.96), rgba(255, 255, 255, 0.82));
+}
+
+.server-triage-cards button.good {
+  border-color: rgba(20, 184, 166, 0.22);
+  background: linear-gradient(135deg, rgba(240, 253, 250, 0.96), rgba(255, 255, 255, 0.82));
+}
+
+.server-triage-cards button.pending {
+  border-color: rgba(100, 116, 139, 0.2);
+  background: linear-gradient(135deg, rgba(248, 250, 252, 0.96), rgba(255, 255, 255, 0.82));
+}
+
+.server-triage-cards span,
+.server-triage-cards small,
+.server-triage-cards em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.server-triage-cards span {
+  color: #475569;
+  font-size: 11px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.server-triage-cards strong {
+  font-size: 25px;
+  line-height: 1;
+  font-weight: 950;
+}
+
+.server-triage-cards small {
+  color: #64748b;
+  min-height: 30px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.server-triage-cards em {
+  color: #0369a1;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
 .server-filter-row {
   grid-template-columns: minmax(320px, 1fr) minmax(180px, 220px) minmax(180px, 220px);
   align-items: end;
@@ -12776,6 +12913,7 @@ pre {
   .api-layout,
   .security-details,
   .server-summary-grid,
+  .server-triage-strip,
   .server-workspace-head,
   .server-workspace-row,
   .ssh-console-body,
@@ -12799,6 +12937,16 @@ pre {
   .ai-workbench-grid,
   .ai-prompt-board {
     grid-template-columns: 1fr;
+  }
+
+  .server-triage-heading {
+    border-right: 0;
+    border-bottom: 1px solid rgba(14, 165, 233, 0.16);
+    padding: 0 0 8px;
+  }
+
+  .server-triage-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .ai-metric-strip {
