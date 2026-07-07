@@ -7910,6 +7910,15 @@ td span,
   color: #f3fffb;
 }
 
+.ssh-terminal-tools button.active {
+  border-color: rgba(94, 234, 212, 0.52);
+  background:
+    radial-gradient(circle at 35% 20%, rgba(94, 234, 212, 0.32), transparent 58%),
+    linear-gradient(135deg, rgba(20, 184, 166, 0.36), rgba(14, 116, 144, 0.24));
+  color: #ecfffb;
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.12);
+}
+
 .ssh-terminal-tools button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
@@ -7972,6 +7981,28 @@ td span,
   background: #030708;
   border-bottom: 1px solid rgba(126, 161, 166, 0.16);
   position: relative;
+}
+
+.ssh-terminal-shell.focus-mode .ssh-terminal-screen {
+  flex: 1 1 auto;
+  min-height: clamp(420px, calc(100vh - 190px), 680px);
+  border-bottom: 0;
+  background:
+    radial-gradient(circle at 18% 0, rgba(20, 184, 166, 0.08), transparent 28%),
+    #030708;
+}
+
+.ssh-terminal-shell.focus-mode .ssh-terminal-titlebar {
+  border-bottom-color: rgba(94, 234, 212, 0.2);
+  background:
+    linear-gradient(90deg, rgba(8, 47, 54, 0.96), rgba(8, 21, 24, 0.98));
+}
+
+.ssh-terminal-shell.focus-mode .ssh-terminal-refresh-mode {
+  border-color: rgba(94, 234, 212, 0.42);
+  background:
+    linear-gradient(135deg, rgba(20, 184, 166, 0.34), rgba(14, 165, 233, 0.18));
+  color: #ecfffb;
 }
 
 .ssh-terminal-screen .xterm {

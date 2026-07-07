@@ -75,6 +75,8 @@ const terminalRuntimePrefetchDelayMs = 1500;
 const terminalRuntimeIdleTimeoutMs = 4500;
 const terminalNetworkUiRefreshMs = 1500;
 const terminalTelemetryUiRefreshMs = 900;
+const terminalFocusModeNetworkUiRefreshMs = 4000;
+const terminalFocusModeTelemetryUiRefreshMs = 3000;
 const terminalRenderForceLagMs = 48;
 const terminalRenderForceBacklogThreshold = terminalWriteLargeBacklogThreshold * 2;
 const terminalWebSocketOpenTimeoutMs = 1400;
@@ -85,6 +87,7 @@ const terminalPasteReviewMinLines = 3;
 const terminalPasteReviewPreviewLines = 8;
 const terminalPasteReviewPreviewChars = 560;
 const terminalTextEncoder = new TextEncoder();
+const terminalFocusModeStorageKey = 'colipas.sshTerminalFocusMode.v1';
 const terminalBottleneckHistoryStorageKey = 'colipas.sshBottleneckRadarHistory.v1';
 const terminalBottleneckHistoryLimit = 12;
 const terminalBottleneckSnapshotDedupeMs = 6000;
@@ -545,6 +548,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const [terminalChannelSwitching, setTerminalChannelSwitching] = useState(false);
   const [terminalPasteReview, setTerminalPasteReview] = useState<TerminalPasteReview | null>(null);
   const [terminalPasteSending, setTerminalPasteSending] = useState(false);
+  const [terminalFocusMode, setTerminalFocusMode] = useState(() => readTerminalFocusMode());
   const [sshRunbookCommands, setSshRunbookCommands] = useState<SshRunbookCommand[]>([]);
   const [sshRunbookForm, setSshRunbookForm] = useState({ title: '', command: '' });
   const [editingSshRunbookId, setEditingSshRunbookId] = useState('');
@@ -593,6 +597,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const terminalNetworkRenderedAtRef = useRef(0);
   const terminalTelemetryRef = useRef<TerminalTelemetryState>(emptyTerminalTelemetry);
   const terminalTelemetryRenderedAtRef = useRef(0);
+  const terminalFocusModeRef = useRef(terminalFocusMode);
   const terminalWebSocketFallbackUntilRef = useRef(0);
   const terminalLastBottleneckSnapshotRef = useRef<{ signature: string; savedAt: number } | null>(null);
   const terminalSelfTestRef = useRef<TerminalSelfTestTracker | null>(null);
@@ -794,6 +799,16 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   useEffect(() => {
     sshPanelServerIdRef.current = sshPanelServerId;
   }, [sshPanelServerId]);
+
+  useEffect(() => {
+    terminalFocusModeRef.current = terminalFocusMode;
+    writeTerminalFocusMode(terminalFocusMode);
+    if (!terminalFocusMode) {
+      setTerminalTelemetry(terminalTelemetryRef.current);
+      setTerminalNetworkStats(terminalNetworkRenderedRef.current);
+    }
+    scheduleTerminalFit(true);
+  }, [terminalFocusMode]);
 
   useEffect(() => {
     if (!sshConsoleOpen || !activeSshServer?.ssh?.connected) {
@@ -1657,7 +1672,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                   </button>
                 </div>
               </aside>
-              <div className="ssh-terminal-shell" onClick={() => xtermRef.current?.focus()}>
+              <div className={terminalFocusMode ? 'ssh-terminal-shell focus-mode' : 'ssh-terminal-shell'} onClick={() => xtermRef.current?.focus()}>
                 <div className="ssh-terminal-titlebar">
                   <div className="ssh-terminal-target">
                     <span>{activeSshServer.ssh.username}@{loginProbe?.host ?? activeSshServer.ssh.host}</span>
@@ -1673,6 +1688,20 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                       </button>
                       <button type="button" aria-label={t('servers.runTerminalSelfTest')} title={t('servers.runTerminalSelfTest')} onClick={runTerminalSelfTest} disabled={!terminalShellId || sshInterrupting || terminalSelfTestRunning}>
                         <Cpu size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        data-ssh-terminal-focus-toggle="true"
+                        className={terminalFocusMode ? 'active' : undefined}
+                        aria-pressed={terminalFocusMode}
+                        aria-label={terminalFocusMode ? t('servers.terminalFocusOff') : t('servers.terminalFocusOn')}
+                        title={terminalFocusMode ? t('servers.terminalFocusOff') : t('servers.terminalFocusOn')}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setTerminalFocusMode((value) => !value);
+                        }}
+                      >
+                        <Terminal size={14} />
                       </button>
                       <button
                         type="button"
@@ -1725,6 +1754,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     </div>
                   </div>
                 </div>
+                {!terminalFocusMode && (
                 <div className={`ssh-terminal-quality ${terminalQualityInsight.tone}`} aria-live="polite">
                   <span className="ssh-terminal-quality-beacon" aria-hidden="true" />
                   <div>
@@ -1733,6 +1763,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                   </div>
                   <code>{terminalQualityInsight.metric}</code>
                 </div>
+                )}
+                {!terminalFocusMode && (
                 <div className={`ssh-terminal-telemetry ${terminalTelemetryInsight.tone}`} data-ssh-terminal-telemetry="true" aria-live="polite">
                   <div className="ssh-terminal-telemetry-heading">
                     <span>{t('servers.telemetryTitle')}</span>
@@ -1749,6 +1781,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     ))}
                   </div>
                 </div>
+                )}
+                {!terminalFocusMode && (
                 <div className={`ssh-terminal-bottleneck ${terminalBottleneckAdvisor.tone}`} data-ssh-terminal-bottleneck="true" aria-live="polite">
                   <div className="ssh-terminal-bottleneck-summary">
                     <span>{t('servers.bottleneckTitle')}</span>
@@ -1769,6 +1803,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     ))}
                   </div>
                 </div>
+                )}
+                {!terminalFocusMode && (
                 <div className={`ssh-terminal-root-cause ${terminalLagRootCause.tone}`} data-ssh-terminal-root-cause="true" aria-live="polite">
                   <div className="ssh-terminal-root-cause-summary">
                     <span><Sparkles size={14} /> {t('servers.rootCauseEyebrow')}</span>
@@ -1793,7 +1829,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     ))}
                   </div>
                 </div>
-                {terminalLagAction && (
+                )}
+                {!terminalFocusMode && terminalLagAction && (
                   <div className={`ssh-terminal-lag-action ${terminalLagAction.tone}`} data-ssh-terminal-lag-action="true" aria-live="polite" onClick={(event) => event.stopPropagation()}>
                     <div className="ssh-terminal-lag-action-copy">
                       <span><Sparkles size={14} /> {t('servers.terminalLagActionEyebrow')}</span>
@@ -1810,7 +1847,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     </button>
                   </div>
                 )}
-                {terminalSelfDiagnosticGuide && (
+                {!terminalFocusMode && terminalSelfDiagnosticGuide && (
                   <div className={`ssh-terminal-self-diagnostic ${terminalSelfDiagnosticGuide.tone}`} data-ssh-self-diagnostic-wizard="true" aria-live="polite" onClick={(event) => event.stopPropagation()}>
                     <div className="ssh-terminal-self-diagnostic-copy">
                       <span><ShieldCheck size={14} /> {t('servers.terminalSelfDiagnosticEyebrow')}</span>
@@ -1837,7 +1874,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     </button>
                   </div>
                 )}
-                {terminalSupportBundle && (
+                {!terminalFocusMode && terminalSupportBundle && (
                   <div className={`ssh-terminal-support-bundle ${terminalSupportBundle.tone}`} data-ssh-terminal-support-bundle="true" aria-live="polite" onClick={(event) => event.stopPropagation()}>
                     <div className="ssh-terminal-support-bundle-copy">
                       <span><FileText size={14} /> {t('servers.terminalSupportBundleEyebrow')}</span>
@@ -1885,6 +1922,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     </div>
                   </div>
                 )}
+                {!terminalFocusMode && (
                 <div className="ssh-quick-command-deck" data-ssh-quick-command-deck="true" onClick={(event) => event.stopPropagation()}>
                   <div className="ssh-quick-command-heading">
                     <span>{t('servers.quickCommandEyebrow')}</span>
@@ -2157,6 +2195,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     </div>
                   </div>
                 </div>
+                )}
                 <div ref={terminalContainerRef} className="ssh-terminal-screen" aria-label="Interactive SSH terminal" />
               </div>
             </div>
@@ -2780,7 +2819,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     };
     const now = performance.now();
     const renderedStats = terminalNetworkRenderedRef.current;
-    if (!shouldRenderTerminalNetworkStats(renderedStats, nextStats, now, terminalNetworkRenderedAtRef.current)) {
+    const refreshMs = terminalFocusModeRef.current ? terminalFocusModeNetworkUiRefreshMs : terminalNetworkUiRefreshMs;
+    if (!shouldRenderTerminalNetworkStats(renderedStats, nextStats, now, terminalNetworkRenderedAtRef.current, refreshMs)) {
       return;
     }
     renderTerminalNetworkStats(nextStats, now);
@@ -2805,7 +2845,9 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     const next = updater(terminalTelemetryRef.current);
     terminalTelemetryRef.current = next;
     const now = performance.now();
-    if (options.force || now - terminalTelemetryRenderedAtRef.current >= terminalTelemetryUiRefreshMs) {
+    const refreshMs = terminalFocusModeRef.current ? terminalFocusModeTelemetryUiRefreshMs : terminalTelemetryUiRefreshMs;
+    const forceRender = options.force && !terminalFocusModeRef.current;
+    if (forceRender || now - terminalTelemetryRenderedAtRef.current >= refreshMs) {
       terminalTelemetryRenderedAtRef.current = now;
       setTerminalTelemetry(next);
     }
@@ -4348,6 +4390,7 @@ function shouldRenderTerminalNetworkStats(
   nextStats: TerminalNetworkStats,
   now: number,
   renderedAt: number,
+  refreshMs = terminalNetworkUiRefreshMs,
 ) {
   if (!renderedStats) {
     return true;
@@ -4357,7 +4400,25 @@ function shouldRenderTerminalNetworkStats(
     return false;
   }
 
-  return now - renderedAt >= terminalNetworkUiRefreshMs;
+  return now - renderedAt >= refreshMs;
+}
+
+function readTerminalFocusMode() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  return window.localStorage.getItem(terminalFocusModeStorageKey) === 'true';
+}
+
+function writeTerminalFocusMode(enabled: boolean) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  try {
+    window.localStorage.setItem(terminalFocusModeStorageKey, enabled ? 'true' : 'false');
+  } catch {
+    // Focus mode is a UI preference and must never block the terminal.
+  }
 }
 
 function terminalNetworkDisplayKey(stats: TerminalNetworkStats) {

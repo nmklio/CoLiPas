@@ -1928,6 +1928,36 @@ async function assertSshTerminalPanel(targetPage) {
     if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(storedTerminalSupportHistory) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(storedTerminalSupportHistory) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(storedTerminalSupportHistory)) {
       throw new Error('SSH terminal support snapshot history leaked a raw IP address or secret');
     }
+    const focusToggleButton = targetPage.locator('[data-ssh-terminal-focus-toggle="true"]');
+    await focusToggleButton.waitFor({ timeout: 5000 });
+    const terminalHeightBeforeFocus = await targetPage.locator('.ssh-terminal-screen').evaluate((node) => node.getBoundingClientRect().height);
+    await focusToggleButton.click();
+    await targetPage.waitForFunction(() => {
+      const shell = document.querySelector('.ssh-terminal-shell');
+      return shell?.classList.contains('focus-mode')
+        && document.querySelectorAll('[data-ssh-terminal-telemetry="true"], [data-ssh-terminal-bottleneck="true"], [data-ssh-terminal-root-cause="true"], [data-ssh-terminal-support-bundle="true"], [data-ssh-quick-command-deck="true"]').length === 0;
+    }, undefined, { timeout: 5000 });
+    const focusPreference = await targetPage.evaluate(() => window.localStorage.getItem('colipas.sshTerminalFocusMode.v1'));
+    if (focusPreference !== 'true') {
+      throw new Error(`SSH terminal focus mode preference was not persisted: ${focusPreference}`);
+    }
+    const terminalHeightInFocus = await targetPage.locator('.ssh-terminal-screen').evaluate((node) => node.getBoundingClientRect().height);
+    if (terminalHeightInFocus < terminalHeightBeforeFocus) {
+      throw new Error(`SSH terminal focus mode should not shrink the terminal: before ${terminalHeightBeforeFocus}, focus ${terminalHeightInFocus}`);
+    }
+    await targetPage.locator('.ssh-terminal-screen').click();
+    await targetPage.keyboard.type('focus-mode-ok', { delay: 1 });
+    await targetPage.keyboard.press('Enter');
+    await targetPage.waitForFunction(() => {
+      const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
+      return terminalText.includes('simulated$ focus-mode-ok') && terminalText.includes('command simulated.');
+    }, undefined, { timeout: 10000 });
+    await focusToggleButton.click();
+    await targetPage.locator('[data-ssh-terminal-telemetry="true"]').waitFor({ timeout: 5000 });
+    const focusPreferenceOff = await targetPage.evaluate(() => window.localStorage.getItem('colipas.sshTerminalFocusMode.v1'));
+    if (focusPreferenceOff !== 'false') {
+      throw new Error(`SSH terminal focus mode preference was not cleared: ${focusPreferenceOff}`);
+    }
     const channelSwitchButton = targetPage.locator('[data-ssh-channel-switch="true"]');
     await channelSwitchButton.waitFor({ timeout: 5000 });
     const initialChannelSwitchLabel = await channelSwitchButton.getAttribute('aria-label');
