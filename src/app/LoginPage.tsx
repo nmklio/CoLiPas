@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Bot, Eye, EyeOff, Github, Globe2, LockKeyhole, Server, ShieldCheck } from 'lucide-react';
 import { languageOptions, useI18n } from '../i18n';
 import { BrandIcon } from './BrandIcon';
@@ -9,11 +9,83 @@ interface LoginPageProps {
   onLogin: (username: string, password: string) => Promise<void>;
 }
 
+interface LoginHealthState {
+  status: 'loading' | 'ok' | 'degraded';
+  nodeEnv: string;
+  database: string;
+  deployment: string;
+  commit: string;
+  checkedAt: string;
+}
+
+interface HealthApiResponse {
+  status?: string;
+  nodeEnv?: string;
+  database?: {
+    driver?: string;
+    name?: string;
+  };
+  release?: {
+    targetName?: string;
+    deploymentMode?: string;
+    gitCommit?: string;
+  };
+  time?: string;
+}
+
 export function LoginPage({ loading, error, onLogin }: LoginPageProps) {
   const { language, setLanguage, t } = useI18n();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [healthState, setHealthState] = useState<LoginHealthState>(() => buildLoginHealthFallback('loading'));
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadHealth() {
+      try {
+        const response = await fetch('/api/health', {
+          credentials: 'same-origin',
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          throw new Error(`health ${response.status}`);
+        }
+        const payload = await response.json() as HealthApiResponse;
+        setHealthState(buildLoginHealthFromPayload(payload));
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setHealthState(buildLoginHealthFallback('degraded'));
+        }
+      }
+    }
+
+    void loadHealth();
+    return () => controller.abort();
+  }, []);
+
+  const healthCards = useMemo(() => ([
+    {
+      id: 'service',
+      label: t('login.healthService'),
+      value: healthState.status === 'loading' ? t('login.healthChecking') : (healthState.status === 'ok' ? t('login.healthReady') : t('login.healthLimited')),
+      detail: healthState.nodeEnv || t('common.none'),
+    },
+    {
+      id: 'database',
+      label: t('login.healthDatabase'),
+      value: healthState.database,
+      detail: healthState.checkedAt,
+    },
+    {
+      id: 'release',
+      label: t('login.healthRelease'),
+      value: healthState.commit,
+      detail: healthState.deployment,
+    },
+  ]), [healthState, t]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -56,6 +128,22 @@ export function LoginPage({ loading, error, onLogin }: LoginPageProps) {
           <span><Server size={16} /> {t('login.featureAssets')}</span>
           <span><Bot size={16} /> {t('login.featureAi')}</span>
           <span><ShieldCheck size={16} /> {t('login.featureAudit')}</span>
+        </div>
+
+        <div className={`login-health-strip ${healthState.status}`} data-login-health-strip="true" aria-label={t('login.healthTitle')}>
+          <div className="login-health-heading">
+            <span>{t('login.healthTitle')}</span>
+            <strong>{healthState.status === 'ok' ? t('login.healthReady') : healthState.status === 'loading' ? t('login.healthChecking') : t('login.healthLimited')}</strong>
+          </div>
+          <div className="login-health-grid">
+            {healthCards.map((card) => (
+              <div className="login-health-card" data-login-health-card={card.id} key={card.id}>
+                <span>{card.label}</span>
+                <strong>{card.value}</strong>
+                <small>{card.detail}</small>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -121,4 +209,60 @@ export function LoginPage({ loading, error, onLogin }: LoginPageProps) {
       </section>
     </main>
   );
+}
+
+
+function buildLoginHealthFromPayload(payload: HealthApiResponse): LoginHealthState {
+  const databaseName = sanitizeLoginHealthLabel(payload.database?.name, 'sqlite');
+  const databaseDriver = sanitizeLoginHealthLabel(payload.database?.driver, 'db');
+  const deploymentMode = sanitizeLoginHealthLabel(payload.release?.deploymentMode, 'node');
+  const targetName = sanitizeLoginHealthLabel(payload.release?.targetName, 'local');
+  const commit = sanitizeLoginCommit(payload.release?.gitCommit);
+
+  return {
+    status: payload.status === 'ok' ? 'ok' : 'degraded',
+    nodeEnv: sanitizeLoginHealthLabel(payload.nodeEnv, 'runtime'),
+    database: `${databaseDriver} / ${databaseName}`,
+    deployment: `${deploymentMode} / ${targetName}`,
+    commit,
+    checkedAt: formatLoginHealthTime(payload.time),
+  };
+}
+
+function buildLoginHealthFallback(status: LoginHealthState['status']): LoginHealthState {
+  return {
+    status,
+    nodeEnv: 'runtime',
+    database: 'sqlite / pending',
+    deployment: 'node / local',
+    commit: 'pending',
+    checkedAt: 'pending',
+  };
+}
+
+function sanitizeLoginHealthLabel(value: unknown, fallback: string) {
+  if (typeof value !== 'string') {
+    return fallback;
+  }
+  const safe = value.replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 32);
+  return safe || fallback;
+}
+
+function sanitizeLoginCommit(value: unknown) {
+  if (typeof value !== 'string') {
+    return 'local';
+  }
+  const safe = value.trim().match(/^[a-f0-9]{7,12}$/i)?.[0];
+  return safe || 'local';
+}
+
+function formatLoginHealthTime(value: unknown) {
+  if (typeof value !== 'string') {
+    return 'pending';
+  }
+  const time = new Date(value);
+  if (Number.isNaN(time.getTime())) {
+    return 'pending';
+  }
+  return time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }

@@ -1360,6 +1360,92 @@ body {
   color: var(--brand-strong);
 }
 
+.login-health-strip {
+  position: relative;
+  z-index: 1;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 12px;
+  padding: 12px;
+  background:
+    radial-gradient(circle at 8% 0%, rgba(20, 184, 166, 0.14), transparent 34%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(239, 253, 250, 0.84));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  display: grid;
+  gap: 10px;
+}
+
+.login-health-strip.degraded {
+  border-color: rgba(217, 119, 6, 0.28);
+  background:
+    radial-gradient(circle at 8% 0%, rgba(245, 158, 11, 0.15), transparent 34%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(255, 251, 235, 0.88));
+}
+
+.login-health-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.login-health-heading span,
+.login-health-card span,
+.login-health-card small {
+  color: #60757c;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.login-health-heading strong {
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: rgba(15, 118, 110, 0.1);
+  color: var(--brand-strong);
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.login-health-strip.degraded .login-health-heading strong {
+  background: rgba(245, 158, 11, 0.16);
+  color: #92400e;
+}
+
+.login-health-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.login-health-card {
+  min-width: 0;
+  border: 1px solid rgba(168, 216, 208, 0.54);
+  border-radius: 10px;
+  padding: 9px;
+  background: rgba(255, 255, 255, 0.76);
+  display: grid;
+  gap: 3px;
+}
+
+.login-health-card strong,
+.login-health-card small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.login-health-card strong {
+  color: #122329;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.login-health-card small {
+  letter-spacing: normal;
+  text-transform: none;
+}
+
 .login-github-link {
   position: relative;
   z-index: 1;
@@ -13892,6 +13978,10 @@ pre {
   }
 
   .login-feature-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .login-health-grid {
     grid-template-columns: 1fr;
   }
 

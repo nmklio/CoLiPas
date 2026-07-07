@@ -3308,6 +3308,23 @@ function assertAccountUiGuards() {
   if (loginSource.includes("useState('admin')") || loginSource.includes('value="admin"')) {
     throw new Error('Login page must not prefill the admin username');
   }
+  const loginHealthFragments = [
+    'interface LoginHealthState',
+    "fetch('/api/health'",
+    'data-login-health-strip="true"',
+    'data-login-health-card={card.id}',
+    'sanitizeLoginCommit',
+    'login.healthTitle',
+    'login.healthRelease',
+    '.login-health-strip',
+    '.login-health-card',
+    'admin login deployment health strip',
+  ];
+  const loginHealthSource = `${loginSource}\n${i18nSource}\n${globalCss}\n${publicPagesCheckSource}`;
+  const missingLoginHealth = loginHealthFragments.filter((fragment) => !loginHealthSource.includes(fragment));
+  if (missingLoginHealth.length) {
+    throw new Error(`Login deployment health strip is incomplete: ${missingLoginHealth.join(', ')}`);
+  }
   if (
     marketingSource.includes("useState('admin')")
     || marketingSource.includes('admin / admin123456')

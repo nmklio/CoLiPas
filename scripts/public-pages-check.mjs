@@ -164,8 +164,15 @@ function buildAdminCheck() {
       await expectTitle(page, /CoLiPas/);
       await page.locator('input[autocomplete="username"]').waitFor({ timeout: 15000 });
       await page.locator('input[autocomplete="current-password"]').waitFor({ timeout: 15000 });
+      await page.locator('[data-login-health-strip="true"]').waitFor({ timeout: 15000 });
       await expectText(page.locator('h1').first(), /CoLiPas|管理后台|console|安全/i, 'admin login h1');
       await expectLink(page, /^GitHub$/i, 'https://github.com/nmklio/CoLiPas');
+      await expectText(page.locator('[data-login-health-strip="true"]'), /Deployment status|上线状态|デプロイ状態|Service|服务|サービス|Database|数据库|データベース|Release|发布版本|リリース/i, 'admin login deployment health strip');
+      await expectLocatorCount(page.locator('[data-login-health-card]'), 3, 'admin login health cards');
+      const healthText = await page.locator('[data-login-health-strip="true"]').innerText();
+      if (/\b(?:\d{1,3}\.){3}\d{1,3}\b|sk-[A-Za-z0-9_-]{12,}|BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY|password=|passphrase=/i.test(healthText)) {
+        throw new Error('admin login health strip leaked a raw IP address or secret');
+      }
       const usernameValue = await page.locator('input[autocomplete="username"]').inputValue();
       if (usernameValue.trim()) {
         throw new Error('admin login must not prefill the username');
