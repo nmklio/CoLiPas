@@ -35,8 +35,8 @@ try {
 
   await assertReleaseEvidenceBrief(page);
   await page.locator('[data-release-fix-router="true"]').scrollIntoViewIfNeeded();
-  await captureVisualEvidence(page, 'desktop-release-cockpit-handoff', ['[data-release-fix-router="true"]', '[data-release-cockpit="true"]', '[data-release-handoff-pack="true"]']);
-  await captureVisualEvidence(page, 'desktop-security-trace', ['.security-workbench', '.security-readiness-card', '[data-release-fix-router="true"]', '[data-release-cockpit="true"]', '[data-release-handoff-pack="true"]', '.security-evidence-brief', '.security-release-playbook', '.security-ssh-performance-card']);
+  await captureVisualEvidence(page, 'desktop-release-cockpit-handoff', ['[data-release-fix-router="true"]', '[data-release-cockpit="true"]', '[data-release-handoff-pack="true"]', '[data-release-evidence-timeline="true"]']);
+  await captureVisualEvidence(page, 'desktop-security-trace', ['.security-workbench', '.security-readiness-card', '[data-release-fix-router="true"]', '[data-release-cockpit="true"]', '[data-release-handoff-pack="true"]', '[data-release-evidence-timeline="true"]', '.security-evidence-brief', '.security-release-playbook', '.security-ssh-performance-card']);
   await page.locator('[data-ssh-flight-recorder="true"]').scrollIntoViewIfNeeded();
   await captureVisualEvidence(page, 'desktop-ssh-flight-recorder', ['[data-ssh-flight-recorder="true"]', '.security-ssh-flight-rail', '[data-ssh-latency-curve="true"]', '[data-ssh-interaction-sampler="true"]', '[data-ssh-bottleneck-trend="true"]']);
   await page.locator('[data-ssh-bottleneck-trend="true"]').scrollIntoViewIfNeeded();
@@ -164,6 +164,7 @@ async function assertReleaseEvidenceBrief(targetPage) {
   await targetPage.locator('[data-release-fix-checklist="true"]').waitFor({ timeout: 10000 });
   await targetPage.locator('[data-release-cockpit="true"]').waitFor({ timeout: 10000 });
   await targetPage.locator('[data-release-handoff-pack="true"]').waitFor({ timeout: 10000 });
+  await targetPage.locator('[data-release-evidence-timeline="true"]').waitFor({ timeout: 10000 });
   await targetPage.locator('.security-release-playbook').waitFor({ timeout: 10000 });
   await targetPage.locator('.security-ssh-performance-card').waitFor({ timeout: 10000 });
   await targetPage.getByRole('button', { name: /copy evidence brief/i }).waitFor({ timeout: 5000 });
@@ -171,6 +172,18 @@ async function assertReleaseEvidenceBrief(targetPage) {
   await targetPage.getByRole('button', { name: /copy checklist/i }).waitFor({ timeout: 5000 });
   await targetPage.getByRole('button', { name: /copy cockpit/i }).waitFor({ timeout: 5000 });
   await targetPage.getByRole('button', { name: /copy handoff pack/i }).waitFor({ timeout: 5000 });
+  await targetPage.getByRole('button', { name: /copy timeline/i }).waitFor({ timeout: 5000 });
+  const releaseTimelineText = await targetPage.locator('[data-release-evidence-timeline="true"]').innerText();
+  if (!/Release evidence timeline|Version publish|Release readiness|Operations preflight|Audit result|SSH field state/i.test(releaseTimelineText)) {
+    throw new Error(`Release evidence timeline did not render the full evidence chain: ${releaseTimelineText}`);
+  }
+  const releaseTimelineItemCount = await targetPage.locator('[data-release-timeline-item]').count();
+  if (releaseTimelineItemCount !== 5) {
+    throw new Error(`Release evidence timeline should expose five stages, got ${releaseTimelineItemCount}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(releaseTimelineText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(releaseTimelineText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(releaseTimelineText)) {
+    throw new Error('Release evidence timeline rendered a raw IP address or secret');
+  }
   const releaseFixText = await targetPage.locator('[data-release-fix-router="true"]').innerText();
   if (!/Release fix router/i.test(releaseFixText) || !/Fix route/i.test(releaseFixText) || !/routed finding/i.test(releaseFixText) || !/Open|Review/i.test(releaseFixText)) {
     throw new Error(`Release fix router did not render actionable route text: ${releaseFixText}`);
@@ -1764,6 +1777,13 @@ async function assertOverviewHealthBaseline(targetPage) {
   if (!/Latest operations preflight|Status|Targets|Issues|Return to operations/i.test(securityOpsPreflightText)) {
     throw new Error(`Security should show the linked operations preflight card, got ${securityOpsPreflightText}`);
   }
+  const linkedReleaseTimeline = targetPage.locator('[data-release-evidence-timeline="true"]');
+  await linkedReleaseTimeline.waitFor({ timeout: 10000 });
+  const linkedReleaseTimelineText = await linkedReleaseTimeline.innerText();
+  if (!/Release evidence timeline|Operations preflight|targets runnable|Back to operations/i.test(linkedReleaseTimelineText)) {
+    throw new Error(`Release evidence timeline should include the linked operations preflight, got ${linkedReleaseTimelineText}`);
+  }
+  await linkedReleaseTimeline.locator('[data-release-timeline-operations="true"]').waitFor({ timeout: 5000 });
   await securityOpsPreflightBrief.locator('[data-security-ops-preflight-open="true"]').click();
   await targetPage.waitForURL(/#operations$/, { timeout: 10000 });
   await targetPage.locator('[data-release-fix-focus="true"], .ops-builder').first().waitFor({ timeout: 10000 });

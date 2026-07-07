@@ -187,6 +187,26 @@ interface ReleaseHandoffPackSummary {
   copyText: string;
 }
 
+interface ReleaseEvidenceTimelineItem {
+  id: 'deployment' | 'readiness' | 'ops-preflight' | 'audit' | 'ssh';
+  label: string;
+  value: string;
+  detail: string;
+  timeLabel: string;
+  tone: 'ok' | 'warn' | 'fail';
+  correlationId?: string;
+}
+
+interface ReleaseEvidenceTimelineSummary {
+  tone: 'ok' | 'warn' | 'fail';
+  title: string;
+  lead: string;
+  status: string;
+  generatedLabel: string;
+  items: ReleaseEvidenceTimelineItem[];
+  copyText: string;
+}
+
 interface ReleaseFixRouteStep {
   id: string;
   module: ReleaseReadinessResponse['checks'][number]['relatedModule'];
@@ -587,6 +607,22 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
     }),
     [activeAuditIssues.blocked, activeAuditIssues.failed, copy, evidenceBrief, releaseCockpit, sshPerformanceCopy, sshSupportBundle],
   );
+
+  const releaseTimeline = useMemo(
+    () => buildReleaseEvidenceTimeline({
+      releaseCockpit,
+      evidenceBrief,
+      readiness,
+      auditEntries,
+      diagnostic: diagnosticBundle,
+      opsPreflightSnapshot,
+      activeAuditIssues,
+      successRate,
+      copy,
+      locale,
+    }),
+    [activeAuditIssues.blocked, activeAuditIssues.failed, auditEntries, copy, diagnosticBundle, evidenceBrief, locale, opsPreflightSnapshot, readiness, releaseCockpit, successRate],
+  );
   const releaseFixRouter = useMemo(
     () => buildReleaseFixRouter(readiness, copy),
     [copy, readiness],
@@ -804,6 +840,23 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
     }
   }
 
+  async function copyReleaseTimeline() {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) {
+      setRemediationMessage(releaseTimeline.copyText);
+      setRemediationError(false);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(releaseTimeline.copyText);
+      setRemediationMessage(copy.releaseTimelineCopied);
+      setRemediationError(false);
+    } catch {
+      setRemediationMessage(releaseTimeline.copyText);
+      setRemediationError(false);
+    }
+  }
+
   async function copyReleaseFixRouter() {
     if (typeof navigator === 'undefined' || !navigator.clipboard) {
       setRemediationMessage(releaseFixRouter.copyText);
@@ -856,6 +909,15 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
     const next: ReleaseFixChecklistState = { version: 1, statuses: {} };
     saveReleaseFixChecklistState(next);
     setReleaseFixChecklistState(next);
+  }
+
+  function focusReleaseTimelineTrace(correlationId: string) {
+    setActiveTraceId(correlationId);
+    setRelationFilter(null);
+    setQuery('');
+    setStatusFilter('all');
+    setSelectedAuditId(auditEntries.find((entry) => entry.correlationId === correlationId)?.id ?? '');
+    onTraceFilterChange?.(correlationId);
   }
 
   function openOpsPreflightTrace() {
@@ -1459,6 +1521,52 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
           </div>
           <small className="security-release-handoff-note">{copy.releaseHandoffSanitizedNote}</small>
         </div>
+      </article>
+
+      <article className={`security-release-timeline ${releaseTimeline.tone}`} data-release-evidence-timeline="true" aria-labelledby="security-release-timeline-title">
+        <div className="security-release-timeline-heading">
+          <div>
+            <span>{copy.releaseTimelineKicker}</span>
+            <h3 id="security-release-timeline-title"><Clock3 size={18} /> {releaseTimeline.title}</h3>
+            <p>{releaseTimeline.lead}</p>
+          </div>
+          <div className="security-release-timeline-status">
+            <small>{copy.releaseTimelineStatusLabel}</small>
+            <strong>{releaseTimeline.status}</strong>
+            <button type="button" className="tool-button" onClick={copyReleaseTimeline} disabled={!releaseTimeline.copyText}>
+              <ClipboardCheck size={15} />
+              {copy.releaseTimelineCopy}
+            </button>
+          </div>
+        </div>
+        <div className="security-release-timeline-track" aria-label={copy.releaseTimelineItemsLabel}>
+          {releaseTimeline.items.map((item, index) => (
+            <article key={item.id} className={`security-release-timeline-item ${item.tone}`} data-release-timeline-item={item.id}>
+              <span className="security-release-timeline-node" aria-hidden="true">{index + 1}</span>
+              <div className="security-release-timeline-copy">
+                <small>{item.timeLabel}</small>
+                <strong>{item.label}</strong>
+                <p>{item.detail}</p>
+              </div>
+              <b>{item.value}</b>
+              <div className="security-release-timeline-actions">
+                {item.correlationId && (
+                  <button type="button" className="tool-button" data-release-timeline-trace={item.id} onClick={() => focusReleaseTimelineTrace(item.correlationId!)}>
+                    <ShieldCheck size={14} />
+                    {copy.releaseTimelineTrace}
+                  </button>
+                )}
+                {item.id === 'ops-preflight' && opsPreflightSnapshot && (
+                  <button type="button" className="tool-button primary" data-release-timeline-operations="true" onClick={openOpsPreflightInOperations}>
+                    <SlidersHorizontal size={14} />
+                    {copy.releaseTimelineOperations}
+                  </button>
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+        <small className="security-release-timeline-note">{copy.releaseTimelineSanitizedNote}</small>
       </article>
 
       <article className={`security-evidence-brief ${readiness?.status ?? 'review'}`} aria-labelledby="security-evidence-brief-title">
@@ -2899,6 +3007,129 @@ function buildReleaseHandoffPack(input: {
     sections,
     copyText,
   };
+}
+
+
+function buildReleaseEvidenceTimeline(input: {
+  releaseCockpit: ReleaseCockpitSummary;
+  evidenceBrief: ReleaseEvidenceBrief;
+  readiness: ReleaseReadinessResponse | null;
+  auditEntries: AuditEntry[];
+  diagnostic: DiagnosticExportResponse | null;
+  opsPreflightSnapshot?: OverviewPreflightSnapshot | null;
+  activeAuditIssues: ReturnType<typeof getActiveAuditIssues>;
+  successRate: number;
+  copy: SecurityCopy;
+  locale: string;
+}): ReleaseEvidenceTimelineSummary {
+  const { releaseCockpit, evidenceBrief, readiness, auditEntries, diagnostic, opsPreflightSnapshot, activeAuditIssues, successRate, copy, locale } = input;
+  const deployment = evidenceBrief.deployment;
+  const latestAudit = getLatestAuditEntry(auditEntries);
+  const latestOpsPreflightAudit = opsPreflightSnapshot?.correlationId
+    ? auditEntries.find((entry) => entry.correlationId === opsPreflightSnapshot.correlationId) ?? null
+    : auditEntries.find((entry) => entry.action === 'OPERATIONS_PREFLIGHT') ?? null;
+  const lastSelfTest = diagnostic?.sshTerminal?.lastSelfTest ?? null;
+  const websocket = diagnostic?.sshTerminal?.websocket ?? null;
+  const deploymentTone: ReleaseEvidenceTimelineItem['tone'] = deployment?.configured ? 'ok' : 'warn';
+  const readinessTone: ReleaseEvidenceTimelineItem['tone'] = readiness?.status === 'ready' ? 'ok' : readiness?.status === 'blocked' ? 'fail' : 'warn';
+  const opsTone: ReleaseEvidenceTimelineItem['tone'] = opsPreflightSnapshot?.status === 'ready' ? 'ok' : opsPreflightSnapshot?.status === 'blocked' ? 'fail' : 'warn';
+  const auditTone: ReleaseEvidenceTimelineItem['tone'] = activeAuditIssues.failed > 0 ? 'fail' : activeAuditIssues.blocked > 0 ? 'warn' : 'ok';
+  const sshTone = getReleaseCockpitSshTone(lastSelfTest, websocket);
+  const items: ReleaseEvidenceTimelineItem[] = [
+    {
+      id: 'deployment',
+      label: copy.releaseTimelineItemVersion,
+      value: deployment?.gitCommit ?? '--',
+      detail: deployment ? copy.releaseTimelineDeploymentDetail(deployment.targetName, deployment.deploymentMode) : copy.releaseCockpitVersionMissing,
+      timeLabel: copy.releaseTimelineTime(evidenceBrief.generatedLabel),
+      tone: deploymentTone,
+    },
+    {
+      id: 'readiness',
+      label: copy.releaseTimelineItemReadiness,
+      value: readiness ? `${readiness.score}/100` : '--',
+      detail: readiness ? copy.releaseTimelineReadinessDetail(readiness.summary.passed, readiness.summary.totalChecks) : copy.readinessCalculating,
+      timeLabel: copy.releaseTimelineTime(evidenceBrief.generatedLabel),
+      tone: readinessTone,
+    },
+    {
+      id: 'ops-preflight',
+      label: copy.releaseTimelineItemOps,
+      value: opsPreflightSnapshot ? `${opsPreflightSnapshot.runnableTargets}/${opsPreflightSnapshot.totalTargets}` : latestOpsPreflightAudit ? copy.auditStatus(latestOpsPreflightAudit.status) : '--',
+      detail: opsPreflightSnapshot
+        ? copy.releaseTimelineOpsDetail(opsPreflightSnapshot.runnableTargets, opsPreflightSnapshot.totalTargets, opsPreflightSnapshot.issueCount)
+        : latestOpsPreflightAudit
+          ? sanitizeEvidenceBriefText(latestOpsPreflightAudit.detail)
+          : copy.releaseTimelineOpsMissing,
+      timeLabel: copy.releaseTimelineTime(formatTimelineTime(opsPreflightSnapshot?.generatedAt ?? latestOpsPreflightAudit?.createdAt ?? '', locale, copy.waitingRefresh)),
+      tone: latestOpsPreflightAudit?.status === 'failed' ? 'fail' : latestOpsPreflightAudit?.status === 'blocked' ? 'warn' : opsTone,
+      correlationId: opsPreflightSnapshot?.correlationId ?? latestOpsPreflightAudit?.correlationId,
+    },
+    {
+      id: 'audit',
+      label: copy.releaseTimelineItemAudit,
+      value: String(activeAuditIssues.blocked + activeAuditIssues.failed),
+      detail: copy.releaseTimelineAuditDetail(activeAuditIssues.blocked, activeAuditIssues.failed, successRate),
+      timeLabel: copy.releaseTimelineTime(formatTimelineTime(latestAudit?.createdAt ?? '', locale, copy.waitingRefresh)),
+      tone: auditTone,
+      correlationId: latestAudit?.correlationId,
+    },
+    {
+      id: 'ssh',
+      label: copy.releaseTimelineItemSsh,
+      value: lastSelfTest ? copy.releaseCockpitSshStatus(lastSelfTest.status) : String(diagnostic?.sshTerminal.activeSessions ?? 0),
+      detail: buildReleaseCockpitSshDetail(diagnostic, copy),
+      timeLabel: copy.releaseTimelineTime(formatTimelineTime(diagnostic?.generatedAt ?? '', locale, copy.waitingRefresh)),
+      tone: sshTone,
+    },
+  ];
+  const tone: ReleaseEvidenceTimelineSummary['tone'] = items.some((item) => item.tone === 'fail')
+    ? 'fail'
+    : items.some((item) => item.tone === 'warn')
+      ? 'warn'
+      : 'ok';
+  const riskCount = items.filter((item) => item.tone !== 'ok').length;
+  const status = copy.releaseTimelineStatus(items.length, riskCount);
+  const generatedLabel = releaseCockpit.generatedLabel || evidenceBrief.generatedLabel;
+  const copyText = [
+    `# ${copy.releaseTimelineTitle}`,
+    `${copy.releaseTimelineStatusLabel}: ${status}`,
+    `${copy.releaseHandoffGenerated}: ${generatedLabel}`,
+    '',
+    ...items.map((item, index) => `${index + 1}. ${item.label}: ${item.value} / ${item.detail} / ${item.timeLabel}`),
+    '',
+    copy.releaseTimelineSanitizedNote,
+  ].map(sanitizeEvidenceBriefText).join('\n');
+
+  return {
+    tone,
+    title: copy.releaseTimelineTitle,
+    lead: copy.releaseTimelineLead,
+    status,
+    generatedLabel,
+    items,
+    copyText,
+  };
+}
+
+function getLatestAuditEntry(auditEntries: AuditEntry[]) {
+  return auditEntries.reduce<AuditEntry | null>((latest, entry) => {
+    if (!latest) {
+      return entry;
+    }
+    return new Date(entry.createdAt).getTime() > new Date(latest.createdAt).getTime() ? entry : latest;
+  }, null);
+}
+
+function formatTimelineTime(value: string, locale: string, fallback: string) {
+  if (!value) {
+    return fallback;
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' });
 }
 
 function buildReleaseFixRouter(
@@ -4653,6 +4884,28 @@ interface SecurityCopy {
   releaseHandoffPolicyValue: string;
   releaseHandoffPolicyDetail: string;
   releaseHandoffSanitizedNote: string;
+  releaseTimelineTitle: string;
+  releaseTimelineLead: string;
+  releaseTimelineKicker: string;
+  releaseTimelineStatusLabel: string;
+  releaseTimelineStatus: (items: number, risk: number) => string;
+  releaseTimelineItemsLabel: string;
+  releaseTimelineCopy: string;
+  releaseTimelineCopied: string;
+  releaseTimelineTrace: string;
+  releaseTimelineOperations: string;
+  releaseTimelineSanitizedNote: string;
+  releaseTimelineItemVersion: string;
+  releaseTimelineItemReadiness: string;
+  releaseTimelineItemOps: string;
+  releaseTimelineItemAudit: string;
+  releaseTimelineItemSsh: string;
+  releaseTimelineOpsMissing: string;
+  releaseTimelineTime: (time: string) => string;
+  releaseTimelineDeploymentDetail: (target: string, mode: string) => string;
+  releaseTimelineReadinessDetail: (passed: number, total: number) => string;
+  releaseTimelineOpsDetail: (runnable: number, total: number, issues: number) => string;
+  releaseTimelineAuditDetail: (blocked: number, failed: number, successRate: number) => string;
   releaseFixTitle: string;
   releaseFixLead: string;
   releaseFixKicker: string;
@@ -5873,6 +6126,28 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     releaseHandoffPolicyValue: '仅脱敏',
     releaseHandoffPolicyDetail: '只交付聚合状态、计数、版本和建议，不包含命令正文、服务器地址、密钥或用户数据。',
     releaseHandoffSanitizedNote: '发布交接包只组合已脱敏的驾驶舱、证据摘要和 SSH 支持包，适合复制给协作方复核。',
+    releaseTimelineTitle: '发布证据时间线',
+    releaseTimelineLead: '按上线顺序串联版本、就绪、预检、审计和 SSH 现场，快速判断卡点落在哪一段。',
+    releaseTimelineKicker: '证据编排',
+    releaseTimelineStatusLabel: '链路状态',
+    releaseTimelineStatus: (items, risk) => risk > 0 ? `${items} 段证据 / ${risk} 段需关注` : `${items} 段证据全部正常`,
+    releaseTimelineItemsLabel: '发布证据链路',
+    releaseTimelineCopy: '复制时间线',
+    releaseTimelineCopied: '发布证据时间线已复制',
+    releaseTimelineTrace: '聚焦证据',
+    releaseTimelineOperations: '回到编排',
+    releaseTimelineSanitizedNote: '时间线只展示脱敏后的版本、聚合状态、计数和关联 ID，不包含服务器地址、密钥、命令正文或用户数据。',
+    releaseTimelineItemVersion: '版本发布',
+    releaseTimelineItemReadiness: '上线就绪',
+    releaseTimelineItemOps: '运维预检',
+    releaseTimelineItemAudit: '审计结果',
+    releaseTimelineItemSsh: 'SSH 现场',
+    releaseTimelineOpsMissing: '暂无可关联的运维预检证据，建议先在运维编排中执行预检。',
+    releaseTimelineTime: (time) => `时间 ${time}`,
+    releaseTimelineDeploymentDetail: (target, mode) => `${target} / ${mode}`,
+    releaseTimelineReadinessDetail: (passed, total) => `${passed}/${total} 项检查通过`,
+    releaseTimelineOpsDetail: (runnable, total, issues) => `${runnable}/${total} 目标可执行，${issues} 个风险项`,
+    releaseTimelineAuditDetail: (blocked, failed, successRate) => `${blocked} 阻断 / ${failed} 失败 / ${successRate}% 成功率`,
     releaseFixTitle: '发布阻断修复导航',
     releaseFixLead: '把每个未通过的上线检查变成可点击的模块入口，先修最高风险项。',
     releaseFixKicker: '修复路线',
@@ -5887,18 +6162,18 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     releaseFixActionText: '建议动作',
     releaseFixOpenText: '打开入口',
     releaseFixSanitizedNote: '修复路线只包含检查名称、聚合值、建议动作和模块入口，不包含服务器地址、密钥、命令正文或用户数据。',
-    releaseFixChecklistTitle: '????????',
-    releaseFixChecklistLead: '?????????????????????????????????',
-    releaseFixChecklistProgress: (done, total) => total > 0 ? `${done}/${total} ???` : '????',
-    releaseFixChecklistOpen: '???',
-    releaseFixChecklistDone: '???',
+    releaseFixChecklistTitle: '发布修复清单',
+    releaseFixChecklistLead: '把每个发布阻断按未处理、已完成或延期记录；刷新浏览器也会保留复核进度，且不保存敏感数据。',
+    releaseFixChecklistProgress: (done, total) => total > 0 ? `${done}/${total} 已完成` : '暂无任务',
+    releaseFixChecklistOpen: '未处理',
+    releaseFixChecklistDone: '已完成',
     releaseFixChecklistDeferred: '??',
-    releaseFixChecklistCopy: '????',
-    releaseFixChecklistCopied: '???????????',
-    releaseFixChecklistReset: '????',
-    releaseFixChecklistSanitizedNote: '???????????? ID ??????????????????????????????????',
-    releaseFixChecklistEmptyTitle: '??????',
-    releaseFixChecklistEmptyDetail: '??????????????????????????',
+    releaseFixChecklistCopy: '复制清单',
+    releaseFixChecklistCopied: '发布修复清单已复制',
+    releaseFixChecklistReset: '重置清单',
+    releaseFixChecklistSanitizedNote: '清单只保存修复项 ID 和状态，不保存服务器地址、密钥、命令正文或用户数据。',
+    releaseFixChecklistEmptyTitle: '暂无清单项',
+    releaseFixChecklistEmptyDetail: '当前没有失败或预警检查，可继续记录快照并发布验证。',
     releaseFixModuleLabel: (module) => ({
       ai: 'AI 模块',
       api: '自定义 API',
@@ -6151,6 +6426,28 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     releaseHandoffPolicyValue: 'Sanitized only',
     releaseHandoffPolicyDetail: 'Shares only aggregate state, counts, version, and recommendations; no command text, server addresses, keys, or user data.',
     releaseHandoffSanitizedNote: 'The release handoff pack only combines sanitized cockpit, evidence brief, and SSH support bundle content for collaborator review.',
+    releaseTimelineTitle: 'Release evidence timeline',
+    releaseTimelineLead: 'Orders version, readiness, preflight, audit, and SSH field evidence so the current release bottleneck is visible at a glance.',
+    releaseTimelineKicker: 'Evidence flow',
+    releaseTimelineStatusLabel: 'Chain state',
+    releaseTimelineStatus: (items, risk) => risk > 0 ? `${items} evidence stage(s) / ${risk} need attention` : `${items} evidence stages healthy`,
+    releaseTimelineItemsLabel: 'Release evidence chain',
+    releaseTimelineCopy: 'Copy timeline',
+    releaseTimelineCopied: 'Release evidence timeline copied',
+    releaseTimelineTrace: 'Focus evidence',
+    releaseTimelineOperations: 'Back to operations',
+    releaseTimelineSanitizedNote: 'The timeline only displays sanitized version, aggregate states, counts, and correlation IDs; no server addresses, keys, command text, or user data.',
+    releaseTimelineItemVersion: 'Version publish',
+    releaseTimelineItemReadiness: 'Release readiness',
+    releaseTimelineItemOps: 'Operations preflight',
+    releaseTimelineItemAudit: 'Audit result',
+    releaseTimelineItemSsh: 'SSH field state',
+    releaseTimelineOpsMissing: 'No linked operations preflight evidence yet; run a preflight from Operations first.',
+    releaseTimelineTime: (time) => `Time ${time}`,
+    releaseTimelineDeploymentDetail: (target, mode) => `${target} / ${mode}`,
+    releaseTimelineReadinessDetail: (passed, total) => `${passed}/${total} checks passed`,
+    releaseTimelineOpsDetail: (runnable, total, issues) => `${runnable}/${total} targets runnable, ${issues} issue(s)`,
+    releaseTimelineAuditDetail: (blocked, failed, successRate) => `${blocked} blocked / ${failed} failed / ${successRate}% success`,
     releaseFixTitle: 'Release fix router',
     releaseFixLead: 'Turns every failing release check into a clickable module entry so the highest-risk item is fixed first.',
     releaseFixKicker: 'Fix route',
@@ -6429,6 +6726,28 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     releaseHandoffPolicyValue: '脱敏のみ',
     releaseHandoffPolicyDetail: '集計状態、件数、バージョン、推奨のみを共有し、コマンド本文、サーバーアドレス、鍵、ユーザーデータは含めません。',
     releaseHandoffSanitizedNote: 'リリース引き継ぎパックは、脱敏済みのコックピット、証跡サマリー、SSH サポートバンドルだけを組み合わせます。',
+    releaseTimelineTitle: 'リリース証跡タイムライン',
+    releaseTimelineLead: 'バージョン、準備、事前確認、監査、SSH 現場証跡を公開順に並べ、詰まりを一目で確認します。',
+    releaseTimelineKicker: '証跡フロー',
+    releaseTimelineStatusLabel: 'チェーン状態',
+    releaseTimelineStatus: (items, risk) => risk > 0 ? `${items} 段階 / ${risk} 件要確認` : `${items} 段階すべて正常`,
+    releaseTimelineItemsLabel: 'リリース証跡チェーン',
+    releaseTimelineCopy: 'タイムラインをコピー',
+    releaseTimelineCopied: 'リリース証跡タイムラインをコピーしました',
+    releaseTimelineTrace: '証跡にフォーカス',
+    releaseTimelineOperations: '運用へ戻る',
+    releaseTimelineSanitizedNote: 'タイムラインは脱敏済みのバージョン、集計状態、件数、関連 ID のみを表示し、サーバーアドレス、鍵、コマンド本文、ユーザーデータは含みません。',
+    releaseTimelineItemVersion: 'バージョン公開',
+    releaseTimelineItemReadiness: 'リリース準備',
+    releaseTimelineItemOps: '運用事前確認',
+    releaseTimelineItemAudit: '監査結果',
+    releaseTimelineItemSsh: 'SSH 現場',
+    releaseTimelineOpsMissing: '関連する運用事前確認証跡がまだありません。先に運用編成で事前確認を実行してください。',
+    releaseTimelineTime: (time) => `時刻 ${time}`,
+    releaseTimelineDeploymentDetail: (target, mode) => `${target} / ${mode}`,
+    releaseTimelineReadinessDetail: (passed, total) => `${passed}/${total} チェック合格`,
+    releaseTimelineOpsDetail: (runnable, total, issues) => `${runnable}/${total} 対象実行可能、リスク ${issues} 件`,
+    releaseTimelineAuditDetail: (blocked, failed, successRate) => `${blocked} ブロック / ${failed} 失敗 / 成功率 ${successRate}%`,
     releaseFixTitle: 'リリース修復ルーター',
     releaseFixLead: '未合格のリリースチェックをクリック可能なモジュール入口に変換し、高リスク項目から修復します。',
     releaseFixKicker: '修復ルート',
@@ -6443,18 +6762,18 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     releaseFixActionText: '推奨アクション',
     releaseFixOpenText: '入口を開く',
     releaseFixSanitizedNote: '修復ルートにはチェック名、集計値、推奨アクション、モジュール入口のみが含まれ、サーバーアドレス、鍵、コマンド本文、ユーザーデータは含みません。',
-    releaseFixChecklistTitle: '?????????????',
-    releaseFixChecklistLead: '?????????????????????????????????????????',
-    releaseFixChecklistProgress: (done, total) => total > 0 ? `${done}/${total} ??` : '?????',
-    releaseFixChecklistOpen: '???',
-    releaseFixChecklistDone: '??',
-    releaseFixChecklistDeferred: '??',
-    releaseFixChecklistCopy: '???????????',
-    releaseFixChecklistCopied: '?????????????????????',
-    releaseFixChecklistReset: '????',
-    releaseFixChecklistSanitizedNote: '?????????????????? ID ????????????????????????????????????????????????????????',
-    releaseFixChecklistEmptyTitle: '???????',
-    releaseFixChecklistEmptyDetail: '??????????????????????????????????????????',
+    releaseFixChecklistTitle: 'リリース修復チェックリスト',
+    releaseFixChecklistLead: '各リリースブロッカーを未対応、完了、延期として追跡します。進捗はブラウザにだけ保存され、機密情報は保存しません。',
+    releaseFixChecklistProgress: (done, total) => total > 0 ? `${done}/${total} 完了` : 'タスクなし',
+    releaseFixChecklistOpen: '未対応',
+    releaseFixChecklistDone: '完了',
+    releaseFixChecklistDeferred: '延期',
+    releaseFixChecklistCopy: 'チェックリストをコピー',
+    releaseFixChecklistCopied: 'リリース修復チェックリストをコピーしました',
+    releaseFixChecklistReset: 'リセット',
+    releaseFixChecklistSanitizedNote: 'チェックリストは修復項目 ID と状態のみを保存し、サーバーアドレス、鍵、コマンド本文、ユーザーデータは保存しません。',
+    releaseFixChecklistEmptyTitle: '項目なし',
+    releaseFixChecklistEmptyDetail: '失敗または警告チェックはありません。スナップショットを記録してリリース検証を続行できます。',
     releaseFixModuleLabel: (module) => ({
       ai: 'AI モジュール',
       api: 'カスタム API',

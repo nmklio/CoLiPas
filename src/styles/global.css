@@ -10036,6 +10036,180 @@ pre {
 }
 
 
+.security-release-timeline {
+  min-width: 0;
+  border: 1px solid rgba(15, 76, 92, 0.16);
+  border-radius: 16px;
+  padding: 14px;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(20, 184, 166, 0.12), transparent 30%),
+    linear-gradient(135deg, #f9fdfd, #ffffff 58%);
+  box-shadow: 0 20px 48px rgba(18, 35, 41, 0.07);
+  display: grid;
+  gap: 12px;
+}
+
+.security-release-timeline.warn {
+  border-color: rgba(217, 119, 6, 0.28);
+  background:
+    radial-gradient(circle at 10% 0%, rgba(245, 158, 11, 0.13), transparent 30%),
+    linear-gradient(135deg, #fffaf0, #ffffff 58%);
+}
+
+.security-release-timeline.fail {
+  border-color: rgba(220, 38, 38, 0.24);
+  background:
+    radial-gradient(circle at 10% 0%, rgba(248, 113, 113, 0.13), transparent 30%),
+    linear-gradient(135deg, #fff7f6, #ffffff 58%);
+}
+
+.security-release-timeline-heading {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.security-release-timeline-heading span,
+.security-release-timeline-status small,
+.security-release-timeline-copy small,
+.security-release-timeline-note {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.security-release-timeline-heading h3 {
+  margin: 4px 0 3px;
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.security-release-timeline-heading p,
+.security-release-timeline-copy p {
+  margin: 0;
+  color: #4f6870;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.security-release-timeline-status {
+  min-width: 172px;
+  display: grid;
+  justify-items: end;
+  gap: 7px;
+}
+
+.security-release-timeline-status strong {
+  color: #123236;
+  font-size: 14px;
+}
+
+.security-release-timeline-track {
+  position: relative;
+  display: grid;
+  gap: 9px;
+}
+
+.security-release-timeline-track::before {
+  content: '';
+  position: absolute;
+  left: 17px;
+  top: 10px;
+  bottom: 10px;
+  width: 2px;
+  border-radius: 999px;
+  background: linear-gradient(#0f766e, rgba(15, 118, 110, 0.08));
+}
+
+.security-release-timeline-item {
+  position: relative;
+  min-width: 0;
+  border: 1px solid rgba(15, 118, 110, 0.13);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.86);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(90px, auto) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.security-release-timeline-item.warn {
+  border-color: rgba(217, 119, 6, 0.24);
+  background: rgba(255, 251, 235, 0.78);
+}
+
+.security-release-timeline-item.fail {
+  border-color: rgba(220, 38, 38, 0.2);
+  background: rgba(254, 242, 242, 0.72);
+}
+
+.security-release-timeline-node {
+  position: relative;
+  z-index: 1;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  background: #0f766e;
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 900;
+  box-shadow: 0 10px 22px rgba(15, 118, 110, 0.18);
+}
+
+.security-release-timeline-item.warn .security-release-timeline-node {
+  background: #d97706;
+  box-shadow: 0 10px 22px rgba(217, 119, 6, 0.18);
+}
+
+.security-release-timeline-item.fail .security-release-timeline-node {
+  background: #dc2626;
+  box-shadow: 0 10px 22px rgba(220, 38, 38, 0.16);
+}
+
+.security-release-timeline-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.security-release-timeline-copy strong,
+.security-release-timeline-item > b {
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.security-release-timeline-item > b {
+  font-size: 13px;
+  justify-self: end;
+  max-width: 190px;
+}
+
+.security-release-timeline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.security-release-timeline-note {
+  display: block;
+  text-transform: none;
+  letter-spacing: normal;
+  line-height: 1.45;
+}
+
+
 .security-ops-preflight-brief {
   border: 1px solid rgba(15, 118, 110, 0.18);
   border-radius: 14px;
@@ -13431,6 +13605,8 @@ pre {
   .security-release-cockpit-radar,
   .security-release-handoff,
   .security-release-handoff-grid,
+  .security-release-timeline-heading,
+  .security-release-timeline-item,
   .security-release-playbook-grid,
   .security-ssh-experience-grid,
   .security-ssh-lag-report,
@@ -14114,6 +14290,8 @@ pre {
   .security-release-handoff,
   .security-release-handoff-heading,
   .security-release-handoff-grid,
+  .security-release-timeline-heading,
+  .security-release-timeline-item,
   .security-evidence-heading,
   .security-evidence-footer,
   .security-evidence-metrics,
@@ -14148,7 +14326,10 @@ pre {
   .security-release-fix-checklist-actions,
   .security-release-fix-checklist-status,
   .security-release-fix-checklist-open,
-  .security-release-handoff-heading .tool-button {
+  .security-release-handoff-heading .tool-button,
+  .security-release-timeline-status,
+  .security-release-timeline-item > b,
+  .security-release-timeline-actions {
     justify-self: start;
   }
 
