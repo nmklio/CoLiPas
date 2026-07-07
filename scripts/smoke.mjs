@@ -5524,7 +5524,12 @@ function assertSshTerminalRealtimeGuards() {
     'const [sshRunbookView, setSshRunbookView]',
     'const sshRunbookViews = [',
     'const visibleSshRunbookCommands = useMemo',
+    'const sshRunbookRecommendations = useMemo',
     'function classifySshRunbookCommand(',
+    'function buildSshRunbookRecommendations(',
+    'function buildSshRunbookRecommendation(',
+    'function getRunbookDoctorFocus(',
+    'function getRunbookBottleneckFocus(',
     'function filterSshRunbookCommands(',
     'function compareSshRunbookCommands(',
     'function getRunbookLastUsedMs(',
@@ -5547,6 +5552,10 @@ function assertSshTerminalRealtimeGuards() {
     'data-ssh-runbook-view={view}',
     'data-ssh-runbook-view-hint="true"',
     'data-ssh-runbook-clear-filter="true"',
+    'data-ssh-runbook-recommendations="true"',
+    'data-ssh-runbook-recommendation={item.command.id}',
+    'data-ssh-runbook-recommendation-insert={item.command.id}',
+    'data-ssh-runbook-recommendation-run={item.command.id}',
     'data-ssh-runbook-pack-dock="true"',
     'data-ssh-runbook-pack={pack.id}',
     'data-ssh-runbook-pack-import={pack.id}',
@@ -5657,6 +5666,9 @@ function assertSshTerminalRealtimeGuards() {
     'servers.quickCommandFilterEmptyTitle',
     'servers.quickCommandFilterEmptyDetail',
     'servers.quickCommandViewLabel',
+    'servers.quickCommandRecommendTitle',
+    'servers.quickCommandRecommendReason.',
+    'servers.quickCommandRecommendDetail.',
     'servers.quickCommandPackTitle',
     'servers.quickCommandPackImport',
     'servers.quickCommandPackImported',
@@ -5733,6 +5745,19 @@ function assertSshTerminalRealtimeGuards() {
     'servers.quickCommandView.frequent',
     'servers.quickCommandViewHint.recent',
     'servers.quickCommandViewHint.frequent',
+    'servers.quickCommandRecommendEyebrow',
+    'servers.quickCommandRecommendTitle',
+    'servers.quickCommandRecommendDetail',
+    'servers.quickCommandRecommendReason.diagnostic',
+    'servers.quickCommandRecommendReason.bottleneck',
+    'servers.quickCommandRecommendReason.usage',
+    'servers.quickCommandRecommendReason.pinned',
+    'servers.quickCommandRecommendReason.ready',
+    'servers.quickCommandRecommendDetail.diagnostic',
+    'servers.quickCommandRecommendDetail.bottleneck',
+    'servers.quickCommandRecommendDetail.usage',
+    'servers.quickCommandRecommendDetail.pinned',
+    'servers.quickCommandRecommendDetail.ready',
     'servers.quickCommandPack.system.title',
     'servers.quickCommandPack.system.detail',
     'servers.quickCommandPack.system.load.title',
@@ -5974,7 +5999,7 @@ function assertSshTerminalRealtimeGuards() {
   if (!globalCssSource.includes('.ssh-terminal-self-test') || !globalCssSource.includes('.ssh-terminal-self-test.complete')) {
     throw new Error('SSH terminal self-test result chip styles are missing');
   }
-  if (!globalCssSource.includes('.ssh-quick-command-deck') || !globalCssSource.includes('.ssh-runbook-workspace') || !globalCssSource.includes('.ssh-runbook-form') || !globalCssSource.includes('.ssh-runbook-form.editing') || !globalCssSource.includes('.ssh-runbook-lens') || !globalCssSource.includes('.ssh-runbook-categories button.active') || !globalCssSource.includes('.ssh-runbook-views button.active') || !globalCssSource.includes('.ssh-runbook-view-hint') || !globalCssSource.includes('.ssh-runbook-clear-filter') || !globalCssSource.includes('.ssh-runbook-pack-dock') || !globalCssSource.includes('.ssh-runbook-pack-grid') || !globalCssSource.includes('.ssh-quick-command-grid') || !globalCssSource.includes('.ssh-quick-command-grid article.custom.pinned') || !globalCssSource.includes('.ssh-quick-command-grid .ssh-runbook-usage') || !globalCssSource.includes('.ssh-quick-command-grid button.pin') || !globalCssSource.includes('.ssh-quick-command-grid button.sort') || !globalCssSource.includes('grid-template-rows: 38px auto auto auto minmax(0, 250px) minmax(160px, 1fr)')) {
+  if (!globalCssSource.includes('.ssh-quick-command-deck') || !globalCssSource.includes('.ssh-runbook-workspace') || !globalCssSource.includes('.ssh-runbook-form') || !globalCssSource.includes('.ssh-runbook-form.editing') || !globalCssSource.includes('.ssh-runbook-lens') || !globalCssSource.includes('.ssh-runbook-categories button.active') || !globalCssSource.includes('.ssh-runbook-views button.active') || !globalCssSource.includes('.ssh-runbook-view-hint') || !globalCssSource.includes('.ssh-runbook-clear-filter') || !globalCssSource.includes('.ssh-runbook-recommendations') || !globalCssSource.includes('.ssh-runbook-recommendation-grid') || !globalCssSource.includes('.ssh-runbook-pack-dock') || !globalCssSource.includes('.ssh-runbook-pack-grid') || !globalCssSource.includes('.ssh-quick-command-grid') || !globalCssSource.includes('.ssh-quick-command-grid article.custom.pinned') || !globalCssSource.includes('.ssh-quick-command-grid .ssh-runbook-usage') || !globalCssSource.includes('.ssh-quick-command-grid button.pin') || !globalCssSource.includes('.ssh-quick-command-grid button.sort') || !globalCssSource.includes('grid-template-rows: 38px auto auto auto minmax(0, 250px) minmax(160px, 1fr)')) {
     throw new Error('SSH terminal quick command deck styles are missing or the terminal grid does not reserve space for it');
   }
 

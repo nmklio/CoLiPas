@@ -1,7 +1,7 @@
 import { FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import type { Terminal as XTerm, IDisposable } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
-import { ChevronDown, ChevronUp, Copy, Cpu, Database, Edit3, Eraser, FileKey2, FileText, Globe2, KeyRound, Network, Plus, Power, PowerOff, RotateCcw, Search, Server, ShieldCheck, Star, Terminal, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Copy, Cpu, Database, Edit3, Eraser, FileKey2, FileText, Globe2, KeyRound, Network, Plus, Power, PowerOff, RotateCcw, Search, Server, ShieldCheck, Sparkles, Star, Terminal, Trash2, X } from 'lucide-react';
 import { Language, useI18n } from '../../i18n';
 import {
   closeServerShell,
@@ -311,6 +311,17 @@ interface SshChannelFixPlan {
   text: string;
 }
 
+type SshRunbookRecommendationReason = 'diagnostic' | 'bottleneck' | 'usage' | 'pinned' | 'ready';
+
+interface SshRunbookRecommendation {
+  command: SshRunbookCommand;
+  category: Exclude<SshRunbookCategory, 'all'>;
+  score: number;
+  tone: TerminalNetworkQuality['tone'];
+  reason: string;
+  detail: string;
+}
+
 type TerminalBottleneckSnapshotReason = 'close' | 'remote-close' | 'disconnect';
 
 interface TerminalBottleneckSnapshot {
@@ -510,6 +521,10 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const sshRunbookManualView = sshRunbookView === 'manual';
   const terminalTelemetryInsight = getTerminalTelemetryInsight(terminalTelemetry, terminalNetworkStats, terminalTransport, Boolean(terminalShellId), t);
   const terminalBottleneckAdvisor = getTerminalBottleneckAdvisor(terminalTelemetry, terminalNetworkStats, terminalTransport, Boolean(terminalShellId), t);
+  const sshRunbookRecommendations = useMemo(
+    () => buildSshRunbookRecommendations(sshRunbookCommands, sshDoctorReport, terminalBottleneckAdvisor, Boolean(terminalShellId), t),
+    [sshRunbookCommands, sshDoctorReport, terminalBottleneckAdvisor, terminalShellId, t],
+  );
   const sshTroubleshootingReport = useMemo(() => (sshDoctorReport
     ? buildSshTroubleshootingReport({
         report: sshDoctorReport,
@@ -1621,6 +1636,42 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                         </button>
                       )}
                     </div>
+                    {sshRunbookRecommendations.length > 0 && (
+                      <div className="ssh-runbook-recommendations" data-ssh-runbook-recommendations="true" aria-label={t('servers.quickCommandRecommendTitle')}>
+                        <div className="ssh-runbook-recommendations-heading">
+                          <span><Sparkles size={13} /> {t('servers.quickCommandRecommendEyebrow')}</span>
+                          <strong>{t('servers.quickCommandRecommendTitle')}</strong>
+                          <small>{t('servers.quickCommandRecommendDetail')}</small>
+                        </div>
+                        <div className="ssh-runbook-recommendation-grid">
+                          {sshRunbookRecommendations.map((item) => (
+                            <article key={item.command.id} className={item.tone} data-ssh-runbook-recommendation={item.command.id}>
+                              <span>{item.reason}</span>
+                              <strong>{item.command.title}</strong>
+                              <small>{item.detail}</small>
+                              <div>
+                                <button
+                                  type="button"
+                                  data-ssh-runbook-recommendation-insert={item.command.id}
+                                  onClick={() => sendSshQuickCommand(item.command.command, item.command.title, 'insert', item.command.id)}
+                                  disabled={!terminalShellId}
+                                >
+                                  {t('servers.quickCommandInsert')}
+                                </button>
+                                <button
+                                  type="button"
+                                  data-ssh-runbook-recommendation-run={item.command.id}
+                                  onClick={() => sendSshQuickCommand(item.command.command, item.command.title, 'run', item.command.id)}
+                                  disabled={!terminalShellId}
+                                >
+                                  {t('servers.quickCommandRun')}
+                                </button>
+                              </div>
+                            </article>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     <div className="ssh-runbook-pack-dock" data-ssh-runbook-pack-dock="true" aria-label={t('servers.quickCommandPackTitle')}>
                       <div className="ssh-runbook-pack-heading">
                         <span>{t('servers.quickCommandPackEyebrow')}</span>
@@ -4824,6 +4875,144 @@ function countSshRunbookCategories(commands: SshRunbookCommand[]): Record<SshRun
     counts[classifySshRunbookCommand(command)] += 1;
   }
   return counts;
+}
+
+function buildSshRunbookRecommendations(
+  commands: SshRunbookCommand[],
+  doctorReport: SshConnectionDoctorReport | null,
+  bottleneckAdvisor: TerminalBottleneckAdvisor,
+  terminalActive: boolean,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): SshRunbookRecommendation[] {
+  if (commands.length === 0) {
+    return [];
+  }
+
+  const doctorFocus = getRunbookDoctorFocus(doctorReport, bottleneckAdvisor);
+  const bottleneckFocus = terminalActive ? getRunbookBottleneckFocus(bottleneckAdvisor) : null;
+  const manualIndex = new Map(commands.map((command, index) => [command.id, index]));
+  return commands
+    .map((command) => buildSshRunbookRecommendation(command, manualIndex.get(command.id) ?? 0, doctorFocus, bottleneckFocus, t))
+    .sort((left, right) => compareRunbookMetric(right.score, left.score) || compareRunbookMetric(manualIndex.get(left.command.id) ?? 0, manualIndex.get(right.command.id) ?? 0))
+    .slice(0, 3);
+}
+
+function buildSshRunbookRecommendation(
+  command: SshRunbookCommand,
+  index: number,
+  doctorFocus: SshRunbookRecommendationFocus | null,
+  bottleneckFocus: SshRunbookRecommendationFocus | null,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): SshRunbookRecommendation {
+  const category = classifySshRunbookCommand(command);
+  const useCount = Math.max(0, Math.trunc(command.useCount ?? 0));
+  const lastUsedMs = getRunbookLastUsedMs(command);
+  const now = Date.now();
+  const recentBoost = lastUsedMs > 0 ? Math.max(0, 16 - Math.floor((now - lastUsedMs) / 36e5)) : 0;
+  let score = Math.max(0, 16 - index) + Math.min(useCount, 20) * 3 + recentBoost;
+  let reasonType: SshRunbookRecommendationReason = useCount > 0 ? 'usage' : 'ready';
+  let detailKey = useCount > 0 ? 'servers.quickCommandRecommendDetail.usage' : 'servers.quickCommandRecommendDetail.ready';
+  let detailVars: Record<string, string | number> = {
+    category: t(`servers.quickCommandCategory.${category}`),
+    count: useCount,
+  };
+  let tone: TerminalNetworkQuality['tone'] = useCount > 0 ? 'good' : 'pending';
+
+  if (command.pinned) {
+    score += 32;
+    reasonType = 'pinned';
+    detailKey = 'servers.quickCommandRecommendDetail.pinned';
+    tone = 'good';
+  }
+
+  if (bottleneckFocus?.categories.has(category)) {
+    score += 48 + bottleneckFocus.strength;
+    reasonType = 'bottleneck';
+    detailKey = 'servers.quickCommandRecommendDetail.bottleneck';
+    detailVars = { ...detailVars, signal: bottleneckFocus.label };
+    tone = bottleneckFocus.tone;
+  }
+
+  if (doctorFocus?.categories.has(category)) {
+    score += 64 + doctorFocus.strength;
+    reasonType = 'diagnostic';
+    detailKey = 'servers.quickCommandRecommendDetail.diagnostic';
+    detailVars = { ...detailVars, signal: doctorFocus.label };
+    tone = doctorFocus.tone;
+  }
+
+  return {
+    command,
+    category,
+    score,
+    tone,
+    reason: t(`servers.quickCommandRecommendReason.${reasonType}`),
+    detail: t(detailKey, detailVars),
+  };
+}
+
+interface SshRunbookRecommendationFocus {
+  categories: Set<Exclude<SshRunbookCategory, 'all'>>;
+  label: string;
+  strength: number;
+  tone: TerminalNetworkQuality['tone'];
+}
+
+function getRunbookDoctorFocus(report: SshConnectionDoctorReport | null, bottleneckAdvisor: TerminalBottleneckAdvisor): SshRunbookRecommendationFocus | null {
+  if (!report) {
+    return null;
+  }
+  const focusStep = report.steps.find((step) => step.tone === 'slow') ?? report.steps.find((step) => step.tone === 'warn');
+  if (!focusStep) {
+    return null;
+  }
+  return {
+    categories: mapDoctorStepToRunbookCategories(focusStep.id, bottleneckAdvisor),
+    label: focusStep.label,
+    strength: focusStep.tone === 'slow' ? 28 : 14,
+    tone: focusStep.tone,
+  };
+}
+
+function mapDoctorStepToRunbookCategories(stepId: SshConnectionDoctorStepId, bottleneckAdvisor: TerminalBottleneckAdvisor): Set<Exclude<SshRunbookCategory, 'all'>> {
+  if (stepId === 'terminal') {
+    return mapBottleneckToRunbookCategories(getPrimaryBottleneckItem(bottleneckAdvisor)?.id ?? 'network');
+  }
+  if (stepId === 'shell' || stepId === 'backend' || stepId === 'credential') {
+    return new Set(['logs', 'system']);
+  }
+  return new Set(['system']);
+}
+
+function getRunbookBottleneckFocus(advisor: TerminalBottleneckAdvisor): SshRunbookRecommendationFocus | null {
+  const primary = getPrimaryBottleneckItem(advisor);
+  if (!primary || primary.tone === 'pending' || primary.level < 22) {
+    return null;
+  }
+  return {
+    categories: mapBottleneckToRunbookCategories(primary.id),
+    label: primary.label,
+    strength: Math.round(primary.level / 3),
+    tone: primary.tone,
+  };
+}
+
+function getPrimaryBottleneckItem(advisor: TerminalBottleneckAdvisor): TerminalBottleneckItem | null {
+  const [firstItem, ...restItems] = advisor.items;
+  if (!firstItem) {
+    return null;
+  }
+  return restItems.reduce((best, item) => (item.level > best.level ? item : best), firstItem);
+}
+
+function mapBottleneckToRunbookCategories(id: TerminalBottleneckItem['id']): Set<Exclude<SshRunbookCategory, 'all'>> {
+  if (id === 'network') {
+    return new Set(['network']);
+  }
+  if (id === 'output' || id === 'render') {
+    return new Set(['logs', 'system']);
+  }
+  return new Set(['system']);
 }
 
 function filterSshRunbookCommands(commands: SshRunbookCommand[], query: string, category: SshRunbookCategory, view: SshRunbookView) {

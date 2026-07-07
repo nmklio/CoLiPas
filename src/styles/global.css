@@ -5651,6 +5651,149 @@ td span,
   transform: translateY(-1px);
 }
 
+.ssh-runbook-recommendations {
+  min-width: 0;
+  border: 1px solid rgba(251, 191, 36, 0.18);
+  border-radius: 16px;
+  padding: 8px;
+  background:
+    linear-gradient(135deg, rgba(113, 63, 18, 0.2), rgba(8, 47, 73, 0.14)),
+    rgba(2, 6, 23, 0.34);
+  display: grid;
+  grid-template-columns: minmax(118px, 0.26fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.ssh-runbook-recommendations-heading {
+  min-width: 0;
+  border-right: 1px solid rgba(251, 191, 36, 0.14);
+  padding: 2px 8px 2px 2px;
+  display: grid;
+  gap: 3px;
+  align-content: center;
+}
+
+.ssh-runbook-recommendations-heading span {
+  color: #fde68a;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 9px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ssh-runbook-recommendations-heading strong {
+  color: #fff7ed;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.ssh-runbook-recommendations-heading small {
+  color: #d6c7aa;
+  font-size: 10px;
+  font-weight: 740;
+  line-height: 1.35;
+}
+
+.ssh-runbook-recommendation-grid {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.ssh-runbook-recommendation-grid article {
+  min-width: 0;
+  border: 1px solid rgba(251, 191, 36, 0.16);
+  border-radius: 13px;
+  padding: 8px;
+  background: rgba(15, 23, 42, 0.36);
+  display: grid;
+  gap: 5px;
+}
+
+.ssh-runbook-recommendation-grid article.slow {
+  border-color: rgba(251, 113, 133, 0.34);
+  background: linear-gradient(135deg, rgba(127, 29, 29, 0.24), rgba(15, 23, 42, 0.34));
+}
+
+.ssh-runbook-recommendation-grid article.warn {
+  border-color: rgba(251, 191, 36, 0.34);
+  background: linear-gradient(135deg, rgba(113, 63, 18, 0.28), rgba(15, 23, 42, 0.34));
+}
+
+.ssh-runbook-recommendation-grid article.good {
+  border-color: rgba(94, 234, 212, 0.26);
+  background: linear-gradient(135deg, rgba(20, 184, 166, 0.16), rgba(15, 23, 42, 0.34));
+}
+
+.ssh-runbook-recommendation-grid span,
+.ssh-runbook-recommendation-grid strong,
+.ssh-runbook-recommendation-grid small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ssh-runbook-recommendation-grid span {
+  color: #fde68a;
+  font-size: 9px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ssh-runbook-recommendation-grid strong {
+  color: #fffdf5;
+  font-size: 11px;
+  font-weight: 920;
+  white-space: nowrap;
+}
+
+.ssh-runbook-recommendation-grid small {
+  color: #d8e0e7;
+  min-height: 28px;
+  font-size: 10px;
+  font-weight: 720;
+  line-height: 1.35;
+}
+
+.ssh-runbook-recommendation-grid article > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.ssh-runbook-recommendation-grid button {
+  min-height: 24px;
+  border: 1px solid rgba(251, 191, 36, 0.22);
+  border-radius: 999px;
+  padding: 0 8px;
+  color: #fff7ed;
+  background: rgba(113, 63, 18, 0.3);
+  font-size: 10px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.ssh-runbook-recommendation-grid button:last-child {
+  border-color: rgba(94, 234, 212, 0.28);
+  background: rgba(20, 184, 166, 0.24);
+}
+
+.ssh-runbook-recommendation-grid button:hover:not(:disabled) {
+  border-color: rgba(253, 230, 138, 0.58);
+  transform: translateY(-1px);
+}
+
+.ssh-runbook-recommendation-grid button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .ssh-runbook-pack-dock {
   min-width: 0;
   border: 1px solid rgba(125, 211, 252, 0.12);
@@ -13820,6 +13963,20 @@ pre {
 
   .ssh-runbook-clear-filter {
     justify-content: center;
+  }
+
+  .ssh-runbook-recommendations {
+    grid-template-columns: 1fr;
+  }
+
+  .ssh-runbook-recommendations-heading {
+    border-right: 0;
+    border-bottom: 1px solid rgba(251, 191, 36, 0.14);
+    padding: 0 0 6px;
+  }
+
+  .ssh-runbook-recommendation-grid {
+    grid-template-columns: 1fr;
   }
 
   .ssh-runbook-pack-dock {

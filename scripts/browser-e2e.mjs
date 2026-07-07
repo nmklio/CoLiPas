@@ -1047,7 +1047,21 @@ async function assertSshTerminalPanel(targetPage) {
       }
 
       await ensureSshQuickCommandsEnabled(targetPage, sshServerRow);
-      await customRunbookCard.locator('[data-ssh-runbook-command-run]').click();
+      await targetPage.locator('[data-ssh-runbook-recommendations="true"]').waitFor({ timeout: 5000 });
+      await targetPage.locator(`[data-ssh-runbook-recommendation="${customRunbookId}"]`).waitFor({ timeout: 5000 });
+      await targetPage.locator(`[data-ssh-runbook-recommendation-insert="${customRunbookId}"]`).waitFor({ timeout: 5000 });
+      const runbookRecommendationText = await targetPage.locator('[data-ssh-runbook-recommendations="true"]').innerText();
+      if (!/Run these first|Smart picks/i.test(runbookRecommendationText) || !runbookRecommendationText.includes(customRunbookUpdatedTitle)) {
+        throw new Error(`SSH runbook recommendations did not surface the edited command: ${runbookRecommendationText}`);
+      }
+      if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(runbookRecommendationText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(runbookRecommendationText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY|password=|passphrase=/i.test(runbookRecommendationText)) {
+        throw new Error('SSH runbook recommendations rendered raw host or secret material');
+      }
+      const recommendationRunButton = targetPage.locator(`[data-ssh-runbook-recommendation-run="${customRunbookId}"]`);
+      if (await recommendationRunButton.isDisabled()) {
+        throw new Error('SSH runbook recommendation run action stayed disabled while terminal was connected');
+      }
+      await recommendationRunButton.click();
       await targetPage.locator('.action-message').filter({ hasText: customRunbookUpdatedTitle }).waitFor({ timeout: 5000 });
       try {
         await targetPage.waitForFunction((expectedCommand) => {
