@@ -1523,6 +1523,32 @@ async function assertOperationsResultTraceRoundTrip(targetPage) {
   await targetPage.waitForURL(/#operations$/, { timeout: 10000 });
   await targetPage.getByRole('button', { name: /new task/i }).click();
   await targetPage.locator('.ops-builder').waitFor({ timeout: 10000 });
+
+  const remediationServer = await createTemporarySimulatedSshServer(targetPage, 'browser-e2e-ops-fix');
+  try {
+    await targetPage.getByRole('button', { name: /run command/i }).click();
+    await targetPage.locator('.ops-type-card.active').filter({ hasText: /run command/i }).waitFor({ timeout: 5000 });
+    await targetPage.locator('.ops-form-grid select').selectOption('selected');
+    await targetPage.locator('.ops-server-choice').filter({ hasText: remediationServer.name }).click();
+    await targetPage.locator('.ops-command-field textarea').fill('apt install -y unzip');
+    await targetPage.locator('[data-ops-draft-preflight-button="true"]').click();
+    const remediationPanel = targetPage.locator('[data-ops-preflight-remediation="true"]');
+    await remediationPanel.waitFor({ timeout: 10000 });
+    const remediationText = await remediationPanel.innerText();
+    if (!/Fix draft suggestion|high-impact action|Create fix draft/i.test(remediationText)) {
+      throw new Error(`Operations preflight remediation panel is incomplete: ${remediationText}`);
+    }
+    await targetPage.locator('[data-ops-preflight-remediation-action="true"]').click();
+    const remediationDraftBanner = targetPage.locator('[data-ops-draft-banner="true"]');
+    await remediationDraftBanner.waitFor({ timeout: 10000 });
+    const remediationDraftText = await remediationDraftBanner.innerText();
+    if (!/Preflight fix draft|high-impact action|confirmation/i.test(remediationDraftText)) {
+      throw new Error(`Operations preflight remediation did not create a draft banner: ${remediationDraftText}`);
+    }
+  } finally {
+    await deleteTemporaryAssetServer(targetPage, remediationServer.id).catch(() => undefined);
+  }
+
   await targetPage.getByRole('button', { name: /asset sweep/i }).click();
   await targetPage.locator('.ops-type-card.active').filter({ hasText: /asset sweep/i }).waitFor({ timeout: 5000 });
   await targetPage.locator('.ops-form-grid select').selectOption('allServers');

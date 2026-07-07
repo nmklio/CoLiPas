@@ -7015,6 +7015,42 @@ td span,
   line-height: 1.5;
 }
 
+.ops-preflight-remediation {
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 10px;
+  padding: 11px 12px;
+  background:
+    linear-gradient(135deg, rgba(240, 253, 250, 0.9), rgba(255, 255, 255, 0.92));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 12px 28px rgba(15, 118, 110, 0.08);
+}
+
+.ops-preflight-remediation span {
+  color: var(--brand-strong);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ops-preflight-remediation strong,
+.ops-preflight-remediation p {
+  display: block;
+  margin: 4px 0 0;
+}
+
+.ops-preflight-remediation p {
+  color: #526970;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .ops-preflight-plan {
   border: 1px solid #d5e3e7;
   border-radius: 8px;
@@ -13670,6 +13706,7 @@ pre {
   .ops-server-choice-grid,
   .ops-draft-risk-grid,
   .ops-draft-locator-actions,
+  .ops-preflight-remediation,
   .ops-runner-footer,
   .ops-output-grid,
   .api-status-strip,

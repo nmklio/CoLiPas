@@ -144,6 +144,13 @@ type Copy = {
   draftLocatorServers: string;
   draftLocatorCommand: string;
   draftLocatorPreflight: string;
+  preflightFixTitle: string;
+  preflightFixBlocked: string;
+  preflightFixWarn: string;
+  preflightFixAction: string;
+  preflightFixDraftTitle: string;
+  preflightFixReasonBlocked: string;
+  preflightFixReasonWarn: string;
   truncatedOutputs?: string;
 };
 
@@ -225,6 +232,13 @@ const copyByLanguage: Record<string, Copy> = {
     draftLocatorServers: '选择服务器',
     draftLocatorCommand: '检查 SSH 命令',
     draftLocatorPreflight: '运行预检',
+    preflightFixTitle: '修复草稿建议',
+    preflightFixBlocked: '预检发现 {count} 个阻断目标，建议先生成资产巡检草稿同步 SSH 状态。',
+    preflightFixWarn: '预检要求确认高影响动作，建议生成确认草稿并保留目标上下文。',
+    preflightFixAction: '生成修复草稿',
+    preflightFixDraftTitle: '预检修复草稿',
+    preflightFixReasonBlocked: '预检阻断后生成的资产巡检草稿',
+    preflightFixReasonWarn: '预检确认高影响动作',
   },
   en: {
     running: 'Running',
@@ -298,6 +312,13 @@ const copyByLanguage: Record<string, Copy> = {
     draftLocatorServers: 'Select servers',
     draftLocatorCommand: 'Check SSH command',
     draftLocatorPreflight: 'Run preflight',
+    preflightFixTitle: 'Fix draft suggestion',
+    preflightFixBlocked: 'Preflight found {count} blocked target(s). Create an asset sweep draft first to resync SSH state.',
+    preflightFixWarn: 'Preflight requires confirmation for a high-impact action. Create a confirmation draft while keeping the target context.',
+    preflightFixAction: 'Create fix draft',
+    preflightFixDraftTitle: 'Preflight fix draft',
+    preflightFixReasonBlocked: 'Asset sweep draft generated after a blocked preflight.',
+    preflightFixReasonWarn: 'Confirm high-impact action after preflight review.',
   },
   ja: {
     running: '実行中',
@@ -371,6 +392,13 @@ const copyByLanguage: Record<string, Copy> = {
     draftLocatorServers: 'サーバーを選択',
     draftLocatorCommand: 'SSH コマンドを確認',
     draftLocatorPreflight: 'プリフライト実行',
+    preflightFixTitle: '修正草案の提案',
+    preflightFixBlocked: 'プリフライトで {count} 件のブロック対象を検出しました。先に資産巡回草案で SSH 状態を同期してください。',
+    preflightFixWarn: '高影響操作の確認が必要です。対象コンテキストを保った確認草案を生成します。',
+    preflightFixAction: '修正草案を生成',
+    preflightFixDraftTitle: 'プリフライト修正草案',
+    preflightFixReasonBlocked: 'ブロックされたプリフライト後に生成された資産巡回草案。',
+    preflightFixReasonWarn: 'プリフライト確認後に高影響操作を確認。',
   },
 };
 
@@ -495,6 +523,15 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
     taskLabel: activeTaskLabel,
     taskType,
   }), [activeTargetModeLabel, activeTaskLabel, command, copy, previewCount, targetMode, taskType]);
+  const preflightFixDraft = useMemo(() => preflight ? buildPreflightFixDraft({
+    command,
+    copy,
+    preflight,
+    reason,
+    selectedServerIds: activeSelectedServerIds,
+    targetMode,
+    taskType,
+  }) : null, [activeSelectedServerIds, command, copy, preflight, reason, targetMode, taskType]);
 
   useEffect(() => {
     if (sshRequiredTask && targetMode === 'allServers') {
@@ -686,6 +723,30 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
       return;
     }
     focusElement(preflightButtonRef.current);
+  }
+
+  function applyPreflightFixDraft() {
+    if (!preflightFixDraft) {
+      return;
+    }
+    setBuilderOpen(true);
+    setTaskType(preflightFixDraft.type);
+    setTargetMode(preflightFixDraft.targetMode);
+    setSelectedServerIds(preflightFixDraft.serverIds);
+    setCommand(preflightFixDraft.command || 'hostname && uptime');
+    setReason(preflightFixDraft.reason);
+    setPreflight(null);
+    setMessage('');
+    setDraftNotice({
+      id: `preflight-fix-${Date.now()}`,
+      title: preflightFixDraft.title,
+      description: preflightFixDraft.detail,
+      type: preflightFixDraft.type,
+      targetMode: preflightFixDraft.targetMode,
+      serverIds: preflightFixDraft.serverIds,
+      command: preflightFixDraft.command,
+      reason: preflightFixDraft.reason,
+    });
   }
 
   function restorePreflightHistory(entry: PreflightHistoryEntry) {
@@ -960,6 +1021,19 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
                     )}
                   </div>
                 )}
+                {preflightFixDraft && (
+                  <div className="ops-preflight-remediation" data-ops-preflight-remediation="true">
+                    <div>
+                      <span><Workflow size={15} /> {copy.preflightFixTitle}</span>
+                      <strong>{preflightFixDraft.title}</strong>
+                      <p>{preflightFixDraft.detail}</p>
+                    </div>
+                    <button type="button" className="tool-button" data-ops-preflight-remediation-action="true" onClick={applyPreflightFixDraft}>
+                      <Workflow size={16} />
+                      {preflightFixDraft.actionLabel}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1177,6 +1251,70 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
   );
 }
 
+
+
+interface PreflightFixDraft {
+  title: string;
+  detail: string;
+  actionLabel: string;
+  type: OperationTaskType;
+  targetMode: OperationTaskTargetMode;
+  serverIds: string[];
+  command?: string;
+  reason: string;
+}
+
+function buildPreflightFixDraft({
+  command,
+  copy,
+  preflight,
+  reason,
+  selectedServerIds,
+  targetMode,
+  taskType,
+}: {
+  command: string;
+  copy: Copy;
+  preflight: OperationTaskPreflightResponse;
+  reason: string;
+  selectedServerIds: string[];
+  targetMode: OperationTaskTargetMode;
+  taskType: OperationTaskType;
+}): PreflightFixDraft | null {
+  const hasIssues = preflight.issues.length > 0 || preflight.summary.blocked > 0 || preflight.requiresConfirmation;
+  if (!hasIssues) {
+    return null;
+  }
+  const affectedServerIds = preflight.targets
+    .filter((target) => target.status !== 'missing' && (!target.runnable || target.issues.length > 0))
+    .map((target) => target.id)
+    .slice(0, 50);
+  const blockedCount = preflight.summary.blocked || affectedServerIds.length || preflight.summary.totalTargets;
+  const hasBlockingIssue = preflight.issues.some((issue) => issue.severity === 'block') || preflight.summary.blocked > 0;
+
+  if (hasBlockingIssue) {
+    return {
+      title: copy.preflightFixDraftTitle,
+      detail: interpolateCopy(copy.preflightFixBlocked, { count: blockedCount }),
+      actionLabel: copy.preflightFixAction,
+      type: 'assetSync',
+      targetMode: affectedServerIds.length > 0 ? 'selected' : 'allServers',
+      serverIds: affectedServerIds,
+      reason: copy.preflightFixReasonBlocked,
+    };
+  }
+
+  return {
+    title: copy.preflightFixDraftTitle,
+    detail: interpolateCopy(copy.preflightFixWarn, { count: preflight.summary.totalTargets || selectedServerIds.length || 1 }),
+    actionLabel: copy.preflightFixAction,
+    type: taskType,
+    targetMode,
+    serverIds: targetMode === 'selected' ? selectedServerIds.slice(0, 50) : [],
+    command: taskType === 'sshCommand' ? command : undefined,
+    reason: reason.trim() || copy.preflightFixReasonWarn,
+  };
+}
 
 type DraftRiskTone = 'ready' | 'warn' | 'blocked';
 type DraftRiskFocusTarget = 'scope' | 'servers' | 'command' | 'preflight';
