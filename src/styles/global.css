@@ -12004,7 +12004,7 @@ pre {
   border-radius: 18px;
   padding: 13px;
   display: grid;
-  grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.2fr) auto;
+  grid-template-columns: minmax(220px, 0.7fr) minmax(0, 1fr) minmax(220px, 0.85fr) auto;
   gap: 12px;
   align-items: center;
   background:
@@ -12073,7 +12073,7 @@ pre {
 .security-ssh-support-bundle-sections {
   min-width: 0;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(86px, 1fr));
   gap: 7px;
 }
 
@@ -12116,6 +12116,118 @@ pre {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.security-ssh-terminal-snapshot {
+  min-width: 0;
+  border: 1px solid rgba(37, 99, 235, 0.16);
+  border-radius: 14px;
+  padding: 10px;
+  display: grid;
+  gap: 6px;
+  background:
+    linear-gradient(135deg, rgba(59, 130, 246, 0.09), transparent 48%),
+    rgba(255, 255, 255, 0.78);
+}
+
+.security-ssh-terminal-snapshot.warn {
+  border-color: rgba(245, 158, 11, 0.24);
+  background:
+    linear-gradient(135deg, rgba(245, 158, 11, 0.1), transparent 48%),
+    rgba(255, 251, 241, 0.84);
+}
+
+.security-ssh-terminal-snapshot.fail {
+  border-color: rgba(239, 68, 68, 0.24);
+  background:
+    linear-gradient(135deg, rgba(239, 68, 68, 0.1), transparent 48%),
+    rgba(255, 247, 247, 0.86);
+}
+
+.security-ssh-terminal-snapshot span,
+.security-ssh-terminal-snapshot strong,
+.security-ssh-terminal-snapshot p,
+.security-ssh-terminal-snapshot small {
+  min-width: 0;
+}
+
+.security-ssh-terminal-snapshot span {
+  color: #2563eb;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.security-ssh-terminal-snapshot.warn span {
+  color: #b65f00;
+}
+
+.security-ssh-terminal-snapshot.fail span {
+  color: var(--red);
+}
+
+.security-ssh-terminal-snapshot strong {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.security-ssh-terminal-snapshot p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.security-ssh-terminal-snapshot > small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.security-ssh-terminal-snapshot div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.security-ssh-terminal-snapshot div small {
+  border: 1px solid rgba(37, 99, 235, 0.12);
+  border-radius: 10px;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.security-ssh-terminal-snapshot div small.warn {
+  border-color: rgba(245, 158, 11, 0.22);
+}
+
+.security-ssh-terminal-snapshot div small.fail {
+  border-color: rgba(239, 68, 68, 0.22);
+}
+
+.security-ssh-terminal-snapshot div b {
+  display: block;
+  color: var(--text);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.security-ssh-terminal-snapshot-empty {
+  min-width: 0;
+  margin: 0;
+  border: 1px dashed rgba(15, 118, 110, 0.22);
+  border-radius: 14px;
+  padding: 10px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+  background: rgba(255, 255, 255, 0.66);
 }
 
 .security-ssh-support-bundle-actions {

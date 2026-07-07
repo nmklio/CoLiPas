@@ -64,6 +64,7 @@ async function createE2ePage(options) {
     window.localStorage.removeItem('colipas.aiResponseCache');
     window.localStorage.removeItem('colipas.sshLagReportHistory.v1');
     window.localStorage.removeItem('colipas.sshConnectionDoctorHistory.v1');
+    window.localStorage.removeItem('colipas.sshTerminalSupportSnapshot.v1');
     window.localStorage.removeItem('colipas.launchGuide.dismissed.v1');
   });
   targetPage.on('console', (message) => {
@@ -1604,6 +1605,21 @@ async function assertSshTerminalPanel(targetPage) {
     if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedTerminalSupportBundleText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedTerminalSupportBundleText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(copiedTerminalSupportBundleText)) {
       throw new Error('SSH terminal support bundle copy output leaked a raw IP address or secret');
     }
+    const storedTerminalSupportSnapshot = await targetPage.evaluate(() => window.localStorage.getItem('colipas.sshTerminalSupportSnapshot.v1') ?? '');
+    const parsedTerminalSupportSnapshot = JSON.parse(storedTerminalSupportSnapshot || '{}');
+    if (
+      parsedTerminalSupportSnapshot.version !== 1
+      || parsedTerminalSupportSnapshot.source !== 'terminal-copy'
+      || !/SSH sanitized diagnosis pack/i.test(parsedTerminalSupportSnapshot.text ?? '')
+      || !Array.isArray(parsedTerminalSupportSnapshot.sections)
+      || parsedTerminalSupportSnapshot.sections.length !== 4
+      || parsedTerminalSupportSnapshot.sections.some((section) => !section.label || !section.value || !['pending', 'good', 'warn', 'slow'].includes(section.tone))
+    ) {
+      throw new Error(`SSH terminal support snapshot storage is incomplete: ${storedTerminalSupportSnapshot}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(storedTerminalSupportSnapshot) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(storedTerminalSupportSnapshot) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(storedTerminalSupportSnapshot)) {
+      throw new Error('SSH terminal support snapshot storage leaked a raw IP address or secret');
+    }
     const channelSwitchButton = targetPage.locator('[data-ssh-channel-switch="true"]');
     await channelSwitchButton.waitFor({ timeout: 5000 });
     const initialChannelSwitchLabel = await channelSwitchButton.getAttribute('aria-label');
@@ -1687,6 +1703,19 @@ async function assertSshTerminalPanel(targetPage) {
       const status = await response.json();
       return status.activeCount === 0;
     }, undefined, { timeout: 5000 });
+    await targetPage.locator('.nav-list').getByRole('button', { name: /^Security$/i }).click();
+    await targetPage.locator('[data-ssh-terminal-support-snapshot="true"]').waitFor({ timeout: 10000 });
+    const securityTerminalSnapshotText = await targetPage.locator('[data-ssh-terminal-support-snapshot="true"]').innerText();
+    if (!/Latest terminal field evidence/i.test(securityTerminalSnapshotText) || !/SSH sanitized diagnosis pack/i.test(securityTerminalSnapshotText) || !/Last copied/i.test(securityTerminalSnapshotText) || !/Channel state/i.test(securityTerminalSnapshotText)) {
+      throw new Error(`Security page did not surface the latest terminal diagnosis snapshot: ${securityTerminalSnapshotText}`);
+    }
+    const securitySupportBundleText = await targetPage.locator('[data-ssh-support-bundle="true"]').innerText();
+    if (!/Terminal field pack/i.test(securitySupportBundleText) || !/Latest terminal field evidence/i.test(securitySupportBundleText)) {
+      throw new Error(`Security support bundle did not include terminal field snapshot linkage: ${securitySupportBundleText}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(securityTerminalSnapshotText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(securityTerminalSnapshotText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(securityTerminalSnapshotText)) {
+      throw new Error('Security terminal snapshot rendered a raw IP address or secret');
+    }
     console.log('ok browser e2e covers interactive xterm SSH terminal, paste review, quick commands, copy/clear tools, status count, and panel disconnect cleanup');
   } finally {
     await deleteTemporaryAssetServer(targetPage, sshServer.id).catch(() => undefined);

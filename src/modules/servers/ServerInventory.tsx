@@ -38,6 +38,13 @@ import { CloudProvider, ServerNode, ServerStatus, SshAuthType, SshRunbookCommand
 import { formatRegionName, percentClass, statusLabel } from '../../utils/format';
 import { ServerFilters } from './serverFilters';
 import { baseCloudProviders, customProviderFilterValue, resolveServerLifecycleStatus } from '../../shared/serverFilters';
+import {
+  normalizeSshTerminalSupportSnapshot,
+  sanitizeSshTerminalSupportSnapshotText,
+  sshTerminalSupportSnapshotEventName,
+  sshTerminalSupportSnapshotStorageKey,
+  type SshTerminalSupportSnapshot,
+} from '../../shared/sshTerminalSupportSnapshot';
 
 interface ServerInventoryProps {
   allServers: ServerNode[];
@@ -3324,11 +3331,46 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
 
     try {
       await writeClipboardText(terminalSupportBundle.text);
+      persistTerminalSupportBundleSnapshot(terminalSupportBundle);
       showActionMessage(t('servers.terminalSupportBundleCopied'));
     } catch {
       showActionMessage(t('servers.terminalCopyFailed'));
     } finally {
       xtermRef.current?.focus();
+    }
+  }
+
+  function persistTerminalSupportBundleSnapshot(bundle: TerminalSupportBundle) {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const snapshot = normalizeSshTerminalSupportSnapshot({
+      version: 1,
+      source: 'terminal-copy',
+      createdAt: new Date().toISOString(),
+      tone: bundle.tone,
+      title: sanitizeSshTerminalSupportSnapshotText(bundle.title, 120),
+      detail: sanitizeSshTerminalSupportSnapshotText(bundle.detail, 240),
+      sections: bundle.sections.map((section) => ({
+        id: section.id,
+        label: sanitizeSshTerminalSupportSnapshotText(section.label, 80),
+        value: sanitizeSshTerminalSupportSnapshotText(section.value, 120),
+        detail: sanitizeSshTerminalSupportSnapshotText(section.detail, 240),
+        tone: section.tone,
+      })),
+      text: sanitizeSshTerminalSupportSnapshotText(bundle.text, 6000),
+    } satisfies SshTerminalSupportSnapshot);
+
+    if (!snapshot) {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(sshTerminalSupportSnapshotStorageKey, JSON.stringify(snapshot));
+      window.dispatchEvent(new CustomEvent(sshTerminalSupportSnapshotEventName, { detail: snapshot }));
+    } catch {
+      // Local snapshot persistence is best-effort and must never block terminal use or clipboard copy.
     }
   }
 
