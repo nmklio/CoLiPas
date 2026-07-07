@@ -2224,6 +2224,14 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
                 <strong>{formatSshProductionProbeScheduleInterval(sshProductionProbeSchedule?.intervalMinutes ?? sshProductionProbeScheduleDraft.intervalMinutes, language)}</strong>
                 <small>{sshProductionProbeSchedule?.autoRunBrowserProbe ? sshProductionProbeCopy.scheduleModeAssist : sshProductionProbeCopy.scheduleModeManual}</small>
               </article>
+              <article
+                className={sshProductionProbeSchedule?.enabled ? (sshProductionProbeSchedule?.autoRunBrowserProbe ? 'ok' : 'warn') : 'warn'}
+                data-ssh-production-probe-schedule-stat="mode"
+              >
+                <span>{sshProductionProbeCopy.scheduleMode}</span>
+                <strong>{sshProductionProbeSchedule?.autoRunBrowserProbe ? sshProductionProbeCopy.scheduleModeAssist : sshProductionProbeCopy.scheduleModeManual}</strong>
+                <small>{sshProductionProbeSchedule?.enabled ? sshProductionProbeCopy.scheduleEnabled : sshProductionProbeCopy.scheduleDisabled}</small>
+              </article>
             </div>
             <div className="security-ssh-production-probe-schedule-form">
               <label>
@@ -7950,7 +7958,7 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     releaseFixChecklistProgress: (done, total) => total > 0 ? `${done}/${total} 已完成` : '暂无任务',
     releaseFixChecklistOpen: '未处理',
     releaseFixChecklistDone: '已完成',
-    releaseFixChecklistDeferred: '??',
+    releaseFixChecklistDeferred: '已延期',
     releaseFixChecklistCopy: '复制清单',
     releaseFixChecklistCopied: '发布修复清单已复制',
     releaseFixChecklistReset: '重置清单',

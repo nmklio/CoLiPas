@@ -659,8 +659,16 @@ async function assertReleaseEvidenceBrief(targetPage) {
   }
   await targetPage.locator('[data-ssh-production-probe-schedule="true"]').waitFor({ timeout: 5000 });
   const sshProductionProbeScheduleText = await targetPage.locator('[data-ssh-production-probe-schedule="true"]').innerText();
-  if (!/SSH auto-check plan|SSH 自动巡检计划|SSH 自動点検プラン/i.test(sshProductionProbeScheduleText) || !/Enable auto-check plan|启用自动巡检|自動点検を有効化/i.test(sshProductionProbeScheduleText)) {
+  if (
+    !/SSH auto-check plan|SSH 自动巡检计划|SSH 自動巡回プラン/i.test(sshProductionProbeScheduleText)
+    || !/Enable auto-check plan|启用自动巡检|自動巡回プランを有効化/i.test(sshProductionProbeScheduleText)
+    || !/Mode|执行模式|実行モード/i.test(sshProductionProbeScheduleText)
+  ) {
     throw new Error(`SSH production probe schedule panel did not render planning controls: ${sshProductionProbeScheduleText}`);
+  }
+  const sshProductionProbeScheduleStatCount = await targetPage.locator('[data-ssh-production-probe-schedule-stat]').count();
+  if (sshProductionProbeScheduleStatCount < 4) {
+    throw new Error(`SSH production probe schedule panel rendered only ${sshProductionProbeScheduleStatCount} stat cards`);
   }
   await targetPage.locator('[data-ssh-production-probe-schedule-enabled="true"]').check();
   await targetPage.locator('[data-ssh-production-probe-schedule-autorun="true"]').check();
