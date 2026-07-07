@@ -396,6 +396,7 @@ async function assertReleaseEvidenceBrief(targetPage) {
     window.__colipasCopiedSshBottleneckTrendText = '';
     window.__colipasCopiedSshSupportBundleText = '';
     window.__colipasCopiedSshSupportTicketText = '';
+    window.__colipasCopiedSshTerminalSnapshotText = '';
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: {
@@ -410,6 +411,8 @@ async function assertReleaseEvidenceBrief(targetPage) {
             window.__colipasCopiedReleaseCockpitText = text;
           } else if (/SSH lag ticket template/i.test(text)) {
             window.__colipasCopiedSshSupportTicketText = text;
+          } else if (/SSH sanitized diagnosis pack/i.test(text)) {
+            window.__colipasCopiedSshTerminalSnapshotText = text;
           } else if (/SSH sanitized support bundle/i.test(text)) {
             window.__colipasCopiedSshSupportBundleText = text;
           } else if (/SSH lag diagnosis report/i.test(text)) {
@@ -1387,11 +1390,17 @@ async function assertSshTerminalPanel(targetPage) {
     await targetPage.getByRole('button', { name: /disconnect/i }).waitFor({ timeout: 5000 });
     await targetPage.evaluate(() => {
       window.__colipasCopiedTerminalText = '';
+      window.__colipasCopiedSshTerminalSnapshotText = '';
       Object.defineProperty(navigator, 'clipboard', {
         configurable: true,
         value: {
           writeText: async (text) => {
-            window.__colipasCopiedTerminalText = text;
+            if (/SSH sanitized diagnosis pack/i.test(text)) {
+              window.__colipasCopiedSshTerminalSnapshotText = text;
+              window.__colipasCopiedTerminalText = text;
+            } else {
+              window.__colipasCopiedTerminalText = text;
+            }
           },
         },
       });
@@ -1724,6 +1733,18 @@ async function assertSshTerminalPanel(targetPage) {
     const securityTerminalSnapshotText = await targetPage.locator('[data-ssh-terminal-support-snapshot="true"]').innerText();
     if (!/Latest terminal field evidence/i.test(securityTerminalSnapshotText) || !/SSH sanitized diagnosis pack/i.test(securityTerminalSnapshotText) || !/Last copied/i.test(securityTerminalSnapshotText) || !/Channel state/i.test(securityTerminalSnapshotText)) {
       throw new Error(`Security page did not surface the latest terminal diagnosis snapshot: ${securityTerminalSnapshotText}`);
+    }
+    const securityTerminalDetailCount = await targetPage.locator('[data-ssh-terminal-support-snapshot="true"] .security-ssh-terminal-snapshot-grid i').count();
+    if (!/Copy terminal pack/i.test(securityTerminalSnapshotText) || securityTerminalDetailCount < 5) {
+      throw new Error(`Security terminal snapshot did not expose copy action and detailed field hints: ${securityTerminalSnapshotText}`);
+    }
+    await targetPage.getByRole('button', { name: /copy terminal pack/i }).click();
+    const copiedSshTerminalSnapshotText = await targetPage.evaluate(() => window.__colipasCopiedSshTerminalSnapshotText ?? '');
+    if (!/SSH sanitized diagnosis pack/i.test(copiedSshTerminalSnapshotText) || !/Self-diagnosis guide/i.test(copiedSshTerminalSnapshotText) || !/Channel state/i.test(copiedSshTerminalSnapshotText)) {
+      throw new Error(`Security terminal snapshot copy output is incomplete: ${copiedSshTerminalSnapshotText}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshTerminalSnapshotText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshTerminalSnapshotText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(copiedSshTerminalSnapshotText)) {
+      throw new Error('Security terminal snapshot copy output leaked a raw IP address or secret');
     }
     const securitySupportBundleText = await targetPage.locator('[data-ssh-support-bundle="true"]').innerText();
     if (!/Terminal field pack/i.test(securitySupportBundleText) || !/Latest terminal field evidence/i.test(securitySupportBundleText)) {

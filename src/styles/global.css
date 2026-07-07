@@ -12361,14 +12361,22 @@ pre {
     rgba(255, 247, 247, 0.86);
 }
 
-.security-ssh-terminal-snapshot span,
+.security-ssh-terminal-snapshot-head,
+.security-ssh-terminal-snapshot-eyebrow,
 .security-ssh-terminal-snapshot strong,
 .security-ssh-terminal-snapshot p,
 .security-ssh-terminal-snapshot small {
   min-width: 0;
 }
 
-.security-ssh-terminal-snapshot span {
+.security-ssh-terminal-snapshot-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.security-ssh-terminal-snapshot-eyebrow {
   color: #2563eb;
   font-size: 10px;
   font-weight: 950;
@@ -12376,11 +12384,21 @@ pre {
   text-transform: uppercase;
 }
 
-.security-ssh-terminal-snapshot.warn span {
+.security-ssh-terminal-snapshot-copy {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 5px 8px;
+  border-color: rgba(37, 99, 235, 0.16);
+  background: rgba(255, 255, 255, 0.82);
+  color: #1d4ed8;
+  font-size: 11px;
+}
+
+.security-ssh-terminal-snapshot.warn .security-ssh-terminal-snapshot-eyebrow {
   color: #b65f00;
 }
 
-.security-ssh-terminal-snapshot.fail span {
+.security-ssh-terminal-snapshot.fail .security-ssh-terminal-snapshot-eyebrow {
   color: var(--red);
 }
 
@@ -12402,13 +12420,13 @@ pre {
   font-size: 10px;
 }
 
-.security-ssh-terminal-snapshot div {
+.security-ssh-terminal-snapshot-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
   gap: 6px;
 }
 
-.security-ssh-terminal-snapshot div small {
+.security-ssh-terminal-snapshot-grid small {
   border: 1px solid rgba(37, 99, 235, 0.12);
   border-radius: 10px;
   padding: 6px;
@@ -12418,21 +12436,43 @@ pre {
   line-height: 1.25;
 }
 
-.security-ssh-terminal-snapshot div small.warn {
+.security-ssh-terminal-snapshot-grid small.warn {
   border-color: rgba(245, 158, 11, 0.22);
 }
 
-.security-ssh-terminal-snapshot div small.fail {
+.security-ssh-terminal-snapshot-grid small.fail {
   border-color: rgba(239, 68, 68, 0.22);
 }
 
-.security-ssh-terminal-snapshot div b {
+.security-ssh-terminal-snapshot-grid b {
   display: block;
   color: var(--text);
   font-size: 10px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.security-ssh-terminal-snapshot-grid em,
+.security-ssh-terminal-snapshot-grid i {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+  line-height: 1.28;
+}
+
+.security-ssh-terminal-snapshot-grid em {
+  color: #1f2937;
+  font-weight: 800;
+}
+
+.security-ssh-terminal-snapshot-grid i {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .security-ssh-terminal-snapshot-empty {

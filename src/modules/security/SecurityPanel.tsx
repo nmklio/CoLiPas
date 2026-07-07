@@ -1000,6 +1000,29 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
     }
   }
 
+  async function copySshTerminalSnapshot() {
+    if (!sshTerminalSupportSnapshot) {
+      setRemediationMessage(sshPerformanceCopy.terminalSnapshotCopyEmpty);
+      setRemediationError(false);
+      return;
+    }
+
+    if (typeof navigator === 'undefined' || !navigator.clipboard) {
+      setRemediationMessage(sshTerminalSupportSnapshot.text);
+      setRemediationError(false);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(sshTerminalSupportSnapshot.text);
+      setRemediationMessage(sshPerformanceCopy.terminalSnapshotCopied);
+      setRemediationError(false);
+    } catch {
+      setRemediationMessage(sshTerminalSupportSnapshot.text);
+      setRemediationError(false);
+    }
+  }
+
   async function copySshSupportTicket() {
     if (typeof navigator === 'undefined' || !navigator.clipboard) {
       setRemediationMessage(sshSupportBundle.ticketText);
@@ -1698,15 +1721,22 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
           </div>
           {sshTerminalSupportSnapshot ? (
             <div className={`security-ssh-terminal-snapshot ${mapTerminalSnapshotTone(sshTerminalSupportSnapshot.tone)}`} data-ssh-terminal-support-snapshot="true">
-              <span>{sshPerformanceCopy.terminalSnapshotTitle}</span>
+              <div className="security-ssh-terminal-snapshot-head">
+                <span className="security-ssh-terminal-snapshot-eyebrow">{sshPerformanceCopy.terminalSnapshotTitle}</span>
+                <button type="button" className="tool-button security-ssh-terminal-snapshot-copy" onClick={copySshTerminalSnapshot} data-ssh-terminal-snapshot-copy="true">
+                  <ClipboardCheck size={14} />
+                  {sshPerformanceCopy.terminalSnapshotCopy}
+                </button>
+              </div>
               <strong>{sshTerminalSupportSnapshot.title}</strong>
               <p>{sshTerminalSupportSnapshot.detail}</p>
               <small>{sshPerformanceCopy.terminalSnapshotLatest}: {new Date(sshTerminalSupportSnapshot.createdAt).toLocaleString(locale)}</small>
-              <div>
+              <div className="security-ssh-terminal-snapshot-grid">
                 {sshTerminalSupportSnapshot.sections.slice(0, 5).map((section) => (
                   <small key={section.id} className={mapTerminalSnapshotTone(section.tone)}>
                     <b>{section.label}</b>
-                    {section.value}
+                    <em>{section.value}</em>
+                    <i>{section.detail}</i>
                   </small>
                 ))}
               </div>
@@ -5120,6 +5150,9 @@ interface SshPerformanceCopy {
   terminalSnapshotDescription: string;
   terminalSnapshotLatest: string;
   terminalSnapshotEmpty: string;
+  terminalSnapshotCopy: string;
+  terminalSnapshotCopied: string;
+  terminalSnapshotCopyEmpty: string;
   activeSessions: string;
   inputBatch: string;
   outputBatch: string;
@@ -5369,6 +5402,9 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     terminalSnapshotDescription: '终端复制诊断包后会同步这里，用于把用户现场和安全审计证据串起来。',
     terminalSnapshotLatest: '最近复制',
     terminalSnapshotEmpty: '暂无终端现场包；请在 SSH 终端内复制一次脱敏诊断包。',
+    terminalSnapshotCopy: '复制现场包',
+    terminalSnapshotCopied: 'SSH 终端现场包已复制',
+    terminalSnapshotCopyEmpty: '暂无可复制的 SSH 终端现场包',
     activeSessions: '活跃会话',
     inputBatch: '输入合并',
     outputBatch: '输出合并',
@@ -5616,6 +5652,9 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     terminalSnapshotDescription: 'Copy a diagnosis pack inside the SSH terminal to bridge the user field report into security audit evidence.',
     terminalSnapshotLatest: 'Last copied',
     terminalSnapshotEmpty: 'No terminal field pack yet. Copy one sanitized diagnosis pack inside the SSH terminal.',
+    terminalSnapshotCopy: 'Copy terminal pack',
+    terminalSnapshotCopied: 'SSH terminal field pack copied',
+    terminalSnapshotCopyEmpty: 'No SSH terminal field pack is ready to copy',
     activeSessions: 'Active sessions',
     inputBatch: 'Input batching',
     outputBatch: 'Output batching',
@@ -5863,6 +5902,9 @@ const sshPerformanceCopyByLanguage: Record<string, SshPerformanceCopy> = {
     terminalSnapshotDescription: 'SSH 端末で診断パックをコピーすると、ユーザー現場とセキュリティ監査証跡を接続できます。',
     terminalSnapshotLatest: '最終コピー',
     terminalSnapshotEmpty: '端末現場パックはまだありません。SSH 端末内で脱敏診断パックを一度コピーしてください。',
+    terminalSnapshotCopy: '端末パックをコピー',
+    terminalSnapshotCopied: 'SSH 端末現場パックをコピーしました',
+    terminalSnapshotCopyEmpty: 'コピー可能な SSH 端末現場パックはありません',
     activeSessions: 'アクティブセッション',
     inputBatch: '入力バッチ',
     outputBatch: '出力バッチ',
