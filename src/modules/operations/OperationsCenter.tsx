@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useI18n } from '../../i18n';
 import { createOperationTask, preflightOperationTask } from '../../services/apiClient';
+import { getSshCommandConfirmationReason } from '../../shared/sshCommandRisk';
 import {
   OperationEvent,
   OperationTaskPreflightResponse,
@@ -126,6 +127,19 @@ type Copy = {
   restorePreflight: string;
   viewPreflightEvidence: string;
   latestPreflight: string;
+  draftRiskTitle: string;
+  draftRiskTask: string;
+  draftRiskTargets: string;
+  draftRiskTargetMode: string;
+  draftRiskCommand: string;
+  draftRiskReady: string;
+  draftRiskWarn: string;
+  draftRiskBlocked: string;
+  draftRiskCommandSafe: string;
+  draftRiskCommandWarn: string;
+  draftRiskCommandMissing: string;
+  draftRiskActionConfirm: string;
+  draftRiskNoCommand: string;
   truncatedOutputs?: string;
 };
 
@@ -190,6 +204,19 @@ const copyByLanguage: Record<string, Copy> = {
     restorePreflight: '恢复这次预检上下文',
     viewPreflightEvidence: '证据',
     latestPreflight: '最新',
+    draftRiskTitle: '执行前摘要',
+    draftRiskTask: '任务',
+    draftRiskTargets: '目标数',
+    draftRiskTargetMode: '目标范围',
+    draftRiskCommand: '命令风险',
+    draftRiskReady: '已选择 {count} 台目标，可先预检再执行。',
+    draftRiskWarn: '命中 {count} 台目标，包含高影响动作，执行前必须确认预检结果。',
+    draftRiskBlocked: '当前没有可执行目标，请调整目标范围或先接入 SSH。',
+    draftRiskCommandSafe: '低风险命令',
+    draftRiskCommandWarn: '高影响命令，需要确认',
+    draftRiskCommandMissing: '等待输入命令',
+    draftRiskActionConfirm: '动作需要确认',
+    draftRiskNoCommand: '无需 SSH 命令',
   },
   en: {
     running: 'Running',
@@ -246,6 +273,19 @@ const copyByLanguage: Record<string, Copy> = {
     restorePreflight: 'Restore this preflight context',
     viewPreflightEvidence: 'Evidence',
     latestPreflight: 'Latest',
+    draftRiskTitle: 'Before-run summary',
+    draftRiskTask: 'Task',
+    draftRiskTargets: 'Targets',
+    draftRiskTargetMode: 'Scope',
+    draftRiskCommand: 'Command risk',
+    draftRiskReady: '{count} target(s) selected. Run preflight before execution.',
+    draftRiskWarn: '{count} target(s) matched with a high-impact action. Confirm preflight evidence before running.',
+    draftRiskBlocked: 'No runnable targets are available. Adjust the scope or connect SSH first.',
+    draftRiskCommandSafe: 'Low-risk command',
+    draftRiskCommandWarn: 'High-impact command; confirmation required',
+    draftRiskCommandMissing: 'Waiting for command input',
+    draftRiskActionConfirm: 'Action requires confirmation',
+    draftRiskNoCommand: 'No SSH command required',
   },
   ja: {
     running: '実行中',
@@ -302,6 +342,19 @@ const copyByLanguage: Record<string, Copy> = {
     restorePreflight: 'このプリフライト内容を復元',
     viewPreflightEvidence: '証跡',
     latestPreflight: '最新',
+    draftRiskTitle: '実行前サマリー',
+    draftRiskTask: 'タスク',
+    draftRiskTargets: '対象数',
+    draftRiskTargetMode: '対象範囲',
+    draftRiskCommand: 'コマンドリスク',
+    draftRiskReady: '{count} 台の対象を選択済みです。実行前にプリフライトできます。',
+    draftRiskWarn: '{count} 台が対象で、高影響の操作を含みます。実行前にプリフライト証跡を確認してください。',
+    draftRiskBlocked: '実行可能な対象がありません。範囲を調整するか SSH を接続してください。',
+    draftRiskCommandSafe: '低リスクコマンド',
+    draftRiskCommandWarn: '高影響コマンド、確認が必要',
+    draftRiskCommandMissing: 'コマンド入力待ち',
+    draftRiskActionConfirm: '操作には確認が必要',
+    draftRiskNoCommand: 'SSH コマンド不要',
   },
 };
 
@@ -391,6 +444,8 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
 
   const taskMeta = useMemo(() => buildTaskMeta(language), [language]);
   const activeTask = tasks.find((task) => task.id === activeTaskId) ?? tasks[0] ?? null;
+  const activeTaskLabel = taskMeta[taskType]?.label ?? taskType;
+  const activeTargetModeLabel = targetMode === 'selected' ? copy.selected : targetMode === 'allServers' ? copy.allServers : copy.allConnected;
   const canOpenActiveTaskTrace = Boolean(
     activeTask
       && activeTask.status !== 'queued'
@@ -411,6 +466,14 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
   );
   const hiddenServerChoiceCount = Math.max(eligibleServers.length - visibleEligibleServers.length, 0);
   const previewCount = resolvePreviewCount(targetMode, eligibleServers.length, activeSelectedServerIds.length);
+  const draftRiskSummary = useMemo(() => buildDraftRiskSummary({
+    command,
+    copy,
+    previewCount,
+    targetModeLabel: activeTargetModeLabel,
+    taskLabel: activeTaskLabel,
+    taskType,
+  }), [activeTargetModeLabel, activeTaskLabel, command, copy, previewCount, taskType]);
 
   useEffect(() => {
     if (sshRequiredTask && targetMode === 'allServers') {
@@ -740,6 +803,31 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
                 </div>
               )}
 
+              <div className={`ops-draft-risk-card ${draftRiskSummary.tone}`} data-ops-draft-risk-summary="true">
+                <div className="ops-draft-risk-heading">
+                  <span>{draftRiskSummary.tone === 'ready' ? <ShieldCheck size={16} /> : <AlertTriangle size={16} />} {copy.draftRiskTitle}</span>
+                  <strong>{draftRiskSummary.message}</strong>
+                </div>
+                <div className="ops-draft-risk-grid">
+                  <div>
+                    <small>{copy.draftRiskTask}</small>
+                    <strong>{draftRiskSummary.taskLabel}</strong>
+                  </div>
+                  <div>
+                    <small>{copy.draftRiskTargetMode}</small>
+                    <strong>{draftRiskSummary.targetModeLabel}</strong>
+                  </div>
+                  <div>
+                    <small>{copy.draftRiskTargets}</small>
+                    <strong>{previewCount}</strong>
+                  </div>
+                  <div>
+                    <small>{copy.draftRiskCommand}</small>
+                    <strong>{draftRiskSummary.commandLabel}</strong>
+                  </div>
+                </div>
+              </div>
+
                 <div className="ops-runner-footer">
                   <div>
                     <span>{copy.preview}</span>
@@ -1025,6 +1113,58 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
       </div>
     </section>
   );
+}
+
+
+type DraftRiskTone = 'ready' | 'warn' | 'blocked';
+
+interface DraftRiskSummary {
+  tone: DraftRiskTone;
+  message: string;
+  commandLabel: string;
+  taskLabel: string;
+  targetModeLabel: string;
+}
+
+function buildDraftRiskSummary({
+  command,
+  copy,
+  previewCount,
+  targetModeLabel,
+  taskLabel,
+  taskType,
+}: {
+  command: string;
+  copy: Copy;
+  previewCount: number;
+  targetModeLabel: string;
+  taskLabel: string;
+  taskType: OperationTaskType;
+}): DraftRiskSummary {
+  const commandText = command.trim();
+  const commandWarning = taskType === 'sshCommand' ? getSshCommandConfirmationReason(commandText) : '';
+  const highImpactAction = taskType === 'shutdown' || taskType === 'reboot';
+  const tone: DraftRiskTone = previewCount === 0 ? 'blocked' : commandWarning || highImpactAction ? 'warn' : 'ready';
+  const message = tone === 'blocked'
+    ? copy.draftRiskBlocked
+    : interpolateCopy(tone === 'warn' ? copy.draftRiskWarn : copy.draftRiskReady, { count: previewCount });
+  const commandLabel = taskType === 'sshCommand'
+    ? commandText.length === 0
+      ? copy.draftRiskCommandMissing
+      : commandWarning
+        ? copy.draftRiskCommandWarn
+        : copy.draftRiskCommandSafe
+    : actionTaskIds.includes(taskType)
+      ? copy.draftRiskActionConfirm
+      : copy.draftRiskNoCommand;
+
+  return {
+    tone,
+    message,
+    commandLabel,
+    taskLabel,
+    targetModeLabel,
+  };
 }
 
 function buildTaskMeta(language: string): Record<OperationTaskType, TaskMeta> {

@@ -5017,6 +5017,7 @@ function assertOverviewMapInteractionGuards() {
     'onDraftPreflight?: (draft: OperationsDraft, preflight: OperationTaskPreflightResponse) => void',
     'data-ops-draft-banner="true"',
     'data-ops-draft-preflight-button="true"',
+    'data-ops-draft-risk-summary="true"',
     'data-ops-preflight-history="true"',
     'data-ops-preflight-history-item="true"',
     'async function executePreflightOnly()',
@@ -5026,6 +5027,9 @@ function assertOverviewMapInteractionGuards() {
     'function createPreflightHistoryEntry(',
     'function formatPreflightSummaryLine(',
     'function resolveDisplayedPreflightTargetCount(',
+    'function buildDraftRiskSummary(',
+    'getSshCommandConfirmationReason(commandText)',
+    'draftRiskCommandWarn',
     'setBuilderOpen(true)',
     'setDraftNotice(draft)',
     'setPreflightHistory((current) => [',
@@ -6837,6 +6841,9 @@ function assertOperationsTargetSelectionGuards() {
   }
   if (operationsSource.includes('setBuilderOpen((value) => !value)')) {
     throw new Error('Operations New task CTA must open the builder, not toggle it closed after a draft handoff');
+  }
+  if (operationsSource.includes('\u00e6\u009c\u0080\u00e6\u0096\u00b0') || operationsSource.includes('\u00e3\u0082\u00b3\u00e3\u0083\u009e\u00e3\u0083\u00b3\u00e3\u0083\u0089')) {
+    throw new Error('Operations copy contains mojibake text');
   }
   if (
     operationsSource.includes('const connectedServers = useMemo(() => servers.filter((server) => server.ssh?.connected), [servers]);')

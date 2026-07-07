@@ -6820,6 +6820,95 @@ td span,
   font-size: 12px;
 }
 
+.ops-draft-risk-card {
+  border: 1px solid #d5e3e7;
+  border-radius: 10px;
+  padding: 12px;
+  background: linear-gradient(135deg, #ffffff, #f8fbff);
+  display: grid;
+  gap: 10px;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06);
+}
+
+.ops-draft-risk-card.ready {
+  border-color: #b8dfcb;
+  background: linear-gradient(135deg, #f4fbf7, #ffffff);
+}
+
+.ops-draft-risk-card.warn {
+  border-color: #e7c66f;
+  background: linear-gradient(135deg, #fff8e6, #ffffff);
+}
+
+.ops-draft-risk-card.blocked {
+  border-color: #efb8b3;
+  background: linear-gradient(135deg, #fff4f2, #ffffff);
+}
+
+.ops-draft-risk-heading {
+  display: grid;
+  gap: 4px;
+}
+
+.ops-draft-risk-heading span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--brand-strong);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ops-draft-risk-card.warn .ops-draft-risk-heading span {
+  color: #9a6700;
+}
+
+.ops-draft-risk-card.blocked .ops-draft-risk-heading span {
+  color: #b42318;
+}
+
+.ops-draft-risk-heading strong {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.ops-draft-risk-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ops-draft-risk-grid div {
+  min-width: 0;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 8px;
+  padding: 9px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.ops-draft-risk-grid small,
+.ops-draft-risk-grid strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ops-draft-risk-grid small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.ops-draft-risk-grid strong {
+  color: var(--text);
+  font-size: 13px;
+  margin-top: 3px;
+}
+
 .ops-runner-footer {
   border: 1px solid #d1e0e4;
   border-radius: 8px;
@@ -13550,6 +13639,7 @@ pre {
   .ops-type-grid,
   .ops-form-grid,
   .ops-server-choice-grid,
+  .ops-draft-risk-grid,
   .ops-runner-footer,
   .ops-output-grid,
   .api-status-strip,

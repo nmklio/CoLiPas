@@ -850,6 +850,12 @@ async function assertSshTerminalPanel(targetPage) {
       const activeChoice = Array.from(document.querySelectorAll('.ops-server-choice.active')).some((choice) => (choice.textContent ?? '').includes(expectedName));
       return scope instanceof HTMLSelectElement && scope.value === 'selected' && /Health check/i.test(activeType?.textContent ?? '') && activeChoice;
     }, sshServer.name, { timeout: 10000 });
+    const triageRiskSummary = targetPage.locator('[data-ops-draft-risk-summary="true"]');
+    await triageRiskSummary.waitFor({ timeout: 10000 });
+    const triageRiskText = await triageRiskSummary.innerText();
+    if (!/Before-run summary|Selected servers|Targets|No SSH command required|Run preflight before execution/i.test(triageRiskText)) {
+      throw new Error(`Server triage draft risk summary is incomplete: ${triageRiskText}`);
+    }
     await targetPage.getByRole('button', { name: /^Servers$/i }).click();
     await targetPage.waitForURL(/#servers$/, { timeout: 10000 });
     await targetPage.locator('.server-workspace-row').filter({ hasText: sshServer.name }).waitFor({ timeout: 10000 });
@@ -1636,6 +1642,12 @@ async function assertOverviewHealthBaseline(targetPage) {
     throw new Error(`Operations draft banner is missing health draft context: ${draftBannerText}`);
   }
   await targetPage.locator('.ops-builder').waitFor({ timeout: 10000 });
+  const overviewRiskSummary = targetPage.locator('[data-ops-draft-risk-summary="true"]');
+  await overviewRiskSummary.waitFor({ timeout: 10000 });
+  const overviewRiskText = await overviewRiskSummary.innerText();
+  if (!/Before-run summary|All server assets|Targets|No SSH command required|Run preflight before execution/i.test(overviewRiskText)) {
+    throw new Error(`Overview draft risk summary is incomplete: ${overviewRiskText}`);
+  }
   await targetPage.waitForFunction(
     () => {
       const targetScope = document.querySelector('.ops-builder select');
