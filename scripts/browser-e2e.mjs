@@ -1751,9 +1751,24 @@ async function assertOverviewHealthBaseline(targetPage) {
   const overviewPreflightSnapshot = targetPage.locator('[data-overview-preflight-snapshot="true"]');
   await overviewPreflightSnapshot.waitFor({ timeout: 10000 });
   const overviewPreflightText = await overviewPreflightSnapshot.innerText();
-  if (!/Latest preflight|Ready to run|Blocked|targets runnable/i.test(overviewPreflightText)) {
+  if (!/Latest preflight|Release risk flight deck|Ready to run|Blocked|targets runnable/i.test(overviewPreflightText)) {
     throw new Error(`Overview should show the latest operations preflight summary, got ${overviewPreflightText}`);
   }
+  const overviewPreflightCommand = targetPage.locator('[data-overview-preflight-command="true"]');
+  await overviewPreflightCommand.waitFor({ timeout: 10000 });
+  await overviewPreflightCommand.getByRole('button', { name: /View audit evidence/i }).click();
+  await targetPage.waitForURL(new RegExp(`#security\\?trace=${preflightTraceId}$`), { timeout: 10000 });
+  const securityOpsPreflightBrief = targetPage.locator('[data-security-ops-preflight-brief="true"]');
+  await securityOpsPreflightBrief.waitFor({ timeout: 10000 });
+  const securityOpsPreflightText = await securityOpsPreflightBrief.innerText();
+  if (!/Latest operations preflight|Status|Targets|Issues|Return to operations/i.test(securityOpsPreflightText)) {
+    throw new Error(`Security should show the linked operations preflight card, got ${securityOpsPreflightText}`);
+  }
+  await securityOpsPreflightBrief.locator('[data-security-ops-preflight-open="true"]').click();
+  await targetPage.waitForURL(/#operations$/, { timeout: 10000 });
+  await targetPage.locator('[data-release-fix-focus="true"], .ops-builder').first().waitFor({ timeout: 10000 });
+  await targetPage.locator('button.nav-item', { hasText: /Overview/i }).click();
+  await rerenderedBaseline.waitFor({ timeout: 10000 });
   await rerenderedBaseline.locator('[data-health-signal="ssh"]').click();
   await targetPage.locator('#servers-title').waitFor({ timeout: 10000 });
   const healthScopeChip = targetPage.locator('[data-health-scope-chip="true"]');

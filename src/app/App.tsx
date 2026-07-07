@@ -698,6 +698,7 @@ export function App() {
       totalTargets: displayedTotalTargets,
       issueCount: preflight.issues.length,
       generatedAt: preflight.generatedAt,
+      correlationId: preflight.correlationId,
     });
   }
 
@@ -1032,6 +1033,7 @@ export function App() {
               onRegionServersOpen={openServersForRegion}
               onHealthSignalOpen={openHealthSignal}
               onOperationsDraftOpen={openOverviewOperationsDraft}
+              onOpsPreflightTraceOpen={openSecurityTrace}
             />
           )}
 
@@ -1136,6 +1138,7 @@ export function App() {
           {activeSection === 'security' && (
             <SecurityPanel
               events={overview.operationEvents}
+              opsPreflightSnapshot={overviewPreflightSnapshot}
               onNavigate={(section, focus) => {
                 navigateToSection(section, focus);
               }}

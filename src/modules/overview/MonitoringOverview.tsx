@@ -1,6 +1,6 @@
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
-import { Activity, AlertTriangle, Globe2, LocateFixed, MapPin, Minus, Network, Plus, RotateCcw, Server, ShieldCheck, Wifi } from 'lucide-react';
+import { Activity, AlertTriangle, ClipboardCheck, Globe2, LocateFixed, MapPin, Minus, Network, Plus, RotateCcw, Server, ShieldCheck, TerminalSquare, Wifi } from 'lucide-react';
 import { geoEquirectangular, geoPath } from 'd3-geo';
 import { feature } from 'topojson-client';
 import countriesAtlas from 'world-atlas/countries-110m.json';
@@ -18,6 +18,7 @@ interface MonitoringOverviewProps {
   onRegionServersOpen?: (region: string | string[]) => void;
   onHealthSignalOpen?: (signal: HealthBaselineSignalId) => void;
   onOperationsDraftOpen?: () => void;
+  onOpsPreflightTraceOpen?: (correlationId: string) => void;
 }
 
 export interface OverviewPreflightSnapshot {
@@ -28,6 +29,7 @@ export interface OverviewPreflightSnapshot {
   totalTargets: number;
   issueCount: number;
   generatedAt: string;
+  correlationId: string;
 }
 
 interface RegionNode {
@@ -228,7 +230,7 @@ const normalizedRegionLocations = regionLocations.map(({ aliases, location }) =>
 
 const fallbackLocation: RegionLocation = { lat: 18, lng: 0, countryId: '', matched: false };
 
-export function MonitoringOverview({ servers, events, onlineCount, avgCpu, opsPreflightSnapshot, onRegionServersOpen, onHealthSignalOpen, onOperationsDraftOpen }: MonitoringOverviewProps) {
+export function MonitoringOverview({ servers, events, onlineCount, avgCpu, opsPreflightSnapshot, onRegionServersOpen, onHealthSignalOpen, onOperationsDraftOpen, onOpsPreflightTraceOpen }: MonitoringOverviewProps) {
   const { language, t } = useI18n();
   const providerName = (provider: string) => formatProviderName(provider, t);
   const regionName = (region: string) => formatRegionName(region, language);
@@ -336,6 +338,37 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, opsPr
         </div>
       </div>
 
+      {opsPreflightSnapshot && (
+        <article className={`overview-preflight-command ${opsPreflightSnapshot.status}`} data-overview-preflight-command="true" data-overview-preflight-snapshot="true">
+          <div className="overview-preflight-command-mark" aria-hidden="true">
+            <ClipboardCheck size={18} />
+          </div>
+          <div className="overview-preflight-command-main">
+            <span>{t('overview.opsPreflightCommandKicker')}</span>
+            <strong>{t(`overview.opsPreflightStatus.${opsPreflightSnapshot.status}`)} · {opsPreflightSnapshot.title}</strong>
+            <small>{t('overview.opsPreflightDetail', {
+              runnable: opsPreflightSnapshot.runnableTargets,
+              total: opsPreflightSnapshot.totalTargets,
+              issues: opsPreflightSnapshot.issueCount,
+            })}</small>
+          </div>
+          <div className="overview-preflight-command-meta">
+            <span>{t('overview.opsPreflightGenerated', { time: new Date(opsPreflightSnapshot.generatedAt).toLocaleTimeString(language === 'en' ? 'en-US' : language === 'ja' ? 'ja-JP' : 'zh-CN') })}</span>
+            <b>{opsPreflightSnapshot.runnableTargets}/{opsPreflightSnapshot.totalTargets}</b>
+          </div>
+          <div className="overview-preflight-command-actions">
+            <button type="button" onClick={() => onOpsPreflightTraceOpen?.(opsPreflightSnapshot.correlationId)}>
+              <ShieldCheck size={14} />
+              {t('overview.opsPreflightTrace')}
+            </button>
+            <button type="button" onClick={onOperationsDraftOpen}>
+              <TerminalSquare size={14} />
+              {t('overview.opsPreflightOpenOps')}
+            </button>
+          </div>
+        </article>
+      )}
+
       <article className={`health-baseline-card ${healthBaseline.tone}`} data-health-baseline="true">
         <div className="health-baseline-score" aria-label={t('overview.healthBaselineScore', { score: healthBaseline.score })}>
           <span>{t('overview.healthBaselineScoreLabel')}</span>
@@ -383,7 +416,7 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, opsPr
             {t('overview.opsDraftButton')}
           </button>
           {opsPreflightSnapshot && (
-            <div className={`health-preflight-snapshot ${opsPreflightSnapshot.status}`} data-overview-preflight-snapshot="true">
+            <button type="button" className={`health-preflight-snapshot ${opsPreflightSnapshot.status}`} onClick={() => onOpsPreflightTraceOpen?.(opsPreflightSnapshot.correlationId)}>
               <span>{t('overview.opsPreflightTitle')}</span>
               <strong>{t(`overview.opsPreflightStatus.${opsPreflightSnapshot.status}`)}</strong>
               <small>{t('overview.opsPreflightDetail', {
@@ -391,7 +424,7 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, opsPr
                 total: opsPreflightSnapshot.totalTargets,
                 issues: opsPreflightSnapshot.issueCount,
               })}</small>
-            </div>
+            </button>
           )}
         </div>
       </article>

@@ -2469,6 +2469,147 @@ main {
   line-height: 1;
 }
 
+
+.overview-preflight-command {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(15, 118, 110, 0.2);
+  border-radius: 14px;
+  padding: 14px;
+  background:
+    radial-gradient(circle at 6% 0%, rgba(20, 184, 166, 0.17), transparent 32%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(241, 253, 250, 0.96));
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  box-shadow: 0 18px 40px rgba(18, 35, 41, 0.07);
+}
+
+.overview-preflight-command::after {
+  content: '';
+  position: absolute;
+  inset: auto -18px -46px auto;
+  width: 150px;
+  height: 150px;
+  border: 1px solid rgba(15, 118, 110, 0.1);
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.overview-preflight-command.warn {
+  border-color: rgba(217, 119, 6, 0.32);
+  background:
+    radial-gradient(circle at 6% 0%, rgba(245, 158, 11, 0.18), transparent 32%),
+    linear-gradient(135deg, rgba(255, 251, 235, 0.97), #ffffff);
+}
+
+.overview-preflight-command.blocked {
+  border-color: rgba(220, 38, 38, 0.28);
+  background:
+    radial-gradient(circle at 6% 0%, rgba(248, 113, 113, 0.16), transparent 32%),
+    linear-gradient(135deg, rgba(254, 242, 242, 0.97), #ffffff);
+}
+
+.overview-preflight-command-mark {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: rgba(15, 118, 110, 0.12);
+  color: var(--brand-strong);
+  display: grid;
+  place-items: center;
+}
+
+.overview-preflight-command.warn .overview-preflight-command-mark {
+  background: rgba(217, 119, 6, 0.12);
+  color: #9a6700;
+}
+
+.overview-preflight-command.blocked .overview-preflight-command-mark {
+  background: rgba(220, 38, 38, 0.1);
+  color: #b42318;
+}
+
+.overview-preflight-command-main {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.overview-preflight-command-main span,
+.overview-preflight-command-meta span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.overview-preflight-command-main strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-preflight-command-main small,
+.overview-preflight-command-meta {
+  color: #4f6870;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.overview-preflight-command-meta {
+  min-width: 112px;
+  display: grid;
+  gap: 3px;
+  justify-items: end;
+}
+
+.overview-preflight-command-meta b {
+  color: #0f3f3b;
+  font-size: 22px;
+  letter-spacing: -0.04em;
+}
+
+.overview-preflight-command-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.overview-preflight-command-actions button,
+.health-preflight-snapshot {
+  cursor: pointer;
+}
+
+.overview-preflight-command-actions button {
+  border: 1px solid rgba(15, 118, 110, 0.2);
+  border-radius: 999px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--brand-strong);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 900;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.overview-preflight-command-actions button:hover,
+.overview-preflight-command-actions button:focus-visible,
+.health-preflight-snapshot:hover,
+.health-preflight-snapshot:focus-visible {
+  border-color: var(--brand-line);
+  box-shadow: 0 12px 26px rgba(15, 118, 110, 0.13);
+  outline: none;
+  transform: translateY(-1px);
+}
+
 .health-baseline-card {
   border: 1px solid #d7e5e8;
   border-radius: 10px;
@@ -9894,6 +10035,117 @@ pre {
   display: block;
 }
 
+
+.security-ops-preflight-brief {
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 14px;
+  padding: 14px;
+  background:
+    radial-gradient(circle at top left, rgba(20, 184, 166, 0.14), transparent 30%),
+    linear-gradient(135deg, #f8fdfc, #ffffff);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(240px, 0.9fr) auto;
+  gap: 12px;
+  align-items: center;
+  box-shadow: 0 18px 40px rgba(18, 35, 41, 0.06);
+}
+
+.security-ops-preflight-brief.warn {
+  border-color: rgba(217, 119, 6, 0.3);
+  background:
+    radial-gradient(circle at top left, rgba(245, 158, 11, 0.14), transparent 30%),
+    linear-gradient(135deg, #fffaf0, #ffffff);
+}
+
+.security-ops-preflight-brief.blocked {
+  border-color: rgba(220, 38, 38, 0.24);
+  background:
+    radial-gradient(circle at top left, rgba(248, 113, 113, 0.13), transparent 30%),
+    linear-gradient(135deg, #fff7f6, #ffffff);
+}
+
+.security-ops-preflight-orbit {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: rgba(15, 118, 110, 0.11);
+  color: var(--brand-strong);
+  display: grid;
+  place-items: center;
+}
+
+.security-ops-preflight-brief.warn .security-ops-preflight-orbit {
+  background: rgba(217, 119, 6, 0.12);
+  color: #9a6700;
+}
+
+.security-ops-preflight-brief.blocked .security-ops-preflight-orbit {
+  background: rgba(220, 38, 38, 0.1);
+  color: #b42318;
+}
+
+.security-ops-preflight-main {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.security-ops-preflight-main span,
+.security-ops-preflight-metrics small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.security-ops-preflight-main h3,
+.security-ops-preflight-main p {
+  margin: 0;
+}
+
+.security-ops-preflight-main h3 {
+  color: var(--text);
+  font-size: 17px;
+}
+
+.security-ops-preflight-main p {
+  color: #4f6870;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.security-ops-preflight-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.security-ops-preflight-metrics div {
+  min-width: 0;
+  border: 1px solid rgba(15, 118, 110, 0.14);
+  border-radius: 10px;
+  padding: 9px;
+  background: rgba(255, 255, 255, 0.78);
+  display: grid;
+  gap: 3px;
+}
+
+.security-ops-preflight-metrics strong {
+  overflow: hidden;
+  color: #123236;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.security-ops-preflight-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .security-release-fix-router {
   min-width: 0;
   border: 1px solid #c9dde2;
@@ -13199,7 +13451,9 @@ pre {
   .monitor-hero,
   .monitor-layout,
   .monitor-bottom,
-  .health-baseline-card {
+  .overview-preflight-command,
+  .health-baseline-card,
+  .security-ops-preflight-brief {
     grid-template-columns: 1fr;
   }
 
@@ -13383,7 +13637,8 @@ pre {
     grid-template-columns: 1fr;
   }
 
-  .health-baseline-signals {
+  .health-baseline-signals,
+  .security-ops-preflight-metrics {
     grid-template-columns: 1fr;
   }
 
@@ -13883,6 +14138,9 @@ pre {
     grid-template-columns: 1fr;
   }
 
+  .overview-preflight-command-meta,
+  .overview-preflight-command-actions,
+  .security-ops-preflight-actions,
   .security-release-cockpit-status,
   .security-release-cockpit-footer .tool-button,
   .security-release-fix-router-actions,

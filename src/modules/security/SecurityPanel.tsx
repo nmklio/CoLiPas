@@ -20,12 +20,14 @@ import {
 } from 'lucide-react';
 import { getLocale, useI18n } from '../../i18n';
 import { OperationEvent } from '../../types';
+import type { OverviewPreflightSnapshot } from '../overview/MonitoringOverview';
 import { fetchDiagnosticExport, fetchReleaseReadiness, fetchReleaseReadinessReport, recordReleaseReadinessSnapshot, recordSshSupportTicketCopy, remediateSecurityRisk } from '../../services/apiClient';
 import type { SecurityRemediationResponse } from '../../services/apiClient';
 import type { DiagnosticExportResponse, ReleaseDeploymentEvidence, ReleaseReadinessResponse } from '../../types';
 
 interface SecurityPanelProps {
   events: OperationEvent[];
+  opsPreflightSnapshot?: OverviewPreflightSnapshot | null;
   onNavigate: (
     section: 'overview' | 'servers' | 'operations' | 'ai' | 'api' | 'security',
     focus?: ReleaseFixFocusPayload,
@@ -449,7 +451,7 @@ const releaseFixChecklistStatuses: ReleaseFixChecklistStatus[] = ['open', 'done'
 type SshSelfTestBottleneck = NonNullable<DiagnosticExportResponse['sshTerminal']['lastSelfTest']>['bottleneck'];
 type SshFlightTimelineEvent = DiagnosticExportResponse['sshTerminal']['sessionReplays'][number]['timeline'][number];
 
-export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, onTraceFocused, onTraceFilterChange }: SecurityPanelProps) {
+export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onRemediated, focusTraceId, onTraceFocused, onTraceFilterChange }: SecurityPanelProps) {
   const { language, t } = useI18n();
   const copy = securityCopyByLanguage[language] ?? securityCopyByLanguage.zh;
   const diagnosticCopy = diagnosticCopyByLanguage[language] ?? diagnosticCopyByLanguage.zh;
@@ -856,6 +858,37 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
     setReleaseFixChecklistState(next);
   }
 
+  function openOpsPreflightTrace() {
+    if (!opsPreflightSnapshot?.correlationId) {
+      return;
+    }
+    setActiveTraceId(opsPreflightSnapshot.correlationId);
+    setRelationFilter(null);
+    setQuery('');
+    setStatusFilter('all');
+    onTraceFilterChange?.(opsPreflightSnapshot.correlationId);
+  }
+
+  function openOpsPreflightInOperations() {
+    if (!opsPreflightSnapshot) {
+      onNavigate('operations');
+      return;
+    }
+    onNavigate('operations', {
+      id: `ops-preflight-${opsPreflightSnapshot.correlationId}`,
+      moduleLabel: t('nav.operations'),
+      title: t('security.opsPreflightFocusTitle'),
+      value: t('security.opsPreflightMetric', {
+        runnable: opsPreflightSnapshot.runnableTargets,
+        total: opsPreflightSnapshot.totalTargets,
+        issues: opsPreflightSnapshot.issueCount,
+      }),
+      action: t('security.opsPreflightFocusAction'),
+      source: t('security.opsPreflightTitle'),
+      anchor: 'operations-builder',
+    });
+  }
+
   async function copySshSupportBundle() {
     if (typeof navigator === 'undefined' || !navigator.clipboard) {
       setRemediationMessage(sshSupportBundle.copyText);
@@ -1211,6 +1244,43 @@ export function SecurityPanel({ events, onNavigate, onRemediated, focusTraceId, 
           </div>
         </div>
       </article>
+
+      {opsPreflightSnapshot && (
+        <article className={`security-ops-preflight-brief ${opsPreflightSnapshot.status}`} data-security-ops-preflight-brief="true" aria-labelledby="security-ops-preflight-title">
+          <div className="security-ops-preflight-orbit" aria-hidden="true">
+            <ClipboardCheck size={18} />
+          </div>
+          <div className="security-ops-preflight-main">
+            <span>{t('security.opsPreflightKicker')}</span>
+            <h3 id="security-ops-preflight-title">{t('security.opsPreflightTitle')}</h3>
+            <p>{t('security.opsPreflightLead', { title: opsPreflightSnapshot.title })}</p>
+          </div>
+          <div className="security-ops-preflight-metrics">
+            <div>
+              <small>{t('security.opsPreflightStatusLabel')}</small>
+              <strong>{t(`overview.opsPreflightStatus.${opsPreflightSnapshot.status}`)}</strong>
+            </div>
+            <div>
+              <small>{t('security.opsPreflightTargets')}</small>
+              <strong>{opsPreflightSnapshot.runnableTargets}/{opsPreflightSnapshot.totalTargets}</strong>
+            </div>
+            <div>
+              <small>{t('security.opsPreflightIssues')}</small>
+              <strong>{opsPreflightSnapshot.issueCount}</strong>
+            </div>
+          </div>
+          <div className="security-ops-preflight-actions">
+            <button type="button" className="tool-button" data-security-ops-preflight-trace="true" onClick={openOpsPreflightTrace}>
+              <ShieldCheck size={15} />
+              {t('security.opsPreflightTrace')}
+            </button>
+            <button type="button" className="tool-button primary" data-security-ops-preflight-open="true" onClick={openOpsPreflightInOperations}>
+              <SlidersHorizontal size={15} />
+              {t('security.opsPreflightOpenOps')}
+            </button>
+          </div>
+        </article>
+      )}
 
       <article className={`security-release-fix-router ${releaseFixRouter.tone}`} data-release-fix-router="true" aria-labelledby="security-release-fix-router-title">
         <div className="security-release-fix-router-heading">
