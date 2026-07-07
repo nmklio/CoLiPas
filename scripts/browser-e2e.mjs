@@ -213,7 +213,7 @@ async function ensureSshQuickCommandsEnabled(targetPage, sshServerRow) {
   await sshServerRow.getByRole('button', { name: /^SSH$/i }).click();
   await targetPage.locator('.ssh-console').waitFor({ timeout: 10000 });
   await targetPage.locator('.ssh-terminal-screen .xterm').waitFor({ timeout: 10000 });
-  await targetPage.locator('.ssh-terminal-session-count').filter({ hasText: /sessions 1/i }).waitFor({ timeout: 10000 });
+  await targetPage.locator('.ssh-terminal-session-count').filter({ hasText: /(?:sessions|会话|セッション)\s*1/i }).waitFor({ timeout: 10000 });
   await targetPage.locator('.ssh-terminal-network').filter({ hasText: /RTT/i }).waitFor({ timeout: 10000 });
   await quickRunButton.waitFor({ timeout: 5000 });
   if (await quickRunButton.isDisabled()) {
@@ -1276,7 +1276,7 @@ async function assertSshTerminalPanel(targetPage) {
     await sshServerRow.getByRole('button', { name: /^SSH$/i }).click();
     await targetPage.locator('.ssh-console').waitFor({ timeout: 10000 });
     await targetPage.locator('.ssh-terminal-screen .xterm').waitFor({ timeout: 10000 });
-    await targetPage.locator('.ssh-terminal-session-count').filter({ hasText: /sessions 1/i }).waitFor({ timeout: 10000 });
+    await targetPage.locator('.ssh-terminal-session-count').filter({ hasText: /(?:sessions|会话|セッション)\s*1/i }).waitFor({ timeout: 10000 });
     await targetPage.locator('.ssh-terminal-network').filter({ hasText: /RTT/i }).waitFor({ timeout: 10000 });
     const sshTerminalLayout = await targetPage.evaluate(() => {
       const shell = document.querySelector('.ssh-terminal-shell')?.getBoundingClientRect();
@@ -1824,6 +1824,9 @@ async function assertSshTerminalPanel(targetPage) {
     const terminalRootCauseText = await targetPage.locator('[data-ssh-terminal-root-cause="true"]').innerText();
     if (!/Real-time lag root cause/i.test(terminalRootCauseText) || !/Confidence \d+%/i.test(terminalRootCauseText) || !/Input echo/i.test(terminalRootCauseText) || !/First output/i.test(terminalRootCauseText) || !/Output throughput/i.test(terminalRootCauseText) || !/Close cleanup/i.test(terminalRootCauseText)) {
       throw new Error(`SSH terminal root-cause panel did not render confidence and all evidence lanes: ${terminalRootCauseText}`);
+    }
+    if (/\?{2,}/.test(terminalRootCauseText)) {
+      throw new Error(`SSH terminal root-cause panel rendered placeholder mojibake text: ${terminalRootCauseText}`);
     }
     if (!/(No clear lag root cause|may be slowing interaction|most likely root cause|Waiting for SSH field samples)/i.test(terminalRootCauseText)) {
       throw new Error(`SSH terminal root-cause panel did not render an actionable summary: ${terminalRootCauseText}`);
