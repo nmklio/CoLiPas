@@ -4341,12 +4341,18 @@ function assertSqlitePersistenceGuards() {
     'shouldReviewTerminalPaste',
     'buildTerminalPasteReview',
     'attachTerminalPasteGuard',
+    'bringTerminalScreenIntoView',
     '.ssh-terminal-bottleneck',
     '.ssh-terminal-bottleneck-radar',
     '.ssh-terminal-lag-action',
     '.ssh-terminal-telemetry',
     '.ssh-paste-review',
     '.ssh-terminal-telemetry-grid',
+    '.ssh-terminal-screen {\n  order: 2;',
+    'flex: 1 0 clamp(320px, 52vh, 520px)',
+    'overflow-y: auto',
+    '.ssh-terminal-titlebar {\n  order: 1;',
+    '.ssh-quick-command-deck {\n  order: 4;',
     'ssh-terminal-quality',
     '.ssh-terminal-quality.good',
     '.ssh-terminal-quality.warn',
@@ -6269,7 +6275,7 @@ function assertSshTerminalRealtimeGuards() {
   if (!globalCssSource.includes('.ssh-terminal-self-test') || !globalCssSource.includes('.ssh-terminal-self-test.complete')) {
     throw new Error('SSH terminal self-test result chip styles are missing');
   }
-  if (!globalCssSource.includes('.ssh-quick-command-deck') || !globalCssSource.includes('.ssh-runbook-workspace') || !globalCssSource.includes('.ssh-runbook-form') || !globalCssSource.includes('.ssh-runbook-form.editing') || !globalCssSource.includes('.ssh-runbook-lens') || !globalCssSource.includes('.ssh-runbook-categories button.active') || !globalCssSource.includes('.ssh-runbook-views button.active') || !globalCssSource.includes('.ssh-runbook-view-hint') || !globalCssSource.includes('.ssh-runbook-clear-filter') || !globalCssSource.includes('.ssh-runbook-recommendations') || !globalCssSource.includes('.ssh-runbook-recommendation-grid') || !globalCssSource.includes('.ssh-runbook-pack-dock') || !globalCssSource.includes('.ssh-runbook-pack-grid') || !globalCssSource.includes('.ssh-quick-command-grid') || !globalCssSource.includes('.ssh-quick-command-grid article.custom.pinned') || !globalCssSource.includes('.ssh-quick-command-grid .ssh-runbook-usage') || !globalCssSource.includes('.ssh-quick-command-grid button.pin') || !globalCssSource.includes('.ssh-quick-command-grid button.sort') || !globalCssSource.includes('flex-direction: column') || !globalCssSource.includes('flex: 0 1 230px') || !globalCssSource.includes('flex: 1 1 260px') || !globalCssSource.includes('min-height: 220px')) {
+  if (!globalCssSource.includes('.ssh-quick-command-deck') || !globalCssSource.includes('.ssh-runbook-workspace') || !globalCssSource.includes('.ssh-runbook-form') || !globalCssSource.includes('.ssh-runbook-form.editing') || !globalCssSource.includes('.ssh-runbook-lens') || !globalCssSource.includes('.ssh-runbook-categories button.active') || !globalCssSource.includes('.ssh-runbook-views button.active') || !globalCssSource.includes('.ssh-runbook-view-hint') || !globalCssSource.includes('.ssh-runbook-clear-filter') || !globalCssSource.includes('.ssh-runbook-recommendations') || !globalCssSource.includes('.ssh-runbook-recommendation-grid') || !globalCssSource.includes('.ssh-runbook-pack-dock') || !globalCssSource.includes('.ssh-runbook-pack-grid') || !globalCssSource.includes('.ssh-quick-command-grid') || !globalCssSource.includes('.ssh-quick-command-grid article.custom.pinned') || !globalCssSource.includes('.ssh-quick-command-grid .ssh-runbook-usage') || !globalCssSource.includes('.ssh-quick-command-grid button.pin') || !globalCssSource.includes('.ssh-quick-command-grid button.sort') || !globalCssSource.includes('flex-direction: column') || !globalCssSource.includes('overflow-y: auto') || !globalCssSource.includes('order: 2') || !globalCssSource.includes('flex: 1 0 clamp(320px, 52vh, 520px)') || !globalCssSource.includes('min-height: clamp(300px, 46vh, 500px)')) {
     throw new Error('SSH terminal quick command deck styles are missing or the terminal grid does not reserve space for it');
   }
 

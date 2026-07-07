@@ -5765,12 +5765,20 @@ td span,
   background: #05090a;
   color: #e8f1e8;
   box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.03);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(168, 216, 208, 0.45) transparent;
+  scrollbar-width: thin;
   display: flex;
   flex-direction: column;
 }
 
 .ssh-terminal-titlebar {
+  order: 1;
+  position: sticky;
+  top: 0;
+  z-index: 4;
   min-height: 38px;
   padding: 0 14px;
   border-bottom: 1px solid rgba(126, 161, 166, 0.16);
@@ -5899,6 +5907,8 @@ td span,
 }
 
 .ssh-terminal-quality {
+  order: 5;
+  flex: 0 0 auto;
   min-height: 42px;
   padding: 8px 14px;
   border-bottom: 1px solid rgba(126, 161, 166, 0.13);
@@ -5988,6 +5998,8 @@ td span,
 }
 
 .ssh-terminal-telemetry {
+  order: 6;
+  flex: 0 0 auto;
   min-height: 66px;
   padding: 9px 14px;
   border-bottom: 1px solid rgba(126, 161, 166, 0.11);
@@ -6139,6 +6151,8 @@ td span,
 }
 
 .ssh-terminal-bottleneck {
+  order: 7;
+  flex: 0 0 auto;
   min-height: 70px;
   padding: 9px 14px;
   border-bottom: 1px solid rgba(126, 161, 166, 0.11);
@@ -6326,6 +6340,8 @@ td span,
 }
 
 .ssh-terminal-lag-action {
+  order: 8;
+  flex: 0 0 auto;
   min-height: 58px;
   padding: 9px 14px;
   border-bottom: 1px solid rgba(126, 161, 166, 0.12);
@@ -6433,6 +6449,8 @@ td span,
 }
 
 .ssh-terminal-self-diagnostic {
+  order: 9;
+  flex: 0 0 auto;
   min-height: 92px;
   padding: 12px 14px;
   border-bottom: 1px solid rgba(126, 161, 166, 0.13);
@@ -6647,6 +6665,8 @@ td span,
 }
 
 .ssh-terminal-support-bundle {
+  order: 10;
+  flex: 0 0 auto;
   min-height: 74px;
   padding: 10px 14px;
   border-bottom: 1px solid rgba(126, 161, 166, 0.12);
@@ -6818,6 +6838,8 @@ td span,
 }
 
 .ssh-paste-review {
+  order: 3;
+  flex: 0 0 auto;
   padding: 11px 14px;
   border-bottom: 1px solid rgba(126, 161, 166, 0.13);
   background:
@@ -6893,7 +6915,8 @@ td span,
 }
 
 .ssh-quick-command-deck {
-  flex: 0 1 230px;
+  order: 4;
+  flex: 0 0 auto;
   min-height: 0;
   max-height: 230px;
   padding: 10px 14px 11px;
@@ -7687,11 +7710,13 @@ td span,
 }
 
 .ssh-terminal-screen {
-  flex: 1 1 260px;
-  min-height: 220px;
+  order: 2;
+  flex: 1 0 clamp(320px, 52vh, 520px);
+  min-height: clamp(300px, 46vh, 500px);
   padding: 10px 12px;
   overflow: hidden;
   background: #030708;
+  border-bottom: 1px solid rgba(126, 161, 166, 0.16);
   position: relative;
 }
 
@@ -16629,6 +16654,11 @@ pre {
 
   .ssh-terminal-shell {
     min-height: 420px;
+  }
+
+  .ssh-terminal-screen {
+    flex-basis: clamp(280px, 45vh, 420px);
+    min-height: 280px;
   }
 
   .ssh-terminal-titlebar {

@@ -2417,6 +2417,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
 
       setLoginProbe(mergedProbe);
       showActionMessage(t('servers.sshConnectedMessage', { name: server.name }));
+      bringTerminalScreenIntoView();
       scheduleTerminalFit(true);
       window.setTimeout(() => terminal.focus(), 30);
     } catch (error) {
@@ -2689,6 +2690,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
         if (isCurrentTerminalLifecycle(server.id, lifecycleSeq)) {
           terminal.writeln('\r\nCompatible stream mode is active.');
           terminal.scrollToBottom();
+          bringTerminalScreenIntoView();
+          scheduleTerminalFit(true);
           showActionMessage(t('servers.sshConnectedMessage', { name: server.name }));
         }
       })
@@ -3282,6 +3285,13 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     terminalInputChainRef.current = Promise.resolve();
   }
 
+  function bringTerminalScreenIntoView() {
+    terminalContainerRef.current?.scrollIntoView({
+      block: 'nearest',
+      inline: 'nearest',
+    });
+  }
+
   function scheduleTerminalFit(pushResize: boolean) {
     if (terminalResizeTimerRef.current !== null) {
       window.clearTimeout(terminalResizeTimerRef.current);
@@ -3656,6 +3666,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     try {
       await startTerminalLogin(server);
       if (terminalLifecycleSeqRef.current === lifecycleSeq && terminalShellIdRef.current) {
+        bringTerminalScreenIntoView();
+        scheduleTerminalFit(true);
         showActionMessage(t(forceCompatible ? 'servers.switchedToCompatibleChannel' : 'servers.retriedWebSocketChannel'), { autoDismissMs: 7000 });
       }
     } finally {

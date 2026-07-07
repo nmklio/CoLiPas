@@ -1106,6 +1106,31 @@ async function assertSshTerminalPanel(targetPage) {
     await targetPage.locator('.ssh-terminal-screen .xterm').waitFor({ timeout: 10000 });
     await targetPage.locator('.ssh-terminal-session-count').filter({ hasText: /sessions 1/i }).waitFor({ timeout: 10000 });
     await targetPage.locator('.ssh-terminal-network').filter({ hasText: /RTT/i }).waitFor({ timeout: 10000 });
+    const sshTerminalLayout = await targetPage.evaluate(() => {
+      const shell = document.querySelector('.ssh-terminal-shell')?.getBoundingClientRect();
+      const titlebar = document.querySelector('.ssh-terminal-titlebar')?.getBoundingClientRect();
+      const screen = document.querySelector('.ssh-terminal-screen')?.getBoundingClientRect();
+      const quickDeck = document.querySelector('[data-ssh-quick-command-deck="true"]')?.getBoundingClientRect();
+      const telemetry = document.querySelector('[data-ssh-terminal-telemetry="true"]')?.getBoundingClientRect();
+      return {
+        shellHeight: shell?.height ?? 0,
+        titlebarBottom: titlebar?.bottom ?? 0,
+        screenTop: screen?.top ?? 0,
+        screenHeight: screen?.height ?? 0,
+        quickDeckTop: quickDeck?.top ?? 0,
+        telemetryTop: telemetry?.top ?? 0,
+        shellOverflowY: getComputedStyle(document.querySelector('.ssh-terminal-shell') ?? document.body).overflowY,
+      };
+    });
+    if (
+      sshTerminalLayout.screenHeight < 280
+      || sshTerminalLayout.screenTop < sshTerminalLayout.titlebarBottom - 2
+      || sshTerminalLayout.quickDeckTop <= sshTerminalLayout.screenTop
+      || sshTerminalLayout.telemetryTop <= sshTerminalLayout.screenTop
+      || !/auto|scroll/i.test(sshTerminalLayout.shellOverflowY)
+    ) {
+      throw new Error(`SSH terminal layout can hide the xterm screen before diagnostics: ${JSON.stringify(sshTerminalLayout)}`);
+    }
     await targetPage.locator('[data-ssh-quick-command-deck="true"]').waitFor({ timeout: 5000 });
     await ensureSshQuickCommandsEnabled(targetPage, sshServerRow);
     const quickCommandText = await targetPage.locator('[data-ssh-quick-command-deck="true"]').innerText();
