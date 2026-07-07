@@ -65,6 +65,10 @@ const terminalRuntimePrefetchDelayMs = 1500;
 const terminalRuntimeIdleTimeoutMs = 4500;
 const terminalNetworkUiRefreshMs = 900;
 const terminalTelemetryUiRefreshMs = 500;
+const terminalPasteReviewMinBytes = 2048;
+const terminalPasteReviewMinLines = 3;
+const terminalPasteReviewPreviewLines = 8;
+const terminalPasteReviewPreviewChars = 560;
 const terminalTextEncoder = new TextEncoder();
 const terminalBottleneckHistoryStorageKey = 'colipas.sshBottleneckRadarHistory.v1';
 const terminalBottleneckHistoryLimit = 12;
@@ -187,6 +191,15 @@ interface TerminalTelemetryInsight {
   title: string;
   detail: string;
   cards: TerminalTelemetryCard[];
+}
+
+interface TerminalPasteReview {
+  sessionId: string;
+  content: string;
+  preview: string;
+  lineCount: number;
+  byteCount: number;
+  createdAt: number;
 }
 
 interface TerminalBottleneckItem {
@@ -444,6 +457,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const [terminalTelemetry, setTerminalTelemetry] = useState<TerminalTelemetryState>(emptyTerminalTelemetry);
   const [terminalSelfTest, setTerminalSelfTest] = useState<TerminalSelfTestState | null>(null);
   const [terminalTransport, setTerminalTransport] = useState<'websocket' | 'compatible' | null>(null);
+  const [terminalPasteReview, setTerminalPasteReview] = useState<TerminalPasteReview | null>(null);
+  const [terminalPasteSending, setTerminalPasteSending] = useState(false);
   const [sshRunbookCommands, setSshRunbookCommands] = useState<SshRunbookCommand[]>([]);
   const [sshRunbookForm, setSshRunbookForm] = useState({ title: '', command: '' });
   const [editingSshRunbookId, setEditingSshRunbookId] = useState('');
@@ -480,6 +495,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const terminalShellStreamRef = useRef<EventSource | null>(null);
   const terminalShellSocketRef = useRef<ReturnType<typeof connectServerShellSocket> | null>(null);
   const terminalShellTransportRef = useRef<'websocket' | 'compatible' | null>(null);
+  const terminalPasteListenerRef = useRef<{ element: HTMLTextAreaElement; handler: (event: ClipboardEvent) => void } | null>(null);
   const terminalWriteBufferRef = useRef('');
   const terminalWriteRafRef = useRef<number | null>(null);
   const terminalInputBufferRef = useRef('');
@@ -493,6 +509,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const terminalTelemetryRenderedAtRef = useRef(0);
   const terminalLastBottleneckSnapshotRef = useRef<{ signature: string; savedAt: number } | null>(null);
   const terminalSelfTestRef = useRef<TerminalSelfTestTracker | null>(null);
+  const terminalPasteReviewRef = useRef<TerminalPasteReview | null>(null);
   const terminalCssInjectedRef = useRef(false);
   const actionMessageTimerRef = useRef<number | null>(null);
   const sshConsoleOpenRef = useRef(false);
@@ -1608,6 +1625,33 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     ))}
                   </div>
                 </div>
+                {terminalPasteReview && (
+                  <div className="ssh-paste-review" data-ssh-paste-review="true" onClick={(event) => event.stopPropagation()}>
+                    <div className="ssh-paste-review-summary">
+                      <span><FileText size={15} /> {t('servers.sshPasteReviewEyebrow')}</span>
+                      <strong>{t('servers.sshPasteReviewTitle')}</strong>
+                      <small>{t('servers.sshPasteReviewDetail', {
+                        lines: terminalPasteReview.lineCount,
+                        size: formatCompactBytes(terminalPasteReview.byteCount),
+                      })}</small>
+                    </div>
+                    <pre>{terminalPasteReview.preview}</pre>
+                    <div className="ssh-paste-review-actions">
+                      <button
+                        type="button"
+                        className="tool-button primary"
+                        data-ssh-paste-review-send="true"
+                        onClick={sendReviewedTerminalPaste}
+                        disabled={terminalPasteSending}
+                      >
+                        {terminalPasteSending ? t('servers.sshPasteReviewSending') : t('servers.sshPasteReviewSend')}
+                      </button>
+                      <button type="button" className="tool-button" data-ssh-paste-review-cancel="true" onClick={cancelReviewedTerminalPaste} disabled={terminalPasteSending}>
+                        {t('servers.sshPasteReviewCancel')}
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div className="ssh-quick-command-deck" data-ssh-quick-command-deck="true" onClick={(event) => event.stopPropagation()}>
                   <div className="ssh-quick-command-heading">
                     <span>{t('servers.quickCommandEyebrow')}</span>
@@ -2405,6 +2449,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       terminalShellSocketRef.current = null;
       terminalShellTransportRef.current = null;
       setTerminalTransport(null);
+      updateTerminalPasteReview(null);
       clearTerminalNetworkStats();
       updateTerminalTelemetry((current) => ({
         ...current,
@@ -2505,6 +2550,11 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     terminalTelemetryRef.current = next;
     terminalTelemetryRenderedAtRef.current = 0;
     setTerminalTelemetry(next);
+  }
+
+  function updateTerminalPasteReview(review: TerminalPasteReview | null) {
+    terminalPasteReviewRef.current = review;
+    setTerminalPasteReview(review);
   }
 
   function recordTerminalInput(data: string) {
@@ -2828,7 +2878,38 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     resizeObserver.observe(terminalContainerRef.current);
     terminalResizeObserverRef.current = resizeObserver;
     scheduleTerminalFit(false);
+    attachTerminalPasteGuard(terminal);
     terminal.focus();
+  }
+
+  function attachTerminalPasteGuard(terminal: XTerm) {
+    detachTerminalPasteGuard();
+    const helper = terminal.element?.querySelector('.xterm-helper-textarea');
+    if (!(helper instanceof HTMLTextAreaElement)) {
+      return;
+    }
+
+    const handler = (event: ClipboardEvent) => {
+      const sessionId = terminalShellIdRef.current;
+      const content = event.clipboardData?.getData('text/plain') ?? event.clipboardData?.getData('text') ?? '';
+      if (!sessionId || !shouldReviewTerminalPaste(content)) {
+        return;
+      }
+      event.preventDefault();
+      openTerminalPasteReview(sessionId, content);
+    };
+
+    helper.addEventListener('paste', handler);
+    terminalPasteListenerRef.current = { element: helper, handler };
+  }
+
+  function detachTerminalPasteGuard() {
+    const current = terminalPasteListenerRef.current;
+    if (!current) {
+      return;
+    }
+    current.element.removeEventListener('paste', current.handler);
+    terminalPasteListenerRef.current = null;
   }
 
   function loadTerminalRuntime() {
@@ -2868,6 +2949,11 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   }
 
   function queueTerminalInput(sessionId: string, data: string) {
+    if (shouldReviewTerminalPaste(data)) {
+      openTerminalPasteReview(sessionId, data);
+      return;
+    }
+
     recordTerminalInput(data);
     if (terminalShellTransportRef.current === 'websocket' && terminalShellSocketRef.current) {
       terminalShellSocketRef.current.sendInput(data);
@@ -2888,6 +2974,64 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       terminalInputTimerRef.current = null;
       flushTerminalInput(sessionId);
     }, terminalCompatibleInputFlushMs);
+  }
+
+  function shouldReviewTerminalPaste(data: string) {
+    if (!data || data.includes('\u0003')) {
+      return false;
+    }
+    const byteCount = measureTerminalTextBytes(data);
+    if (byteCount >= terminalPasteReviewMinBytes) {
+      return true;
+    }
+    return countTerminalPasteLines(data) >= terminalPasteReviewMinLines;
+  }
+
+  function openTerminalPasteReview(sessionId: string, content: string) {
+    const current = terminalPasteReviewRef.current;
+    const mergedContent = current?.sessionId === sessionId ? `${current.content}${content}` : content;
+    const review = buildTerminalPasteReview(sessionId, mergedContent);
+    updateTerminalPasteReview(review);
+    showActionMessage(t('servers.sshPasteReviewQueued', {
+      lines: review.lineCount,
+      size: formatCompactBytes(review.byteCount),
+    }));
+  }
+
+  async function sendReviewedTerminalPaste() {
+    const review = terminalPasteReviewRef.current;
+    if (!review || terminalPasteSending) {
+      return;
+    }
+    const activeSessionId = terminalShellIdRef.current;
+    if (!activeSessionId || activeSessionId !== review.sessionId) {
+      updateTerminalPasteReview(null);
+      showActionMessage(t('servers.sshPasteReviewExpired'));
+      return;
+    }
+
+    setTerminalPasteSending(true);
+    try {
+      await flushTerminalInput(review.sessionId);
+      recordTerminalInput(review.content);
+      await sendTerminalInput(review.sessionId, review.content);
+      updateTerminalPasteReview(null);
+      showActionMessage(t('servers.sshPasteReviewSent', {
+        lines: review.lineCount,
+        size: formatCompactBytes(review.byteCount),
+      }));
+      xtermRef.current?.focus();
+    } catch (error) {
+      showActionMessage(error instanceof Error ? error.message : t('servers.sshPasteReviewSendFailed'));
+    } finally {
+      setTerminalPasteSending(false);
+    }
+  }
+
+  function cancelReviewedTerminalPaste() {
+    updateTerminalPasteReview(null);
+    showActionMessage(t('servers.sshPasteReviewCancelled'));
+    xtermRef.current?.focus();
   }
 
   function flushTerminalInput(sessionId = terminalShellIdRef.current): Promise<void> {
@@ -3285,6 +3429,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     clearTerminalWriteBuffer();
     clearTerminalInputBuffer();
     resetTerminalSelfTest();
+    updateTerminalPasteReview(null);
+    setTerminalPasteSending(false);
     if (syncState) {
       setTerminalShellId(null);
       clearTerminalNetworkStats();
@@ -3441,6 +3587,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     terminalResizeObserverRef.current = null;
     terminalDataSubscriptionRef.current?.dispose();
     terminalDataSubscriptionRef.current = null;
+    detachTerminalPasteGuard();
     fitAddonRef.current?.dispose();
     fitAddonRef.current = null;
     xtermRef.current?.dispose();
@@ -3710,6 +3857,28 @@ function countTerminalOutputLines(content: string) {
   }
   const newlines = content.match(/\n/g)?.length ?? 0;
   return Math.max(newlines, content.trim() ? 1 : 0);
+}
+
+function countTerminalPasteLines(content: string) {
+  if (!content.trim()) {
+    return 0;
+  }
+  return content.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter((line) => line.trim().length > 0).length;
+}
+
+function buildTerminalPasteReview(sessionId: string, content: string): TerminalPasteReview {
+  const normalized = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const previewLines = normalized.split('\n').slice(0, terminalPasteReviewPreviewLines);
+  const preview = previewLines.join('\n').slice(0, terminalPasteReviewPreviewChars);
+  const truncated = normalized.length > preview.length || normalized.split('\n').length > terminalPasteReviewPreviewLines;
+  return {
+    sessionId,
+    content,
+    preview: `${preview}${truncated ? '\n…' : ''}`,
+    lineCount: countTerminalPasteLines(content),
+    byteCount: measureTerminalTextBytes(content),
+    createdAt: Date.now(),
+  };
 }
 
 function actionLabel(action: 'powerOn' | 'shutdown' | 'reboot') {

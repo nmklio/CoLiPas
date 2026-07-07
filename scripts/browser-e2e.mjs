@@ -1357,6 +1357,32 @@ async function assertSshTerminalPanel(targetPage) {
       throw new Error(`SSH terminal rendered duplicate remote prompt history rows: ${terminalState.lineTexts.join(' | ')}`);
     }
 
+    const guardedPaste = 'printf colipas-paste-one\nprintf colipas-paste-two\nprintf colipas-paste-three\n';
+    await targetPage.locator('.ssh-terminal-screen').click();
+    await dispatchTerminalPaste(targetPage, guardedPaste);
+    await targetPage.locator('[data-ssh-paste-review="true"]').waitFor({ timeout: 5000 });
+    const pasteReviewText = await targetPage.locator('[data-ssh-paste-review="true"]').innerText();
+    if (!/Large SSH paste detected|Paste airlock|3 lines/i.test(pasteReviewText) || !pasteReviewText.includes('colipas-paste-two')) {
+      throw new Error(`SSH paste review did not summarize the held paste: ${pasteReviewText}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b|sk-[A-Za-z0-9_-]{12,}|BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY|password=|passphrase=/i.test(pasteReviewText)) {
+      throw new Error('SSH paste review rendered raw host or secret material');
+    }
+    await targetPage.locator('[data-ssh-paste-review-cancel="true"]').click();
+    await targetPage.locator('[data-ssh-paste-review="true"]').waitFor({ state: 'hidden', timeout: 5000 });
+    await targetPage.waitForFunction(() => {
+      const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
+      return !terminalText.includes('colipas-paste-one');
+    }, undefined, { timeout: 5000 });
+    await targetPage.locator('.ssh-terminal-screen').click();
+    await dispatchTerminalPaste(targetPage, guardedPaste);
+    await targetPage.locator('[data-ssh-paste-review-send="true"]').click();
+    await targetPage.locator('[data-ssh-paste-review="true"]').waitFor({ state: 'hidden', timeout: 5000 });
+    await targetPage.waitForFunction(() => {
+      const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
+      return terminalText.includes('simulated$ printf colipas-paste-three') && terminalText.includes('command simulated.');
+    }, undefined, { timeout: 10000 });
+
     await targetPage.getByRole('button', { name: /disconnect/i }).waitFor({ timeout: 5000 });
     await targetPage.evaluate(() => {
       window.__colipasCopiedTerminalText = '';
@@ -1371,7 +1397,7 @@ async function assertSshTerminalPanel(targetPage) {
     });
     await targetPage.getByRole('button', { name: /copy terminal output/i }).click();
     const copiedTerminalText = await targetPage.evaluate(() => window.__colipasCopiedTerminalText ?? '');
-    if (!copiedTerminalText.includes('simulated$ whoami') || !copiedTerminalText.includes('command simulated.')) {
+    if (!/(simulated\$ whoami|simulated\$ printf colipas-paste-three)/.test(copiedTerminalText) || !copiedTerminalText.includes('command simulated.')) {
       throw new Error(`SSH terminal copy tool did not copy visible output: ${copiedTerminalText}`);
     }
     await targetPage.getByRole('button', { name: /clear terminal output/i }).click();
@@ -1585,9 +1611,30 @@ async function assertSshTerminalPanel(targetPage) {
       const status = await response.json();
       return status.activeCount === 0;
     }, undefined, { timeout: 5000 });
-    console.log('ok browser e2e covers interactive xterm SSH terminal, quick commands, copy/clear tools, status count, and panel disconnect cleanup');
+    console.log('ok browser e2e covers interactive xterm SSH terminal, paste review, quick commands, copy/clear tools, status count, and panel disconnect cleanup');
   } finally {
     await deleteTemporaryAssetServer(targetPage, sshServer.id).catch(() => undefined);
+  }
+}
+
+async function dispatchTerminalPaste(targetPage, text) {
+  const result = await targetPage.evaluate((pasteText) => {
+    const textarea = document.querySelector('.ssh-terminal-screen .xterm-helper-textarea');
+    if (!textarea) {
+      return { ok: false, reason: 'missing xterm helper textarea' };
+    }
+    const data = new DataTransfer();
+    data.setData('text/plain', pasteText);
+    const event = new ClipboardEvent('paste', {
+      bubbles: true,
+      cancelable: true,
+      clipboardData: data,
+    });
+    const dispatched = textarea.dispatchEvent(event);
+    return { ok: true, defaultPrevented: event.defaultPrevented, dispatched };
+  }, text);
+  if (!result.ok || !result.defaultPrevented) {
+    throw new Error(`SSH terminal paste event was not intercepted: ${JSON.stringify(result)}`);
   }
 }
 

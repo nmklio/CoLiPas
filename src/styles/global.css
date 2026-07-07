@@ -6325,6 +6325,81 @@ td span,
   line-height: 1.25;
 }
 
+.ssh-paste-review {
+  padding: 11px 14px;
+  border-bottom: 1px solid rgba(126, 161, 166, 0.13);
+  background:
+    radial-gradient(circle at 4% 0, rgba(45, 212, 191, 0.16), transparent 35%),
+    linear-gradient(135deg, rgba(7, 18, 22, 0.98), rgba(4, 9, 11, 0.99));
+  display: grid;
+  grid-template-columns: minmax(190px, 0.58fr) minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.ssh-paste-review-summary {
+  min-width: 0;
+  border-right: 1px solid rgba(125, 211, 252, 0.14);
+  padding-right: 10px;
+  display: grid;
+  align-content: center;
+  gap: 3px;
+}
+
+.ssh-paste-review-summary span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #5eead4;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ssh-paste-review-summary strong {
+  color: #e8fff8;
+  font-size: 13px;
+  font-weight: 950;
+  line-height: 1.25;
+}
+
+.ssh-paste-review-summary small {
+  color: #8da7ad;
+  font-size: 11px;
+  font-weight: 740;
+  line-height: 1.35;
+}
+
+.ssh-paste-review pre {
+  min-width: 0;
+  max-height: 118px;
+  margin: 0;
+  overflow: auto;
+  border: 1px solid rgba(94, 234, 212, 0.16);
+  border-radius: 14px;
+  padding: 9px 10px;
+  background: rgba(2, 6, 8, 0.72);
+  color: #d7fff7;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+  font-weight: 760;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ssh-paste-review-actions {
+  display: grid;
+  align-content: center;
+  gap: 7px;
+}
+
+.ssh-paste-review-actions .tool-button {
+  justify-content: center;
+  white-space: nowrap;
+}
+
 .ssh-quick-command-deck {
   min-height: 0;
   padding: 10px 14px 11px;
@@ -15413,6 +15488,23 @@ pre {
 
   .ssh-terminal-bottleneck-radar small {
     white-space: normal;
+  }
+
+  .ssh-paste-review {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 9px 12px 11px;
+  }
+
+  .ssh-paste-review-summary {
+    border-right: 0;
+    border-bottom: 1px solid rgba(125, 211, 252, 0.14);
+    padding-right: 0;
+    padding-bottom: 7px;
+  }
+
+  .ssh-paste-review-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .ssh-quick-command-deck {
