@@ -596,7 +596,7 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
           <p>{t('ops.eyebrow')}</p>
           <h2 id="ops-title">{t('ops.title')}</h2>
         </div>
-        <button type="button" className="tool-button primary" onClick={() => setBuilderOpen((value) => !value)}>
+        <button type="button" className="tool-button primary" onClick={() => setBuilderOpen(true)}>
           <PlayCircle size={16} />
           {t('ops.newTask')}
         </button>

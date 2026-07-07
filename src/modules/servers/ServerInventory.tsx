@@ -44,6 +44,7 @@ interface ServerInventoryProps {
   servers: ServerNode[];
   filters: ServerFilters;
   onFiltersChange: (filters: ServerFilters) => void;
+  onTriageDraftOpen?: (triageId: ServerFleetTriageCardId) => void;
   onServerConnected: () => Promise<void> | void;
   onAuditTraceOpen?: (correlationId: string) => void;
   releaseFocusAnchor?: string;
@@ -322,7 +323,7 @@ interface SshRunbookRecommendation {
   detail: string;
 }
 
-type ServerFleetTriageCardId = 'resourcePressure' | 'sshMissing' | 'sshSimulated' | 'stopped';
+export type ServerFleetTriageCardId = 'resourcePressure' | 'sshMissing' | 'sshSimulated' | 'stopped';
 
 interface ServerFleetTriageCard {
   id: ServerFleetTriageCardId;
@@ -413,7 +414,7 @@ const initialForm: ConnectServerPayload = {
   },
 };
 
-export function ServerInventory({ allServers, servers, filters, onFiltersChange, onServerConnected, onAuditTraceOpen, releaseFocusAnchor }: ServerInventoryProps) {
+export function ServerInventory({ allServers, servers, filters, onFiltersChange, onTriageDraftOpen, onServerConnected, onAuditTraceOpen, releaseFocusAnchor }: ServerInventoryProps) {
   const { language, t } = useI18n();
   const regions = useMemo(() => buildSortedRegions(allServers), [allServers]);
   const scopedRegions = useMemo(() => normalizeScopedRegions(filters.regionScope), [filters.regionScope]);
@@ -909,20 +910,37 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
             {fleetTriageCards.map((card) => {
               const active = isServerFleetTriageActive(card.id, filters);
               return (
-                <button
+                <article
                   key={card.id}
-                  type="button"
-                  className={`${card.tone}${active ? ' active' : ''}`}
+                  className={`server-triage-card ${card.tone}${active ? ' active' : ''}`}
                   data-server-triage-card={card.id}
-                  aria-pressed={active}
-                  disabled={card.count === 0}
-                  onClick={() => onFiltersChange(buildServerFleetTriageFilters(card.id, filters))}
                 >
                   <span>{card.title}</span>
                   <strong>{card.count}</strong>
                   <small>{card.detail}</small>
-                  <em>{card.actionLabel}</em>
-                </button>
+                  <div className="server-triage-card-actions">
+                    <button
+                      type="button"
+                      data-server-triage-filter={card.id}
+                      aria-pressed={active}
+                      disabled={card.count === 0}
+                      onClick={() => onFiltersChange(buildServerFleetTriageFilters(card.id, filters))}
+                    >
+                      {card.actionLabel}
+                    </button>
+                    {onTriageDraftOpen && (
+                      <button
+                        type="button"
+                        className="secondary"
+                        data-server-triage-draft={card.id}
+                        disabled={card.count === 0}
+                        onClick={() => onTriageDraftOpen(card.id)}
+                      >
+                        {t('servers.triageDraftAction')}
+                      </button>
+                    )}
+                  </div>
+                </article>
               );
             })}
           </div>

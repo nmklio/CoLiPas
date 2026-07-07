@@ -3673,7 +3673,7 @@ main {
   gap: 8px;
 }
 
-.server-triage-cards button {
+.server-triage-card {
   min-width: 0;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 15px;
@@ -3683,39 +3683,33 @@ main {
   text-align: left;
   display: grid;
   gap: 4px;
-  cursor: pointer;
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
   transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
-.server-triage-cards button:hover:not(:disabled),
-.server-triage-cards button.active {
+.server-triage-card:hover,
+.server-triage-card.active {
   transform: translateY(-1px);
   border-color: rgba(14, 165, 233, 0.4);
   box-shadow: 0 16px 34px rgba(14, 165, 233, 0.14);
 }
 
-.server-triage-cards button:disabled {
-  opacity: 0.58;
-  cursor: not-allowed;
-}
-
-.server-triage-cards button.slow {
+.server-triage-card.slow {
   border-color: rgba(244, 63, 94, 0.28);
   background: linear-gradient(135deg, rgba(255, 241, 242, 0.94), rgba(255, 255, 255, 0.82));
 }
 
-.server-triage-cards button.warn {
+.server-triage-card.warn {
   border-color: rgba(245, 158, 11, 0.32);
   background: linear-gradient(135deg, rgba(255, 251, 235, 0.96), rgba(255, 255, 255, 0.82));
 }
 
-.server-triage-cards button.good {
+.server-triage-card.good {
   border-color: rgba(20, 184, 166, 0.22);
   background: linear-gradient(135deg, rgba(240, 253, 250, 0.96), rgba(255, 255, 255, 0.82));
 }
 
-.server-triage-cards button.pending {
+.server-triage-card.pending {
   border-color: rgba(100, 116, 139, 0.2);
   background: linear-gradient(135deg, rgba(248, 250, 252, 0.96), rgba(255, 255, 255, 0.82));
 }
@@ -3746,6 +3740,48 @@ main {
   min-height: 30px;
   font-size: 11px;
   line-height: 1.35;
+}
+
+.server-triage-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 3px;
+}
+
+.server-triage-card-actions button {
+  min-height: 27px;
+  border: 1px solid rgba(14, 165, 233, 0.24);
+  border-radius: 999px;
+  padding: 0 10px;
+  color: #0369a1;
+  background: rgba(255, 255, 255, 0.68);
+  font-size: 11px;
+  font-weight: 900;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.server-triage-card-actions button.secondary {
+  color: #0f766e;
+  border-color: rgba(20, 184, 166, 0.26);
+  background: rgba(240, 253, 250, 0.72);
+}
+
+.server-triage-card-actions button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(14, 165, 233, 0.5);
+}
+
+.server-triage-card-actions button:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+
+.server-triage-card-actions button[aria-pressed="true"] {
+  color: #ffffff;
+  background: linear-gradient(135deg, #0ea5e9, #14b8a6);
+  border-color: transparent;
 }
 
 .server-triage-cards em {

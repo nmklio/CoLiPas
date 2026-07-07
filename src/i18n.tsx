@@ -1498,6 +1498,10 @@ const fallbackTranslations: Record<Language, Record<string, string>> = {
     'servers.triage.stopped.title': '停止资产',
     'servers.triage.stopped.detail': '{count} 台已停止，发布前需确认影响面。',
     'servers.triage.stopped.action': '筛选停止项',
+    'servers.triageDraftAction': '生成编排草稿',
+    'servers.triageDraftTitle': '{signal} 处置草稿',
+    'servers.triageDraftDesc': '从 {count} 台命中资产中选择 {selected} 台生成草稿；当前共有 {assets} 台资产、{connected} 台可执行 SSH。',
+    'servers.triageDraftReason': '服务器分诊触发：{signal}，命中 {count} 台，已选择 {selected} 台进入预检。',
   },
   en: {
     'ai.you': 'You',
@@ -1541,6 +1545,10 @@ const fallbackTranslations: Record<Language, Record<string, string>> = {
     'servers.triage.stopped.title': 'Stopped assets',
     'servers.triage.stopped.detail': '{count} servers are stopped; confirm impact before release.',
     'servers.triage.stopped.action': 'Filter stopped',
+    'servers.triageDraftAction': 'Create ops draft',
+    'servers.triageDraftTitle': '{signal} response draft',
+    'servers.triageDraftDesc': 'Selected {selected} of {count} matched assets for a draft; fleet has {assets} assets and {connected} SSH-runnable targets.',
+    'servers.triageDraftReason': 'Server triage trigger: {signal}; {count} matched, {selected} selected for preflight.',
   },
   ja: {
     'ai.you': 'あなた',
@@ -1584,6 +1592,10 @@ const fallbackTranslations: Record<Language, Record<string, string>> = {
     'servers.triage.stopped.title': '停止資産',
     'servers.triage.stopped.detail': '{count} 台が停止中です。リリース前に影響を確認してください。',
     'servers.triage.stopped.action': '停止項目を絞る',
+    'servers.triageDraftAction': '編成草案を生成',
+    'servers.triageDraftTitle': '{signal} 対応草案',
+    'servers.triageDraftDesc': '{count} 台の該当資産から {selected} 台を選択しました。全体は {assets} 台、SSH 実行可能は {connected} 台です。',
+    'servers.triageDraftReason': 'サーバートリアージトリガー：{signal}、該当 {count} 台、プリフライト対象 {selected} 台。',
   },
 };
 

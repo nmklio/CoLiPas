@@ -4838,6 +4838,7 @@ async function assertReleaseDeployTargetPlanGuards() {
 
 function assertOverviewMapInteractionGuards() {
   const overviewSource = fs.readFileSync(new URL('../src/modules/overview/MonitoringOverview.tsx', import.meta.url), 'utf8');
+  const i18nSource = fs.readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
   const requiredFragments = [
     'moved: boolean',
     'suppressMapClickRef.current = drag.moved',
@@ -5038,12 +5039,32 @@ function assertOverviewMapInteractionGuards() {
     'data-health-scope-chip="true"',
     'data-server-triage="true"',
     'data-server-triage-card={card.id}',
+    'data-server-triage-filter={card.id}',
+    'data-server-triage-draft={card.id}',
+    'onTriageDraftOpen?: (triageId: ServerFleetTriageCardId) => void',
     'function buildServerFleetTriageCards(',
     'function buildServerFleetTriageFilters(',
     'servers.healthScopeLabel',
     'servers.triageTitle',
+    'servers.triageDraftAction',
     'servers.clearHealthScope',
   ], 'server health filter chip');
+  assertFileContains('src/app/App.tsx', [
+    'type ServerFleetTriageCardId',
+    'function openServerTriageOperationsDraft(triageId: ServerFleetTriageCardId)',
+    'setOperationDraft({',
+    'id: `server-triage-${triageId}-',
+    "title: t('servers.triageDraftTitle'",
+    "description: t('servers.triageDraftDesc'",
+    "reason: t('servers.triageDraftReason'",
+    'onTriageDraftOpen={openServerTriageOperationsDraft}',
+  ], 'server triage operations draft handoff');
+  for (const key of ['servers.triageDraftAction', 'servers.triageDraftTitle', 'servers.triageDraftDesc', 'servers.triageDraftReason']) {
+    const count = (i18nSource.match(new RegExp(key.replaceAll('.', '\\.'), 'g')) ?? []).length;
+    if (count < 3) {
+      throw new Error(`Server triage draft i18n key is missing languages: ${key}`);
+    }
+  }
   if (overviewSource.includes('new Set(servers.map((server) => server.provider)).size')) {
     throw new Error('Overview provider count must reuse single-pass stats instead of rescanning during render');
   }
@@ -6813,6 +6834,9 @@ function assertOperationsTargetSelectionGuards() {
   }
   if (operationsSource.includes('eligibleServers.map((server) => (')) {
     throw new Error('Operations selected target picker must render visibleEligibleServers, not every eligible server');
+  }
+  if (operationsSource.includes('setBuilderOpen((value) => !value)')) {
+    throw new Error('Operations New task CTA must open the builder, not toggle it closed after a draft handoff');
   }
   if (
     operationsSource.includes('const connectedServers = useMemo(() => servers.filter((server) => server.ssh?.connected), [servers]);')

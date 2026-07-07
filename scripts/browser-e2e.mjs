@@ -826,7 +826,7 @@ async function assertSshTerminalPanel(targetPage) {
     if (serverTriageCardCount !== 4) {
       throw new Error(`Server fleet triage should expose four cards, got ${serverTriageCardCount}`);
     }
-    await targetPage.locator('[data-server-triage-card="sshSimulated"]').click();
+    await targetPage.locator('[data-server-triage-filter="sshSimulated"]').click();
     const simulatedScopeChip = targetPage.locator('[data-health-scope-chip="true"]');
     await simulatedScopeChip.waitFor({ timeout: 5000 });
     const simulatedScopeText = await simulatedScopeChip.innerText();
@@ -836,6 +836,23 @@ async function assertSshTerminalPanel(targetPage) {
     await targetPage.locator('.server-workspace-row').filter({ hasText: sshServer.name }).waitFor({ timeout: 5000 });
     await simulatedScopeChip.getByRole('button', { name: /clear health filter/i }).click();
     await targetPage.locator('[data-health-scope-chip="true"]').waitFor({ state: 'detached', timeout: 5000 });
+    await targetPage.locator('[data-server-triage-draft="sshSimulated"]').click();
+    await targetPage.waitForURL(/#operations$/, { timeout: 10000 });
+    const triageDraftBanner = targetPage.locator('[data-ops-draft-banner="true"]');
+    await triageDraftBanner.waitFor({ timeout: 10000 });
+    const triageDraftText = await triageDraftBanner.innerText();
+    if (!/Simulated SSH response draft|Health draft generated|Server triage trigger/i.test(triageDraftText)) {
+      throw new Error(`Server triage draft did not populate the operations banner: ${triageDraftText}`);
+    }
+    await targetPage.waitForFunction((expectedName) => {
+      const scope = document.querySelector('.ops-builder select');
+      const activeType = document.querySelector('.ops-type-card.active');
+      const activeChoice = Array.from(document.querySelectorAll('.ops-server-choice.active')).some((choice) => (choice.textContent ?? '').includes(expectedName));
+      return scope instanceof HTMLSelectElement && scope.value === 'selected' && /Health check/i.test(activeType?.textContent ?? '') && activeChoice;
+    }, sshServer.name, { timeout: 10000 });
+    await targetPage.getByRole('button', { name: /^Servers$/i }).click();
+    await targetPage.waitForURL(/#servers$/, { timeout: 10000 });
+    await targetPage.locator('.server-workspace-row').filter({ hasText: sshServer.name }).waitFor({ timeout: 10000 });
     await sshServerRow.getByRole('button', { name: /diagnose/i }).click();
     await targetPage.locator('[data-ssh-connection-doctor="true"]').waitFor({ timeout: 10000 });
     const sshDoctorText = await targetPage.locator('[data-ssh-connection-doctor="true"]').innerText();

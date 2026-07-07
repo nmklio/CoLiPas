@@ -26,7 +26,7 @@ import { CustomApiLab } from '../modules/custom-api/CustomApiLab';
 import { OperationsCenter, type OperationsDraft } from '../modules/operations/OperationsCenter';
 import { MonitoringOverview, type OverviewPreflightSnapshot } from '../modules/overview/MonitoringOverview';
 import { SecurityPanel } from '../modules/security/SecurityPanel';
-import { ServerInventory } from '../modules/servers/ServerInventory';
+import { ServerInventory, type ServerFleetTriageCardId } from '../modules/servers/ServerInventory';
 import { BrandIcon } from './BrandIcon';
 import {
   cloudAccounts as fallbackCloudAccounts,
@@ -628,6 +628,61 @@ export function App() {
     navigateToSection('operations');
   }
 
+  function openServerTriageOperationsDraft(triageId: ServerFleetTriageCardId) {
+    const connectedServers = overview.servers.filter((server) => resolveServerLifecycleStatus(server) !== 'unconnected');
+    const pressureServers = overview.servers
+      .filter((server) => Math.max(server.cpu, server.memory, server.disk) >= 70)
+      .sort((left, right) => Math.max(right.cpu, right.memory, right.disk) - Math.max(left.cpu, left.memory, left.disk));
+    const connectedPressureServers = pressureServers.filter((server) => resolveServerLifecycleStatus(server) !== 'unconnected');
+    const missingSshServers = overview.servers.filter((server) => !server.ssh?.connected);
+    const simulatedServers = overview.servers.filter((server) => server.ssh?.verifyMode === 'simulate');
+    const stoppedServers = overview.servers.filter((server) => resolveServerLifecycleStatus(server) === 'stopped');
+    const triageSource = {
+      resourcePressure: {
+        servers: connectedPressureServers.length > 0 ? connectedPressureServers : pressureServers,
+        type: connectedPressureServers.length > 0 ? 'sshCommand' : 'assetSync',
+        command: connectedPressureServers.length > 0 ? overviewTriageCommand : undefined,
+      },
+      sshMissing: {
+        servers: missingSshServers,
+        type: 'assetSync',
+        command: undefined,
+      },
+      sshSimulated: {
+        servers: simulatedServers,
+        type: 'healthCheck',
+        command: undefined,
+      },
+      stopped: {
+        servers: stoppedServers,
+        type: 'assetSync',
+        command: undefined,
+      },
+    } satisfies Record<ServerFleetTriageCardId, { servers: ServerNode[]; type: OperationsDraft['type']; command?: string }>;
+    const source = triageSource[triageId];
+    const selectedServers = source.servers.slice(0, 50);
+    const targetMode: OperationsDraft['targetMode'] = selectedServers.length > 0 ? 'selected' : source.type === 'assetSync' ? 'allServers' : 'allConnected';
+    const draftVars = {
+      signal: t(`servers.triage.${triageId}.title`),
+      count: source.servers.length,
+      selected: selectedServers.length,
+      connected: connectedServers.length,
+      assets: overview.servers.length,
+    };
+
+    setOperationDraft({
+      id: `server-triage-${triageId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      title: t('servers.triageDraftTitle', draftVars),
+      description: t('servers.triageDraftDesc', draftVars),
+      type: source.type,
+      targetMode,
+      serverIds: selectedServers.map((server) => server.id),
+      command: source.command,
+      reason: t('servers.triageDraftReason', draftVars),
+    });
+    navigateToSection('operations');
+  }
+
   function recordOverviewDraftPreflight(draft: OperationsDraft, preflight: OperationTaskPreflightResponse) {
     const displayedTotalTargets = !preflight.requiresSsh && preflight.summary.totalTargets === 0
       ? overview.servers.length
@@ -984,6 +1039,7 @@ export function App() {
             <ServerInventory
               filters={filters}
               onFiltersChange={setFilters}
+              onTriageDraftOpen={openServerTriageOperationsDraft}
               onServerConnected={refreshOverview}
               onAuditTraceOpen={openSecurityTrace}
               releaseFocusAnchor={activeReleaseFixAnchor === 'server-ssh' ? activeReleaseFixAnchor : undefined}
