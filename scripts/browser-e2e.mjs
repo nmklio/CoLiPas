@@ -387,7 +387,7 @@ async function assertReleaseEvidenceBrief(targetPage) {
     throw new Error(`Release cockpit should expose four health rails, got ${releaseCockpitLaneCount}`);
   }
   const releaseCockpitText = await targetPage.locator('[data-release-cockpit="true"]').innerText();
-  if (!/Release cockpit/i.test(releaseCockpitText) || !/Version rail/i.test(releaseCockpitText) || !/Readiness rail/i.test(releaseCockpitText) || !/Audit rail/i.test(releaseCockpitText) || !/SSH rail/i.test(releaseCockpitText) || !/Next publish move/i.test(releaseCockpitText)) {
+  if (!/Release cockpit/i.test(releaseCockpitText) || !/Version rail/i.test(releaseCockpitText) || !/Readiness rail/i.test(releaseCockpitText) || !/Audit rail/i.test(releaseCockpitText) || !/SSH rail/i.test(releaseCockpitText) || !/Current decision/i.test(releaseCockpitText) || !/Next publish move/i.test(releaseCockpitText)) {
     throw new Error(`Release cockpit did not render publish-control rails: ${releaseCockpitText}`);
   }
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(releaseCockpitText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(releaseCockpitText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(releaseCockpitText)) {
@@ -398,7 +398,7 @@ async function assertReleaseEvidenceBrief(targetPage) {
     throw new Error(`Release handoff pack should expose four handoff sections, got ${releaseHandoffSectionCount}`);
   }
   const releaseHandoffText = await targetPage.locator('[data-release-handoff-pack="true"]').innerText();
-  if (!/Release handoff pack/i.test(releaseHandoffText) || !/Tower conclusion/i.test(releaseHandoffText) || !/Publish evidence/i.test(releaseHandoffText) || !/SSH field state/i.test(releaseHandoffText) || !/Handoff rule/i.test(releaseHandoffText) || !/sanitized/i.test(releaseHandoffText)) {
+  if (!/Release handoff pack/i.test(releaseHandoffText) || !/Tower conclusion/i.test(releaseHandoffText) || !/Publish evidence/i.test(releaseHandoffText) || !/SSH field state/i.test(releaseHandoffText) || !/Handoff rule/i.test(releaseHandoffText) || !/Pass|Blocked|Disabled|Waiting for refresh/i.test(releaseHandoffText) || !/sanitized/i.test(releaseHandoffText)) {
     throw new Error(`Release handoff pack did not render review sections: ${releaseHandoffText}`);
   }
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(releaseHandoffText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(releaseHandoffText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(releaseHandoffText)) {

@@ -172,6 +172,12 @@ interface ReleaseCockpitSummary {
   status: string;
   commitLabel: string;
   generatedLabel: string;
+  gate: {
+    tone: 'ok' | 'warn' | 'fail';
+    status: string;
+    detail: string;
+    rules: string;
+  };
   lanes: ReleaseCockpitLane[];
   nextAction: string;
   copyText: string;
@@ -2111,6 +2117,12 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
             <small>{copy.releaseCockpitStatusLabel}</small>
             <strong>{releaseCockpit.status}</strong>
             <span>{releaseCockpit.commitLabel}</span>
+            <div className={`security-release-cockpit-gate ${releaseCockpit.gate.tone}`} data-release-cockpit-gate="true">
+              <small>{copy.releaseGateDecision}</small>
+              <strong>{releaseCockpit.gate.status}</strong>
+              <p>{releaseCockpit.gate.detail}</p>
+              <span>{releaseCockpit.gate.rules}</span>
+            </div>
           </div>
         </div>
         <div className="security-release-cockpit-radar" aria-label={copy.releaseCockpitRailLabel}>
@@ -2250,8 +2262,11 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
         {evidenceBrief.deployment && (
           <div className="security-deployment-evidence" data-release-deployment-evidence="true">
             <span>{copy.evidenceDeploymentTitle}</span>
-            <strong>{evidenceBrief.deployment.targetName} · {evidenceBrief.deployment.gitCommit}</strong>
-            <small>{copy.evidenceDeploymentDetail(evidenceBrief.deployment.channel, evidenceBrief.deployment.deploymentMode, evidenceBrief.deployment.publicHost)}</small>
+            <strong>{evidenceBrief.deployment.targetName} / {evidenceBrief.deployment.gitCommit}</strong>
+            <small>
+              {copy.evidenceDeploymentDetail(evidenceBrief.deployment.channel, evidenceBrief.deployment.deploymentMode, evidenceBrief.deployment.publicHost)}
+              {releaseGatePolicy ? ` / ${copy.releaseGateDecision}: ${copy.releaseGateStatus(releaseGatePolicy.status)}` : ''}
+            </small>
           </div>
         )}
         <small className="security-evidence-generated">{copy.evidenceBriefGenerated(evidenceBrief.generatedLabel)}</small>
@@ -3721,6 +3736,7 @@ function buildReleaseEvidenceBrief(input: {
   const nextAction = sanitizeEvidenceBriefText(readiness?.nextBestAction ?? copy.readinessCalculating);
   const deploymentCheck = readiness?.checks.find((check) => check.id === 'deployment-evidence');
   const deployment = deploymentCheck ? parseDeploymentEvidence(deploymentCheck.evidence) : null;
+  const gateSignal = buildReleaseGateSignal(readiness?.gatePolicy ?? null, copy);
   const metrics: ReleaseEvidenceMetric[] = [
     {
       label: copy.evidenceMetricReadiness,
@@ -3755,6 +3771,7 @@ function buildReleaseEvidenceBrief(input: {
     `${copy.evidenceMetricAudit}: ${metrics[2].value} (${metrics[2].detail})`,
     `${copy.evidenceMetricQueue}: ${metrics[3].value} (${metrics[3].detail})`,
     deployment ? `${copy.evidenceDeploymentTitle}: ${deployment.targetName} / ${deployment.gitCommit} / ${deployment.publicHost}` : '',
+    `${copy.releaseGateDecision}: ${gateSignal.status} (${gateSignal.detail}; ${gateSignal.rules})`,
     `${copy.evidenceBriefBlockersTitle}: ${blockers.length > 0 ? blockers.join('; ') : copy.evidenceBriefNoBlockers}`,
     `${copy.evidenceBriefNextAction}: ${nextAction}`,
   ].filter(Boolean);
@@ -3787,6 +3804,7 @@ function buildReleaseCockpitSummary(input: {
   const readinessTone: ReleaseCockpitLane['tone'] = readiness?.status === 'ready' ? 'ok' : readiness?.status === 'blocked' ? 'fail' : 'warn';
   const auditTone: ReleaseCockpitLane['tone'] = activeAuditIssues.failed > 0 ? 'fail' : activeAuditIssues.blocked > 0 ? 'warn' : 'ok';
   const sshTone: ReleaseCockpitLane['tone'] = getReleaseCockpitSshTone(lastSelfTest, websocket);
+  const gate = buildReleaseGateSignal(readiness?.gatePolicy ?? null, copy);
   const lanes: ReleaseCockpitLane[] = [
     {
       id: 'version',
@@ -3819,9 +3837,9 @@ function buildReleaseCockpitSummary(input: {
       tone: sshTone,
     },
   ];
-  const tone: ReleaseCockpitSummary['tone'] = lanes.some((lane) => lane.tone === 'fail')
+  const tone: ReleaseCockpitSummary['tone'] = [gate.tone, ...lanes.map((lane) => lane.tone)].includes('fail')
     ? 'fail'
-    : lanes.some((lane) => lane.tone === 'warn')
+    : [gate.tone, ...lanes.map((lane) => lane.tone)].includes('warn')
       ? 'warn'
       : 'ok';
   const status = tone === 'ok' ? copy.releaseCockpitStatusOk : tone === 'fail' ? copy.releaseCockpitStatusFail : copy.releaseCockpitStatusWarn;
@@ -3837,6 +3855,7 @@ function buildReleaseCockpitSummary(input: {
     `${copy.releaseCockpitLaneReadiness}: ${lanes[1].value} (${lanes[1].detail})`,
     `${copy.releaseCockpitLaneAudit}: ${lanes[2].value} (${lanes[2].detail})`,
     `${copy.releaseCockpitLaneSsh}: ${lanes[3].value} (${lanes[3].detail})`,
+    `${copy.releaseGateDecision}: ${gate.status} (${gate.detail}; ${gate.rules})`,
     `${copy.releaseCockpitNextAction}: ${nextAction}`,
     copy.releaseCockpitSanitizedNote,
   ].map(sanitizeEvidenceBriefText).join('\n');
@@ -3848,6 +3867,7 @@ function buildReleaseCockpitSummary(input: {
     status,
     commitLabel: copy.releaseCockpitCommit(commit),
     generatedLabel,
+    gate,
     lanes,
     nextAction,
     copyText,
@@ -3888,9 +3908,9 @@ function buildReleaseHandoffPack(input: {
     {
       id: 'policy',
       label: copy.releaseHandoffSectionPolicy,
-      value: copy.releaseHandoffPolicyValue,
-      detail: copy.releaseHandoffPolicyDetail,
-      tone: 'ok',
+      value: releaseCockpit.gate.status,
+      detail: `${releaseCockpit.gate.detail} / ${releaseCockpit.gate.rules}`,
+      tone: releaseCockpit.gate.tone,
     },
   ];
   const tone = sections.reduce<ReleaseHandoffPackSummary['tone']>((current, section) => (
@@ -4038,6 +4058,30 @@ function getLatestAuditEntry(auditEntries: AuditEntry[]) {
     }
     return new Date(entry.createdAt).getTime() > new Date(latest.createdAt).getTime() ? entry : latest;
   }, null);
+}
+
+function buildReleaseGateSignal(policy: ReleaseReadinessResponse['gatePolicy'] | null, copy: SecurityCopy) {
+  if (!policy) {
+    return {
+      tone: 'warn' as const,
+      status: copy.waitingRefresh,
+      detail: copy.readinessCalculating,
+      rules: '--',
+    };
+  }
+
+  const detail = policy.status === 'blocked'
+    ? sanitizeEvidenceBriefText(policy.reasons[0] ?? copy.releaseGateBlockedDetail)
+    : policy.status === 'disabled'
+      ? copy.releaseGateDisabledDetail
+      : copy.releaseGatePassDetail;
+
+  return {
+    tone: policy.status === 'blocked' ? 'fail' as const : policy.status === 'disabled' ? 'warn' as const : 'ok' as const,
+    status: copy.releaseGateStatus(policy.status),
+    detail,
+    rules: sanitizeEvidenceBriefText(copy.releaseGateObservedRules(policy.activeRuleCount)),
+  };
 }
 
 function formatTimelineTime(value: string, locale: string, fallback: string) {

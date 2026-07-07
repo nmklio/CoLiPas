@@ -11233,6 +11233,29 @@ pre {
   color: var(--text);
 }
 
+.security-release-cockpit-gate {
+  margin-top: 10px;
+  border-top: 1px solid rgba(151, 193, 196, 0.28);
+  padding-top: 10px;
+  display: grid;
+  gap: 3px;
+}
+
+.security-release-cockpit-gate.warn {
+  border-top-color: rgba(245, 158, 11, 0.28);
+}
+
+.security-release-cockpit-gate.fail {
+  border-top-color: rgba(239, 68, 68, 0.28);
+}
+
+.security-release-cockpit-gate p {
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .security-release-cockpit-radar {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
