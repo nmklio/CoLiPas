@@ -97,6 +97,7 @@ if (releaseVerifyToken) {
   if (
     releaseVerifyBody.ok !== true
     || releaseVerifyBody.frontend?.featureMarkers?.['security-evidence-brief'] !== true
+    || releaseVerifyBody.frontend?.featureMarkers?.['release-sync-radar'] !== true
     || releaseVerifyBody.frontend?.featureMarkers?.['cloud-map'] !== true
     || !Number.isInteger(releaseVerifyBody.readiness?.score)
     || !releaseVerifyBody.readiness?.gatePolicy
@@ -394,6 +395,11 @@ if (revokedSessionResponse.status !== 401) {
 currentSmokePassword = nextPassword;
 console.log('ok /api/account/password hashes password, rejects weak input, and revokes other sessions');
 
+const unauthenticatedReleaseSyncResponse = await fetch(`${baseUrl}/api/release/sync-health`);
+if (unauthenticatedReleaseSyncResponse.status !== 401) {
+  throw new Error(`/api/release/sync-health expected 401 before login, got ${unauthenticatedReleaseSyncResponse.status}`);
+}
+
 const getChecks = [
   [
     '/api/health',
@@ -406,6 +412,23 @@ const getChecks = [
       && body.release?.targetName === 'verify-local'
       && body.release?.deploymentMode === 'node'
       && !JSON.stringify(body).includes('verify-production-release-token-12345'),
+  ],
+  [
+    '/api/release/sync-health',
+    (body) => {
+      const payload = JSON.stringify(body);
+      return body.ok === true
+        && body.expectedCommit === 'abcdef123456'
+        && body.summary?.total === 2
+        && body.summary?.ok === 2
+        && Array.isArray(body.targets)
+        && body.targets.length === 2
+        && body.targets.every((target) => target.status === 'ok' && target.observedCommit === 'abcdef123456' && target.expectedCommit === 'abcdef123456')
+        && !payload.includes('verify-production-release-token-12345')
+        && !payload.includes('127.0.0.1')
+        && !/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(payload)
+        && !/\bsk-[A-Za-z0-9_-]{12,}\b/.test(payload);
+    },
   ],
   [
     '/api/config',

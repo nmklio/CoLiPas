@@ -23,6 +23,8 @@ const envSchema = z.object({
   RELEASE_GIT_COMMIT: z.string().default(''),
   RELEASE_ARTIFACT_ID: z.string().default(''),
   RELEASE_DEPLOYED_AT: z.string().default(''),
+  RELEASE_SYNC_TARGETS: z.string().default(''),
+  COLIPAS_TEST_ALLOW_RELEASE_SYNC_LOOPBACK: z.enum(['0', '1']).default('0'),
   COLIPAS_SECURE_COOKIES: z.enum(['0', '1']).optional(),
 });
 
@@ -80,6 +82,75 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       gitCommit: parsed.RELEASE_GIT_COMMIT,
       artifactId: parsed.RELEASE_ARTIFACT_ID,
       deployedAt: parsed.RELEASE_DEPLOYED_AT,
+      syncTargets: parseReleaseSyncTargets(
+        parsed.RELEASE_SYNC_TARGETS,
+        parsed.RELEASE_PUBLIC_URL,
+        parsed.RELEASE_TARGET_NAME,
+        parsed.COLIPAS_TEST_ALLOW_RELEASE_SYNC_LOOPBACK === '1',
+      ),
     },
   };
+}
+
+function parseReleaseSyncTargets(rawValue: string, fallbackUrl: string, fallbackName: string, allowLoopback: boolean) {
+  const rawTargets = rawValue
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const targetSpecs = rawTargets.length > 0
+    ? rawTargets
+    : fallbackUrl
+      ? [`${fallbackName || 'current'}=${fallbackUrl}`]
+      : [];
+
+  return targetSpecs
+    .map((spec, index) => {
+      const separatorIndex = spec.indexOf('=');
+      const rawName = separatorIndex > 0 ? spec.slice(0, separatorIndex).trim() : `target-${index + 1}`;
+      const rawUrl = separatorIndex > 0 ? spec.slice(separatorIndex + 1).trim() : spec;
+      const parsedUrl = parsePublicHttpUrl(rawUrl, allowLoopback);
+      if (!parsedUrl) {
+        return null;
+      }
+
+      return {
+        name: sanitizeReleaseTargetName(rawName || `target-${index + 1}`),
+        baseUrl: parsedUrl,
+      };
+    })
+    .filter((target): target is { name: string; baseUrl: string } => Boolean(target));
+}
+
+function parsePublicHttpUrl(rawUrl: string, allowLoopback: boolean) {
+  try {
+    const url = new URL(rawUrl);
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+      return null;
+    }
+    if (!allowLoopback && isPrivateHostname(url.hostname)) {
+      return null;
+    }
+    url.pathname = url.pathname.replace(/\/+$/, '');
+    url.search = '';
+    url.hash = '';
+    return url.toString().replace(/\/$/, '');
+  } catch {
+    return null;
+  }
+}
+
+function isPrivateHostname(hostname: string) {
+  const normalized = hostname.toLowerCase();
+  return normalized === 'localhost'
+    || normalized.endsWith('.local')
+    || normalized === '0.0.0.0'
+    || normalized === '127.0.0.1'
+    || normalized === '::1'
+    || normalized.startsWith('10.')
+    || normalized.startsWith('192.168.')
+    || /^172\.(1[6-9]|2\d|3[0-1])\./.test(normalized);
+}
+
+function sanitizeReleaseTargetName(value: string) {
+  return value.replace(/[^\p{L}\p{N}_. -]/gu, '').trim().slice(0, 48) || 'target';
 }

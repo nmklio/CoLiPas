@@ -136,6 +136,8 @@ function startServer() {
       RELEASE_GIT_COMMIT: 'abcdef1234567890',
       RELEASE_ARTIFACT_ID: 'verify-production',
       RELEASE_DEPLOYED_AT: '2026-01-01T00:00:00.000Z',
+      RELEASE_SYNC_TARGETS: `primary-grey=${baseUrl},secondary-grey=${baseUrl}`,
+      COLIPAS_TEST_ALLOW_RELEASE_SYNC_LOOPBACK: '1',
       COLIPAS_DATA_DIR: verifyDataDir,
     },
     shell: false,

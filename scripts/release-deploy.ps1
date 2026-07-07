@@ -23,6 +23,7 @@ $script:PublishedCommitSha = ""
 $script:TargetUpdateResults = @()
 $script:SuccessfulDeployTargets = @()
 $script:TargetHealthResults = @()
+$script:ReleaseSyncTargetsEnv = ""
 $script:DefaultTargetUpdateAttempts = 2
 $script:DefaultTargetUpdateRetryDelaySeconds = 15
 $script:DefaultHealthCommitValidationAttempts = 6
@@ -412,6 +413,25 @@ function Write-DeployPlan {
   } | ConvertTo-Json -Depth 5
 }
 
+function ConvertTo-ReleaseSyncTargetsEnv {
+  param([object[]]$Targets)
+
+  $items = @()
+  foreach ($target in $Targets) {
+    if ([string]::IsNullOrWhiteSpace($target.publicBaseUrl)) {
+      continue
+    }
+    $safeName = ([string]$target.name).Replace(",", " ").Replace("=", "-").Trim()
+    $safeUrl = ([string]$target.publicBaseUrl).Trim().TrimEnd("/")
+    if ([string]::IsNullOrWhiteSpace($safeName) -or [string]::IsNullOrWhiteSpace($safeUrl)) {
+      continue
+    }
+    $items += "$safeName=$safeUrl"
+  }
+
+  return ($items -join ",")
+}
+
 function Get-SshFailureHint {
   param(
     [int]$ExitCode,
@@ -494,7 +514,8 @@ function Invoke-TargetUpdate {
   $safePublicUrl = ConvertTo-ShellSingleQuoted $Target.publicBaseUrl
   $safeCommit = ConvertTo-ShellSingleQuoted $head
   $safeArtifact = ConvertTo-ShellSingleQuoted "$($Target.name)-$Branch"
-  $releaseEnv = "RELEASE_TARGET_NAME=$safeTargetName RELEASE_CHANNEL='production' RELEASE_DEPLOYMENT_MODE=$safeMode RELEASE_PUBLIC_URL=$safePublicUrl RELEASE_GIT_COMMIT=$safeCommit RELEASE_ARTIFACT_ID=$safeArtifact"
+  $safeSyncTargets = ConvertTo-ShellSingleQuoted $script:ReleaseSyncTargetsEnv
+  $releaseEnv = "RELEASE_TARGET_NAME=$safeTargetName RELEASE_CHANNEL='production' RELEASE_DEPLOYMENT_MODE=$safeMode RELEASE_PUBLIC_URL=$safePublicUrl RELEASE_GIT_COMMIT=$safeCommit RELEASE_ARTIFACT_ID=$safeArtifact RELEASE_SYNC_TARGETS=$safeSyncTargets"
   $targetCommand = [string]$Target.command
   if ($targetCommand -match '^\s*sudo\s+(.+)$') {
     $evidenceCommand = "sudo env $releaseEnv $($Matches[1])"
@@ -1306,6 +1327,7 @@ $DeployTargets = @(Get-DeployTargets)
 if ($DeployTargets.Count -eq 0) {
   throw "No release deploy targets are enabled."
 }
+$script:ReleaseSyncTargetsEnv = ConvertTo-ReleaseSyncTargetsEnv $DeployTargets
 
 if ($SelfTest) {
   Test-GitHubApiJsonFallback

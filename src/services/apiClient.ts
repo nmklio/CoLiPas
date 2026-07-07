@@ -14,6 +14,7 @@ import {
   ReleaseReadinessReportResponse,
   ReleaseReadinessResponse,
   ReleaseReadinessSnapshotResponse,
+  ReleaseSyncHealthResponse,
   ReleaseGatePolicy,
   ServerNode,
   SshRunbookCommand,
@@ -690,6 +691,16 @@ export async function fetchReleaseReadiness(fetcher: typeof fetch = fetch) {
   }
 
   return (await response.json()) as ReleaseReadinessResponse;
+}
+
+export async function fetchReleaseSyncHealth(fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/release/sync-health');
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as ReleaseSyncHealthResponse;
 }
 
 export async function fetchReleaseGatePolicy(fetcher: typeof fetch = fetch) {

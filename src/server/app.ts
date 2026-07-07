@@ -18,6 +18,7 @@ import { getDatabasePath } from './services/database.js';
 import { buildDiagnosticExport } from './services/diagnosticService.js';
 import { createOperationTask, preflightOperationTask } from './services/operationsService.js';
 import { buildReleaseReadiness, buildReleaseReadinessReport, getReleaseGatePolicy, recordReleaseReadinessSnapshot, updateReleaseGatePolicy } from './services/releaseReadinessService.js';
+import { checkReleaseSyncHealth } from './services/releaseSyncHealthService.js';
 import { buildReleaseVerification, isReleaseVerificationAuthorized, isReleaseVerificationEnabled } from './services/releaseVerificationService.js';
 import { claimSshProductionProbeScheduleRun, getSshProductionProbeSchedule, recordSshProductionProbe, updateSshProductionProbeSchedule } from './services/sshProductionProbeService.js';
 import { createSshRunbookCommand, deleteSshRunbookCommand, importSshRunbookCommands, listSshRunbookCommands, markSshRunbookCommandUsed, reorderSshRunbookCommands, updateSshRunbookCommand, updateSshRunbookCommandPin } from './services/sshRunbookService.js';
@@ -169,6 +170,15 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
   app.get('/api/account', (request, response, next) => {
     try {
       response.json(buildAccountPayload(request, config));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get('/api/release/sync-health', async (_request, response, next) => {
+    try {
+      response.setHeader('Cache-Control', 'no-store');
+      response.json(await checkReleaseSyncHealth(config));
     } catch (error) {
       next(error);
     }

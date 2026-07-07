@@ -95,6 +95,7 @@ function inspectFrontendBundle(): ReleaseVerificationResponse['frontend'] {
   const combinedContent = [indexHtml, ...assets.map((asset) => asset.content)].join('\n');
   const featureMarkers = [
     'security-evidence-brief',
+    'release-sync-radar',
     'cloud-map',
     'ai-dock',
     'ssh-console',

@@ -404,6 +404,18 @@ async function assertReleaseEvidenceBrief(targetPage) {
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(releaseSyncRadarText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(releaseSyncRadarText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(releaseSyncRadarText)) {
     throw new Error('Release sync radar rendered a raw IP address or secret');
   }
+  await targetPage.locator('[data-release-online-target]').first().waitFor({ timeout: 10000 });
+  const releaseOnlineTargetCount = await targetPage.locator('[data-release-online-target]').count();
+  if (releaseOnlineTargetCount !== 2) {
+    throw new Error(`Release online sync should expose two live targets in the grey fixture, got ${releaseOnlineTargetCount}`);
+  }
+  const releaseOnlineText = await targetPage.locator('[data-release-online-sync="true"]').innerText();
+  if (!/Live auto-check/i.test(releaseOnlineText) || !/primary-grey/i.test(releaseOnlineText) || !/secondary-grey/i.test(releaseOnlineText) || !/abcdef123456/i.test(releaseOnlineText)) {
+    throw new Error(`Release online sync did not render live target evidence: ${releaseOnlineText}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(releaseOnlineText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(releaseOnlineText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(releaseOnlineText)) {
+    throw new Error('Release online sync rendered a raw IP address or secret');
+  }
   const releaseHandoffSectionCount = await targetPage.locator('[data-release-handoff-section]').count();
   if (releaseHandoffSectionCount !== 4) {
     throw new Error(`Release handoff pack should expose four handoff sections, got ${releaseHandoffSectionCount}`);

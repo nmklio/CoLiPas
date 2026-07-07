@@ -21,9 +21,9 @@ import {
 import { getLocale, useI18n } from '../../i18n';
 import { OperationEvent } from '../../types';
 import type { OverviewPreflightSnapshot } from '../overview/MonitoringOverview';
-import { claimSshProductionProbeScheduleRun, connectServer, connectServerShellSocket, deleteServer, fetchDiagnosticExport, fetchReleaseReadiness, fetchReleaseReadinessReport, fetchServerShellStatus, recordReleaseReadinessSnapshot, recordSshProductionProbe, recordSshSupportTicketCopy, remediateSecurityRisk, updateReleaseGatePolicy, updateSshProductionProbeSchedule } from '../../services/apiClient';
+import { claimSshProductionProbeScheduleRun, connectServer, connectServerShellSocket, deleteServer, fetchDiagnosticExport, fetchReleaseReadiness, fetchReleaseReadinessReport, fetchReleaseSyncHealth, fetchServerShellStatus, recordReleaseReadinessSnapshot, recordSshProductionProbe, recordSshSupportTicketCopy, remediateSecurityRisk, updateReleaseGatePolicy, updateSshProductionProbeSchedule } from '../../services/apiClient';
 import type { SecurityRemediationResponse } from '../../services/apiClient';
-import type { DiagnosticExportResponse, ReleaseDeploymentEvidence, ReleaseReadinessResponse } from '../../types';
+import type { DiagnosticExportResponse, ReleaseDeploymentEvidence, ReleaseReadinessResponse, ReleaseSyncHealthResponse } from '../../types';
 import {
   normalizeSshTerminalSupportSnapshot,
   normalizeSshTerminalSupportSnapshotHistory,
@@ -199,6 +199,21 @@ interface ReleaseSyncRadarSummary {
   generatedLabel: string;
   items: ReleaseSyncRadarItem[];
   copyText: string;
+}
+
+interface ReleaseOnlineSyncSummary {
+  tone: 'ok' | 'warn' | 'fail';
+  status: string;
+  detail: string;
+  generatedLabel: string;
+  targets: Array<{
+    name: string;
+    status: string;
+    expectedCommit: string;
+    observedCommit: string;
+    detail: string;
+    tone: 'ok' | 'warn' | 'fail';
+  }>;
 }
 
 interface ReleaseHandoffPackSection {
@@ -626,6 +641,7 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
   const [remediationError, setRemediationError] = useState(false);
   const [remediatingId, setRemediatingId] = useState('');
   const [readiness, setReadiness] = useState<ReleaseReadinessResponse | null>(null);
+  const [releaseSyncHealth, setReleaseSyncHealth] = useState<ReleaseSyncHealthResponse | null>(null);
   const [savingReleaseGatePolicy, setSavingReleaseGatePolicy] = useState(false);
   const [releaseGatePolicyDraft, setReleaseGatePolicyDraft] = useState<ReleaseGatePolicyDraft>({
     enabled: true,
@@ -725,6 +741,10 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
       locale,
     }),
     [copy, diagnosticBundle, evidenceBrief, locale, readiness, releaseCockpit],
+  );
+  const releaseOnlineSync = useMemo(
+    () => buildReleaseOnlineSyncSummary(releaseSyncHealth, copy, locale),
+    [copy, locale, releaseSyncHealth],
   );
   const sshPerformance = useMemo(
     () => buildSshPerformanceSummary(diagnosticBundle, sshPerformanceCopy, locale),
@@ -996,14 +1016,16 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
       ]);
       const readinessPromise = fetchReleaseReadiness();
       const diagnosticPromise = fetchDiagnosticExport().catch(() => null);
+      const releaseSyncPromise = fetchReleaseSyncHealth().catch(() => null);
       if (!configResponse.ok || !auditResponse.ok) {
         throw new Error(copy.loadFailed);
       }
-      const [configBody, auditBody, readinessBody, diagnosticBody] = await Promise.all([
+      const [configBody, auditBody, readinessBody, diagnosticBody, releaseSyncBody] = await Promise.all([
         configResponse.json(),
         auditResponse.json(),
         readinessPromise,
         diagnosticPromise,
+        releaseSyncPromise,
       ]);
       if (!Array.isArray(auditBody.items)) {
         throw new Error(copy.loadFailed);
@@ -1012,6 +1034,7 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
       setAuditEntries((auditBody.items ?? []) as AuditEntry[]);
       setReadiness(readinessBody);
       setDiagnosticBundle(diagnosticBody);
+      setReleaseSyncHealth(releaseSyncBody);
       setLastRefreshedAt(new Date());
     } catch {
       setLoadError(copy.loadFailed);
@@ -1019,6 +1042,7 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
       setAuditEntries([]);
       setReadiness(null);
       setDiagnosticBundle(null);
+      setReleaseSyncHealth(null);
     } finally {
       setLoading(false);
     }
@@ -2221,6 +2245,26 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
               <p>{item.detail}</p>
             </div>
           ))}
+        </div>
+        <div className={`security-release-online-sync ${releaseOnlineSync.tone}`} data-release-online-sync="true">
+          <div className="security-release-online-sync-head">
+            <div>
+              <small>{copy.releaseOnlineSyncKicker}</small>
+              <strong>{releaseOnlineSync.status}</strong>
+              <p>{releaseOnlineSync.detail}</p>
+            </div>
+            <span>{releaseOnlineSync.generatedLabel}</span>
+          </div>
+          <div className="security-release-online-sync-targets" aria-label={copy.releaseOnlineSyncTargetsLabel}>
+            {releaseOnlineSync.targets.map((target) => (
+              <div key={target.name} className={`security-release-online-sync-target ${target.tone}`} data-release-online-target={target.name}>
+                <small>{target.name}</small>
+                <strong>{target.status}</strong>
+                <p>{target.detail}</p>
+                <span>{copy.releaseOnlineSyncCommitPair(target.expectedCommit, target.observedCommit)}</span>
+              </div>
+            ))}
+          </div>
         </div>
         <div className="security-release-sync-radar-footer">
           <small>{copy.releaseSyncSanitizedNote}</small>
@@ -4029,6 +4073,40 @@ function buildReleaseSyncRadar(input: {
     generatedLabel,
     items,
     copyText,
+  };
+}
+
+function buildReleaseOnlineSyncSummary(syncHealth: ReleaseSyncHealthResponse | null, copy: SecurityCopy, locale: string): ReleaseOnlineSyncSummary {
+  if (!syncHealth) {
+    return {
+      tone: 'warn',
+      status: copy.releaseOnlineSyncWaiting,
+      detail: copy.releaseOnlineSyncWaitingDetail,
+      generatedLabel: copy.waitingRefresh,
+      targets: [],
+    };
+  }
+
+  const targets = syncHealth.targets.map((target) => ({
+    name: target.name,
+    status: copy.releaseOnlineSyncTargetStatus(target.status),
+    expectedCommit: target.expectedCommit || '--',
+    observedCommit: target.observedCommit || '--',
+    detail: copy.releaseOnlineSyncTargetDetail(target.detail, target.responseMs),
+    tone: target.status === 'ok' ? 'ok' as const : target.status === 'mismatch' ? 'fail' as const : 'warn' as const,
+  }));
+  const tone: ReleaseOnlineSyncSummary['tone'] = syncHealth.summary.mismatch > 0
+    ? 'fail'
+    : syncHealth.summary.unreachable + syncHealth.summary.invalid > 0 || syncHealth.summary.total === 0
+      ? 'warn'
+      : 'ok';
+
+  return {
+    tone,
+    status: tone === 'ok' ? copy.releaseOnlineSyncOk : tone === 'fail' ? copy.releaseOnlineSyncFail : copy.releaseOnlineSyncWarn,
+    detail: copy.releaseOnlineSyncDetail(syncHealth.summary.ok, syncHealth.summary.total, syncHealth.summary.mismatch, syncHealth.summary.unreachable + syncHealth.summary.invalid),
+    generatedLabel: new Date(syncHealth.generatedAt).toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' }),
+    targets,
   };
 }
 
@@ -6897,6 +6975,17 @@ interface SecurityCopy {
   releaseSyncGateDetail: (detail: string, rules: string) => string;
   releaseSyncEvidenceDetail: (passed: number, total: number, blockers: number) => string;
   releaseSyncFieldDetail: (detail: string) => string;
+  releaseOnlineSyncKicker: string;
+  releaseOnlineSyncTargetsLabel: string;
+  releaseOnlineSyncWaiting: string;
+  releaseOnlineSyncWaitingDetail: string;
+  releaseOnlineSyncOk: string;
+  releaseOnlineSyncWarn: string;
+  releaseOnlineSyncFail: string;
+  releaseOnlineSyncDetail: (ok: number, total: number, mismatches: number, warnings: number) => string;
+  releaseOnlineSyncTargetStatus: (status: ReleaseSyncHealthResponse['targets'][number]['status']) => string;
+  releaseOnlineSyncTargetDetail: (detail: string, responseMs: number | null) => string;
+  releaseOnlineSyncCommitPair: (expected: string, observed: string) => string;
   releaseHandoffTitle: string;
   releaseHandoffLead: string;
   releaseHandoffKicker: string;
@@ -8408,6 +8497,22 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     releaseSyncGateDetail: (detail, rules) => `${detail} / ${rules}`,
     releaseSyncEvidenceDetail: (passed, total, blockers) => `${passed}/${total} 项通过 / ${blockers} 个阻断`,
     releaseSyncFieldDetail: (detail) => detail,
+    releaseOnlineSyncKicker: '线上自动巡检',
+    releaseOnlineSyncTargetsLabel: '线上目标同步状态',
+    releaseOnlineSyncWaiting: '等待线上巡检',
+    releaseOnlineSyncWaitingDetail: '刷新后会并发检查已配置发布目标的 /api/health。',
+    releaseOnlineSyncOk: '线上版本一致',
+    releaseOnlineSyncWarn: '部分目标待确认',
+    releaseOnlineSyncFail: '发现版本不一致',
+    releaseOnlineSyncDetail: (ok, total, mismatches, warnings) => `${ok}/${total} 目标一致 / ${mismatches} 个版本不一致 / ${warnings} 个待确认`,
+    releaseOnlineSyncTargetStatus: (status) => ({
+      ok: '一致',
+      mismatch: '不一致',
+      unreachable: '不可达',
+      invalid: '证据异常',
+    })[status],
+    releaseOnlineSyncTargetDetail: (detail, responseMs) => responseMs === null ? detail : `${detail} / ${responseMs}ms`,
+    releaseOnlineSyncCommitPair: (expected, observed) => `期望 ${expected} / 实际 ${observed}`,
     releaseHandoffTitle: '发布交接包',
     releaseHandoffLead: '把发布状态、上线证据和 SSH 诊断合成一份可直接交给运维复核的脱敏文本。',
     releaseHandoffKicker: '交接封套',
@@ -8761,6 +8866,22 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     releaseSyncGateDetail: (detail, rules) => `${detail} / ${rules}`,
     releaseSyncEvidenceDetail: (passed, total, blockers) => `${passed}/${total} checks passed / ${blockers} blocker(s)`,
     releaseSyncFieldDetail: (detail) => detail,
+    releaseOnlineSyncKicker: 'Live auto-check',
+    releaseOnlineSyncTargetsLabel: 'Live target sync state',
+    releaseOnlineSyncWaiting: 'Waiting for live check',
+    releaseOnlineSyncWaitingDetail: 'Refresh to check the configured release targets through /api/health in parallel.',
+    releaseOnlineSyncOk: 'Live versions match',
+    releaseOnlineSyncWarn: 'Some targets need confirmation',
+    releaseOnlineSyncFail: 'Version mismatch found',
+    releaseOnlineSyncDetail: (ok, total, mismatches, warnings) => `${ok}/${total} target(s) match / ${mismatches} mismatch(es) / ${warnings} need confirmation`,
+    releaseOnlineSyncTargetStatus: (status) => ({
+      ok: 'Matched',
+      mismatch: 'Mismatch',
+      unreachable: 'Unreachable',
+      invalid: 'Invalid evidence',
+    })[status],
+    releaseOnlineSyncTargetDetail: (detail, responseMs) => responseMs === null ? detail : `${detail} / ${responseMs}ms`,
+    releaseOnlineSyncCommitPair: (expected, observed) => `Expected ${expected} / observed ${observed}`,
     releaseHandoffTitle: 'Release handoff pack',
     releaseHandoffLead: 'Combines release state, publish evidence, and SSH diagnostics into one sanitized text pack for operator review.',
     releaseHandoffKicker: 'Handoff sleeve',
@@ -9114,6 +9235,22 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     releaseSyncGateDetail: (detail, rules) => `${detail} / ${rules}`,
     releaseSyncEvidenceDetail: (passed, total, blockers) => `${passed}/${total} チェック通過 / ${blockers} 件ブロック`,
     releaseSyncFieldDetail: (detail) => detail,
+    releaseOnlineSyncKicker: '本番自動チェック',
+    releaseOnlineSyncTargetsLabel: '本番ターゲット同期状態',
+    releaseOnlineSyncWaiting: '本番チェック待ち',
+    releaseOnlineSyncWaitingDetail: '更新すると、設定済みリリースターゲットの /api/health を並列確認します。',
+    releaseOnlineSyncOk: '本番バージョン一致',
+    releaseOnlineSyncWarn: '一部ターゲットは確認が必要',
+    releaseOnlineSyncFail: 'バージョン不一致あり',
+    releaseOnlineSyncDetail: (ok, total, mismatches, warnings) => `${ok}/${total} ターゲット一致 / ${mismatches} 件不一致 / ${warnings} 件確認待ち`,
+    releaseOnlineSyncTargetStatus: (status) => ({
+      ok: '一致',
+      mismatch: '不一致',
+      unreachable: '到達不可',
+      invalid: '証跡異常',
+    })[status],
+    releaseOnlineSyncTargetDetail: (detail, responseMs) => responseMs === null ? detail : `${detail} / ${responseMs}ms`,
+    releaseOnlineSyncCommitPair: (expected, observed) => `期待 ${expected} / 実際 ${observed}`,
     releaseHandoffTitle: 'リリース引き継ぎパック',
     releaseHandoffLead: 'リリース状態、公開証跡、SSH 診断を、運用レビュー向けの脱敏済みテキストにまとめます。',
     releaseHandoffKicker: '引き継ぎ封筒',

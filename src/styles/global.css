@@ -11491,6 +11491,96 @@ pre {
   white-space: nowrap;
 }
 
+.security-release-online-sync {
+  border: 1px solid rgba(15, 76, 92, 0.14);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.7);
+  display: grid;
+  gap: 10px;
+}
+
+.security-release-online-sync.warn {
+  border-color: rgba(245, 158, 11, 0.28);
+  background: rgba(255, 253, 248, 0.9);
+}
+
+.security-release-online-sync.fail {
+  border-color: rgba(239, 68, 68, 0.28);
+  background: rgba(255, 248, 248, 0.92);
+}
+
+.security-release-online-sync-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.security-release-online-sync-head small,
+.security-release-online-sync-target small,
+.security-release-online-sync-head span,
+.security-release-online-sync-target span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.security-release-online-sync-head strong {
+  display: block;
+  margin: 3px 0;
+  color: var(--text);
+}
+
+.security-release-online-sync-head p,
+.security-release-online-sync-target p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.security-release-online-sync-targets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.security-release-online-sync-target {
+  min-width: 0;
+  border: 1px solid #dce8eb;
+  border-top: 3px solid #0f766e;
+  border-radius: 11px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.security-release-online-sync-target.warn {
+  border-top-color: var(--orange);
+  background: #fffdf8;
+}
+
+.security-release-online-sync-target.fail {
+  border-top-color: var(--red);
+  background: #fff8f8;
+}
+
+.security-release-online-sync-target strong {
+  display: block;
+  margin: 4px 0;
+  color: var(--text);
+}
+
+.security-release-online-sync-target span {
+  display: block;
+  margin-top: 7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .security-release-sync-radar-footer {
   align-items: center;
 }
@@ -16413,6 +16503,7 @@ pre {
   .security-release-fix-checklist-item,
   .security-release-cockpit-radar,
   .security-release-sync-radar-grid,
+  .security-release-online-sync-targets,
   .security-release-handoff,
   .security-release-handoff-grid,
   .security-release-timeline-heading,
@@ -17130,6 +17221,8 @@ pre {
   .security-release-sync-radar-heading,
   .security-release-sync-radar-grid,
   .security-release-sync-radar-footer,
+  .security-release-online-sync-head,
+  .security-release-online-sync-targets,
   .security-release-handoff,
   .security-release-handoff-heading,
   .security-release-handoff-grid,
@@ -17174,6 +17267,7 @@ pre {
   .security-release-cockpit-footer .tool-button,
   .security-release-sync-radar-status,
   .security-release-sync-radar-footer .tool-button,
+  .security-release-online-sync-head > span,
   .security-release-fix-router-actions,
   .security-release-fix-action,
   .security-release-fix-checklist-actions,

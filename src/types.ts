@@ -546,3 +546,30 @@ export interface ReleaseVerificationResponse {
     credentialEncryptionKeyDefault: boolean;
   };
 }
+
+export type ReleaseSyncTargetStatus = 'ok' | 'mismatch' | 'unreachable' | 'invalid';
+
+export interface ReleaseSyncTargetHealth {
+  name: string;
+  status: ReleaseSyncTargetStatus;
+  expectedCommit: string;
+  observedCommit: string;
+  deploymentMode: string;
+  responseMs: number | null;
+  checkedAt: string;
+  detail: string;
+}
+
+export interface ReleaseSyncHealthResponse {
+  ok: boolean;
+  generatedAt: string;
+  expectedCommit: string;
+  summary: {
+    total: number;
+    ok: number;
+    mismatch: number;
+    unreachable: number;
+    invalid: number;
+  };
+  targets: ReleaseSyncTargetHealth[];
+}
