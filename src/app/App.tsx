@@ -7,11 +7,13 @@ import {
   Cpu,
   HardDrive,
   LayoutDashboard,
+  ListChecks,
   LogOut,
   MessageSquareText,
   Menu,
   PlugZap,
   RefreshCw,
+  Rocket,
   Search,
   Server,
   ShieldCheck,
@@ -39,9 +41,11 @@ import {
   AccountProfile,
   AuthRequiredError,
   AuthSession,
+  ConfigSummaryResponse,
   OverviewResponse,
   changeAccountPassword,
   fetchAuthSession,
+  fetchConfigSummary,
   fetchOverview,
   login,
   logout,
@@ -63,6 +67,24 @@ interface ReleaseFixFocusPayload {
 
 interface ReleaseFixFocus extends ReleaseFixFocusPayload {
   targetSection: SectionId;
+}
+
+interface LaunchChecklistItem {
+  id: 'runtime' | 'assets' | 'ssh' | 'ai' | 'preflight' | 'audit';
+  title: string;
+  detail: string;
+  action: string;
+  section: SectionId;
+  tone: 'ok' | 'warn' | 'fail';
+}
+
+interface LaunchChecklistSummary {
+  tone: 'ok' | 'warn' | 'fail';
+  done: number;
+  total: number;
+  status: string;
+  nextAction: string;
+  items: LaunchChecklistItem[];
 }
 
 const sections: Array<{ id: SectionId; labelKey: string; icon: typeof LayoutDashboard }> = [
@@ -109,6 +131,7 @@ const overviewTriageCommand = [
 ].join(' && ');
 const avatarMaxBytes = 2 * 1024 * 1024;
 const settingsMessageTtlMs = 2800;
+const launchGuideStorageKey = 'colipas.launchGuide.dismissed.v1';
 
 function isSectionId(value: string): value is SectionId {
   return sections.some((section) => section.id === value);
@@ -200,8 +223,15 @@ export function App() {
   const [aiCollapsed, setAiCollapsed] = useState(true);
   const [aiSeedQuestion, setAiSeedQuestion] = useState('');
   const [overview, setOverview] = useState<OverviewResponse>(fallbackOverview);
+  const [configSummary, setConfigSummary] = useState<ConfigSummaryResponse | null>(null);
   const [dataSource, setDataSource] = useState<'api' | 'fallback'>('fallback');
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
+  const [launchGuideOpen, setLaunchGuideOpen] = useState(() => {
+    if (typeof window === 'undefined') {
+      return true;
+    }
+    return window.localStorage.getItem(launchGuideStorageKey) !== 'dismissed';
+  });
   const appMountedRef = useRef(true);
   const sessionAuthenticatedRef = useRef(false);
   const overviewRefreshInFlightRef = useRef(false);
@@ -227,6 +257,24 @@ export function App() {
       }
     } finally {
       overviewRefreshInFlightRef.current = false;
+    }
+  }
+
+  async function refreshConfigSummary() {
+    if (!session?.authenticated && !sessionAuthenticatedRef.current) {
+      return;
+    }
+    try {
+      const nextConfig = await fetchConfigSummary();
+      if (!appMountedRef.current || !sessionAuthenticatedRef.current) {
+        return;
+      }
+      setConfigSummary(nextConfig);
+    } catch (error) {
+      if (appMountedRef.current && error instanceof AuthRequiredError) {
+        setSession(null);
+        setAiCollapsed(true);
+      }
     }
   }
 
@@ -291,6 +339,7 @@ export function App() {
     }
 
     void refreshOverview();
+    void refreshConfigSummary();
     return undefined;
   }, [session?.authenticated]);
 
@@ -419,6 +468,16 @@ export function App() {
   const activeSectionConfig = sections.find((section) => section.id === activeSection) ?? sections[0];
   const ActiveSectionIcon = activeSectionConfig.icon;
   const commandShortcutLabel = isApplePlatform() ? '⌘K' : 'Ctrl K';
+  const launchChecklist = useMemo(() => buildLaunchChecklist({
+    config: configSummary,
+    dataSource,
+    totalServers: overview.servers.length,
+    onlineCount,
+    connectedCount,
+    openEventCount,
+    opsPreflightSnapshot: overviewPreflightSnapshot,
+    t,
+  }), [configSummary, connectedCount, dataSource, onlineCount, openEventCount, overview.servers.length, overviewPreflightSnapshot, t]);
   const commandPaletteActions: CommandPaletteAction[] = [
     ...sections.map((section) => ({
       id: `section-${section.id}`,
@@ -429,6 +488,15 @@ export function App() {
       keywords: `${section.id} ${t(section.labelKey)} ${t('app.commandNavigation')}`,
       run: () => navigateToSection(section.id),
     })),
+    {
+      id: 'launch-guide',
+      title: t('launchGuide.commandTitle'),
+      description: launchChecklist.nextAction,
+      category: t('app.commandTools'),
+      icon: Rocket,
+      keywords: `launch setup checklist readiness deployment ${t('launchGuide.title')} ${t('launchGuide.commandTitle')}`,
+      run: openLaunchGuide,
+    },
     {
       id: 'open-ai',
       title: t('app.commandOpenAi'),
@@ -547,6 +615,7 @@ export function App() {
     setSession(null);
     setProfile(fallbackProfile);
     setOverview(fallbackOverview);
+    setConfigSummary(null);
     setDataSource('fallback');
     setLastRefreshedAt(null);
     setAiCollapsed(true);
@@ -721,6 +790,31 @@ export function App() {
   function handleSecurityTraceFilterChange(correlationId: string) {
     const traceId = normalizeTraceRouteId(correlationId);
     writeHashRoute('security', traceId);
+  }
+
+  function openLaunchGuide() {
+    setLaunchGuideOpen(true);
+    try {
+      window.localStorage.removeItem(launchGuideStorageKey);
+    } catch {
+      // Keep the launch guide usable when storage is unavailable.
+    }
+  }
+
+  function dismissLaunchGuide() {
+    setLaunchGuideOpen(false);
+    try {
+      window.localStorage.setItem(launchGuideStorageKey, 'dismissed');
+    } catch {
+      // Dismissal is cosmetic; failing to persist it should not block the console.
+    }
+  }
+
+  function openLaunchChecklistItem(item: LaunchChecklistItem) {
+    if (item.section === 'servers') {
+      setFilters(defaultFilters);
+    }
+    navigateToSection(item.section);
   }
 
   function openSettings() {
@@ -924,6 +1018,18 @@ export function App() {
           <div className="topbar-actions">
             <button
               type="button"
+              className={`launch-guide-open ${launchChecklist.tone}`}
+              data-launch-guide-open="true"
+              aria-label={t('launchGuide.open')}
+              title={launchChecklist.nextAction}
+              onClick={openLaunchGuide}
+            >
+              <Rocket size={15} aria-hidden="true" />
+              <span>{t('launchGuide.open')}</span>
+              <b>{launchChecklist.done}/{launchChecklist.total}</b>
+            </button>
+            <button
+              type="button"
               className="command-trigger"
               aria-label={t('app.openCommandPalette')}
               title={t('app.openCommandPalette')}
@@ -955,7 +1061,10 @@ export function App() {
               className="icon-button topbar-refresh"
               aria-label={dataSource === 'api' ? t('app.refresh') : t('app.retryApi')}
               title={dataSource === 'api' ? t('app.refresh') : t('app.retryApi')}
-              onClick={refreshOverview}
+              onClick={() => {
+                void refreshOverview();
+                void refreshConfigSummary();
+              }}
             >
               <RefreshCw size={16} />
             </button>
@@ -977,6 +1086,52 @@ export function App() {
         </header>
 
         <main>
+          {launchGuideOpen && (
+            <article className={`launch-guide ${launchChecklist.tone}`} data-launch-guide="true" aria-labelledby="launch-guide-title">
+              <div className="launch-guide-radar" aria-hidden="true">
+                <Rocket size={22} />
+              </div>
+              <div className="launch-guide-copy">
+                <span className="launch-guide-kicker">
+                  <ListChecks size={15} />
+                  {t('launchGuide.eyebrow')}
+                </span>
+                <h2 id="launch-guide-title">{t('launchGuide.title')}</h2>
+                <p>{t('launchGuide.desc')}</p>
+                <div className="launch-guide-progress" aria-label={t('launchGuide.progress', { done: launchChecklist.done, total: launchChecklist.total })}>
+                  <span style={{ width: `${Math.round((launchChecklist.done / launchChecklist.total) * 100)}%` }} />
+                </div>
+              </div>
+              <div className="launch-guide-status">
+                <span>{t('launchGuide.progress', { done: launchChecklist.done, total: launchChecklist.total })}</span>
+                <strong>{launchChecklist.status}</strong>
+                <button type="button" className="tool-button" onClick={dismissLaunchGuide}>
+                  {t('launchGuide.dismiss')}
+                </button>
+              </div>
+              <div className="launch-guide-grid">
+                {launchChecklist.items.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`launch-guide-item ${item.tone}`}
+                    data-launch-guide-item={item.id}
+                    onClick={() => openLaunchChecklistItem(item)}
+                  >
+                    <span className="launch-guide-item-state" aria-hidden="true">
+                      {item.tone === 'ok' ? <CheckCircle2 size={16} /> : <ShieldCheck size={16} />}
+                    </span>
+                    <span className="launch-guide-item-copy">
+                      <strong>{item.title}</strong>
+                      <small>{item.detail}</small>
+                    </span>
+                    <b>{item.action}</b>
+                  </button>
+                ))}
+              </div>
+            </article>
+          )}
+
           {activeReleaseFixFocus && (
             <article className="release-fix-focus-banner" data-release-fix-focus="true" aria-live="polite">
               <div className="release-fix-focus-lead">
@@ -1361,6 +1516,122 @@ function isApplePlatform() {
     return false;
   }
   return /mac|iphone|ipad|ipod/i.test(navigator.platform);
+}
+
+function buildLaunchChecklist(input: {
+  config: ConfigSummaryResponse | null;
+  dataSource: 'api' | 'fallback';
+  totalServers: number;
+  onlineCount: number;
+  connectedCount: number;
+  openEventCount: number;
+  opsPreflightSnapshot: OverviewPreflightSnapshot | null;
+  t: (key: string, vars?: Record<string, string | number>) => string;
+}): LaunchChecklistSummary {
+  const {
+    config,
+    dataSource,
+    totalServers,
+    onlineCount,
+    connectedCount,
+    openEventCount,
+    opsPreflightSnapshot,
+    t,
+  } = input;
+  const defaultSecretCount = config
+    ? [
+      config.security.adminPasswordDefault,
+      config.security.sessionSecretDefault,
+      config.security.credentialEncryptionKeyDefault || !config.security.credentialEncryptionKeyConfigured,
+    ].filter(Boolean).length
+    : 1;
+  const aiReady = Boolean(
+    config?.ai.configured
+    || config?.ai.hasStoredApiKey
+    || (config?.ai.managedBy && config.ai.managedBy !== 'none'),
+  );
+  const preflightTone: LaunchChecklistItem['tone'] = opsPreflightSnapshot
+    ? opsPreflightSnapshot.status === 'ready'
+      ? 'ok'
+      : opsPreflightSnapshot.status === 'warn'
+        ? 'warn'
+        : 'fail'
+    : 'warn';
+
+  const items: LaunchChecklistItem[] = [
+    {
+      id: 'runtime',
+      title: t('launchGuide.runtimeTitle'),
+      detail: config
+        ? t('launchGuide.runtimeDetail', { count: defaultSecretCount })
+        : t('launchGuide.pendingDetail'),
+      action: t('launchGuide.openSecurity'),
+      section: 'security',
+      tone: !config ? 'warn' : defaultSecretCount === 0 ? 'ok' : 'fail',
+    },
+    {
+      id: 'assets',
+      title: t('launchGuide.assetsTitle'),
+      detail: t('launchGuide.assetsDetail', { online: onlineCount, total: totalServers }),
+      action: t('launchGuide.openServers'),
+      section: 'servers',
+      tone: totalServers > 0 && dataSource === 'api' ? 'ok' : totalServers > 0 ? 'warn' : 'fail',
+    },
+    {
+      id: 'ssh',
+      title: t('launchGuide.sshTitle'),
+      detail: t('launchGuide.sshDetail', { connected: connectedCount, total: totalServers }),
+      action: t('launchGuide.openSsh'),
+      section: 'servers',
+      tone: connectedCount > 0 ? 'ok' : totalServers > 0 ? 'warn' : 'fail',
+    },
+    {
+      id: 'ai',
+      title: t('launchGuide.aiTitle'),
+      detail: aiReady ? t('launchGuide.aiReady') : t('launchGuide.aiMissing'),
+      action: t('launchGuide.openAi'),
+      section: 'ai',
+      tone: aiReady ? 'ok' : 'warn',
+    },
+    {
+      id: 'preflight',
+      title: t('launchGuide.preflightTitle'),
+      detail: opsPreflightSnapshot
+        ? t('launchGuide.preflightDetail', {
+          runnable: opsPreflightSnapshot.runnableTargets,
+          total: opsPreflightSnapshot.totalTargets,
+          issues: opsPreflightSnapshot.issueCount,
+        })
+        : t('launchGuide.preflightMissing'),
+      action: t('launchGuide.openOperations'),
+      section: 'operations',
+      tone: preflightTone,
+    },
+    {
+      id: 'audit',
+      title: t('launchGuide.auditTitle'),
+      detail: t('launchGuide.auditDetail', { events: openEventCount }),
+      action: t('launchGuide.openAudit'),
+      section: 'security',
+      tone: openEventCount === 0 && defaultSecretCount === 0 ? 'ok' : openEventCount > 0 || defaultSecretCount > 0 ? 'fail' : 'warn',
+    },
+  ];
+  const done = items.filter((item) => item.tone === 'ok').length;
+  const firstActionable = items.find((item) => item.tone === 'fail') ?? items.find((item) => item.tone === 'warn') ?? items[0];
+  const tone: LaunchChecklistSummary['tone'] = items.some((item) => item.tone === 'fail')
+    ? 'fail'
+    : items.some((item) => item.tone === 'warn')
+      ? 'warn'
+      : 'ok';
+
+  return {
+    tone,
+    done,
+    total: items.length,
+    status: done === items.length ? t('launchGuide.allDone') : t('launchGuide.needAction'),
+    nextAction: firstActionable ? `${firstActionable.title}: ${firstActionable.action}` : t('launchGuide.allDone'),
+    items,
+  };
 }
 
 function AvatarMark({ profile, className = '' }: { profile: AccountProfile; className?: string }) {

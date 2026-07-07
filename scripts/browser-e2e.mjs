@@ -20,6 +20,7 @@ let temporaryServerId = '';
 try {
   await openAndLogin(page, `${baseUrl}/admin/#security?trace=${encodeURIComponent(traceId)}`);
   await assertSyntheticTraceDeepLink(page, traceId);
+  await assertLaunchGuide(page);
 
   console.log('ok browser e2e preserves security trace deep link after login');
 
@@ -63,6 +64,7 @@ async function createE2ePage(options) {
     window.localStorage.removeItem('colipas.aiResponseCache');
     window.localStorage.removeItem('colipas.sshLagReportHistory.v1');
     window.localStorage.removeItem('colipas.sshConnectionDoctorHistory.v1');
+    window.localStorage.removeItem('colipas.launchGuide.dismissed.v1');
   });
   targetPage.on('console', (message) => {
     if (message.type() === 'error' || message.type() === 'warning') {
@@ -76,6 +78,28 @@ async function createE2ePage(options) {
     consoleProblems.push(`pageerror: ${error.message}`);
   });
   return targetPage;
+}
+
+async function assertLaunchGuide(targetPage) {
+  await targetPage.locator('[data-launch-guide="true"]').waitFor({ timeout: 10000 });
+  await targetPage.locator('[data-launch-guide-open="true"]').waitFor({ timeout: 5000 });
+  const launchText = await targetPage.locator('[data-launch-guide="true"]').innerText();
+  if (!/First-run launch guide|Runtime security|Asset onboarding|SSH access|AI key custody|Operations preflight|Audit risk/i.test(launchText)) {
+    throw new Error(`Launch guide did not render the full first-run checklist: ${launchText}`);
+  }
+  const itemCount = await targetPage.locator('[data-launch-guide-item]').count();
+  if (itemCount !== 6) {
+    throw new Error(`Launch guide should expose six checklist items, got ${itemCount}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b|sk-[A-Za-z0-9_-]{12,}|BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY|password=|passphrase=/i.test(launchText)) {
+    throw new Error('Launch guide leaked a raw IP address or secret');
+  }
+  await assertElementHorizontallyWithinViewport(targetPage, '[data-launch-guide="true"]', 'desktop launch guide');
+  await captureVisualEvidence(targetPage, 'desktop-launch-guide', ['[data-launch-guide="true"]']);
+  await targetPage.locator('[data-launch-guide-item="ai"]').click();
+  await targetPage.waitForURL(/#ai$/, { timeout: 10000 });
+  await targetPage.locator('.ai-workbench').waitFor({ timeout: 10000 });
+  console.log('ok browser e2e covers first-run launch checklist routing and sanitization');
 }
 
 function isExpectedBrowserConsoleNoise(text) {

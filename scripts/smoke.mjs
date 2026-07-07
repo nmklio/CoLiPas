@@ -3325,6 +3325,31 @@ function assertAccountUiGuards() {
   if (missingLoginHealth.length) {
     throw new Error(`Login deployment health strip is incomplete: ${missingLoginHealth.join(', ')}`);
   }
+  const launchGuideFragments = [
+    'interface LaunchChecklistItem',
+    'launchGuideStorageKey',
+    'buildLaunchChecklist',
+    'data-launch-guide="true"',
+    'data-launch-guide-item={item.id}',
+    'data-launch-guide-open="true"',
+    'openLaunchChecklistItem',
+    'fetchConfigSummary',
+    '.launch-guide-radar',
+    '.launch-guide-grid',
+    'async function assertLaunchGuide',
+    'first-run launch checklist routing and sanitization',
+  ];
+  const launchGuideSource = `${appSource}\n${i18nSource}\n${globalCss}\n${fs.readFileSync(new URL('../scripts/browser-e2e.mjs', import.meta.url), 'utf8')}`;
+  const missingLaunchGuide = launchGuideFragments.filter((fragment) => !launchGuideSource.includes(fragment));
+  if (missingLaunchGuide.length) {
+    throw new Error(`First-run launch guide is incomplete: ${missingLaunchGuide.join(', ')}`);
+  }
+  for (const key of ['launchGuide.title', 'launchGuide.runtimeTitle', 'launchGuide.assetsTitle', 'launchGuide.sshTitle', 'launchGuide.aiTitle', 'launchGuide.preflightTitle', 'launchGuide.auditTitle']) {
+    const count = (i18nSource.match(new RegExp(key.replace('.', '\\.'), 'g')) ?? []).length;
+    if (count < 3) {
+      throw new Error(`Launch guide i18n key is missing languages: ${key}`);
+    }
+  }
   if (
     marketingSource.includes("useState('admin')")
     || marketingSource.includes('admin / admin123456')
@@ -6594,10 +6619,12 @@ function assertSecurityAuditRelationsAreSpecific() {
     "`${corsOriginText} · ${copy.linkedAudits(count('cors'))}`",
     "`${config?.ai.baseUrl ?? copy.unavailable} · ${copy.linkedAudits(count('ai'))}`",
     "`${apiHostText} · ${copy.linkedAudits(count('api'))}`",
-    "releaseFixChecklistTitle: '????????'",
-    "releaseFixChecklistCopied: '???????????'",
+    "releaseFixChecklistTitle: '发布修复清单'",
+    "releaseFixChecklistCopied: '发布修复清单已复制'",
   ];
-  const hardcodedRegressions = forbiddenHardcodedFragments.filter((fragment) => securitySource.includes(fragment));
+  const securityCopyTableIndex = securitySource.indexOf('const securityCopyByLanguage');
+  const securityRuntimeSource = securityCopyTableIndex >= 0 ? securitySource.slice(0, securityCopyTableIndex) : securitySource;
+  const hardcodedRegressions = forbiddenHardcodedFragments.filter((fragment) => securityRuntimeSource.includes(fragment));
   if (hardcodedRegressions.length) {
     throw new Error(`Security audit visible copy must use language-specific helpers: ${hardcodedRegressions.join(', ')}`);
   }
