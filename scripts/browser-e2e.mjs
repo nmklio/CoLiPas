@@ -856,6 +856,14 @@ async function assertSshTerminalPanel(targetPage) {
     if (!/Before-run summary|Selected servers|Targets|No SSH command required|Run preflight before execution/i.test(triageRiskText)) {
       throw new Error(`Server triage draft risk summary is incomplete: ${triageRiskText}`);
     }
+    const triagePreflightLocator = targetPage.locator('[data-ops-draft-locator-action="preflight"]');
+    await triagePreflightLocator.waitFor({ timeout: 10000 });
+    await triagePreflightLocator.click();
+    await targetPage.waitForFunction(() => document.activeElement?.getAttribute('data-ops-draft-preflight-button') === 'true', null, { timeout: 5000 });
+    const triageServerLocator = targetPage.locator('[data-ops-draft-locator-action="servers"]');
+    await triageServerLocator.waitFor({ timeout: 10000 });
+    await triageServerLocator.click();
+    await targetPage.waitForFunction(() => document.activeElement?.classList.contains('ops-server-picker') === true, null, { timeout: 5000 });
     await targetPage.getByRole('button', { name: /^Servers$/i }).click();
     await targetPage.waitForURL(/#servers$/, { timeout: 10000 });
     await targetPage.locator('.server-workspace-row').filter({ hasText: sshServer.name }).waitFor({ timeout: 10000 });
@@ -1648,6 +1656,10 @@ async function assertOverviewHealthBaseline(targetPage) {
   if (!/Before-run summary|All server assets|Targets|No SSH command required|Run preflight before execution/i.test(overviewRiskText)) {
     throw new Error(`Overview draft risk summary is incomplete: ${overviewRiskText}`);
   }
+  const overviewPreflightLocator = targetPage.locator('[data-ops-draft-locator-action="preflight"]');
+  await overviewPreflightLocator.waitFor({ timeout: 10000 });
+  await overviewPreflightLocator.click();
+  await targetPage.waitForFunction(() => document.activeElement?.getAttribute('data-ops-draft-preflight-button') === 'true', null, { timeout: 5000 });
   await targetPage.waitForFunction(
     () => {
       const targetScope = document.querySelector('.ops-builder select');

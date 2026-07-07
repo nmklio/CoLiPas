@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -140,6 +140,10 @@ type Copy = {
   draftRiskCommandMissing: string;
   draftRiskActionConfirm: string;
   draftRiskNoCommand: string;
+  draftLocatorScope: string;
+  draftLocatorServers: string;
+  draftLocatorCommand: string;
+  draftLocatorPreflight: string;
   truncatedOutputs?: string;
 };
 
@@ -217,6 +221,10 @@ const copyByLanguage: Record<string, Copy> = {
     draftRiskCommandMissing: '等待输入命令',
     draftRiskActionConfirm: '动作需要确认',
     draftRiskNoCommand: '无需 SSH 命令',
+    draftLocatorScope: '检查目标范围',
+    draftLocatorServers: '选择服务器',
+    draftLocatorCommand: '检查 SSH 命令',
+    draftLocatorPreflight: '运行预检',
   },
   en: {
     running: 'Running',
@@ -286,6 +294,10 @@ const copyByLanguage: Record<string, Copy> = {
     draftRiskCommandMissing: 'Waiting for command input',
     draftRiskActionConfirm: 'Action requires confirmation',
     draftRiskNoCommand: 'No SSH command required',
+    draftLocatorScope: 'Check scope',
+    draftLocatorServers: 'Select servers',
+    draftLocatorCommand: 'Check SSH command',
+    draftLocatorPreflight: 'Run preflight',
   },
   ja: {
     running: '実行中',
@@ -355,6 +367,10 @@ const copyByLanguage: Record<string, Copy> = {
     draftRiskCommandMissing: 'コマンド入力待ち',
     draftRiskActionConfirm: '操作には確認が必要',
     draftRiskNoCommand: 'SSH コマンド不要',
+    draftLocatorScope: '対象範囲を確認',
+    draftLocatorServers: 'サーバーを選択',
+    draftLocatorCommand: 'SSH コマンドを確認',
+    draftLocatorPreflight: 'プリフライト実行',
   },
 };
 
@@ -440,6 +456,10 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
   const [activeTaskId, setActiveTaskId] = useState('');
   const [appliedDraftId, setAppliedDraftId] = useState('');
   const [draftNotice, setDraftNotice] = useState<OperationsDraft | null>(null);
+  const targetScopeRef = useRef<HTMLSelectElement>(null);
+  const serverPickerRef = useRef<HTMLDivElement>(null);
+  const commandInputRef = useRef<HTMLTextAreaElement>(null);
+  const preflightButtonRef = useRef<HTMLButtonElement>(null);
   const operationsReleaseFocusActive = releaseFocusAnchor === 'operations-builder';
 
   const taskMeta = useMemo(() => buildTaskMeta(language), [language]);
@@ -470,10 +490,11 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
     command,
     copy,
     previewCount,
+    targetMode,
     targetModeLabel: activeTargetModeLabel,
     taskLabel: activeTaskLabel,
     taskType,
-  }), [activeTargetModeLabel, activeTaskLabel, command, copy, previewCount, taskType]);
+  }), [activeTargetModeLabel, activeTaskLabel, command, copy, previewCount, targetMode, taskType]);
 
   useEffect(() => {
     if (sshRequiredTask && targetMode === 'allServers') {
@@ -641,6 +662,32 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
     ));
   }
 
+  function focusOperationLocator(target: DraftRiskFocusTarget) {
+    const focusElement = (element: HTMLElement | null) => {
+      if (!element) {
+        return;
+      }
+      element.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      element.focus({ preventScroll: true });
+    };
+
+    if (target === 'scope') {
+      focusElement(targetScopeRef.current);
+      return;
+    }
+    if (target === 'servers') {
+      setTargetMode('selected');
+      window.setTimeout(() => focusElement(serverPickerRef.current ?? targetScopeRef.current), 0);
+      return;
+    }
+    if (target === 'command') {
+      setTaskType('sshCommand');
+      window.setTimeout(() => focusElement(commandInputRef.current), 0);
+      return;
+    }
+    focusElement(preflightButtonRef.current);
+  }
+
   function restorePreflightHistory(entry: PreflightHistoryEntry) {
     setBuilderOpen(true);
     setTaskType(entry.type);
@@ -734,7 +781,7 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
               <div className="ops-form-grid">
                 <label className="field-block">
                   {copy.targetScope}
-                  <select value={targetMode} onChange={(event) => setTargetMode(event.target.value as OperationTaskTargetMode)}>
+                  <select ref={targetScopeRef} value={targetMode} onChange={(event) => setTargetMode(event.target.value as OperationTaskTargetMode)}>
                     <option value="allConnected">{copy.allConnected}</option>
                     <option value="selected">{copy.selected}</option>
                     <option value="allServers" disabled={sshRequiredTask}>{copy.allServers}</option>
@@ -751,13 +798,13 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
                 {taskType === 'sshCommand' && (
                   <label className="field-block ops-command-field">
                     {copy.command}
-                    <textarea value={command} onChange={(event) => setCommand(event.target.value)} placeholder={copy.commandPlaceholder} />
+                    <textarea ref={commandInputRef} value={command} onChange={(event) => setCommand(event.target.value)} placeholder={copy.commandPlaceholder} />
                   </label>
                 )}
               </div>
 
               {targetMode === 'selected' && (
-                <div className="ops-server-picker">
+                <div className="ops-server-picker" ref={serverPickerRef} tabIndex={-1}>
                   <div className="ops-picker-title">
                     <strong>{copy.selectServers}</strong>
                     <span>{activeSelectedServerIds.length}/{eligibleServers.length}</span>
@@ -826,6 +873,20 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
                     <strong>{draftRiskSummary.commandLabel}</strong>
                   </div>
                 </div>
+                {draftRiskSummary.actions.length > 0 && (
+                  <div className="ops-draft-locator-actions" data-ops-draft-locator-actions="true">
+                    {draftRiskSummary.actions.map((action) => (
+                      <button
+                        key={`${action.target}-${action.label}`}
+                        type="button"
+                        data-ops-draft-locator-action={action.target}
+                        onClick={() => focusOperationLocator(action.target)}
+                      >
+                        {action.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
                 <div className="ops-runner-footer">
@@ -837,6 +898,7 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
                   <button
                     type="button"
                     className="tool-button"
+                    ref={preflightButtonRef}
                     data-ops-draft-preflight-button="true"
                     disabled={running || preflighting || previewCount === 0}
                     onClick={executePreflightOnly}
@@ -1117,6 +1179,12 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
 
 
 type DraftRiskTone = 'ready' | 'warn' | 'blocked';
+type DraftRiskFocusTarget = 'scope' | 'servers' | 'command' | 'preflight';
+
+interface DraftRiskAction {
+  label: string;
+  target: DraftRiskFocusTarget;
+}
 
 interface DraftRiskSummary {
   tone: DraftRiskTone;
@@ -1124,12 +1192,14 @@ interface DraftRiskSummary {
   commandLabel: string;
   taskLabel: string;
   targetModeLabel: string;
+  actions: DraftRiskAction[];
 }
 
 function buildDraftRiskSummary({
   command,
   copy,
   previewCount,
+  targetMode,
   targetModeLabel,
   taskLabel,
   taskType,
@@ -1137,6 +1207,7 @@ function buildDraftRiskSummary({
   command: string;
   copy: Copy;
   previewCount: number;
+  targetMode: OperationTaskTargetMode;
   targetModeLabel: string;
   taskLabel: string;
   taskType: OperationTaskType;
@@ -1157,6 +1228,19 @@ function buildDraftRiskSummary({
     : actionTaskIds.includes(taskType)
       ? copy.draftRiskActionConfirm
       : copy.draftRiskNoCommand;
+  const actions: DraftRiskAction[] = [];
+  if (previewCount === 0) {
+    actions.push({ label: copy.draftLocatorScope, target: 'scope' });
+  }
+  if (previewCount === 0 || targetMode === 'selected') {
+    actions.push({ label: copy.draftLocatorServers, target: 'servers' });
+  }
+  if (taskType === 'sshCommand' && (commandText.length === 0 || commandWarning)) {
+    actions.push({ label: copy.draftLocatorCommand, target: 'command' });
+  }
+  if (previewCount > 0) {
+    actions.push({ label: copy.draftLocatorPreflight, target: 'preflight' });
+  }
 
   return {
     tone,
@@ -1164,6 +1248,7 @@ function buildDraftRiskSummary({
     commandLabel,
     taskLabel,
     targetModeLabel,
+    actions,
   };
 }
 

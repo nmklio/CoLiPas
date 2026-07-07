@@ -6909,6 +6909,35 @@ td span,
   margin-top: 3px;
 }
 
+.ops-draft-locator-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ops-draft-locator-actions button {
+  border: 1px solid rgba(15, 118, 110, 0.22);
+  border-radius: 999px;
+  padding: 7px 11px;
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--brand-strong);
+  font-size: 12px;
+  font-weight: 850;
+  box-shadow: 0 8px 18px rgba(15, 118, 110, 0.08);
+}
+
+.ops-draft-locator-actions button:hover,
+.ops-draft-locator-actions button:focus-visible {
+  border-color: var(--brand-line);
+  background: var(--brand-soft);
+  outline: none;
+}
+
+.ops-server-picker:focus {
+  outline: 2px solid rgba(15, 118, 110, 0.3);
+  outline-offset: 3px;
+}
+
 .ops-runner-footer {
   border: 1px solid #d1e0e4;
   border-radius: 8px;
@@ -13640,6 +13669,7 @@ pre {
   .ops-form-grid,
   .ops-server-choice-grid,
   .ops-draft-risk-grid,
+  .ops-draft-locator-actions,
   .ops-runner-footer,
   .ops-output-grid,
   .api-status-strip,
