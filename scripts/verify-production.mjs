@@ -216,6 +216,7 @@ try {
       ...process.env,
       SMOKE_BASE_URL: baseUrl,
       SMOKE_RELEASE_VERIFY_TOKEN: 'verify-production-release-token-12345',
+      COLIPAS_DATA_DIR: verifyDataDir,
     },
   });
   await run(process.execPath, ['scripts/browser-e2e.mjs'], {

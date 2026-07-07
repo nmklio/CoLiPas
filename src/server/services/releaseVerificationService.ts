@@ -51,6 +51,7 @@ export function buildReleaseVerification(config: RuntimeConfig): ReleaseVerifica
       summary: readiness.summary,
       blockerCount: readiness.blockers.length,
       nextBestAction: sanitizeVerificationText(readiness.nextBestAction),
+      gatePolicy: readiness.gatePolicy,
     },
     audit: {
       total: auditEntries.length,

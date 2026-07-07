@@ -1,6 +1,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import { generateKeyPairSync } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { WebSocket } from 'ws';
 
 const baseUrl = process.env.SMOKE_BASE_URL ?? 'http://127.0.0.1:8080';
@@ -98,6 +99,10 @@ if (releaseVerifyToken) {
     || releaseVerifyBody.frontend?.featureMarkers?.['security-evidence-brief'] !== true
     || releaseVerifyBody.frontend?.featureMarkers?.['cloud-map'] !== true
     || !Number.isInteger(releaseVerifyBody.readiness?.score)
+    || !releaseVerifyBody.readiness?.gatePolicy
+    || !['disabled', 'pass', 'blocked'].includes(releaseVerifyBody.readiness?.gatePolicy?.status)
+    || typeof releaseVerifyBody.readiness?.gatePolicy?.allowedToRelease !== 'boolean'
+    || !Array.isArray(releaseVerifyBody.readiness?.gatePolicy?.reasons)
     || !Number.isInteger(releaseVerifyBody.audit?.total)
     || !Number.isInteger(releaseVerifyBody.inventory?.servers?.total)
     || releaseVerifyBody.deployment?.targetName !== 'verify-local'
@@ -3087,6 +3092,54 @@ if (
 }
 console.log('ok /api/audit/readiness/policy persists release gate guardrails safely');
 
+const releaseGateCheck = spawnSync(process.execPath, ['scripts/release-gate-check.mjs', '--target-count', '2', '--json'], {
+  cwd: process.cwd(),
+  encoding: 'utf8',
+  env: {
+    ...process.env,
+    COLIPAS_DATA_DIR: process.env.COLIPAS_DATA_DIR ?? '.data',
+  },
+});
+if (releaseGateCheck.status !== 0) {
+  throw new Error(`scripts/release-gate-check.mjs returned ${releaseGateCheck.status}: ${releaseGateCheck.stderr || releaseGateCheck.stdout}`);
+}
+const releaseGateCheckBody = JSON.parse(releaseGateCheck.stdout.trim());
+if (
+  releaseGateCheckBody.ok !== true
+  || releaseGateCheckBody.mode !== 'pipeline-grey'
+  || releaseGateCheckBody.targetCount !== 2
+  || releaseGateCheckBody.policy?.minScore !== 90
+  || releaseGateCheckBody.policy?.maxWarnings !== 0
+  || releaseGateCheckBody.policy?.observed?.connectedSsh !== 2
+  || releaseGateCheckBody.policy?.observed?.score !== 100
+  || releaseGateCheckBody.policy?.observed?.warnings !== 0
+  || releaseGateCheckBody.policy?.observed?.failures !== 0
+  || !['disabled', 'pass', 'blocked'].includes(releaseGateCheckBody.policy?.status)
+) {
+  throw new Error(`scripts/release-gate-check.mjs returned an unexpected policy payload: ${releaseGateCheck.stdout}`);
+}
+const releaseGateBlocked = spawnSync(process.execPath, ['scripts/release-gate-check.mjs', '--target-count', '0', '--json'], {
+  cwd: process.cwd(),
+  encoding: 'utf8',
+  env: {
+    ...process.env,
+    COLIPAS_DATA_DIR: process.env.COLIPAS_DATA_DIR ?? '.data',
+  },
+});
+if (releaseGateBlocked.status !== 0) {
+  throw new Error(`scripts/release-gate-check.mjs blocked scenario returned ${releaseGateBlocked.status}: ${releaseGateBlocked.stderr || releaseGateBlocked.stdout}`);
+}
+const releaseGateBlockedBody = JSON.parse(releaseGateBlocked.stdout.trim());
+if (
+  releaseGateBlockedBody.ok !== false
+  || releaseGateBlockedBody.policy?.allowedToRelease !== false
+  || !Array.isArray(releaseGateBlockedBody.policy?.reasons)
+  || !releaseGateBlockedBody.policy.reasons.some((reason) => /No SSH-connected server/i.test(reason))
+) {
+  throw new Error(`scripts/release-gate-check.mjs did not block zero-target releases: ${releaseGateBlocked.stdout}`);
+}
+console.log('ok scripts/release-gate-check.mjs evaluates pipeline release gate policy for pass and block paths');
+
 const readinessSnapshotResponse = await fetch(`${baseUrl}/api/audit/readiness/snapshots`, {
   method: 'POST',
   headers: authHeaders,
@@ -5087,6 +5140,63 @@ async function assertReleaseDeployTargetPlanGuards() {
   const missingSshDiagnostics = sshDiagnosticsFragments.filter((fragment) => !releaseDeploySource.includes(fragment));
   if (missingSshDiagnostics.length) {
     throw new Error(`Release deploy SSH failure diagnostics are incomplete: ${missingSshDiagnostics.join(', ')}`);
+  }
+  const releaseGateFragments = [
+    'Run-Step "Release gate guard"',
+    'node scripts/release-gate-check.mjs --target-count $DeployTargets.Count --json',
+    'Release gate blocked publish:',
+    'Release gate passed:',
+  ];
+  const missingReleaseGateFragments = releaseGateFragments.filter((fragment) => !releaseDeploySource.includes(fragment));
+  if (missingReleaseGateFragments.length) {
+    throw new Error(`Release deploy release-gate guard is incomplete: ${missingReleaseGateFragments.join(', ')}`);
+  }
+
+  const tempReleaseGateDir = fs.mkdtempSync(new URL('../.tmp-release-gate-', import.meta.url));
+  try {
+    const releaseGatePass = spawnSync(process.execPath, ['scripts/release-gate-check.mjs', '--target-count', '2', '--json'], {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        COLIPAS_DATA_DIR: tempReleaseGateDir,
+      },
+    });
+    if (releaseGatePass.status !== 0) {
+      throw new Error(`Release gate pipeline check pass scenario failed: ${releaseGatePass.stderr || releaseGatePass.stdout}`);
+    }
+    const releaseGatePassBody = JSON.parse(releaseGatePass.stdout.trim());
+    if (
+      releaseGatePassBody.ok !== true
+      || releaseGatePassBody.targetCount !== 2
+      || releaseGatePassBody.policy?.allowedToRelease !== true
+      || releaseGatePassBody.policy?.observed?.connectedSsh !== 2
+      || releaseGatePassBody.policy?.observed?.score !== 100
+    ) {
+      throw new Error(`Release gate pipeline check pass scenario returned unexpected JSON: ${releaseGatePass.stdout}`);
+    }
+
+    const releaseGateBlock = spawnSync(process.execPath, ['scripts/release-gate-check.mjs', '--target-count', '0', '--json'], {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        COLIPAS_DATA_DIR: tempReleaseGateDir,
+      },
+    });
+    if (releaseGateBlock.status !== 0) {
+      throw new Error(`Release gate pipeline check block scenario failed: ${releaseGateBlock.stderr || releaseGateBlock.stdout}`);
+    }
+    const releaseGateBlockBody = JSON.parse(releaseGateBlock.stdout.trim());
+    if (
+      releaseGateBlockBody.ok !== false
+      || releaseGateBlockBody.policy?.allowedToRelease !== false
+      || !releaseGateBlockBody.policy?.reasons?.some((reason) => /No SSH-connected server/i.test(reason))
+    ) {
+      throw new Error(`Release gate pipeline check block scenario returned unexpected JSON: ${releaseGateBlock.stdout}`);
+    }
+  } finally {
+    fs.rmSync(tempReleaseGateDir, { recursive: true, force: true });
   }
 
   const plan = {

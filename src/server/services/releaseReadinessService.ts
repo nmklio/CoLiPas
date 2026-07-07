@@ -45,6 +45,17 @@ const gatePolicyUpdateSchema = z.object({
 });
 
 type StoredReleaseGatePolicy = z.infer<typeof storedGatePolicySchema>;
+type ReleaseGatePolicyInput = Pick<
+  ReleaseGatePolicy,
+  | 'enabled'
+  | 'minScore'
+  | 'maxWarnings'
+  | 'requireZeroFailures'
+  | 'requireConnectedSsh'
+  | 'requireAiProvider'
+  | 'updatedAt'
+  | 'updatedBy'
+>;
 
 export function buildReleaseReadiness(config: RuntimeConfig): ReleaseReadinessResponse {
   const auditEntries = listAuditEntries();
@@ -166,7 +177,7 @@ export function buildReleaseReadiness(config: RuntimeConfig): ReleaseReadinessRe
   const passed = checks.filter((check) => check.passed).length;
   const score = Math.max(0, Math.round((passed / checks.length) * 100 - failures * 12 - warnings * 4));
   const blockers = checks.filter((check) => check.severity === 'fail' || (!check.passed && check.relatedModule === 'audit'));
-  const gatePolicy = buildReleaseGatePolicySummary(loadStoredReleaseGatePolicy(), {
+  const gatePolicy = evaluateReleaseGatePolicy(loadStoredReleaseGatePolicy(), {
     score,
     warnings,
     failures,
@@ -392,12 +403,20 @@ function loadStoredReleaseGatePolicy() {
   }
 }
 
-function buildReleaseGatePolicySummary(
-  stored: StoredReleaseGatePolicy | null,
+export function evaluateReleaseGatePolicy(
+  stored: ReleaseGatePolicyInput | StoredReleaseGatePolicy | null | undefined,
   observed: ReleaseGatePolicy['observed'],
 ): ReleaseGatePolicy {
-  const policy = stored ?? {
-    version: 1 as const,
+  const policy: ReleaseGatePolicyInput = stored ? {
+    enabled: stored.enabled,
+    minScore: stored.minScore,
+    maxWarnings: stored.maxWarnings,
+    requireZeroFailures: stored.requireZeroFailures,
+    requireConnectedSsh: stored.requireConnectedSsh,
+    requireAiProvider: stored.requireAiProvider,
+    updatedAt: stored.updatedAt,
+    updatedBy: stored.updatedBy,
+  } : {
     enabled: true,
     minScore: 80,
     maxWarnings: 1,

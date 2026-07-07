@@ -1335,6 +1335,26 @@ Run-Step "Sensitive data guard" {
   node scripts/secret-scan.mjs
 }
 
+Run-Step "Release gate guard" {
+  $releaseGateJson = & node scripts/release-gate-check.mjs --target-count $DeployTargets.Count --json
+  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($releaseGateJson)) {
+    throw "Release gate guard did not return a valid JSON payload."
+  }
+
+  $releaseGate = $releaseGateJson | ConvertFrom-Json
+  if ($null -eq $releaseGate -or $null -eq $releaseGate.policy) {
+    throw "Release gate guard returned an incomplete payload."
+  }
+
+  if (-not [bool]$releaseGate.ok) {
+    $reasons = @($releaseGate.policy.reasons | ForEach-Object { [string]$_ })
+    $reasonText = if ($reasons.Count -gt 0) { $reasons -join " " } else { "Release gate policy blocked publish." }
+    throw "Release gate blocked publish: $reasonText"
+  }
+
+  Write-Host "Release gate passed: status $($releaseGate.policy.status), score $($releaseGate.policy.observed.score), targets $($releaseGate.targetCount)."
+}
+
 Run-Step "Push GitHub" {
   Push-GitHub
 }

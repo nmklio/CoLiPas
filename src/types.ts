@@ -515,6 +515,7 @@ export interface ReleaseVerificationResponse {
     summary: ReleaseReadinessResponse['summary'];
     blockerCount: number;
     nextBestAction: string;
+    gatePolicy: ReleaseGatePolicy;
   };
   audit: {
     total: number;
