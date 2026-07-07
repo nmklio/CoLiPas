@@ -17,7 +17,7 @@ import { executeCustomApiProxy } from './services/customApiProxy.js';
 import { getDatabasePath } from './services/database.js';
 import { buildDiagnosticExport } from './services/diagnosticService.js';
 import { createOperationTask, preflightOperationTask } from './services/operationsService.js';
-import { buildReleaseReadiness, buildReleaseReadinessReport, recordReleaseReadinessSnapshot } from './services/releaseReadinessService.js';
+import { buildReleaseReadiness, buildReleaseReadinessReport, getReleaseGatePolicy, recordReleaseReadinessSnapshot, updateReleaseGatePolicy } from './services/releaseReadinessService.js';
 import { buildReleaseVerification, isReleaseVerificationAuthorized, isReleaseVerificationEnabled } from './services/releaseVerificationService.js';
 import { claimSshProductionProbeScheduleRun, getSshProductionProbeSchedule, recordSshProductionProbe, updateSshProductionProbeSchedule } from './services/sshProductionProbeService.js';
 import { createSshRunbookCommand, deleteSshRunbookCommand, importSshRunbookCommands, listSshRunbookCommands, markSshRunbookCommandUsed, reorderSshRunbookCommands, updateSshRunbookCommand, updateSshRunbookCommandPin } from './services/sshRunbookService.js';
@@ -774,6 +774,19 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
 
   app.get('/api/audit/readiness', (_request, response) => {
     response.json(buildReleaseReadiness(config));
+  });
+
+  app.get('/api/audit/readiness/policy', (_request, response) => {
+    response.json(getReleaseGatePolicy(config));
+  });
+
+  app.put('/api/audit/readiness/policy', (request, response, next) => {
+    try {
+      const session = requireSession(request, config);
+      response.json(updateReleaseGatePolicy(config, request.body, session.user.username));
+    } catch (error) {
+      next(error);
+    }
   });
 
   app.post('/api/audit/readiness/snapshots', (_request, response) => {

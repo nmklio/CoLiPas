@@ -2990,6 +2990,16 @@ if (
   || !readinessBody.checks?.some((check) => check.id === 'audit-failures' && check.severity !== 'info')
   || !readinessBody.blockers?.some((check) => check.id === 'audit-failures')
   || typeof readinessBody.nextBestAction !== 'string'
+  || !readinessBody.gatePolicy
+  || !['disabled', 'pass', 'blocked'].includes(readinessBody.gatePolicy.status)
+  || typeof readinessBody.gatePolicy.allowedToRelease !== 'boolean'
+  || !Number.isInteger(readinessBody.gatePolicy.activeRuleCount)
+  || !Array.isArray(readinessBody.gatePolicy.reasons)
+  || !Number.isInteger(readinessBody.gatePolicy.observed?.score)
+  || !Number.isInteger(readinessBody.gatePolicy.observed?.warnings)
+  || !Number.isInteger(readinessBody.gatePolicy.observed?.failures)
+  || !Number.isInteger(readinessBody.gatePolicy.observed?.connectedSsh)
+  || typeof readinessBody.gatePolicy.observed?.aiConfigured !== 'boolean'
 ) {
   throw new Error('/api/audit/readiness did not reflect active audit risk evidence');
 }
@@ -3003,6 +3013,79 @@ if (
   throw new Error('/api/audit/readiness leaked sensitive audit or SSH material');
 }
 console.log('ok /api/audit/readiness aggregates release evidence without secrets');
+
+const releaseGatePolicyInitialResponse = await fetch(`${baseUrl}/api/audit/readiness/policy`, { headers: authHeaders });
+if (!releaseGatePolicyInitialResponse.ok) {
+  throw new Error(`/api/audit/readiness/policy initial returned HTTP ${releaseGatePolicyInitialResponse.status}`);
+}
+const releaseGatePolicyInitialBody = await releaseGatePolicyInitialResponse.json();
+if (
+  releaseGatePolicyInitialBody.minScore !== readinessBody.gatePolicy.minScore
+  || releaseGatePolicyInitialBody.maxWarnings !== readinessBody.gatePolicy.maxWarnings
+  || releaseGatePolicyInitialBody.requireConnectedSsh !== readinessBody.gatePolicy.requireConnectedSsh
+  || !['disabled', 'pass', 'blocked'].includes(releaseGatePolicyInitialBody.status)
+) {
+  throw new Error('/api/audit/readiness/policy initial payload did not match readiness evidence');
+}
+
+const releaseGatePolicyUpdateResponse = await fetch(`${baseUrl}/api/audit/readiness/policy`, {
+  method: 'PUT',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    enabled: true,
+    minScore: 90,
+    maxWarnings: 0,
+    requireZeroFailures: true,
+    requireConnectedSsh: true,
+    requireAiProvider: false,
+  }),
+});
+if (!releaseGatePolicyUpdateResponse.ok) {
+  throw new Error(`/api/audit/readiness/policy update returned HTTP ${releaseGatePolicyUpdateResponse.status}`);
+}
+const releaseGatePolicyUpdateBody = await releaseGatePolicyUpdateResponse.json();
+if (
+  releaseGatePolicyUpdateBody.ok !== true
+  || releaseGatePolicyUpdateBody.policy?.enabled !== true
+  || releaseGatePolicyUpdateBody.policy?.minScore !== 90
+  || releaseGatePolicyUpdateBody.policy?.maxWarnings !== 0
+  || releaseGatePolicyUpdateBody.policy?.requireZeroFailures !== true
+  || releaseGatePolicyUpdateBody.policy?.requireConnectedSsh !== true
+  || releaseGatePolicyUpdateBody.policy?.requireAiProvider !== false
+  || !['disabled', 'pass', 'blocked'].includes(releaseGatePolicyUpdateBody.policy?.status)
+  || releaseGatePolicyUpdateBody.readiness?.gatePolicy?.minScore !== 90
+  || releaseGatePolicyUpdateBody.readiness?.gatePolicy?.maxWarnings !== 0
+  || releaseGatePolicyUpdateBody.readiness?.gatePolicy?.observed?.score !== releaseGatePolicyUpdateBody.readiness?.score
+) {
+  throw new Error('/api/audit/readiness/policy update returned unexpected policy payload');
+}
+if (
+  JSON.stringify(releaseGatePolicyUpdateBody).includes(sensitiveAuditSecret)
+  || JSON.stringify(releaseGatePolicyUpdateBody).includes(sensitiveSshSecret)
+  || JSON.stringify(releaseGatePolicyUpdateBody).includes(smokePrivateKeyMarker)
+  || JSON.stringify(releaseGatePolicyUpdateBody).includes(smokePrivateKeyPassphrase)
+) {
+  throw new Error('/api/audit/readiness/policy update leaked sensitive material');
+}
+
+const releaseGatePolicyPersistedResponse = await fetch(`${baseUrl}/api/audit/readiness/policy`, { headers: authHeaders });
+if (!releaseGatePolicyPersistedResponse.ok) {
+  throw new Error(`/api/audit/readiness/policy persisted returned HTTP ${releaseGatePolicyPersistedResponse.status}`);
+}
+const releaseGatePolicyPersistedBody = await releaseGatePolicyPersistedResponse.json();
+if (
+  releaseGatePolicyPersistedBody.enabled !== true
+  || releaseGatePolicyPersistedBody.minScore !== 90
+  || releaseGatePolicyPersistedBody.maxWarnings !== 0
+  || releaseGatePolicyPersistedBody.requireZeroFailures !== true
+  || releaseGatePolicyPersistedBody.requireConnectedSsh !== true
+  || releaseGatePolicyPersistedBody.requireAiProvider !== false
+  || typeof releaseGatePolicyPersistedBody.updatedBy !== 'string'
+  || releaseGatePolicyPersistedBody.updatedBy.length === 0
+) {
+  throw new Error('/api/audit/readiness/policy did not persist the updated release gate');
+}
+console.log('ok /api/audit/readiness/policy persists release gate guardrails safely');
 
 const readinessSnapshotResponse = await fetch(`${baseUrl}/api/audit/readiness/snapshots`, {
   method: 'POST',
@@ -3046,6 +3129,7 @@ if (
   readinessReportBody.contentType !== 'text/markdown'
   || !readinessReportBody.markdown?.includes('## Blockers')
   || !readinessReportBody.markdown?.includes('## Recent Snapshots')
+  || !readinessReportBody.markdown?.includes('## Release Gate Policy')
   || !readinessReportBody.markdown?.includes('Audit failures')
 ) {
   throw new Error('/api/audit/readiness/report returned incomplete Markdown report');
@@ -3191,6 +3275,10 @@ if (
   diagnosticExportBody.contentType !== 'application/json'
   || !diagnosticExportBody.filename?.startsWith('colipas-diagnostics-')
   || !diagnosticExportBody.readiness?.checks?.some((check) => check.id === 'runtime-secret-posture')
+  || diagnosticExportBody.readiness?.gatePolicy?.minScore !== 90
+  || diagnosticExportBody.readiness?.gatePolicy?.maxWarnings !== 0
+  || typeof diagnosticExportBody.readiness?.gatePolicy?.allowedToRelease !== 'boolean'
+  || !Array.isArray(diagnosticExportBody.readiness?.gatePolicy?.reasons)
   || typeof diagnosticExportBody.config?.ai?.baseUrlHost !== 'string'
   || !Number.isInteger(diagnosticExportBody.inventory?.servers?.connectedSsh)
   || !Number.isInteger(diagnosticExportBody.sshTerminal?.activeSessions)
@@ -6966,6 +7054,13 @@ function assertSecurityAuditRelationsAreSpecific() {
     'fetchDiagnosticExport()',
     'diagnosticCopy.exported',
     'diagnosticCopy.failed',
+    'releaseGatePolicyDraft',
+    'saveReleaseGatePolicyDraft',
+    'data-release-gate-policy="true"',
+    'data-release-gate-policy-save="true"',
+    'data-release-gate-policy-stat="decision"',
+    'copy.releaseGateStatus(releaseGatePolicy.status)',
+    'updateReleaseGatePolicy(releaseGatePolicyDraft)',
   ];
   const missing = requiredFragments.filter((fragment) => !securitySource.includes(fragment));
   if (missing.length) {
@@ -7032,6 +7127,13 @@ function assertSecurityAuditRelationsAreSpecific() {
     '.security-release-playbook-grid',
     '.security-release-playbook-item.fail',
     '.security-release-playbook-icon',
+    '.security-release-gate-policy',
+    '.security-release-gate-policy-heading',
+    '.security-release-gate-policy-actions',
+    '.security-release-gate-policy-form',
+    '.security-release-gate-policy-reasons',
+    '.security-release-gate-policy-note',
+    '.security-launch-summary-grid-release',
     '.security-release-timeline',
     '.security-release-timeline-track',
     '.security-release-timeline-item',
@@ -7107,6 +7209,8 @@ function assertSecurityAuditRelationsAreSpecific() {
   const apiClientSource = fs.readFileSync(new URL('../src/services/apiClient.ts', import.meta.url), 'utf8');
   const remediationFragments = [
     "app.get('/api/audit/readiness'",
+    "app.get('/api/audit/readiness/policy'",
+    "app.put('/api/audit/readiness/policy'",
     "app.post('/api/audit/readiness/snapshots'",
     "app.get('/api/audit/readiness/report'",
     "app.get('/api/audit/diagnostics/export'",
@@ -7115,12 +7219,16 @@ function assertSecurityAuditRelationsAreSpecific() {
     'isReleaseVerificationAuthorized(config, getBearerToken(request.headers.authorization))',
     'response.setHeader(\'Cache-Control\', \'no-store\')',
     'buildReleaseReadiness(config)',
+    'getReleaseGatePolicy(config)',
+    'updateReleaseGatePolicy(config, request.body, session.user.username)',
     'buildReleaseReadinessReport(config)',
     'buildDiagnosticExport(config)',
     'buildReleaseVerification(config)',
     'buildReleaseDeploymentEvidence(config)',
     'recordReleaseReadinessSnapshot(config)',
     'export function buildReleaseReadiness(config',
+    'export function getReleaseGatePolicy(config',
+    'export function updateReleaseGatePolicy(config',
     'export function buildReleaseReadinessReport(config',
     'export function buildDiagnosticExport(config',
     'export function buildReleaseVerification(config',
@@ -7134,12 +7242,16 @@ function assertSecurityAuditRelationsAreSpecific() {
     'runtime-secret-posture',
     'deployment-evidence',
     "relatedModule: 'deployment'",
+    'release-gate-policy.v1',
+    "action: 'RELEASE_GATE_POLICY_UPDATE'",
+    'gatePolicy: readiness.gatePolicy',
     'config.security.adminPasswordDefault',
     'sanitizeReportText',
     'writeAppSetting(readinessHistorySettingId',
     'getLastRemediationTime(auditEntries, \'audit-errors\')',
     'nextBestAction',
     "fetcher('/api/audit/readiness'",
+    "fetcher('/api/audit/readiness/policy'",
     "fetcher('/api/audit/readiness/snapshots'",
     "fetcher('/api/audit/readiness/report'",
     "fetcher('/api/audit/diagnostics/export'",
@@ -7233,6 +7345,10 @@ function assertSecurityAuditRelationsAreSpecific() {
     'captureVisualEvidence',
     "path.resolve('output', 'browser-e2e')",
     'desktop-security-trace',
+    'data-release-gate-policy="true"',
+    'data-release-gate-policy-save="true"',
+    'data-release-gate-policy-stat',
+    '/api/audit/readiness/policy',
     'mobile-map-to-servers',
     'mobile-security-audit',
     'Browser visual evidence',

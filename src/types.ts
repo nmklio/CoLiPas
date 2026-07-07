@@ -217,6 +217,7 @@ export interface ReleaseReadinessCheck {
 }
 
 export type ReleaseReadinessStatus = 'ready' | 'review' | 'blocked';
+export type ReleaseGatePolicyStatus = 'disabled' | 'pass' | 'blocked';
 
 export type ReleaseReadinessTrendDirection = 'up' | 'down' | 'flat' | 'new';
 
@@ -244,6 +245,28 @@ export interface ReleaseReadinessHistory {
   trend: ReleaseReadinessTrend;
 }
 
+export interface ReleaseGatePolicy {
+  enabled: boolean;
+  minScore: number;
+  maxWarnings: number;
+  requireZeroFailures: boolean;
+  requireConnectedSsh: boolean;
+  requireAiProvider: boolean;
+  updatedAt: string | null;
+  updatedBy: string | null;
+  status: ReleaseGatePolicyStatus;
+  allowedToRelease: boolean;
+  activeRuleCount: number;
+  reasons: string[];
+  observed: {
+    score: number;
+    warnings: number;
+    failures: number;
+    connectedSsh: number;
+    aiConfigured: boolean;
+  };
+}
+
 export interface ReleaseReadinessResponse {
   score: number;
   status: ReleaseReadinessStatus;
@@ -258,6 +281,7 @@ export interface ReleaseReadinessResponse {
   blockers: ReleaseReadinessCheck[];
   nextBestAction: string;
   history: ReleaseReadinessHistory;
+  gatePolicy: ReleaseGatePolicy;
 }
 
 export interface ReleaseReadinessSnapshotResponse {
@@ -307,6 +331,7 @@ export interface DiagnosticExportResponse {
     summary: ReleaseReadinessResponse['summary'];
     nextBestAction: string;
     checks: Array<Pick<ReleaseReadinessCheck, 'id' | 'label' | 'severity' | 'passed' | 'value' | 'relatedModule'>>;
+    gatePolicy: ReleaseGatePolicy;
   };
   audit: {
     total: number;

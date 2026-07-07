@@ -21,7 +21,7 @@ import {
 import { getLocale, useI18n } from '../../i18n';
 import { OperationEvent } from '../../types';
 import type { OverviewPreflightSnapshot } from '../overview/MonitoringOverview';
-import { claimSshProductionProbeScheduleRun, connectServer, connectServerShellSocket, deleteServer, fetchDiagnosticExport, fetchReleaseReadiness, fetchReleaseReadinessReport, fetchServerShellStatus, recordReleaseReadinessSnapshot, recordSshProductionProbe, recordSshSupportTicketCopy, remediateSecurityRisk, updateSshProductionProbeSchedule } from '../../services/apiClient';
+import { claimSshProductionProbeScheduleRun, connectServer, connectServerShellSocket, deleteServer, fetchDiagnosticExport, fetchReleaseReadiness, fetchReleaseReadinessReport, fetchServerShellStatus, recordReleaseReadinessSnapshot, recordSshProductionProbe, recordSshSupportTicketCopy, remediateSecurityRisk, updateReleaseGatePolicy, updateSshProductionProbeSchedule } from '../../services/apiClient';
 import type { SecurityRemediationResponse } from '../../services/apiClient';
 import type { DiagnosticExportResponse, ReleaseDeploymentEvidence, ReleaseReadinessResponse } from '../../types';
 import {
@@ -541,6 +541,15 @@ interface SshProductionProbeScheduleDraft {
   intervalMinutes: SshProductionProbeSchedule['intervalMinutes'];
 }
 
+interface ReleaseGatePolicyDraft {
+  enabled: boolean;
+  minScore: number;
+  maxWarnings: number;
+  requireZeroFailures: boolean;
+  requireConnectedSsh: boolean;
+  requireAiProvider: boolean;
+}
+
 interface SshSupportBundleSection {
   id: 'summary' | 'lag-report' | 'flight' | 'sampler' | 'trend' | 'terminal-pack';
   title: string;
@@ -593,6 +602,15 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
   const [remediationError, setRemediationError] = useState(false);
   const [remediatingId, setRemediatingId] = useState('');
   const [readiness, setReadiness] = useState<ReleaseReadinessResponse | null>(null);
+  const [savingReleaseGatePolicy, setSavingReleaseGatePolicy] = useState(false);
+  const [releaseGatePolicyDraft, setReleaseGatePolicyDraft] = useState<ReleaseGatePolicyDraft>({
+    enabled: true,
+    minScore: 80,
+    maxWarnings: 1,
+    requireZeroFailures: true,
+    requireConnectedSsh: true,
+    requireAiProvider: false,
+  });
   const [recordingSnapshot, setRecordingSnapshot] = useState(false);
   const [exportingReadinessReport, setExportingReadinessReport] = useState(false);
   const [exportingDiagnostic, setExportingDiagnostic] = useState(false);
@@ -754,6 +772,7 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
     () => buildReleaseFixChecklist(releaseFixRouter.steps, releaseFixChecklistState, copy),
     [copy, releaseFixChecklistState, releaseFixRouter.steps],
   );
+  const releaseGatePolicy = readiness?.gatePolicy ?? null;
   const releaseFixRouterCounts = useMemo(() => ({
     fail: releaseFixRouter.steps.filter((step) => step.tone === 'fail').length,
     warn: releaseFixRouter.steps.filter((step) => step.tone === 'warn').length,
@@ -767,6 +786,27 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
   useEffect(() => {
     refreshSecurityData().catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (!releaseGatePolicy) {
+      return;
+    }
+    setReleaseGatePolicyDraft({
+      enabled: releaseGatePolicy.enabled,
+      minScore: releaseGatePolicy.minScore,
+      maxWarnings: releaseGatePolicy.maxWarnings,
+      requireZeroFailures: releaseGatePolicy.requireZeroFailures,
+      requireConnectedSsh: releaseGatePolicy.requireConnectedSsh,
+      requireAiProvider: releaseGatePolicy.requireAiProvider,
+    });
+  }, [
+    releaseGatePolicy?.enabled,
+    releaseGatePolicy?.maxWarnings,
+    releaseGatePolicy?.minScore,
+    releaseGatePolicy?.requireAiProvider,
+    releaseGatePolicy?.requireConnectedSsh,
+    releaseGatePolicy?.requireZeroFailures,
+  ]);
 
   useEffect(() => {
     if (!sshProductionProbeSchedule) {
@@ -980,6 +1020,21 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
       setRemediationError(true);
     } finally {
       setSavingSshProductionProbeSchedule(false);
+    }
+  }
+
+  async function saveReleaseGatePolicyDraft() {
+    setSavingReleaseGatePolicy(true);
+    try {
+      const result = await updateReleaseGatePolicy(releaseGatePolicyDraft);
+      setReadiness(result.readiness);
+      setRemediationMessage(copy.releaseGateSaved(result.policy.status));
+      setRemediationError(false);
+    } catch (error) {
+      setRemediationMessage(error instanceof Error ? error.message : copy.releaseGateSaveFailed);
+      setRemediationError(true);
+    } finally {
+      setSavingReleaseGatePolicy(false);
     }
   }
 
@@ -1736,6 +1791,135 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
           </div>
         </div>
       </article>
+
+      {readiness && releaseGatePolicy && (
+        <article
+          className={`security-release-gate-policy ${releaseGatePolicy.status}`}
+          data-release-gate-policy="true"
+          aria-labelledby="security-release-gate-policy-title"
+        >
+          <div className="security-release-gate-policy-heading">
+            <div>
+              <span>{copy.releaseGateKicker}</span>
+              <h3 id="security-release-gate-policy-title"><LockKeyhole size={18} /> {copy.releaseGateTitle}</h3>
+              <p>{copy.releaseGateLead}</p>
+            </div>
+            <div className="security-release-gate-policy-actions">
+              <strong>{copy.releaseGateStatus(releaseGatePolicy.status)}</strong>
+              <button
+                type="button"
+                className="tool-button"
+                onClick={saveReleaseGatePolicyDraft}
+                disabled={savingReleaseGatePolicy}
+                data-release-gate-policy-save="true"
+              >
+                <ClipboardCheck size={15} />
+                {savingReleaseGatePolicy ? copy.releaseGateSaving : copy.releaseGateSave}
+              </button>
+            </div>
+          </div>
+          <div className="security-launch-summary-grid security-launch-summary-grid-release" data-release-gate-policy-summary="true">
+            <article className={`security-launch-summary-card ${releaseGatePolicy.status === 'blocked' ? 'fail' : releaseGatePolicy.status === 'disabled' ? 'warn' : 'ok'}`} data-release-gate-policy-stat="decision">
+              <span>{copy.releaseGateDecision}</span>
+              <strong>{copy.releaseGateStatus(releaseGatePolicy.status)}</strong>
+              <small>{releaseGatePolicy.status === 'blocked' ? (releaseGatePolicy.reasons[0] ?? copy.releaseGateBlockedDetail) : releaseGatePolicy.status === 'disabled' ? copy.releaseGateDisabledDetail : copy.releaseGatePassDetail}</small>
+            </article>
+            <article className={`security-launch-summary-card ${readiness.score >= releaseGatePolicy.minScore ? 'ok' : 'warn'}`} data-release-gate-policy-stat="score">
+              <span>{copy.releaseGateScoreFloor}</span>
+              <strong>{releaseGatePolicy.minScore}</strong>
+              <small>{copy.releaseGateObservedScore(readiness.score)}</small>
+            </article>
+            <article className={`security-launch-summary-card ${readiness.summary.warnings <= releaseGatePolicy.maxWarnings ? 'ok' : 'warn'}`} data-release-gate-policy-stat="warnings">
+              <span>{copy.releaseGateWarningCeiling}</span>
+              <strong>{releaseGatePolicy.maxWarnings}</strong>
+              <small>{copy.releaseGateObservedWarnings(readiness.summary.warnings)}</small>
+            </article>
+            <article className="security-launch-summary-card" data-release-gate-policy-stat="rules">
+              <span>{copy.releaseGateRuleCount}</span>
+              <strong>{releaseGatePolicy.activeRuleCount}</strong>
+              <small>{copy.releaseGateObservedRules(releaseGatePolicy.activeRuleCount)}</small>
+            </article>
+          </div>
+          {releaseGatePolicy.reasons.length > 0 && (
+            <div className="security-release-gate-policy-reasons">
+              {releaseGatePolicy.reasons.map((reason) => (
+                <article key={reason}>
+                  <AlertTriangle size={15} />
+                  <span>{reason}</span>
+                </article>
+              ))}
+            </div>
+          )}
+          <div className="security-release-gate-policy-form">
+            <label>
+              <input
+                type="checkbox"
+                checked={releaseGatePolicyDraft.enabled}
+                onChange={(event) => setReleaseGatePolicyDraft((current) => ({ ...current, enabled: event.target.checked }))}
+                data-release-gate-policy-enabled="true"
+              />
+              <span>{copy.releaseGateEnableLabel}</span>
+            </label>
+            <label className="security-release-gate-policy-select">
+              <span>{copy.releaseGateScoreFloor}</span>
+              <select
+                value={releaseGatePolicyDraft.minScore}
+                disabled={!releaseGatePolicyDraft.enabled}
+                onChange={(event) => setReleaseGatePolicyDraft((current) => ({ ...current, minScore: Number(event.target.value) }))}
+                data-release-gate-policy-min-score="true"
+              >
+                {[60, 70, 80, 90].map((value) => (
+                  <option key={value} value={value}>{value}</option>
+                ))}
+              </select>
+            </label>
+            <label className="security-release-gate-policy-select">
+              <span>{copy.releaseGateWarningCeiling}</span>
+              <select
+                value={releaseGatePolicyDraft.maxWarnings}
+                disabled={!releaseGatePolicyDraft.enabled}
+                onChange={(event) => setReleaseGatePolicyDraft((current) => ({ ...current, maxWarnings: Number(event.target.value) }))}
+                data-release-gate-policy-max-warnings="true"
+              >
+                {[0, 1, 2, 3, 5].map((value) => (
+                  <option key={value} value={value}>{value}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={releaseGatePolicyDraft.requireZeroFailures}
+                disabled={!releaseGatePolicyDraft.enabled}
+                onChange={(event) => setReleaseGatePolicyDraft((current) => ({ ...current, requireZeroFailures: event.target.checked }))}
+                data-release-gate-policy-zero-failures="true"
+              />
+              <span>{copy.releaseGateRequireZeroFailures}</span>
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={releaseGatePolicyDraft.requireConnectedSsh}
+                disabled={!releaseGatePolicyDraft.enabled}
+                onChange={(event) => setReleaseGatePolicyDraft((current) => ({ ...current, requireConnectedSsh: event.target.checked }))}
+                data-release-gate-policy-require-ssh="true"
+              />
+              <span>{copy.releaseGateRequireSsh}</span>
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={releaseGatePolicyDraft.requireAiProvider}
+                disabled={!releaseGatePolicyDraft.enabled}
+                onChange={(event) => setReleaseGatePolicyDraft((current) => ({ ...current, requireAiProvider: event.target.checked }))}
+                data-release-gate-policy-require-ai="true"
+              />
+              <span>{copy.releaseGateRequireAi}</span>
+            </label>
+          </div>
+          <small className="security-release-gate-policy-note">{copy.releaseGateNote}</small>
+        </article>
+      )}
 
       {opsPreflightSnapshot && (
         <article className={`security-ops-preflight-brief ${opsPreflightSnapshot.status}`} data-security-ops-preflight-brief="true" aria-labelledby="security-ops-preflight-title">
@@ -6564,6 +6748,29 @@ interface SecurityCopy {
   releasePlaybookSignalLabel: string;
   releasePlaybookActionLabel: string;
   releasePlaybookItems: ReleaseFailurePlaybookItem[];
+  releaseGateKicker: string;
+  releaseGateTitle: string;
+  releaseGateLead: string;
+  releaseGateSave: string;
+  releaseGateSaving: string;
+  releaseGateSaveFailed: string;
+  releaseGateSaved: (status: ReleaseReadinessResponse['gatePolicy']['status']) => string;
+  releaseGateStatus: (status: ReleaseReadinessResponse['gatePolicy']['status']) => string;
+  releaseGateDecision: string;
+  releaseGateScoreFloor: string;
+  releaseGateWarningCeiling: string;
+  releaseGateRuleCount: string;
+  releaseGateObservedScore: (score: number) => string;
+  releaseGateObservedWarnings: (warnings: number) => string;
+  releaseGateObservedRules: (rules: number) => string;
+  releaseGateEnableLabel: string;
+  releaseGateRequireZeroFailures: string;
+  releaseGateRequireSsh: string;
+  releaseGateRequireAi: string;
+  releaseGateBlockedDetail: string;
+  releaseGateDisabledDetail: string;
+  releaseGatePassDetail: string;
+  releaseGateNote: string;
   traceApplied: (id: string, count: number) => string;
   remediationTitle: string;
   remediationClear: string;
@@ -8139,6 +8346,33 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     evidenceAuditDetail: (blocked, failed, successRate, total) => `${blocked} 个阻断 / ${failed} 个失败，成功率 ${successRate}%（${total} 条）`,
     evidenceQueueDetail: (count) => count > 0 ? `${count} 个待处理事件需闭环` : '无待处理事件',
     evidenceDeploymentDetail: (channel, mode, host) => `${channel} / ${mode} / ${host}`,
+    releaseGateKicker: '上线门禁',
+    releaseGateTitle: '发布门禁策略',
+    releaseGateLead: '用分数、预警、失败项以及 SSH / AI 条件定义允许上线的最低标准。',
+    releaseGateSave: '保存门禁',
+    releaseGateSaving: '保存中',
+    releaseGateSaveFailed: '发布门禁保存失败',
+    releaseGateSaved: (status) => `发布门禁已保存：${({ disabled: '已停用', pass: '允许上线', blocked: '阻止上线' })[status]}`,
+    releaseGateStatus: (status) => ({
+      disabled: '已停用',
+      pass: '允许上线',
+      blocked: '阻止上线',
+    })[status],
+    releaseGateDecision: '当前判定',
+    releaseGateScoreFloor: '最低分数',
+    releaseGateWarningCeiling: '最大预警',
+    releaseGateRuleCount: '生效规则',
+    releaseGateObservedScore: (score) => `当前得分 ${score}`,
+    releaseGateObservedWarnings: (warnings) => `当前预警 ${warnings}`,
+    releaseGateObservedRules: (rules) => `${rules} 条规则生效`,
+    releaseGateEnableLabel: '启用发布门禁',
+    releaseGateRequireZeroFailures: '必须 0 个阻断项',
+    releaseGateRequireSsh: '必须存在 SSH 已连接服务器',
+    releaseGateRequireAi: '必须配置 AI 服务端 Key',
+    releaseGateBlockedDetail: '至少一条门禁规则未满足',
+    releaseGateDisabledDetail: '门禁已关闭，本轮只提示不拦截发布',
+    releaseGatePassDetail: '全部门禁规则已满足，可以继续发布',
+    releaseGateNote: '门禁仅保存阈值与开关，不保存服务器地址、命令正文、密钥或用户数据。',
     auditStatus: (status) => ({
       all: '全部',
       success: '成功',
@@ -8446,6 +8680,33 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     evidenceAuditDetail: (blocked, failed, successRate, total) => `${blocked} blocked / ${failed} failed, ${successRate}% success across ${total} audits`,
     evidenceQueueDetail: (count) => count > 0 ? `${count} open events need closure` : 'No open events',
     evidenceDeploymentDetail: (channel, mode, host) => `${channel} / ${mode} / ${host}`,
+    releaseGateKicker: 'Release gate',
+    releaseGateTitle: 'Release gate policy',
+    releaseGateLead: 'Sets the minimum publish bar with score, warning, failure, SSH, and AI requirements.',
+    releaseGateSave: 'Save gate',
+    releaseGateSaving: 'Saving',
+    releaseGateSaveFailed: 'Failed to save the release gate policy',
+    releaseGateSaved: (status) => `Release gate saved: ${({ disabled: 'Disabled', pass: 'Pass', blocked: 'Blocked' })[status]}`,
+    releaseGateStatus: (status) => ({
+      disabled: 'Disabled',
+      pass: 'Pass',
+      blocked: 'Blocked',
+    })[status],
+    releaseGateDecision: 'Current decision',
+    releaseGateScoreFloor: 'Minimum score',
+    releaseGateWarningCeiling: 'Max warnings',
+    releaseGateRuleCount: 'Active rules',
+    releaseGateObservedScore: (score) => `Observed score ${score}`,
+    releaseGateObservedWarnings: (warnings) => `Observed warnings ${warnings}`,
+    releaseGateObservedRules: (rules) => `${rules} active rules`,
+    releaseGateEnableLabel: 'Enable release gate',
+    releaseGateRequireZeroFailures: 'Require zero blocking failures',
+    releaseGateRequireSsh: 'Require at least one SSH-connected server',
+    releaseGateRequireAi: 'Require a server-side AI key',
+    releaseGateBlockedDetail: 'At least one release gate rule is not satisfied',
+    releaseGateDisabledDetail: 'Gate is disabled, so this cycle only warns and does not block publishing',
+    releaseGatePassDetail: 'All gate rules are satisfied and publishing can continue',
+    releaseGateNote: 'The gate stores only thresholds and toggles, never server addresses, command text, keys, or user data.',
     auditStatus: (status) => ({
       all: 'All',
       success: 'Success',
@@ -8753,6 +9014,33 @@ const securityCopyByLanguage: Record<string, SecurityCopy> = {
     evidenceAuditDetail: (blocked, failed, successRate, total) => `${blocked} 件ブロック / ${failed} 件失敗、${total} 件中成功率 ${successRate}%`,
     evidenceQueueDetail: (count) => count > 0 ? `${count} 件の未対応イベントを閉じる必要があります` : '未対応イベントなし',
     evidenceDeploymentDetail: (channel, mode, host) => `${channel} / ${mode} / ${host}`,
+    releaseGateKicker: '公開ゲート',
+    releaseGateTitle: 'リリースゲートポリシー',
+    releaseGateLead: 'スコア、警告数、失敗項目、SSH、AI 条件で公開可否の最低ラインを定義します。',
+    releaseGateSave: 'ゲートを保存',
+    releaseGateSaving: '保存中',
+    releaseGateSaveFailed: 'リリースゲートの保存に失敗しました',
+    releaseGateSaved: (status) => `リリースゲートを保存しました: ${({ disabled: '無効', pass: '通過', blocked: 'ブロック' })[status]}`,
+    releaseGateStatus: (status) => ({
+      disabled: '無効',
+      pass: '通過',
+      blocked: 'ブロック',
+    })[status],
+    releaseGateDecision: '現在の判定',
+    releaseGateScoreFloor: '最低スコア',
+    releaseGateWarningCeiling: '最大警告数',
+    releaseGateRuleCount: '有効ルール',
+    releaseGateObservedScore: (score) => `現在スコア ${score}`,
+    releaseGateObservedWarnings: (warnings) => `現在警告 ${warnings}`,
+    releaseGateObservedRules: (rules) => `${rules} 件のルールが有効`,
+    releaseGateEnableLabel: 'リリースゲートを有効にする',
+    releaseGateRequireZeroFailures: 'ブロッカーを 0 件にする',
+    releaseGateRequireSsh: 'SSH 接続済みサーバーを必須にする',
+    releaseGateRequireAi: 'サーバー側 AI Key を必須にする',
+    releaseGateBlockedDetail: '少なくとも 1 つのゲート条件を満たしていません',
+    releaseGateDisabledDetail: 'ゲートは無効化されているため、今回は警告のみで公開は止めません',
+    releaseGatePassDetail: 'すべてのゲート条件を満たしており、そのまま公開を続行できます',
+    releaseGateNote: '保存するのは閾値とスイッチだけで、サーバーアドレス、コマンド本文、鍵、ユーザーデータは保存しません。',
     auditStatus: (status) => ({
       all: 'すべて',
       success: '成功',

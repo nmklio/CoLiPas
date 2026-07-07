@@ -14,6 +14,7 @@ import {
   ReleaseReadinessReportResponse,
   ReleaseReadinessResponse,
   ReleaseReadinessSnapshotResponse,
+  ReleaseGatePolicy,
   ServerNode,
   SshRunbookCommand,
   SshAuthType,
@@ -281,6 +282,15 @@ export interface SshProductionProbeScheduleUpdatePayload {
   enabled: boolean;
   autoRunBrowserProbe: boolean;
   intervalMinutes: SshProductionProbeScheduleResponse['intervalMinutes'];
+}
+
+export interface ReleaseGatePolicyUpdatePayload {
+  enabled: boolean;
+  minScore: number;
+  maxWarnings: number;
+  requireZeroFailures: boolean;
+  requireConnectedSsh: boolean;
+  requireAiProvider: boolean;
 }
 
 export interface ServerActionResponse extends ServerCommandResponse {
@@ -682,6 +692,16 @@ export async function fetchReleaseReadiness(fetcher: typeof fetch = fetch) {
   return (await response.json()) as ReleaseReadinessResponse;
 }
 
+export async function fetchReleaseGatePolicy(fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/audit/readiness/policy');
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as ReleaseGatePolicy;
+}
+
 export async function recordReleaseReadinessSnapshot(fetcher: typeof fetch = fetch) {
   const response = await fetcher('/api/audit/readiness/snapshots', {
     method: 'POST',
@@ -692,6 +712,27 @@ export async function recordReleaseReadinessSnapshot(fetcher: typeof fetch = fet
   }
 
   return (await response.json()) as ReleaseReadinessSnapshotResponse;
+}
+
+export async function updateReleaseGatePolicy(
+  payload: ReleaseGatePolicyUpdatePayload,
+  fetcher: typeof fetch = fetch,
+) {
+  const response = await fetcher('/api/audit/readiness/policy', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as {
+    ok: true;
+    policy: ReleaseGatePolicy;
+    readiness: ReleaseReadinessResponse;
+  };
 }
 
 export async function fetchReleaseReadinessReport(fetcher: typeof fetch = fetch) {

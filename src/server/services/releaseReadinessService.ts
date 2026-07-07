@@ -1,5 +1,7 @@
+import { z } from 'zod';
 import { operationEvents, servers } from '../../data/mockData.js';
 import type {
+  ReleaseGatePolicy,
   ReleaseReadinessCheck,
   ReleaseReadinessHistory,
   ReleaseReadinessReportResponse,
@@ -10,13 +12,39 @@ import type {
 } from '../../types.js';
 import { RuntimeConfig } from '../config.js';
 import { getDatabasePath, readAppSetting, writeAppSetting } from './database.js';
-import { listAuditEntries } from './auditService.js';
+import { listAuditEntries, recordAudit } from './auditService.js';
 import { resolveServerLifecycleStatus } from '../../shared/serverFilters.js';
 import { buildReleaseDeploymentEvidence } from './deploymentEvidenceService.js';
 import { getAiProviderStatus } from './aiSettingsService.js';
 
 const readinessHistorySettingId = 'release-readiness-history';
+const readinessGatePolicySettingId = 'release-gate-policy.v1';
 const maxReadinessSnapshots = 12;
+const gatePolicyScoreOptions = [60, 70, 80, 90] as const;
+const gatePolicyWarningOptions = [0, 1, 2, 3, 5] as const;
+
+const storedGatePolicySchema = z.object({
+  version: z.literal(1),
+  enabled: z.boolean(),
+  minScore: z.number().int().min(0).max(100),
+  maxWarnings: z.number().int().min(0).max(20),
+  requireZeroFailures: z.boolean(),
+  requireConnectedSsh: z.boolean(),
+  requireAiProvider: z.boolean(),
+  updatedAt: z.string().trim().min(1).max(80).nullable(),
+  updatedBy: z.string().trim().min(1).max(80).nullable(),
+});
+
+const gatePolicyUpdateSchema = z.object({
+  enabled: z.boolean(),
+  minScore: z.coerce.number().int().refine((value) => gatePolicyScoreOptions.includes(value as (typeof gatePolicyScoreOptions)[number]), 'Release gate score floor is invalid'),
+  maxWarnings: z.coerce.number().int().refine((value) => gatePolicyWarningOptions.includes(value as (typeof gatePolicyWarningOptions)[number]), 'Release gate warning ceiling is invalid'),
+  requireZeroFailures: z.boolean(),
+  requireConnectedSsh: z.boolean(),
+  requireAiProvider: z.boolean(),
+});
+
+type StoredReleaseGatePolicy = z.infer<typeof storedGatePolicySchema>;
 
 export function buildReleaseReadiness(config: RuntimeConfig): ReleaseReadinessResponse {
   const auditEntries = listAuditEntries();
@@ -138,6 +166,13 @@ export function buildReleaseReadiness(config: RuntimeConfig): ReleaseReadinessRe
   const passed = checks.filter((check) => check.passed).length;
   const score = Math.max(0, Math.round((passed / checks.length) * 100 - failures * 12 - warnings * 4));
   const blockers = checks.filter((check) => check.severity === 'fail' || (!check.passed && check.relatedModule === 'audit'));
+  const gatePolicy = buildReleaseGatePolicySummary(loadStoredReleaseGatePolicy(), {
+    score,
+    warnings,
+    failures,
+    connectedSsh: connectedServers.length,
+    aiConfigured: aiProvider.configured,
+  });
   const currentSnapshot = createSnapshot({
     score,
     status: failures > 0 ? 'blocked' : warnings > 0 ? 'review' : 'ready',
@@ -162,6 +197,40 @@ export function buildReleaseReadiness(config: RuntimeConfig): ReleaseReadinessRe
     blockers,
     nextBestAction: currentSnapshot.nextBestAction,
     history,
+    gatePolicy,
+  };
+}
+
+export function getReleaseGatePolicy(config: RuntimeConfig) {
+  return buildReleaseReadiness(config).gatePolicy;
+}
+
+export function updateReleaseGatePolicy(config: RuntimeConfig, input: unknown, actor: string) {
+  const parsed = gatePolicyUpdateSchema.parse(input);
+  const next: StoredReleaseGatePolicy = {
+    version: 1,
+    enabled: parsed.enabled,
+    minScore: parsed.minScore,
+    maxWarnings: parsed.maxWarnings,
+    requireZeroFailures: parsed.requireZeroFailures,
+    requireConnectedSsh: parsed.requireConnectedSsh,
+    requireAiProvider: parsed.requireAiProvider,
+    updatedAt: new Date().toISOString(),
+    updatedBy: sanitizeActor(actor),
+  };
+  writeAppSetting(readinessGatePolicySettingId, next);
+  recordAudit({
+    action: 'RELEASE_GATE_POLICY_UPDATE',
+    actor: sanitizeActor(actor),
+    target: 'release-gate-policy',
+    status: 'success',
+    detail: `Release gate policy ${next.enabled ? 'enabled' : 'disabled'} at score ${next.minScore}, max warnings ${next.maxWarnings}, zero failures ${next.requireZeroFailures ? 'on' : 'off'}, SSH ${next.requireConnectedSsh ? 'required' : 'optional'}, AI ${next.requireAiProvider ? 'required' : 'optional'}.`,
+  });
+  const readiness = buildReleaseReadiness(config);
+  return {
+    ok: true,
+    policy: readiness.gatePolicy,
+    readiness,
   };
 }
 
@@ -208,6 +277,10 @@ export function buildReleaseReadinessReport(config: RuntimeConfig): ReleaseReadi
     '## Next Best Action',
     '',
     `- ${readiness.nextBestAction}`,
+    '',
+    '## Release Gate Policy',
+    '',
+    ...formatGatePolicy(readiness.gatePolicy),
     '',
     '## Blockers',
     '',
@@ -271,6 +344,18 @@ function formatReportSnapshots(snapshots: ReleaseReadinessSnapshot[]) {
   return snapshots.map((snapshot) => `- ${snapshot.createdAt}: score ${snapshot.score}, status ${snapshot.status}, blockers ${snapshot.blockerLabels.length ? snapshot.blockerLabels.map(sanitizeReportText).join(', ') : 'none'}`);
 }
 
+function formatGatePolicy(policy: ReleaseGatePolicy) {
+  return [
+    `- Enabled: ${policy.enabled ? 'yes' : 'no'}`,
+    `- Decision: ${policy.status}`,
+    `- Score floor: ${policy.minScore}`,
+    `- Warning ceiling: ${policy.maxWarnings}`,
+    `- Required guards: zero failures ${policy.requireZeroFailures ? 'yes' : 'no'}, SSH coverage ${policy.requireConnectedSsh ? 'yes' : 'no'}, AI provider ${policy.requireAiProvider ? 'yes' : 'no'}`,
+    `- Observed state: score ${policy.observed.score}, warnings ${policy.observed.warnings}, failures ${policy.observed.failures}, SSH ${policy.observed.connectedSsh}, AI configured ${policy.observed.aiConfigured ? 'yes' : 'no'}`,
+    ...(policy.reasons.length > 0 ? policy.reasons.map((reason) => `- Reason: ${sanitizeReportText(reason)}`) : ['- Reason: gate satisfied']),
+  ];
+}
+
 function formatTrend(direction: ReleaseReadinessTrend['direction'], deltaScore: number, previousScore?: number) {
   if (direction === 'new') {
     return 'no previous snapshot';
@@ -293,6 +378,84 @@ function sanitizeReportText(value: string) {
     .replace(/\b(password|passwd|pwd|token|secret|api[_-]?key)=([^\s&]+)/gi, '$1=[redacted]')
     .replace(/\/\/([^/\s:@]+):([^@\s/]+)@/g, '//[redacted]@')
     .slice(0, 1000);
+}
+
+function loadStoredReleaseGatePolicy() {
+  try {
+    const row = readAppSetting(readinessGatePolicySettingId);
+    if (!row) {
+      return null;
+    }
+    return storedGatePolicySchema.parse(JSON.parse(row.payload));
+  } catch {
+    return null;
+  }
+}
+
+function buildReleaseGatePolicySummary(
+  stored: StoredReleaseGatePolicy | null,
+  observed: ReleaseGatePolicy['observed'],
+): ReleaseGatePolicy {
+  const policy = stored ?? {
+    version: 1 as const,
+    enabled: true,
+    minScore: 80,
+    maxWarnings: 1,
+    requireZeroFailures: true,
+    requireConnectedSsh: true,
+    requireAiProvider: false,
+    updatedAt: null,
+    updatedBy: null,
+  };
+  const reasons: string[] = [];
+
+  if (policy.enabled) {
+    if (observed.score < policy.minScore) {
+      reasons.push(`Readiness score ${observed.score} is below the gate floor ${policy.minScore}.`);
+    }
+    if (observed.warnings > policy.maxWarnings) {
+      reasons.push(`Warning count ${observed.warnings} exceeds the gate ceiling ${policy.maxWarnings}.`);
+    }
+    if (policy.requireZeroFailures && observed.failures > 0) {
+      reasons.push(`${observed.failures} blocking release check(s) are still failing.`);
+    }
+    if (policy.requireConnectedSsh && observed.connectedSsh === 0) {
+      reasons.push('No SSH-connected server is available for release validation.');
+    }
+    if (policy.requireAiProvider && !observed.aiConfigured) {
+      reasons.push('No server-side AI provider key is configured for the release gate.');
+    }
+  }
+
+  return {
+    enabled: policy.enabled,
+    minScore: policy.minScore,
+    maxWarnings: policy.maxWarnings,
+    requireZeroFailures: policy.requireZeroFailures,
+    requireConnectedSsh: policy.requireConnectedSsh,
+    requireAiProvider: policy.requireAiProvider,
+    updatedAt: policy.updatedAt,
+    updatedBy: policy.updatedBy,
+    status: !policy.enabled ? 'disabled' : reasons.length > 0 ? 'blocked' : 'pass',
+    allowedToRelease: !policy.enabled || reasons.length === 0,
+    activeRuleCount: policy.enabled
+      ? 2
+        + Number(policy.requireZeroFailures)
+        + Number(policy.requireConnectedSsh)
+        + Number(policy.requireAiProvider)
+      : 0,
+    reasons,
+    observed,
+  };
+}
+
+function sanitizeActor(value: string) {
+  const sanitized = value
+    .replace(/[^\p{L}\p{N}_.@-]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80);
+  return sanitized || 'operator';
 }
 
 function createSnapshot(input: {

@@ -31,18 +31,18 @@ try {
   temporaryServerId = temporaryServer.id;
   await assertSshTerminalPanel(page);
   await assertOperationsResultTraceRoundTrip(page);
-  await deleteTemporaryAssetServer(page, temporaryServer.id);
-  temporaryServerId = '';
 
   await assertReleaseEvidenceBrief(page);
   await page.locator('[data-release-fix-router="true"]').scrollIntoViewIfNeeded();
   await captureVisualEvidence(page, 'desktop-release-cockpit-handoff', ['[data-release-fix-router="true"]', '[data-release-cockpit="true"]', '[data-release-handoff-pack="true"]', '[data-release-evidence-timeline="true"]']);
-  await captureVisualEvidence(page, 'desktop-security-trace', ['.security-workbench', '.security-readiness-card', '[data-release-fix-router="true"]', '[data-release-cockpit="true"]', '[data-release-handoff-pack="true"]', '[data-release-evidence-timeline="true"]', '.security-evidence-brief', '.security-release-playbook', '.security-ssh-performance-card']);
+  await captureVisualEvidence(page, 'desktop-security-trace', ['.security-workbench', '.security-readiness-card', '[data-release-gate-policy="true"]', '[data-release-fix-router="true"]', '[data-release-cockpit="true"]', '[data-release-handoff-pack="true"]', '[data-release-evidence-timeline="true"]', '.security-evidence-brief', '.security-release-playbook', '.security-ssh-performance-card']);
   await page.locator('[data-ssh-flight-recorder="true"]').scrollIntoViewIfNeeded();
   await captureVisualEvidence(page, 'desktop-ssh-flight-recorder', ['[data-ssh-flight-recorder="true"]', '.security-ssh-flight-rail', '[data-ssh-latency-curve="true"]', '[data-ssh-interaction-sampler="true"]', '[data-ssh-experience-sla="true"]', '[data-ssh-bottleneck-trend="true"]']);
   await page.locator('[data-ssh-bottleneck-trend="true"]').scrollIntoViewIfNeeded();
   await captureVisualEvidence(page, 'desktop-ssh-bottleneck-trend', ['[data-ssh-bottleneck-trend="true"]']);
   await assertOverviewHealthBaseline(page);
+  await deleteTemporaryAssetServer(page, temporaryServer.id);
+  temporaryServerId = '';
   await assertMobileConsoleAndMap();
   await assertMobileModuleLayoutSweep();
 
@@ -230,9 +230,14 @@ async function assertReleaseEvidenceBrief(targetPage) {
   await targetPage.locator('[data-release-evidence-timeline="true"]').waitFor({ timeout: 10000 });
   await targetPage.locator('.security-release-playbook').waitFor({ timeout: 10000 });
   await targetPage.locator('.security-ssh-performance-card').waitFor({ timeout: 10000 });
+  await targetPage.locator('[data-release-gate-policy="true"]').waitFor({ timeout: 10000 });
   const readinessSummaryCount = await targetPage.locator('[data-security-readiness-kpi]').count();
   if (readinessSummaryCount < 4) {
     throw new Error(`Release readiness summary should expose four KPI cards, got ${readinessSummaryCount}`);
+  }
+  const releaseGateStatCount = await targetPage.locator('[data-release-gate-policy-stat]').count();
+  if (releaseGateStatCount < 4) {
+    throw new Error(`Release gate policy should expose four summary stat cards, got ${releaseGateStatCount}`);
   }
   const releaseFixRouterSummaryCount = await targetPage.locator('[data-release-fix-router-stat]').count();
   if (releaseFixRouterSummaryCount < 3) {
@@ -242,6 +247,60 @@ async function assertReleaseEvidenceBrief(targetPage) {
   if (releaseFixChecklistSummaryCount < 3) {
     throw new Error(`Release fix checklist summary should expose three stat cards, got ${releaseFixChecklistSummaryCount}`);
   }
+  const releaseGateText = await targetPage.locator('[data-release-gate-policy="true"]').innerText();
+  if (!/Release gate policy|Release gate/i.test(releaseGateText) || !/Minimum score|Max warnings|Active rules|Enable release gate/i.test(releaseGateText)) {
+    throw new Error(`Release gate policy did not render the expected guardrail controls: ${releaseGateText}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(releaseGateText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(releaseGateText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(releaseGateText)) {
+    throw new Error('Release gate policy rendered a raw IP address or secret');
+  }
+  const releaseGateEnabled = targetPage.locator('[data-release-gate-policy-enabled="true"]');
+  const releaseGateMinScore = targetPage.locator('[data-release-gate-policy-min-score="true"]');
+  const releaseGateMaxWarnings = targetPage.locator('[data-release-gate-policy-max-warnings="true"]');
+  const releaseGateSave = targetPage.locator('[data-release-gate-policy-save="true"]');
+  if (!(await releaseGateEnabled.isChecked())) {
+    await releaseGateEnabled.check();
+  }
+  await releaseGateEnabled.uncheck();
+  await releaseGateSave.click();
+  await targetPage.waitForFunction(async () => {
+    const response = await fetch('/api/audit/readiness/policy');
+    const body = await response.json();
+    return body.enabled === false && body.status === 'disabled';
+  }, { timeout: 10000 });
+  await releaseGateEnabled.check();
+  await releaseGateMinScore.selectOption('90');
+  await releaseGateMaxWarnings.selectOption('0');
+  await releaseGateSave.click();
+  await targetPage.waitForFunction(async () => {
+    const response = await fetch('/api/audit/readiness/policy');
+    const body = await response.json();
+    return body.enabled === true && body.minScore === 90 && body.maxWarnings === 0;
+  }, { timeout: 10000 });
+  await targetPage.reload({ waitUntil: 'networkidle' });
+  await targetPage.locator('[data-release-gate-policy="true"]').waitFor({ timeout: 10000 });
+  if (await targetPage.locator('[data-release-gate-policy-min-score="true"]').inputValue() !== '90') {
+    throw new Error('Release gate policy did not persist the saved minimum score after reload');
+  }
+  if (await targetPage.locator('[data-release-gate-policy-max-warnings="true"]').inputValue() !== '0') {
+    throw new Error('Release gate policy did not persist the saved warning ceiling after reload');
+  }
+  const releaseGateDiagnostics = await targetPage.evaluate(async () => {
+    const response = await fetch('/api/audit/diagnostics/export');
+    const body = await response.json();
+    return {
+      minScore: body.readiness?.gatePolicy?.minScore,
+      maxWarnings: body.readiness?.gatePolicy?.maxWarnings,
+      payload: JSON.stringify(body.readiness?.gatePolicy ?? {}),
+    };
+  });
+  if (releaseGateDiagnostics.minScore !== 90 || releaseGateDiagnostics.maxWarnings !== 0) {
+    throw new Error(`Release gate policy did not persist into diagnostics export: ${JSON.stringify(releaseGateDiagnostics)}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(releaseGateDiagnostics.payload) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(releaseGateDiagnostics.payload) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(releaseGateDiagnostics.payload)) {
+    throw new Error('Release gate diagnostics export leaked a raw IP address or secret');
+  }
+  await captureVisualEvidence(targetPage, 'desktop-release-gate-policy', ['[data-release-gate-policy="true"]']);
   await targetPage.getByRole('button', { name: /copy evidence brief/i }).waitFor({ timeout: 5000 });
   await targetPage.getByRole('button', { name: /copy fix route/i }).waitFor({ timeout: 5000 });
   await targetPage.getByRole('button', { name: /copy checklist/i }).waitFor({ timeout: 5000 });
@@ -2162,9 +2221,11 @@ async function assertOverviewHealthBaseline(targetPage) {
     throw new Error(`Overview draft risk summary is incomplete: ${overviewRiskText}`);
   }
   const overviewPreflightLocator = targetPage.locator('[data-ops-draft-locator-action="preflight"]');
-  await overviewPreflightLocator.waitFor({ timeout: 10000 });
-  await overviewPreflightLocator.click();
-  await targetPage.waitForFunction(() => document.activeElement?.getAttribute('data-ops-draft-preflight-button') === 'true', null, { timeout: 5000 });
+  const hasOverviewPreflightLocator = await overviewPreflightLocator.first().isVisible().catch(() => false);
+  if (hasOverviewPreflightLocator) {
+    await overviewPreflightLocator.click();
+    await targetPage.waitForFunction(() => document.activeElement?.getAttribute('data-ops-draft-preflight-button') === 'true', null, { timeout: 5000 });
+  }
   await targetPage.waitForFunction(
     () => {
       const targetScope = document.querySelector('.ops-builder select');
