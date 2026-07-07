@@ -6918,6 +6918,181 @@ td span,
   opacity: 0.55;
 }
 
+
+.ssh-terminal-latency-report {
+  order: 10;
+  flex: 0 0 auto;
+  min-height: 78px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(126, 161, 166, 0.12);
+  background:
+    radial-gradient(circle at 6% 0, rgba(45, 212, 191, 0.15), transparent 30%),
+    radial-gradient(circle at 96% 12%, rgba(59, 130, 246, 0.14), transparent 32%),
+    linear-gradient(135deg, rgba(5, 18, 24, 0.98), rgba(3, 7, 8, 0.99));
+  display: grid;
+  grid-template-columns: minmax(200px, 0.5fr) minmax(0, 1.5fr) auto;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.ssh-terminal-latency-report.good {
+  background:
+    radial-gradient(circle at 6% 0, rgba(45, 212, 191, 0.13), transparent 30%),
+    linear-gradient(135deg, rgba(4, 24, 22, 0.98), rgba(3, 7, 8, 0.99));
+}
+
+.ssh-terminal-latency-report.warn {
+  background:
+    radial-gradient(circle at 6% 0, rgba(250, 204, 21, 0.13), transparent 30%),
+    linear-gradient(135deg, rgba(31, 24, 7, 0.98), rgba(3, 7, 8, 0.99));
+}
+
+.ssh-terminal-latency-report.slow {
+  background:
+    radial-gradient(circle at 6% 0, rgba(251, 113, 133, 0.15), transparent 30%),
+    linear-gradient(135deg, rgba(35, 11, 15, 0.98), rgba(3, 7, 8, 0.99));
+}
+
+.ssh-terminal-latency-report-copy {
+  min-width: 0;
+  border-right: 1px solid rgba(45, 212, 191, 0.17);
+  padding-right: 10px;
+  display: grid;
+  align-content: center;
+  gap: 3px;
+}
+
+.ssh-terminal-latency-report-copy span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #67e8f9;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ssh-terminal-latency-report.good .ssh-terminal-latency-report-copy span {
+  color: #5eead4;
+}
+
+.ssh-terminal-latency-report.warn .ssh-terminal-latency-report-copy span {
+  color: #facc15;
+}
+
+.ssh-terminal-latency-report.slow .ssh-terminal-latency-report-copy span {
+  color: #fb7185;
+}
+
+.ssh-terminal-latency-report-copy strong {
+  color: #f4fffb;
+  font-size: 13px;
+  font-weight: 950;
+  line-height: 1.22;
+}
+
+.ssh-terminal-latency-report-copy small {
+  color: #9eb4ba;
+  font-size: 10px;
+  font-weight: 730;
+  line-height: 1.35;
+}
+
+.ssh-terminal-latency-report-grid {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.ssh-terminal-latency-report-grid article {
+  min-width: 0;
+  border: 1px solid rgba(103, 232, 249, 0.16);
+  border-radius: 12px;
+  padding: 7px 8px;
+  background: rgba(255, 255, 255, 0.045);
+  display: grid;
+  align-content: start;
+  gap: 3px;
+}
+
+.ssh-terminal-latency-report-grid article.good {
+  border-color: rgba(94, 234, 212, 0.24);
+  background: rgba(20, 184, 166, 0.11);
+}
+
+.ssh-terminal-latency-report-grid article.warn {
+  border-color: rgba(250, 204, 21, 0.24);
+  background: rgba(113, 63, 18, 0.15);
+}
+
+.ssh-terminal-latency-report-grid article.slow {
+  border-color: rgba(251, 113, 133, 0.27);
+  background: rgba(127, 29, 29, 0.16);
+}
+
+.ssh-terminal-latency-report-grid article.pending {
+  border-color: rgba(148, 163, 184, 0.18);
+  background: rgba(30, 41, 59, 0.18);
+}
+
+.ssh-terminal-latency-report-grid span,
+.ssh-terminal-latency-report-grid strong,
+.ssh-terminal-latency-report-grid small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ssh-terminal-latency-report-grid span {
+  color: #a9bdd1;
+  font-size: 9px;
+  font-weight: 950;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ssh-terminal-latency-report-grid strong {
+  color: #f8fffb;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.ssh-terminal-latency-report-grid small {
+  color: #8da7ad;
+  font-size: 10px;
+  font-weight: 720;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.ssh-terminal-latency-report > button {
+  align-self: center;
+  border: 1px solid rgba(103, 232, 249, 0.28);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: linear-gradient(135deg, rgba(20, 184, 166, 0.24), rgba(14, 165, 233, 0.16));
+  color: #ecfffb;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.ssh-terminal-latency-report > button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(103, 232, 249, 0.44);
+}
+
+.ssh-terminal-latency-report > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .ssh-terminal-support-bundle {
   order: 11;
   flex: 0 0 auto;
@@ -17917,6 +18092,32 @@ pre {
   }
 
   .ssh-terminal-self-diagnostic > button {
+    justify-self: stretch;
+  }
+
+  .ssh-terminal-latency-report {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 9px 12px 11px;
+  }
+
+  .ssh-terminal-latency-report-copy {
+    border-right: 0;
+    border-bottom: 1px solid rgba(103, 232, 249, 0.16);
+    padding-right: 0;
+    padding-bottom: 7px;
+  }
+
+  .ssh-terminal-latency-report-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .ssh-terminal-latency-report-grid small {
+    white-space: normal;
+  }
+
+  .ssh-terminal-latency-report > button {
     justify-self: stretch;
   }
 

@@ -67,6 +67,8 @@ async function createE2ePage(options) {
     window.localStorage.removeItem('colipas.sshConnectionDoctorHistory.v1');
     window.localStorage.removeItem('colipas.sshTerminalSupportSnapshot.v1');
     window.localStorage.removeItem('colipas.sshTerminalSupportSnapshotHistory.v1');
+    window.localStorage.removeItem('colipas.sshLatencyReport.v1');
+    window.localStorage.removeItem('colipas.sshLatencyReportHistory.v1');
     window.localStorage.removeItem('colipas.launchGuide.dismissed.v1');
   });
   targetPage.on('console', (message) => {
@@ -1877,6 +1879,52 @@ async function assertSshTerminalPanel(targetPage) {
     if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(terminalSelfDiagnosticText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(terminalSelfDiagnosticText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(terminalSelfDiagnosticText)) {
       throw new Error('SSH terminal self-diagnostic wizard rendered a raw IP address or secret');
     }
+    await targetPage.locator('[data-ssh-terminal-latency-report="true"]').waitFor({ timeout: 5000 });
+    const terminalLatencyReportText = await targetPage.locator('[data-ssh-terminal-latency-report="true"]').innerText();
+    if (!/SSH latency sampling report/i.test(terminalLatencyReportText) || !/Latency sampler/i.test(terminalLatencyReportText) || !/Input echo/i.test(terminalLatencyReportText) || !/First output/i.test(terminalLatencyReportText) || !/Output throughput/i.test(terminalLatencyReportText) || !/Browser render/i.test(terminalLatencyReportText) || !/Channel/i.test(terminalLatencyReportText) || !/Next action/i.test(terminalLatencyReportText)) {
+      throw new Error(`SSH latency sampling report did not render all evidence lanes: ${terminalLatencyReportText}`);
+    }
+    const terminalLatencySectionCount = await targetPage.locator('[data-ssh-terminal-latency-report-section]').count();
+    if (terminalLatencySectionCount !== 6) {
+      throw new Error(`SSH latency sampling report should expose six evidence lanes, got ${terminalLatencySectionCount}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(terminalLatencyReportText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(terminalLatencyReportText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(terminalLatencyReportText)) {
+      throw new Error('SSH latency sampling report rendered a raw IP address or secret');
+    }
+    await targetPage.evaluate(() => {
+      window.__colipasCopiedTerminalText = '';
+    });
+    await targetPage.locator('[data-ssh-terminal-latency-report="true"] button').click();
+    const copiedTerminalLatencyReportText = await targetPage.evaluate(() => window.__colipasCopiedTerminalText ?? '');
+    if (!/SSH latency sampling report/i.test(copiedTerminalLatencyReportText) || !/Generated at/i.test(copiedTerminalLatencyReportText) || !/Sanitized/i.test(copiedTerminalLatencyReportText) || !/Input echo/i.test(copiedTerminalLatencyReportText) || !/First output/i.test(copiedTerminalLatencyReportText) || !/Output throughput/i.test(copiedTerminalLatencyReportText) || !/Browser render/i.test(copiedTerminalLatencyReportText) || !/Channel/i.test(copiedTerminalLatencyReportText) || !/Next action/i.test(copiedTerminalLatencyReportText)) {
+      throw new Error(`SSH latency sampling report copy output is incomplete: ${copiedTerminalLatencyReportText}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedTerminalLatencyReportText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedTerminalLatencyReportText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(copiedTerminalLatencyReportText)) {
+      throw new Error('SSH latency sampling report copy output leaked a raw IP address or secret');
+    }
+    const storedTerminalLatencyReport = await targetPage.evaluate(() => window.localStorage.getItem('colipas.sshLatencyReport.v1') ?? '');
+    const parsedTerminalLatencyReport = JSON.parse(storedTerminalLatencyReport || '{}');
+    if (
+      parsedTerminalLatencyReport.version !== 1
+      || parsedTerminalLatencyReport.source !== 'terminal-latency-report'
+      || !/SSH latency sampling report/i.test(parsedTerminalLatencyReport.text ?? '')
+      || !Array.isArray(parsedTerminalLatencyReport.sections)
+      || parsedTerminalLatencyReport.sections.length !== 6
+      || parsedTerminalLatencyReport.sections.some((section) => !section.label || !section.value || !['pending', 'good', 'warn', 'slow'].includes(section.tone))
+    ) {
+      throw new Error(`SSH latency report storage is incomplete: ${storedTerminalLatencyReport}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(storedTerminalLatencyReport) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(storedTerminalLatencyReport) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(storedTerminalLatencyReport)) {
+      throw new Error('SSH latency report storage leaked a raw IP address or secret');
+    }
+    const storedTerminalLatencyHistory = await targetPage.evaluate(() => window.localStorage.getItem('colipas.sshLatencyReportHistory.v1') ?? '');
+    const parsedTerminalLatencyHistory = JSON.parse(storedTerminalLatencyHistory || '[]');
+    if (!Array.isArray(parsedTerminalLatencyHistory) || parsedTerminalLatencyHistory.length !== 1 || !/SSH latency sampling report/i.test(parsedTerminalLatencyHistory[0]?.text ?? '') || parsedTerminalLatencyHistory[0]?.sections?.length !== 6) {
+      throw new Error(`SSH latency report history storage is incomplete: ${storedTerminalLatencyHistory}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(storedTerminalLatencyHistory) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(storedTerminalLatencyHistory) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(storedTerminalLatencyHistory)) {
+      throw new Error('SSH latency report history leaked a raw IP address or secret');
+    }
     await targetPage.locator('[data-ssh-terminal-support-bundle="true"]').waitFor({ timeout: 5000 });
     const terminalSupportBundleText = await targetPage.locator('[data-ssh-terminal-support-bundle="true"]').innerText();
     if (!/SSH sanitized diagnosis pack/i.test(terminalSupportBundleText) || !/Field evidence pack/i.test(terminalSupportBundleText) || !/Channel state/i.test(terminalSupportBundleText) || !/Live telemetry/i.test(terminalSupportBundleText) || !/Bottleneck radar/i.test(terminalSupportBundleText) || !/Recovery action/i.test(terminalSupportBundleText) || !/Self-diagnosis guide/i.test(terminalSupportBundleText)) {
@@ -1935,7 +1983,7 @@ async function assertSshTerminalPanel(targetPage) {
     await targetPage.waitForFunction(() => {
       const shell = document.querySelector('.ssh-terminal-shell');
       return shell?.classList.contains('focus-mode')
-        && document.querySelectorAll('[data-ssh-terminal-telemetry="true"], [data-ssh-terminal-bottleneck="true"], [data-ssh-terminal-root-cause="true"], [data-ssh-terminal-support-bundle="true"], [data-ssh-quick-command-deck="true"]').length === 0;
+        && document.querySelectorAll('[data-ssh-terminal-telemetry="true"], [data-ssh-terminal-bottleneck="true"], [data-ssh-terminal-root-cause="true"], [data-ssh-terminal-latency-report="true"], [data-ssh-terminal-support-bundle="true"], [data-ssh-quick-command-deck="true"]').length === 0;
     }, undefined, { timeout: 5000 });
     const focusPreference = await targetPage.evaluate(() => window.localStorage.getItem('colipas.sshTerminalFocusMode.v1'));
     if (focusPreference !== 'true') {

@@ -88,6 +88,9 @@ const terminalPasteReviewPreviewLines = 8;
 const terminalPasteReviewPreviewChars = 560;
 const terminalTextEncoder = new TextEncoder();
 const terminalFocusModeStorageKey = 'colipas.sshTerminalFocusMode.v1';
+const terminalLatencyReportStorageKey = 'colipas.sshLatencyReport.v1';
+const terminalLatencyReportHistoryStorageKey = 'colipas.sshLatencyReportHistory.v1';
+const terminalLatencyReportHistoryLimit = 12;
 const terminalBottleneckHistoryStorageKey = 'colipas.sshBottleneckRadarHistory.v1';
 const terminalBottleneckHistoryLimit = 12;
 const terminalBottleneckSnapshotDedupeMs = 6000;
@@ -305,6 +308,23 @@ interface TerminalSupportBundle {
   title: string;
   detail: string;
   sections: TerminalSupportBundleSection[];
+  text: string;
+}
+
+interface TerminalLatencyReportSection {
+  id: 'input-echo' | 'first-output' | 'throughput' | 'render' | 'channel' | 'action';
+  label: string;
+  value: string;
+  detail: string;
+  tone: TerminalNetworkQuality['tone'];
+}
+
+interface TerminalLatencyReport {
+  tone: TerminalNetworkQuality['tone'];
+  generatedAt: string;
+  title: string;
+  detail: string;
+  sections: TerminalLatencyReportSection[];
   text: string;
 }
 
@@ -682,6 +702,19 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       t,
     }),
     [terminalTelemetry, terminalTelemetryInsight, terminalBottleneckAdvisor, terminalLagAction, terminalSelfDiagnosticGuide, terminalNetworkStats, terminalTransport, terminalSelfTest, terminalShellId, t],
+  );
+  const terminalLatencyReport = useMemo(
+    () => buildTerminalLatencyReport({
+      telemetry: terminalTelemetry,
+      bottleneckAdvisor: terminalBottleneckAdvisor,
+      lagRootCause: terminalLagRootCause,
+      networkStats: terminalNetworkStats,
+      transport: terminalTransport,
+      selfTest: terminalSelfTest,
+      connected: Boolean(terminalShellId),
+      t,
+    }),
+    [terminalTelemetry, terminalBottleneckAdvisor, terminalLagRootCause, terminalNetworkStats, terminalTransport, terminalSelfTest, terminalShellId, t],
   );
   const sshRunbookRecommendations = useMemo(
     () => buildSshRunbookRecommendations(sshRunbookCommands, sshDoctorReport, terminalBottleneckAdvisor, Boolean(terminalShellId), t),
@@ -1691,6 +1724,19 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                       </button>
                       <button
                         type="button"
+                        data-ssh-latency-report-copy="true"
+                        aria-label={t('servers.terminalLatencyReportCopy')}
+                        title={t('servers.terminalLatencyReportCopy')}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void copyTerminalLatencyReport();
+                        }}
+                        disabled={!terminalShellId || !terminalLatencyReport}
+                      >
+                        <FileText size={14} />
+                      </button>
+                      <button
+                        type="button"
                         data-ssh-terminal-focus-toggle="true"
                         className={terminalFocusMode ? 'active' : undefined}
                         aria-pressed={terminalFocusMode}
@@ -1871,6 +1917,27 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     >
                       {terminalSelfDiagnosticGuide.actionLabel}
                       <small>{terminalSelfDiagnosticGuide.actionDetail}</small>
+                    </button>
+                  </div>
+                )}
+                {!terminalFocusMode && terminalLatencyReport && (
+                  <div className={`ssh-terminal-latency-report ${terminalLatencyReport.tone}`} data-ssh-terminal-latency-report="true" aria-live="polite" onClick={(event) => event.stopPropagation()}>
+                    <div className="ssh-terminal-latency-report-copy">
+                      <span><Network size={14} /> {t('servers.terminalLatencyReportEyebrow')}</span>
+                      <strong>{terminalLatencyReport.title}</strong>
+                      <small>{terminalLatencyReport.detail}</small>
+                    </div>
+                    <div className="ssh-terminal-latency-report-grid">
+                      {terminalLatencyReport.sections.map((section) => (
+                        <article key={section.id} className={section.tone} data-ssh-terminal-latency-report-section={section.id}>
+                          <span>{section.label}</span>
+                          <strong>{section.value}</strong>
+                          <small>{section.detail}</small>
+                        </article>
+                      ))}
+                    </div>
+                    <button type="button" onClick={copyTerminalLatencyReport} disabled={!terminalShellId}>
+                      {t('servers.terminalLatencyReportCopy')}
                     </button>
                   </div>
                 )}
@@ -3524,6 +3591,57 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     }
   }
 
+  async function copyTerminalLatencyReport() {
+    if (!terminalLatencyReport) {
+      return;
+    }
+
+    try {
+      await writeClipboardText(terminalLatencyReport.text);
+      persistTerminalLatencyReportSnapshot(terminalLatencyReport);
+      showActionMessage(t('servers.terminalLatencyReportCopied'));
+    } catch {
+      showActionMessage(t('servers.terminalCopyFailed'));
+    } finally {
+      xtermRef.current?.focus();
+    }
+  }
+
+  function persistTerminalLatencyReportSnapshot(report: TerminalLatencyReport) {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const snapshot = {
+      version: 1,
+      source: 'terminal-latency-report',
+      createdAt: new Date().toISOString(),
+      tone: report.tone,
+      title: sanitizeSshDoctorText(report.title).slice(0, 120),
+      detail: sanitizeSshDoctorText(report.detail).slice(0, 240),
+      sections: report.sections.map((section) => ({
+        id: section.id,
+        label: sanitizeSshDoctorText(section.label).slice(0, 80),
+        value: sanitizeSshDoctorText(section.value).slice(0, 120),
+        detail: sanitizeSshDoctorText(section.detail).slice(0, 240),
+        tone: section.tone,
+      })),
+      text: sanitizeSshDoctorText(report.text).slice(0, 6000),
+    };
+
+    try {
+      window.localStorage.setItem(terminalLatencyReportStorageKey, JSON.stringify(snapshot));
+      const current = window.localStorage.getItem(terminalLatencyReportHistoryStorageKey);
+      const parsed = current ? JSON.parse(current) : [];
+      const history = Array.isArray(parsed) ? parsed : [];
+      const nextHistory = [snapshot, ...history.filter((item) => item?.text !== snapshot.text)].slice(0, terminalLatencyReportHistoryLimit);
+      window.localStorage.setItem(terminalLatencyReportHistoryStorageKey, JSON.stringify(nextHistory));
+      window.dispatchEvent(new CustomEvent('colipas:ssh-latency-report', { detail: snapshot }));
+    } catch {
+      // Browser storage is best-effort; copying the report must still succeed.
+    }
+  }
+
   function runTerminalSelfDiagnosticAction(action: TerminalSelfDiagnosticAction) {
     if (action === 'wait') {
       showActionMessage(t('servers.terminalSelfDiagnosticWaiting'));
@@ -5076,6 +5194,174 @@ function buildTerminalSelfDiagnosticGuide({
     actionLabel,
     actionDetail,
     steps,
+  };
+}
+
+
+function buildTerminalLatencyReport({
+  telemetry,
+  bottleneckAdvisor,
+  lagRootCause,
+  networkStats,
+  transport,
+  selfTest,
+  connected,
+  t,
+}: {
+  telemetry: TerminalTelemetryState;
+  bottleneckAdvisor: TerminalBottleneckAdvisor;
+  lagRootCause: TerminalLagRootCause;
+  networkStats: TerminalNetworkStats | null;
+  transport: 'websocket' | 'compatible' | null;
+  selfTest: TerminalSelfTestState | null;
+  connected: boolean;
+  t: (key: string, vars?: Record<string, string | number>) => string;
+}): TerminalLatencyReport | null {
+  if (!connected) {
+    return null;
+  }
+
+  const generatedAt = new Date().toISOString();
+  const transportLabel = getTerminalTransportLabel(transport, t);
+  const networkQuality = networkStats ? getTerminalNetworkQuality(networkStats, t) : null;
+  const primary = getPrimaryBottleneckItem(bottleneckAdvisor) ?? bottleneckAdvisor.items[0] ?? null;
+  const inputEchoMs = telemetry.lastInputAt !== null && telemetry.lastOutputAt !== null && telemetry.lastOutputAt >= telemetry.lastInputAt
+    ? Math.max(0, telemetry.lastOutputAt - telemetry.lastInputAt)
+    : null;
+  const firstOutputMs = telemetry.latestFirstOutputMs ?? selfTest?.firstResponseMs ?? null;
+  const throughput = networkStats?.throughputBytesPerSecond ?? selfTest?.throughputBytesPerSecond ?? 0;
+  const rttLabel = networkStats ? formatTerminalRtt(networkStats.rttMs) : formatTerminalRtt(selfTest?.rttMs ?? null);
+  const inputTone: TerminalNetworkQuality['tone'] = inputEchoMs === null
+    ? 'pending'
+    : inputEchoMs >= 1200
+      ? 'slow'
+      : inputEchoMs >= 350
+        ? 'warn'
+        : 'good';
+  const firstOutputTone: TerminalNetworkQuality['tone'] = firstOutputMs === null
+    ? 'pending'
+    : firstOutputMs >= 1800
+      ? 'slow'
+      : firstOutputMs >= 700
+        ? 'warn'
+        : 'good';
+  const throughputTone: TerminalNetworkQuality['tone'] = throughput <= 0 || telemetry.outputBytes === 0
+    ? 'pending'
+    : throughput < 16 * 1024
+      ? 'warn'
+      : 'good';
+  const renderTone: TerminalNetworkQuality['tone'] = telemetry.renderLagMs >= 64 || telemetry.pendingBytes >= terminalWriteLargeBacklogThreshold
+    ? 'slow'
+    : telemetry.renderLagMs >= 24 || telemetry.pendingBytes > 0
+      ? 'warn'
+      : 'good';
+  const channelTone: TerminalNetworkQuality['tone'] = networkQuality?.tone ?? (transport === 'compatible' ? 'warn' : transport === 'websocket' ? 'good' : 'pending');
+  const actionTone: TerminalNetworkQuality['tone'] = primary?.tone ?? lagRootCause.tone;
+  const firstOutputSource = telemetry.latestFirstOutputMs !== null
+    ? t('servers.terminalLatencyReportSourceLive')
+    : selfTest
+      ? t('servers.terminalLatencyReportSourceSelfTest')
+      : t('servers.terminalLatencyReportSourcePending');
+
+  const rawSections: TerminalLatencyReportSection[] = [
+    {
+      id: 'input-echo',
+      label: t('servers.terminalLatencyReportInputEcho'),
+      value: inputEchoMs === null ? '--' : `${Math.round(inputEchoMs)}ms`,
+      detail: inputEchoMs === null
+        ? t('servers.terminalLatencyReportInputEchoPending')
+        : t('servers.terminalLatencyReportInputEchoDetail', { events: telemetry.inputEvents, bytes: formatCompactBytes(telemetry.inputBytes) }),
+      tone: inputTone,
+    },
+    {
+      id: 'first-output',
+      label: t('servers.terminalLatencyReportFirstOutput'),
+      value: firstOutputMs === null ? '--' : `${Math.round(firstOutputMs)}ms`,
+      detail: firstOutputMs === null
+        ? t('servers.terminalLatencyReportFirstOutputPending')
+        : t('servers.terminalLatencyReportFirstOutputDetail', { source: firstOutputSource }),
+      tone: firstOutputTone,
+    },
+    {
+      id: 'throughput',
+      label: t('servers.terminalLatencyReportThroughput'),
+      value: formatBytesPerSecond(throughput),
+      detail: t('servers.terminalLatencyReportThroughputDetail', { bytes: formatCompactBytes(telemetry.outputBytes), lines: telemetry.outputLines }),
+      tone: throughputTone,
+    },
+    {
+      id: 'render',
+      label: t('servers.terminalLatencyReportRender'),
+      value: `${Math.round(telemetry.renderLagMs)}ms`,
+      detail: t('servers.terminalLatencyReportRenderDetail', { pending: formatCompactBytes(telemetry.pendingBytes), peak: formatCompactBytes(telemetry.peakPendingBytes) }),
+      tone: renderTone,
+    },
+    {
+      id: 'channel',
+      label: t('servers.terminalLatencyReportChannel'),
+      value: transportLabel,
+      detail: t('servers.terminalLatencyReportChannelDetail', { rtt: rttLabel, rate: formatBytesPerSecond(throughput) }),
+      tone: channelTone,
+    },
+    {
+      id: 'action',
+      label: t('servers.terminalLatencyReportAction'),
+      value: primary ? `${primary.label}: ${primary.value}` : lagRootCause.title,
+      detail: `${t('servers.terminalLatencyReportActionDetail', { confidence: lagRootCause.confidenceLabel })} / ${lagRootCause.summary}`,
+      tone: actionTone,
+    },
+  ];
+  const sections = rawSections.map((section) => ({
+    ...section,
+    value: sanitizeSshDoctorText(section.value),
+    detail: sanitizeSshDoctorText(section.detail),
+  }));
+  const tone: TerminalNetworkQuality['tone'] = sections.some((section) => section.tone === 'slow')
+    ? 'slow'
+    : sections.some((section) => section.tone === 'warn')
+      ? 'warn'
+      : sections.some((section) => section.tone === 'pending')
+        ? 'pending'
+        : 'good';
+  const text = sanitizeSshDoctorText([
+    `# ${t('servers.terminalLatencyReportTitle')}`,
+    `${t('servers.terminalLatencyReportGenerated', { time: generatedAt })}`,
+    `${t('servers.terminalLatencyReportSanitized')}`,
+    '',
+    `[${t('servers.terminalLatencyReportInputEcho')}]`,
+    `- ${sections[0].value}`,
+    `- ${sections[0].detail}`,
+    '',
+    `[${t('servers.terminalLatencyReportFirstOutput')}]`,
+    `- ${sections[1].value}`,
+    `- ${sections[1].detail}`,
+    '',
+    `[${t('servers.terminalLatencyReportThroughput')}]`,
+    `- ${sections[2].value}`,
+    `- ${sections[2].detail}`,
+    '',
+    `[${t('servers.terminalLatencyReportRender')}]`,
+    `- ${sections[3].value}`,
+    `- ${sections[3].detail}`,
+    '',
+    `[${t('servers.terminalLatencyReportChannel')}]`,
+    `- ${sections[4].value}`,
+    `- ${sections[4].detail}`,
+    '',
+    `[${t('servers.terminalLatencyReportAction')}]`,
+    `- ${sections[5].value}`,
+    `- ${sections[5].detail}`,
+    '',
+    t('servers.terminalLatencyReportSafeNote'),
+  ].join('\n'));
+
+  return {
+    tone,
+    generatedAt,
+    title: t('servers.terminalLatencyReportTitle'),
+    detail: t('servers.terminalLatencyReportDetail', { sections: sections.length }),
+    sections,
+    text,
   };
 }
 

@@ -6014,6 +6014,8 @@ function assertSshTerminalRealtimeGuards() {
     'terminalNetworkUiRefreshMs = 1500',
     'renderLagMs >= terminalRenderForceLagMs || pendingBytes >= terminalRenderForceBacklogThreshold',
     'terminalFocusModeStorageKey',
+    'terminalLatencyReportStorageKey',
+    'terminalLatencyReportHistoryStorageKey',
     'terminalFocusModeNetworkUiRefreshMs',
     'terminalFocusModeTelemetryUiRefreshMs',
     'const [terminalFocusMode, setTerminalFocusMode]',
@@ -6024,6 +6026,7 @@ function assertSshTerminalRealtimeGuards() {
     'data-ssh-terminal-focus-toggle="true"',
     "aria-pressed={terminalFocusMode}",
     'setTerminalFocusMode((value) => !value)',
+    '!terminalFocusMode && terminalLatencyReport',
     '!terminalFocusMode && terminalSupportBundle',
     'function resetTerminalTelemetry()',
     'function recordTerminalInput(',
@@ -6052,6 +6055,14 @@ function assertSshTerminalRealtimeGuards() {
     'function runTerminalSelfDiagnosticAction(',
     'terminalSupportBundleSelfDiagnostic',
     'terminalSelfDiagnosticTitle',
+    'TerminalLatencyReport',
+    'function buildTerminalLatencyReport(',
+    'const terminalLatencyReport = useMemo',
+    'data-ssh-terminal-latency-report="true"',
+    'data-ssh-terminal-latency-report-section={section.id}',
+    'data-ssh-latency-report-copy="true"',
+    'function copyTerminalLatencyReport()',
+    'function persistTerminalLatencyReportSnapshot(',
     'TerminalSupportBundle',
     'function buildTerminalSupportBundle(',
     'const terminalSupportBundle = useMemo',
@@ -6295,6 +6306,17 @@ function assertSshTerminalRealtimeGuards() {
     'servers.terminalSupportBundleTelemetry',
     'servers.terminalSupportBundleBottleneck',
     'servers.terminalSupportBundleRecovery',
+    'servers.terminalLatencyReportEyebrow',
+    'servers.terminalLatencyReportTitle',
+    'servers.terminalLatencyReportCopy',
+    'servers.terminalLatencyReportCopied',
+    'servers.terminalLatencyReportSanitized',
+    'servers.terminalLatencyReportInputEcho',
+    'servers.terminalLatencyReportFirstOutput',
+    'servers.terminalLatencyReportThroughput',
+    'servers.terminalLatencyReportRender',
+    'servers.terminalLatencyReportChannel',
+    'servers.terminalLatencyReportAction',
     'servers.switchToCompatibleChannel',
     'servers.retryWebSocketChannel',
     'servers.switchingToCompatibleChannel',
@@ -6348,6 +6370,33 @@ function assertSshTerminalRealtimeGuards() {
     throw new Error(`SSH terminal tool i18n or UI wiring is incomplete: ${missingToolLabels.join(', ')}`);
   }
   const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const terminalLatencyReportI18nKeys = [
+    'servers.terminalLatencyReportEyebrow',
+    'servers.terminalLatencyReportTitle',
+    'servers.terminalLatencyReportDetail',
+    'servers.terminalLatencyReportCopy',
+    'servers.terminalLatencyReportCopied',
+    'servers.terminalLatencyReportGenerated',
+    'servers.terminalLatencyReportSanitized',
+    'servers.terminalLatencyReportSafeNote',
+    'servers.terminalLatencyReportInputEcho',
+    'servers.terminalLatencyReportInputEchoPending',
+    'servers.terminalLatencyReportInputEchoDetail',
+    'servers.terminalLatencyReportFirstOutput',
+    'servers.terminalLatencyReportFirstOutputPending',
+    'servers.terminalLatencyReportFirstOutputDetail',
+    'servers.terminalLatencyReportSourceLive',
+    'servers.terminalLatencyReportSourceSelfTest',
+    'servers.terminalLatencyReportSourcePending',
+    'servers.terminalLatencyReportThroughput',
+    'servers.terminalLatencyReportThroughputDetail',
+    'servers.terminalLatencyReportRender',
+    'servers.terminalLatencyReportRenderDetail',
+    'servers.terminalLatencyReportChannel',
+    'servers.terminalLatencyReportChannelDetail',
+    'servers.terminalLatencyReportAction',
+    'servers.terminalLatencyReportActionDetail',
+  ];
   const terminalSupportBundleI18nKeys = [
     'servers.terminalSupportBundleEyebrow',
     'servers.terminalSupportBundleTitle',
@@ -6361,13 +6410,24 @@ function assertSshTerminalRealtimeGuards() {
     'servers.terminalSupportBundleTelemetry',
     'servers.terminalSupportBundleBottleneck',
     'servers.terminalSupportBundleRecovery',
+    'servers.terminalLatencyReportEyebrow',
+    'servers.terminalLatencyReportTitle',
+    'servers.terminalLatencyReportCopy',
+    'servers.terminalLatencyReportCopied',
+    'servers.terminalLatencyReportSanitized',
+    'servers.terminalLatencyReportInputEcho',
+    'servers.terminalLatencyReportFirstOutput',
+    'servers.terminalLatencyReportThroughput',
+    'servers.terminalLatencyReportRender',
+    'servers.terminalLatencyReportChannel',
+    'servers.terminalLatencyReportAction',
     'servers.terminalSupportBundleNoNetwork',
     'servers.terminalSupportBundleNoSelfTest',
     'servers.terminalSupportBundleRecoveryReady',
     'servers.terminalSupportBundleInputBytes',
     'servers.terminalSupportBundleOutputBytes',
   ];
-  const placeholderRegressions = terminalSupportBundleI18nKeys.flatMap((key) => {
+  const placeholderRegressions = [...terminalSupportBundleI18nKeys, ...terminalLatencyReportI18nKeys].flatMap((key) => {
     const matches = [...i18nSource.matchAll(new RegExp(`'${escapeRegExp(key)}'\\s*:\\s*'([^']*)'`, 'g'))];
     if (matches.length < 3) {
       return [`${key}: missing language copy`];
@@ -6682,7 +6742,7 @@ function assertSshTerminalRealtimeGuards() {
   if (!globalCssSource.includes('.ssh-terminal-self-test') || !globalCssSource.includes('.ssh-terminal-self-test.complete')) {
     throw new Error('SSH terminal self-test result chip styles are missing');
   }
-  if (!globalCssSource.includes('.ssh-quick-command-deck') || !globalCssSource.includes('.ssh-runbook-workspace') || !globalCssSource.includes('.ssh-runbook-form') || !globalCssSource.includes('.ssh-runbook-form.editing') || !globalCssSource.includes('.ssh-runbook-lens') || !globalCssSource.includes('.ssh-runbook-categories button.active') || !globalCssSource.includes('.ssh-runbook-views button.active') || !globalCssSource.includes('.ssh-runbook-view-hint') || !globalCssSource.includes('.ssh-runbook-clear-filter') || !globalCssSource.includes('.ssh-runbook-recommendations') || !globalCssSource.includes('.ssh-runbook-recommendation-grid') || !globalCssSource.includes('.ssh-runbook-pack-dock') || !globalCssSource.includes('.ssh-runbook-pack-grid') || !globalCssSource.includes('.ssh-quick-command-grid') || !globalCssSource.includes('.ssh-quick-command-grid article.custom.pinned') || !globalCssSource.includes('.ssh-quick-command-grid .ssh-runbook-usage') || !globalCssSource.includes('.ssh-quick-command-grid button.pin') || !globalCssSource.includes('.ssh-quick-command-grid button.sort') || !globalCssSource.includes('.ssh-terminal-refresh-mode') || !globalCssSource.includes('.ssh-terminal-tools button.active') || !globalCssSource.includes('.ssh-terminal-shell.focus-mode .ssh-terminal-screen') || !globalCssSource.includes('.ssh-terminal-root-cause') || !globalCssSource.includes('.ssh-terminal-root-cause-meter') || !globalCssSource.includes('.ssh-terminal-root-cause-lanes') || !globalCssSource.includes('flex-direction: column') || !globalCssSource.includes('overflow-y: auto') || !globalCssSource.includes('order: 2') || !globalCssSource.includes('flex: 1 0 clamp(320px, 52vh, 520px)') || !globalCssSource.includes('min-height: clamp(300px, 46vh, 500px)')) {
+  if (!globalCssSource.includes('.ssh-terminal-latency-report') || !globalCssSource.includes('.ssh-terminal-latency-report-grid') || !globalCssSource.includes('.ssh-terminal-latency-report-copy') || !globalCssSource.includes('.ssh-quick-command-deck') || !globalCssSource.includes('.ssh-runbook-workspace') || !globalCssSource.includes('.ssh-runbook-form') || !globalCssSource.includes('.ssh-runbook-form.editing') || !globalCssSource.includes('.ssh-runbook-lens') || !globalCssSource.includes('.ssh-runbook-categories button.active') || !globalCssSource.includes('.ssh-runbook-views button.active') || !globalCssSource.includes('.ssh-runbook-view-hint') || !globalCssSource.includes('.ssh-runbook-clear-filter') || !globalCssSource.includes('.ssh-runbook-recommendations') || !globalCssSource.includes('.ssh-runbook-recommendation-grid') || !globalCssSource.includes('.ssh-runbook-pack-dock') || !globalCssSource.includes('.ssh-runbook-pack-grid') || !globalCssSource.includes('.ssh-quick-command-grid') || !globalCssSource.includes('.ssh-quick-command-grid article.custom.pinned') || !globalCssSource.includes('.ssh-quick-command-grid .ssh-runbook-usage') || !globalCssSource.includes('.ssh-quick-command-grid button.pin') || !globalCssSource.includes('.ssh-quick-command-grid button.sort') || !globalCssSource.includes('.ssh-terminal-refresh-mode') || !globalCssSource.includes('.ssh-terminal-tools button.active') || !globalCssSource.includes('.ssh-terminal-shell.focus-mode .ssh-terminal-screen') || !globalCssSource.includes('.ssh-terminal-root-cause') || !globalCssSource.includes('.ssh-terminal-root-cause-meter') || !globalCssSource.includes('.ssh-terminal-root-cause-lanes') || !globalCssSource.includes('flex-direction: column') || !globalCssSource.includes('overflow-y: auto') || !globalCssSource.includes('order: 2') || !globalCssSource.includes('flex: 1 0 clamp(320px, 52vh, 520px)') || !globalCssSource.includes('min-height: clamp(300px, 46vh, 500px)')) {
     throw new Error('SSH terminal quick command deck styles are missing or the terminal grid does not reserve space for it');
   }
 
