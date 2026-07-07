@@ -3332,19 +3332,25 @@ function assertAccountUiGuards() {
     'data-launch-guide="true"',
     'data-launch-guide-item={item.id}',
     'data-launch-guide-open="true"',
+    'data-launch-guide-copy-report="true"',
     'openLaunchChecklistItem',
+    'copyLaunchGuideReport',
+    'buildLaunchChecklistReport',
+    'sanitizeLaunchChecklistReport',
     'fetchConfigSummary',
     '.launch-guide-radar',
     '.launch-guide-grid',
+    '.launch-guide-actions',
     'async function assertLaunchGuide',
     'first-run launch checklist routing and sanitization',
+    'Launch guide copied report leaked a raw IP address or secret',
   ];
   const launchGuideSource = `${appSource}\n${i18nSource}\n${globalCss}\n${fs.readFileSync(new URL('../scripts/browser-e2e.mjs', import.meta.url), 'utf8')}`;
   const missingLaunchGuide = launchGuideFragments.filter((fragment) => !launchGuideSource.includes(fragment));
   if (missingLaunchGuide.length) {
     throw new Error(`First-run launch guide is incomplete: ${missingLaunchGuide.join(', ')}`);
   }
-  for (const key of ['launchGuide.title', 'launchGuide.runtimeTitle', 'launchGuide.assetsTitle', 'launchGuide.sshTitle', 'launchGuide.aiTitle', 'launchGuide.preflightTitle', 'launchGuide.auditTitle']) {
+  for (const key of ['launchGuide.title', 'launchGuide.runtimeTitle', 'launchGuide.assetsTitle', 'launchGuide.sshTitle', 'launchGuide.aiTitle', 'launchGuide.preflightTitle', 'launchGuide.auditTitle', 'launchGuide.copyReport', 'launchGuide.reportSanitizedNote']) {
     const count = (i18nSource.match(new RegExp(key.replace('.', '\\.'), 'g')) ?? []).length;
     if (count < 3) {
       throw new Error(`Launch guide i18n key is missing languages: ${key}`);

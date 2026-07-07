@@ -3,6 +3,7 @@ import {
   Activity,
   Bot,
   CheckCircle2,
+  ClipboardCheck,
   Command,
   Cpu,
   HardDrive,
@@ -232,10 +233,12 @@ export function App() {
     }
     return window.localStorage.getItem(launchGuideStorageKey) !== 'dismissed';
   });
+  const [launchGuideMessage, setLaunchGuideMessage] = useState('');
   const appMountedRef = useRef(true);
   const sessionAuthenticatedRef = useRef(false);
   const overviewRefreshInFlightRef = useRef(false);
   const settingsMessageTimerRef = useRef<number | null>(null);
+  const launchGuideMessageTimerRef = useRef<number | null>(null);
 
   async function refreshOverview() {
     if ((!session?.authenticated && !sessionAuthenticatedRef.current) || overviewRefreshInFlightRef.current) {
@@ -314,6 +317,9 @@ export function App() {
   useEffect(() => () => {
     if (settingsMessageTimerRef.current) {
       window.clearTimeout(settingsMessageTimerRef.current);
+    }
+    if (launchGuideMessageTimerRef.current) {
+      window.clearTimeout(launchGuideMessageTimerRef.current);
     }
   }, []);
 
@@ -810,6 +816,35 @@ export function App() {
     }
   }
 
+  function showLaunchGuideMessage(message: string) {
+    setLaunchGuideMessage(message);
+    if (launchGuideMessageTimerRef.current) {
+      window.clearTimeout(launchGuideMessageTimerRef.current);
+    }
+    launchGuideMessageTimerRef.current = window.setTimeout(() => {
+      setLaunchGuideMessage('');
+      launchGuideMessageTimerRef.current = null;
+    }, settingsMessageTtlMs);
+  }
+
+  async function copyLaunchGuideReport() {
+    const report = buildLaunchChecklistReport({
+      checklist: launchChecklist,
+      generatedAt: new Date(),
+      locale: timeLocale,
+      t,
+    });
+    try {
+      if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+        throw new Error('clipboard unavailable');
+      }
+      await navigator.clipboard.writeText(report);
+      showLaunchGuideMessage(t('launchGuide.reportCopied'));
+    } catch {
+      showLaunchGuideMessage(t('launchGuide.reportCopyFailed'));
+    }
+  }
+
   function openLaunchChecklistItem(item: LaunchChecklistItem) {
     if (item.section === 'servers') {
       setFilters(defaultFilters);
@@ -1105,9 +1140,16 @@ export function App() {
               <div className="launch-guide-status">
                 <span>{t('launchGuide.progress', { done: launchChecklist.done, total: launchChecklist.total })}</span>
                 <strong>{launchChecklist.status}</strong>
-                <button type="button" className="tool-button" onClick={dismissLaunchGuide}>
-                  {t('launchGuide.dismiss')}
-                </button>
+                <div className="launch-guide-actions">
+                  <button type="button" className="tool-button" data-launch-guide-copy-report="true" onClick={copyLaunchGuideReport}>
+                    <ClipboardCheck size={15} />
+                    {t('launchGuide.copyReport')}
+                  </button>
+                  <button type="button" className="tool-button" onClick={dismissLaunchGuide}>
+                    {t('launchGuide.dismiss')}
+                  </button>
+                </div>
+                {launchGuideMessage && <em className="launch-guide-message">{launchGuideMessage}</em>}
               </div>
               <div className="launch-guide-grid">
                 {launchChecklist.items.map((item) => (
@@ -1632,6 +1674,40 @@ function buildLaunchChecklist(input: {
     nextAction: firstActionable ? `${firstActionable.title}: ${firstActionable.action}` : t('launchGuide.allDone'),
     items,
   };
+}
+
+function buildLaunchChecklistReport(input: {
+  checklist: LaunchChecklistSummary;
+  generatedAt: Date;
+  locale: string;
+  t: (key: string, vars?: Record<string, string | number>) => string;
+}) {
+  const { checklist, generatedAt, locale, t } = input;
+  const toneLabel: Record<LaunchChecklistItem['tone'], string> = {
+    ok: t('launchGuide.reportOk'),
+    warn: t('launchGuide.reportWarn'),
+    fail: t('launchGuide.reportFail'),
+  };
+  const lines = [
+    `# ${t('launchGuide.reportTitle')}`,
+    `${t('launchGuide.reportGenerated')}: ${generatedAt.toLocaleString(locale)}`,
+    `${t('launchGuide.reportStatus')}: ${checklist.status} (${checklist.done}/${checklist.total})`,
+    `${t('launchGuide.reportNextAction')}: ${checklist.nextAction}`,
+    '',
+    `## ${t('launchGuide.reportItemsTitle')}`,
+    ...checklist.items.map((item) => `- [${toneLabel[item.tone]}] ${item.title}: ${item.detail} -> ${item.action}`),
+    '',
+    t('launchGuide.reportSanitizedNote'),
+  ];
+  return sanitizeLaunchChecklistReport(lines.join('\n'));
+}
+
+function sanitizeLaunchChecklistReport(value: string) {
+  return value
+    .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, '[redacted-private-key]')
+    .replace(/\bsk-[A-Za-z0-9_-]{12,}\b/g, '[redacted-api-key]')
+    .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, '[redacted-ip]')
+    .replace(/\b(password|passphrase)=\S+/gi, '$1=[redacted]');
 }
 
 function AvatarMark({ profile, className = '' }: { profile: AccountProfile; className?: string }) {

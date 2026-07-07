@@ -94,6 +94,27 @@ async function assertLaunchGuide(targetPage) {
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b|sk-[A-Za-z0-9_-]{12,}|BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY|password=|passphrase=/i.test(launchText)) {
     throw new Error('Launch guide leaked a raw IP address or secret');
   }
+  await targetPage.evaluate(() => {
+    window.__colipasCopiedLaunchGuideReport = '';
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (text) => {
+          window.__colipasCopiedLaunchGuideReport = text;
+        },
+      },
+    });
+  });
+  await targetPage.locator('[data-launch-guide-copy-report="true"]').click();
+  await targetPage.waitForFunction(() => Boolean(window.__colipasCopiedLaunchGuideReport), null, { timeout: 5000 });
+  const copiedLaunchReport = await targetPage.evaluate(() => window.__colipasCopiedLaunchGuideReport);
+  if (!/CoLiPas launch checklist report|Checklist items|sanitized/i.test(copiedLaunchReport)) {
+    throw new Error(`Launch guide copied report is incomplete: ${copiedLaunchReport}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b|sk-[A-Za-z0-9_-]{12,}|BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY|password=|passphrase=/i.test(copiedLaunchReport)) {
+    throw new Error('Launch guide copied report leaked a raw IP address or secret');
+  }
+  await targetPage.locator('.launch-guide-message').waitFor({ timeout: 5000 });
   await assertElementHorizontallyWithinViewport(targetPage, '[data-launch-guide="true"]', 'desktop launch guide');
   await captureVisualEvidence(targetPage, 'desktop-launch-guide', ['[data-launch-guide="true"]']);
   await targetPage.locator('[data-launch-guide-item="ai"]').click();

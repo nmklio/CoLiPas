@@ -3632,6 +3632,26 @@ main {
   gap: 7px;
 }
 
+.launch-guide-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.launch-guide-actions .tool-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.launch-guide-message {
+  color: #0f766e;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+}
+
 .launch-guide-status span {
   color: #60757c;
   font-size: 11px;
@@ -3743,6 +3763,10 @@ main {
     justify-items: start;
   }
 
+  .launch-guide-actions {
+    justify-content: flex-start;
+  }
+
   .launch-guide-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -3761,6 +3785,15 @@ main {
   .launch-guide-status {
     grid-column: auto;
     justify-items: stretch;
+  }
+
+  .launch-guide-actions {
+    justify-content: stretch;
+  }
+
+  .launch-guide-actions .tool-button {
+    justify-content: center;
+    flex: 1 1 140px;
   }
 
   .launch-guide-grid {
