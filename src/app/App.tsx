@@ -79,6 +79,14 @@ interface LaunchChecklistItem {
   tone: 'ok' | 'warn' | 'fail';
 }
 
+interface LaunchRemediationStep {
+  id: string;
+  rank: number;
+  item: LaunchChecklistItem;
+  priority: string;
+  reason: string;
+}
+
 interface LaunchChecklistSummary {
   tone: 'ok' | 'warn' | 'fail';
   done: number;
@@ -86,6 +94,7 @@ interface LaunchChecklistSummary {
   status: string;
   nextAction: string;
   items: LaunchChecklistItem[];
+  remediationSteps: LaunchRemediationStep[];
 }
 
 const sections: Array<{ id: SectionId; labelKey: string; icon: typeof LayoutDashboard }> = [
@@ -845,6 +854,13 @@ export function App() {
     }
   }
 
+  function startTopLaunchFix() {
+    const [firstStep] = launchChecklist.remediationSteps;
+    if (firstStep) {
+      openLaunchChecklistItem(firstStep.item);
+    }
+  }
+
   function openLaunchChecklistItem(item: LaunchChecklistItem) {
     if (item.section === 'servers') {
       setFilters(defaultFilters);
@@ -1141,6 +1157,12 @@ export function App() {
                 <span>{t('launchGuide.progress', { done: launchChecklist.done, total: launchChecklist.total })}</span>
                 <strong>{launchChecklist.status}</strong>
                 <div className="launch-guide-actions">
+                  {launchChecklist.remediationSteps[0] && (
+                    <button type="button" className="tool-button" data-launch-guide-start-top-fix="true" onClick={startTopLaunchFix}>
+                      <ListChecks size={15} />
+                      {t('launchGuide.startTopFix')}
+                    </button>
+                  )}
                   <button type="button" className="tool-button" data-launch-guide-copy-report="true" onClick={copyLaunchGuideReport}>
                     <ClipboardCheck size={15} />
                     {t('launchGuide.copyReport')}
@@ -1170,6 +1192,34 @@ export function App() {
                     <b>{item.action}</b>
                   </button>
                 ))}
+              </div>
+              <div className="launch-guide-fix-queue" data-launch-guide-fix-queue="true">
+                <div className="launch-guide-fix-queue-head">
+                  <span>
+                    <ListChecks size={15} />
+                    {t('launchGuide.fixQueueEyebrow')}
+                  </span>
+                  <strong>{t('launchGuide.fixQueueTitle')}</strong>
+                  <p>{launchChecklist.remediationSteps.length > 0 ? t('launchGuide.fixQueueDesc') : t('launchGuide.fixQueueEmpty')}</p>
+                </div>
+                {launchChecklist.remediationSteps.length > 0 && (
+                  <div className="launch-guide-fix-steps">
+                    {launchChecklist.remediationSteps.map((step) => (
+                      <button
+                        key={step.id}
+                        type="button"
+                        className={`launch-guide-fix-step ${step.item.tone}`}
+                        data-launch-guide-fix-step={step.item.id}
+                        onClick={() => openLaunchChecklistItem(step.item)}
+                      >
+                        <span>{step.priority}</span>
+                        <strong>{step.item.title}</strong>
+                        <small>{step.reason}</small>
+                        <b>{step.item.action}</b>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </article>
           )}
@@ -1673,7 +1723,47 @@ function buildLaunchChecklist(input: {
     status: done === items.length ? t('launchGuide.allDone') : t('launchGuide.needAction'),
     nextAction: firstActionable ? `${firstActionable.title}: ${firstActionable.action}` : t('launchGuide.allDone'),
     items,
+    remediationSteps: buildLaunchRemediationQueue(items, t),
   };
+}
+
+function buildLaunchRemediationQueue(
+  items: LaunchChecklistItem[],
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): LaunchRemediationStep[] {
+  const toneRank: Record<LaunchChecklistItem['tone'], number> = { fail: 0, warn: 1, ok: 2 };
+  return [...items]
+    .filter((item) => item.tone !== 'ok')
+    .sort((left, right) => toneRank[left.tone] - toneRank[right.tone])
+    .map((item, index) => ({
+      id: `${index + 1}-${item.id}`,
+      rank: index + 1,
+      item,
+      priority: t('launchGuide.fixPriority', { rank: index + 1 }),
+      reason: getLaunchRemediationReason(item, t),
+    }));
+}
+
+function getLaunchRemediationReason(
+  item: LaunchChecklistItem,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+) {
+  switch (item.id) {
+    case 'runtime':
+      return t('launchGuide.fixReasonRuntime');
+    case 'assets':
+      return t('launchGuide.fixReasonAssets');
+    case 'ssh':
+      return t('launchGuide.fixReasonSsh');
+    case 'ai':
+      return t('launchGuide.fixReasonAi');
+    case 'preflight':
+      return t('launchGuide.fixReasonPreflight');
+    case 'audit':
+      return t('launchGuide.fixReasonAudit');
+    default:
+      return item.detail;
+  }
 }
 
 function buildLaunchChecklistReport(input: {

@@ -91,6 +91,19 @@ async function assertLaunchGuide(targetPage) {
   if (itemCount !== 6) {
     throw new Error(`Launch guide should expose six checklist items, got ${itemCount}`);
   }
+  await targetPage.locator('[data-launch-guide-fix-queue="true"]').waitFor({ timeout: 5000 });
+  const fixQueueText = await targetPage.locator('[data-launch-guide-fix-queue="true"]').innerText();
+  if (!/Priority remediation queue|Fix P1 first|Runtime security/i.test(fixQueueText)) {
+    throw new Error(`Launch guide priority remediation queue is incomplete: ${fixQueueText}`);
+  }
+  const fixStepCount = await targetPage.locator('[data-launch-guide-fix-step]').count();
+  if (fixStepCount < 3) {
+    throw new Error(`Launch guide should expose prioritized remediation steps, got ${fixStepCount}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b|sk-[A-Za-z0-9_-]{12,}|BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY|password=|passphrase=/i.test(fixQueueText)) {
+    throw new Error('Launch guide remediation queue leaked a raw IP address or secret');
+  }
+  await targetPage.locator('[data-launch-guide-start-top-fix="true"]').waitFor({ timeout: 5000 });
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b|sk-[A-Za-z0-9_-]{12,}|BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY|password=|passphrase=/i.test(launchText)) {
     throw new Error('Launch guide leaked a raw IP address or secret');
   }

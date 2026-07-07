@@ -3333,24 +3333,33 @@ function assertAccountUiGuards() {
     'data-launch-guide-item={item.id}',
     'data-launch-guide-open="true"',
     'data-launch-guide-copy-report="true"',
+    'data-launch-guide-start-top-fix="true"',
+    'data-launch-guide-fix-queue="true"',
+    'data-launch-guide-fix-step={step.item.id}',
     'openLaunchChecklistItem',
     'copyLaunchGuideReport',
+    'startTopLaunchFix',
     'buildLaunchChecklistReport',
     'sanitizeLaunchChecklistReport',
+    'buildLaunchRemediationQueue',
+    'getLaunchRemediationReason',
     'fetchConfigSummary',
     '.launch-guide-radar',
     '.launch-guide-grid',
     '.launch-guide-actions',
+    '.launch-guide-fix-queue',
+    '.launch-guide-fix-step',
     'async function assertLaunchGuide',
     'first-run launch checklist routing and sanitization',
     'Launch guide copied report leaked a raw IP address or secret',
+    'Launch guide priority remediation queue is incomplete',
   ];
   const launchGuideSource = `${appSource}\n${i18nSource}\n${globalCss}\n${fs.readFileSync(new URL('../scripts/browser-e2e.mjs', import.meta.url), 'utf8')}`;
   const missingLaunchGuide = launchGuideFragments.filter((fragment) => !launchGuideSource.includes(fragment));
   if (missingLaunchGuide.length) {
     throw new Error(`First-run launch guide is incomplete: ${missingLaunchGuide.join(', ')}`);
   }
-  for (const key of ['launchGuide.title', 'launchGuide.runtimeTitle', 'launchGuide.assetsTitle', 'launchGuide.sshTitle', 'launchGuide.aiTitle', 'launchGuide.preflightTitle', 'launchGuide.auditTitle', 'launchGuide.copyReport', 'launchGuide.reportSanitizedNote']) {
+  for (const key of ['launchGuide.title', 'launchGuide.runtimeTitle', 'launchGuide.assetsTitle', 'launchGuide.sshTitle', 'launchGuide.aiTitle', 'launchGuide.preflightTitle', 'launchGuide.auditTitle', 'launchGuide.copyReport', 'launchGuide.reportSanitizedNote', 'launchGuide.fixQueueTitle', 'launchGuide.fixReasonRuntime', 'launchGuide.startTopFix']) {
     const count = (i18nSource.match(new RegExp(key.replace('.', '\\.'), 'g')) ?? []).length;
     if (count < 3) {
       throw new Error(`Launch guide i18n key is missing languages: ${key}`);
