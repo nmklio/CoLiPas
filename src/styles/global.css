@@ -3108,6 +3108,30 @@ main {
   text-shadow: none;
 }
 
+.map-asset-loader {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 8;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 11px;
+  border: 1px solid rgba(15, 118, 110, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #28535a;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(8px);
+}
+
+.map-asset-loader svg {
+  color: var(--brand-strong);
+  animation: spin 1.4s linear infinite;
+}
+
 .map-transform-layer {
   position: absolute;
   inset: 26px 10px 8px;

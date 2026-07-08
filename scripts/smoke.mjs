@@ -4912,6 +4912,7 @@ function assertBuildChunkingGuards() {
     'manualChunks(id)',
     "'vendor-react'",
     "'vendor-map'",
+    "'vendor-atlas'",
     "'vendor-icons'",
     "id.includes('node_modules/react')",
     "id.includes('node_modules/d3-geo')",
@@ -5467,12 +5468,18 @@ function assertOverviewMapInteractionGuards() {
     'orientationchange',
     'window.addEventListener(\'resize\', settleMapView)',
     "const fallbackLocation: RegionLocation = { lat: 18, lng: 0, countryId: '', matched: false }",
-    'countryIds: getRenderableCountryIds(location)',
+    'countryIds: getRenderableCountryIds(location, renderableCountryIds)',
     '?? fallbackLocation',
-    'const mapCountryShapes: MapCountryShape[] = countries.features.map',
+    'const [mapCountryAssets, setMapCountryAssets] = useState<MapCountryAssets>(emptyMapCountryAssets)',
+    'const mapAssetsReady = mapCountryAssets.shapes.length > 0',
+    'loadMapCountryAssets()',
+    "import('world-atlas/countries-110m.json')",
+    'const shapes: MapCountryShape[] = countries.features.map',
     "path: mapPath(typedCountry) ?? ''",
     'centroid: [centroid[0], centroid[1]]',
-    '{mapCountryShapes.map((country) =>',
+    '{mapCountryAssets.shapes.map((country) =>',
+    'data-map-asset-loader="true"',
+    'overview.mapAssetLoading',
     'd={country.path}',
     'country.centroid[0]',
     'const normalizedRegions = buildRegionSearchVariants(region)',
@@ -5493,7 +5500,7 @@ function assertOverviewMapInteractionGuards() {
     "HK: { lat: 22.3193",
     "SG: { lat: 1.3521",
     'countryIds: [\'156\']',
-    'mapCountryIds.has(countryId)',
+    "renderableCountryIds.size === 0 || renderableCountryIds.has(countryId)",
     "'us-la'",
     'lat: 34.0522',
     "'us-ny'",
@@ -5526,6 +5533,9 @@ function assertOverviewMapInteractionGuards() {
 
   if (overviewSource.includes('fallbackLocations')) {
     throw new Error('Overview map must not rotate unknown regions through real country locations');
+  }
+  if (overviewSource.includes("import countriesAtlas from 'world-atlas/countries-110m.json'")) {
+    throw new Error('Overview map must lazy-load world atlas data instead of bundling it at module top-level');
   }
   if (overviewSource.includes('--map-tooltip-scale') || overviewSource.includes("Record<'--map-tooltip-scale'")) {
     throw new Error('Overview map tooltip must not be counter-scaled inside the transformed map layer');
@@ -5668,6 +5678,7 @@ function assertOverviewMapInteractionGuards() {
     '.content:not(.ai-collapsed) .cloud-map',
     'margin-bottom: 0',
     '.content:not(.ai-collapsed) .map-controls',
+    '.map-asset-loader',
     'position: absolute',
     'z-index: 9',
     'width: max-content',

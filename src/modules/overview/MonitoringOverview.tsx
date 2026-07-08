@@ -3,7 +3,6 @@ import type { PointerEvent as ReactPointerEvent } from 'react';
 import { Activity, AlertTriangle, ClipboardCheck, Globe2, LocateFixed, MapPin, Minus, Network, Plus, RotateCcw, Server, ShieldCheck, TerminalSquare, Wifi } from 'lucide-react';
 import { geoEquirectangular, geoPath } from 'd3-geo';
 import { feature } from 'topojson-client';
-import countriesAtlas from 'world-atlas/countries-110m.json';
 import { useI18n } from '../../i18n';
 import { OperationEvent, ServerNode } from '../../types';
 import { formatCountryName, formatRegionName, percentClass, statusLabel } from '../../utils/format';
@@ -112,6 +111,11 @@ interface MapCountryShape {
   centroid: [number, number];
 }
 
+interface MapCountryAssets {
+  shapes: MapCountryShape[];
+  ids: Set<string>;
+}
+
 const MAP_WIDTH = 1000;
 const MAP_HEIGHT = 520;
 const tooltipServerNameLimit = 6;
@@ -119,28 +123,13 @@ const healthTrendStorageKey = 'colipas.overview.healthTrend.v1';
 const healthTrendLimit = 12;
 const healthTrendRefreshMs = 15 * 60 * 1000;
 
-const countries = feature(
-  countriesAtlas as never,
-  (countriesAtlas as { objects: { countries: unknown } }).objects.countries as never,
-) as unknown as FeatureCollection<Geometry, { name?: string }>;
-
 const projection = geoEquirectangular().fitExtent(
   [[16, 20], [984, 500]],
   { type: 'Sphere' },
 );
 const mapPath = geoPath(projection);
-const mapCountryShapes: MapCountryShape[] = countries.features.map((country) => {
-  const typedCountry = country as Feature<Geometry, { name?: string }>;
-  const centroid = mapPath.centroid(typedCountry);
-
-  return {
-    id: normalizeCountryId(country.id),
-    path: mapPath(typedCountry) ?? '',
-    name: typedCountry.properties?.name ?? '',
-    centroid: [centroid[0], centroid[1]],
-  };
-});
-const mapCountryIds = new Set(mapCountryShapes.map((country) => country.id));
+const emptyMapCountryAssets: MapCountryAssets = { shapes: [], ids: new Set() };
+let mapCountryAssetsPromise: Promise<MapCountryAssets> | null = null;
 
 const countryCodeLocations: Record<string, RegionLocation> = {
   AU: { lat: -33.8688, lng: 151.2093, countryId: '036', matched: true },
@@ -238,19 +227,21 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, opsPr
   const mapRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);
   const suppressMapClickRef = useRef(false);
+  const [mapCountryAssets, setMapCountryAssets] = useState<MapCountryAssets>(emptyMapCountryAssets);
   const [mapView, setMapView] = useState({ scale: 1, x: 0, y: 0 });
   const [selectedRegionName, setSelectedRegionName] = useState('');
   const [hoveredCountry, setHoveredCountry] = useState<CountryHover | null>(null);
   const [pinnedCountry, setPinnedCountry] = useState<CountryHover | null>(null);
   const overviewStats = useMemo(() => buildOverviewStats(servers, events), [events, servers]);
-  const regions = useMemo(() => buildRegionNodes(servers), [servers]);
+  const regions = useMemo(() => buildRegionNodes(servers, mapCountryAssets.ids), [mapCountryAssets.ids, servers]);
   const visibleRegions = useMemo(
-    () => (regions.length ? regions : [buildEmptyRegionNode(t('overview.pendingRegion'), t('overview.noAssetProvider'))]),
-    [regions, t],
+    () => (regions.length ? regions : [buildEmptyRegionNode(t('overview.pendingRegion'), t('overview.noAssetProvider'), mapCountryAssets.ids)]),
+    [mapCountryAssets.ids, regions, t],
   );
   const mapRegions = useMemo(() => (regions.length ? regions : []), [regions]);
   const activeCountryIds = useMemo(() => new Set(mapRegions.flatMap((region) => region.countryIds)), [mapRegions]);
   const regionsByCountryId = useMemo(() => buildCountryRegionMap(mapRegions), [mapRegions]);
+  const mapAssetsReady = mapCountryAssets.shapes.length > 0;
   const healthBaseline = useMemo(() => buildHealthBaselineSummary(servers, events, t), [events, servers, t]);
   const healthTrend = useHealthBaselineTrend(healthBaseline, t);
   const selectedRegion = visibleRegions.find((region) => region.region === selectedRegionName) ?? visibleRegions[0];
@@ -258,6 +249,25 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, opsPr
   const visibleTooltipAnchor = visibleCountryPopup ? getTooltipViewportAnchor(visibleCountryPopup) : null;
   const tooltipIsPinned = Boolean(pinnedCountry && visibleCountryPopup && pinnedCountry.title === visibleCountryPopup.title);
   const { openEvents, criticalEvents, warningServers, connectedServers, providerCount, busiestServers } = overviewStats;
+
+  useEffect(() => {
+    let cancelled = false;
+    loadMapCountryAssets()
+      .then((assets) => {
+        if (!cancelled) {
+          setMapCountryAssets(assets);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMapCountryAssets(emptyMapCountryAssets);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const mapElement = mapRef.current;
@@ -458,6 +468,12 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, opsPr
             }}
           >
             <div className="map-caption">{t('overview.mapDistribution', { count: regions.length })}</div>
+            {!mapAssetsReady && (
+              <div className="map-asset-loader" data-map-asset-loader="true" aria-live="polite">
+                <Globe2 size={18} />
+                <span>{t('overview.mapAssetLoading')}</span>
+              </div>
+            )}
             <div
               className="map-transform-layer"
               style={{ transform: `translate(${mapView.x}px, ${mapView.y}px) scale(${mapView.scale})` }}
@@ -474,7 +490,7 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, opsPr
                 </defs>
                 <rect className="map-ocean" width={MAP_WIDTH} height={MAP_HEIGHT} rx="10" />
                 <g className="map-countries">
-                  {mapCountryShapes.map((country) => {
+                  {mapCountryAssets.shapes.map((country) => {
                     const id = country.id;
                     const matchedRegions = regionsByCountryId.get(id) ?? [];
                     const matchedRegion = matchedRegions[0];
@@ -837,7 +853,7 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, opsPr
   }
 }
 
-function buildRegionNodes(servers: ServerNode[]): RegionNode[] {
+function buildRegionNodes(servers: ServerNode[], renderableCountryIds: Set<string>): RegionNode[] {
   const groups = new Map<string, {
     total: number;
     running: number;
@@ -883,7 +899,7 @@ function buildRegionNodes(servers: ServerNode[]): RegionNode[] {
       serverNames: group.serverNames,
       lat: location.lat,
       lng: location.lng,
-      countryIds: getRenderableCountryIds(location),
+      countryIds: getRenderableCountryIds(location, renderableCountryIds),
       x: position.x,
       y: position.y,
     };
@@ -1319,7 +1335,7 @@ function collectTooltipServerNames(regions: RegionNode[]) {
   return names;
 }
 
-function buildEmptyRegionNode(regionLabel: string, providerLabel: string): RegionNode {
+function buildEmptyRegionNode(regionLabel: string, providerLabel: string, renderableCountryIds: Set<string>): RegionNode {
   const location = resolveRegionLocation('hong kong', 0);
   const position = projectRegion(location);
 
@@ -1333,7 +1349,7 @@ function buildEmptyRegionNode(regionLabel: string, providerLabel: string): Regio
     serverNames: [],
     lat: location.lat,
     lng: location.lng,
-    countryIds: [location.countryId],
+    countryIds: getRenderableCountryIds(location, renderableCountryIds),
     x: position.x,
     y: position.y,
     placeholder: true,
@@ -1443,11 +1459,11 @@ function resolveCountryCodeLocation(normalizedRegion: string) {
   return countryCodeLocations[match[1].toUpperCase()];
 }
 
-function getRenderableCountryIds(location: RegionLocation) {
+function getRenderableCountryIds(location: RegionLocation, renderableCountryIds: Set<string>) {
   return [location.countryId, ...(location.countryIds ?? [])]
     .map(normalizeCountryId)
     .filter((countryId, index, countryIds) => countryId !== '000' && countryIds.indexOf(countryId) === index)
-    .filter((countryId) => mapCountryIds.has(countryId));
+    .filter((countryId) => renderableCountryIds.size === 0 || renderableCountryIds.has(countryId));
 }
 
 function projectRegion(location: RegionLocation): { x: number; y: number } {
@@ -1465,4 +1481,36 @@ function clamp(value: number, min: number, max: number): number {
 
 function normalizeCountryId(id: string | number | undefined) {
   return String(id ?? '').padStart(3, '0');
+}
+
+function loadMapCountryAssets() {
+  if (!mapCountryAssetsPromise) {
+    mapCountryAssetsPromise = import('world-atlas/countries-110m.json')
+      .then((module) => {
+        const atlas = module.default as { objects: { countries: unknown } };
+        const countries = feature(
+          atlas as never,
+          atlas.objects.countries as never,
+        ) as unknown as FeatureCollection<Geometry, { name?: string }>;
+        const shapes: MapCountryShape[] = countries.features.map((country) => {
+          const typedCountry = country as Feature<Geometry, { name?: string }>;
+          const centroid = mapPath.centroid(typedCountry);
+
+          return {
+            id: normalizeCountryId(country.id),
+            path: mapPath(typedCountry) ?? '',
+            name: typedCountry.properties?.name ?? '',
+            centroid: [centroid[0], centroid[1]],
+          };
+        });
+
+        return {
+          shapes,
+          ids: new Set(shapes.map((country) => country.id)),
+        };
+      })
+      .catch(() => emptyMapCountryAssets);
+  }
+
+  return mapCountryAssetsPromise;
 }

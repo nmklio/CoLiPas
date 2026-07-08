@@ -11,7 +11,10 @@ export default defineConfig({
           if (id.includes('node_modules/react') || id.includes('node_modules/react-dom')) {
             return 'vendor-react';
           }
-          if (id.includes('node_modules/d3-geo') || id.includes('node_modules/topojson-client') || id.includes('node_modules/world-atlas')) {
+          if (id.includes('node_modules/world-atlas')) {
+            return 'vendor-atlas';
+          }
+          if (id.includes('node_modules/d3-geo') || id.includes('node_modules/topojson-client')) {
             return 'vendor-map';
           }
           if (id.includes('node_modules/lucide-react')) {
