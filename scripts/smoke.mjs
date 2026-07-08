@@ -4949,7 +4949,10 @@ function assertAdminModuleLazyLoadingGuards() {
     'function preloadSectionModule(section: SectionId)',
     'function warmIdleAdminModules(activeSection: SectionId, aiCollapsed: boolean)',
     'requestIdleCallback',
-    'onMouseEnter={() => preloadSectionModule(section.id)}',
+    'performanceModeStorageKey',
+    'data-performance-mode-toggle="true"',
+    'if (!performanceMode) {',
+    'setPerformanceMode((value) => !value)',
     'shouldRenderAiConsole ? (',
     "<Suspense fallback={<ModuleLoadingFallback title={t('nav.servers')} />}>",
     '<button type="button" className="ai-launcher"',
@@ -4977,7 +4980,7 @@ function assertAdminModuleLazyLoadingGuards() {
     throw new Error(`Admin lazy loading UI CSS is incomplete: ${missingCssFragments.join(', ')}`);
   }
 
-  for (const key of ['app.moduleLoadingOptimize', 'app.moduleLoadingTitle', 'app.moduleLoadingDetail']) {
+  for (const key of ['app.moduleLoadingOptimize', 'app.moduleLoadingTitle', 'app.moduleLoadingDetail', 'app.performanceMode', 'app.performanceModeOn', 'app.performanceModeOff']) {
     const count = (i18nSource.match(new RegExp(key.replaceAll('.', '\\.'), 'g')) ?? []).length;
     if (count < 3) {
       throw new Error(`Admin lazy loading i18n key is missing languages: ${key}`);
@@ -5471,6 +5474,9 @@ function assertOverviewMapInteractionGuards() {
     'countryIds: getRenderableCountryIds(location, renderableCountryIds)',
     '?? fallbackLocation',
     'const [mapCountryAssets, setMapCountryAssets] = useState<MapCountryAssets>(emptyMapCountryAssets)',
+    'performanceMode?: boolean',
+    'const [mapAssetsRequested, setMapAssetsRequested] = useState(!performanceMode)',
+    'if (!mapAssetsRequested || mapAssetsReady)',
     'const mapAssetsReady = mapCountryAssets.shapes.length > 0',
     'loadMapCountryAssets()',
     "import('world-atlas/countries-110m.json')",
@@ -5479,7 +5485,10 @@ function assertOverviewMapInteractionGuards() {
     'centroid: [centroid[0], centroid[1]]',
     '{mapCountryAssets.shapes.map((country) =>',
     'data-map-asset-loader="true"',
+    'data-map-asset-load-detail="true"',
     'overview.mapAssetLoading',
+    'overview.mapAssetDeferred',
+    'overview.mapAssetLoadDetail',
     'd={country.path}',
     'country.centroid[0]',
     'const normalizedRegions = buildRegionSearchVariants(region)',

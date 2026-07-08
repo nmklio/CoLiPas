@@ -13,6 +13,7 @@ interface MonitoringOverviewProps {
   events: OperationEvent[];
   onlineCount: number;
   avgCpu: number;
+  performanceMode?: boolean;
   opsPreflightSnapshot?: OverviewPreflightSnapshot | null;
   onRegionServersOpen?: (region: string | string[]) => void;
   onHealthSignalOpen?: (signal: HealthBaselineSignalId) => void;
@@ -219,7 +220,7 @@ const normalizedRegionLocations = regionLocations.map(({ aliases, location }) =>
 
 const fallbackLocation: RegionLocation = { lat: 18, lng: 0, countryId: '', matched: false };
 
-export function MonitoringOverview({ servers, events, onlineCount, avgCpu, opsPreflightSnapshot, onRegionServersOpen, onHealthSignalOpen, onOperationsDraftOpen, onOpsPreflightTraceOpen }: MonitoringOverviewProps) {
+export function MonitoringOverview({ servers, events, onlineCount, avgCpu, performanceMode = false, opsPreflightSnapshot, onRegionServersOpen, onHealthSignalOpen, onOperationsDraftOpen, onOpsPreflightTraceOpen }: MonitoringOverviewProps) {
   const { language, t } = useI18n();
   const providerName = (provider: string) => formatProviderName(provider, t);
   const regionName = (region: string) => formatRegionName(region, language);
@@ -228,6 +229,7 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, opsPr
   const dragRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);
   const suppressMapClickRef = useRef(false);
   const [mapCountryAssets, setMapCountryAssets] = useState<MapCountryAssets>(emptyMapCountryAssets);
+  const [mapAssetsRequested, setMapAssetsRequested] = useState(!performanceMode);
   const [mapView, setMapView] = useState({ scale: 1, x: 0, y: 0 });
   const [selectedRegionName, setSelectedRegionName] = useState('');
   const [hoveredCountry, setHoveredCountry] = useState<CountryHover | null>(null);
@@ -251,6 +253,16 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, opsPr
   const { openEvents, criticalEvents, warningServers, connectedServers, providerCount, busiestServers } = overviewStats;
 
   useEffect(() => {
+    if (!performanceMode) {
+      setMapAssetsRequested(true);
+    }
+  }, [performanceMode]);
+
+  useEffect(() => {
+    if (!mapAssetsRequested || mapAssetsReady) {
+      return undefined;
+    }
+
     let cancelled = false;
     loadMapCountryAssets()
       .then((assets) => {
@@ -267,7 +279,7 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, opsPr
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [mapAssetsReady, mapAssetsRequested]);
 
   useEffect(() => {
     const mapElement = mapRef.current;
@@ -469,9 +481,18 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, opsPr
           >
             <div className="map-caption">{t('overview.mapDistribution', { count: regions.length })}</div>
             {!mapAssetsReady && (
-              <div className="map-asset-loader" data-map-asset-loader="true" aria-live="polite">
+              <div className={performanceMode && !mapAssetsRequested ? 'map-asset-loader manual' : 'map-asset-loader'} data-map-asset-loader="true" aria-live="polite">
                 <Globe2 size={18} />
-                <span>{t('overview.mapAssetLoading')}</span>
+                <span>{performanceMode && !mapAssetsRequested ? t('overview.mapAssetDeferred') : t('overview.mapAssetLoading')}</span>
+                {performanceMode && !mapAssetsRequested && (
+                  <button
+                    type="button"
+                    data-map-asset-load-detail="true"
+                    onClick={() => setMapAssetsRequested(true)}
+                  >
+                    {t('overview.mapAssetLoadDetail')}
+                  </button>
+                )}
               </div>
             )}
             <div

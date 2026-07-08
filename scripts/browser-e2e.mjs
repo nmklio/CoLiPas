@@ -2279,6 +2279,7 @@ async function assertOperationsResultTraceRoundTrip(targetPage) {
 }
 
 async function assertOverviewHealthBaseline(targetPage) {
+  await assertOverviewPerformanceMode();
   await targetPage.goto(`${baseUrl}/admin/#overview`, { waitUntil: 'networkidle', timeout: 30000 });
   const baseline = targetPage.locator('[data-health-baseline="true"]');
   await baseline.waitFor({ timeout: 10000 });
@@ -2471,6 +2472,37 @@ async function assertOverviewHealthBaseline(targetPage) {
   }
 
   console.log('ok browser e2e covers overview health baseline alerts, trend snapshots, and action routing');
+}
+
+
+async function assertOverviewPerformanceMode() {
+  const performancePage = await createE2ePage({ viewport: { width: 1440, height: 980 } });
+  try {
+    await performancePage.addInitScript(() => {
+      window.localStorage.setItem('colipas.performanceMode.v1', '1');
+    });
+    await openAndLogin(performancePage, `${baseUrl}/admin/#overview`);
+    const performanceToggle = performancePage.locator('[data-performance-mode-toggle="true"]');
+    await performanceToggle.waitFor({ timeout: 10000 });
+    if ((await performancePage.locator('.shell').getAttribute('data-performance-mode')) !== 'true') {
+      throw new Error('Performance mode should be restored from localStorage before overview loads');
+    }
+    const deferredMapLoader = performancePage.locator('[data-map-asset-loader="true"]');
+    await deferredMapLoader.waitFor({ timeout: 10000 });
+    const deferredMapText = await deferredMapLoader.innerText();
+    if (!/Performance mode deferred the global map layer|Load detailed map/i.test(deferredMapText)) {
+      throw new Error(`Overview performance mode should defer the heavy map layer with a manual CTA: ${deferredMapText}`);
+    }
+    await performancePage.locator('[data-map-asset-load-detail="true"]').click();
+    await performancePage.waitForFunction(() => document.querySelectorAll('.map-country').length > 100, null, { timeout: 10000 });
+    await performanceToggle.click();
+    if ((await performancePage.locator('.shell').getAttribute('data-performance-mode')) !== 'false') {
+      throw new Error('Performance mode toggle did not return the app to standard mode');
+    }
+    console.log('ok browser e2e covers performance mode deferred map loading and toggle persistence');
+  } finally {
+    await performancePage.close();
+  }
 }
 
 async function assertMobileConsoleAndMap() {

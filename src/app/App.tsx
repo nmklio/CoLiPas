@@ -6,6 +6,7 @@ import {
   ClipboardCheck,
   Command,
   Cpu,
+  Gauge,
   HardDrive,
   LayoutDashboard,
   ListChecks,
@@ -219,6 +220,7 @@ const overviewTriageCommand = [
 const avatarMaxBytes = 2 * 1024 * 1024;
 const settingsMessageTtlMs = 2800;
 const launchGuideStorageKey = 'colipas.launchGuide.dismissed.v1';
+const performanceModeStorageKey = 'colipas.performanceMode.v1';
 
 function isSectionId(value: string): value is SectionId {
   return sections.some((section) => section.id === value);
@@ -246,6 +248,14 @@ function readHashRoute(): HashRoute {
   const section = matched ? sectionPart : 'overview';
   const traceId = section === 'security' ? normalizeTraceRouteId(new URLSearchParams(queryPart).get('trace')) : '';
   return { section, traceId, matched };
+}
+
+function readStoredPerformanceMode() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return window.localStorage.getItem(performanceModeStorageKey) === '1';
 }
 
 function writeHashRoute(section: SectionId, traceId = '') {
@@ -308,6 +318,7 @@ export function App() {
   const [overviewPreflightSnapshot, setOverviewPreflightSnapshot] = useState<OverviewPreflightSnapshot | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [aiCollapsed, setAiCollapsed] = useState(true);
+  const [performanceMode, setPerformanceMode] = useState(readStoredPerformanceMode);
   const [aiSeedQuestion, setAiSeedQuestion] = useState('');
   const [overview, setOverview] = useState<OverviewResponse>(fallbackOverview);
   const [configSummary, setConfigSummary] = useState<ConfigSummaryResponse | null>(null);
@@ -419,16 +430,28 @@ export function App() {
   }, [session?.authenticated]);
 
   useEffect(() => {
+    window.localStorage.setItem(performanceModeStorageKey, performanceMode ? '1' : '0');
+  }, [performanceMode]);
+
+  useEffect(() => {
     if (!session?.authenticated) {
       return undefined;
     }
 
     preloadSectionModule(activeSection);
-    if (activeSection === 'overview') {
+    if (!performanceMode && activeSection === 'overview') {
       preloadSectionModule('servers');
     }
-    if (!aiCollapsed || activeSection === 'ai' || aiSeedQuestion || releaseFixFocus?.targetSection === 'ai') {
+    if (
+      activeSection === 'ai'
+      || aiSeedQuestion
+      || releaseFixFocus?.targetSection === 'ai'
+      || (!performanceMode && !aiCollapsed)
+    ) {
       preloadAiConsole();
+    }
+    if (performanceMode) {
+      return undefined;
     }
 
     if (typeof window.requestIdleCallback === 'function') {
@@ -438,7 +461,7 @@ export function App() {
 
     const timer = window.setTimeout(() => warmIdleAdminModules(activeSection, aiCollapsed), 1200);
     return () => window.clearTimeout(timer);
-  }, [activeSection, aiCollapsed, aiSeedQuestion, releaseFixFocus?.targetSection, session?.authenticated]);
+  }, [activeSection, aiCollapsed, aiSeedQuestion, performanceMode, releaseFixFocus?.targetSection, session?.authenticated]);
 
   useEffect(() => {
     function syncRouteFromHash() {
@@ -1122,7 +1145,7 @@ export function App() {
   }
 
   return (
-    <div className="shell" data-build="20260509-i18n-map">
+    <div className={performanceMode ? 'shell performance-mode' : 'shell'} data-build="20260509-i18n-map" data-performance-mode={performanceMode ? 'true' : 'false'}>
       <aside className={sidebarOpen ? 'sidebar open' : 'sidebar'}>
         <div className="brand">
           <AvatarMark profile={profile} />
@@ -1139,8 +1162,16 @@ export function App() {
                 key={section.id}
                 type="button"
                 className={activeSection === section.id ? 'nav-item active' : 'nav-item'}
-                onMouseEnter={() => preloadSectionModule(section.id)}
-                onFocus={() => preloadSectionModule(section.id)}
+                onMouseEnter={() => {
+                  if (!performanceMode) {
+                    preloadSectionModule(section.id);
+                  }
+                }}
+                onFocus={() => {
+                  if (!performanceMode) {
+                    preloadSectionModule(section.id);
+                  }
+                }}
                 onClick={() => navigateToSection(section.id)}
               >
                 <Icon size={18} aria-hidden="true" />
@@ -1221,6 +1252,19 @@ export function App() {
               <Command size={15} aria-hidden="true" />
               <span>{t('app.commandPalette')}</span>
               <kbd>{commandShortcutLabel}</kbd>
+            </button>
+            <button
+              type="button"
+              className={performanceMode ? 'performance-mode-toggle active' : 'performance-mode-toggle'}
+              data-performance-mode-toggle="true"
+              aria-pressed={performanceMode}
+              aria-label={performanceMode ? t('app.performanceModeOn') : t('app.performanceModeOff')}
+              title={performanceMode ? t('app.performanceModeOnDetail') : t('app.performanceModeOffDetail')}
+              onClick={() => setPerformanceMode((value) => !value)}
+            >
+              <Gauge size={15} aria-hidden="true" />
+              <span>{t('app.performanceMode')}</span>
+              <b>{performanceMode ? t('app.performanceModeOn') : t('app.performanceModeOff')}</b>
             </button>
             <div className="language-switcher topbar-language-switcher" role="group" aria-label={t('language.label')}>
               <span className="language-switcher-label">{t('language.label')}</span>
@@ -1419,6 +1463,7 @@ export function App() {
                 events={overview.operationEvents}
                 onlineCount={onlineCount}
                 avgCpu={avgCpu}
+                performanceMode={performanceMode}
                 opsPreflightSnapshot={overviewPreflightSnapshot}
                 onRegionServersOpen={openServersForRegion}
                 onHealthSignalOpen={openHealthSignal}

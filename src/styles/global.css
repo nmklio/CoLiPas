@@ -1599,6 +1599,29 @@ button:disabled {
   grid-template-columns: 244px minmax(0, 1fr);
 }
 
+.shell.performance-mode *,
+.shell.performance-mode *::before,
+.shell.performance-mode *::after {
+  transition-duration: 80ms !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+}
+
+.shell.performance-mode .module-loading-orb,
+.shell.performance-mode .map-node,
+.shell.performance-mode .topbar-chip {
+  filter: none;
+  box-shadow: none;
+}
+
+.shell.performance-mode .panel,
+.shell.performance-mode .metric-card,
+.shell.performance-mode .launch-guide,
+.shell.performance-mode .command-palette,
+.shell.performance-mode .account-modal {
+  backdrop-filter: none;
+}
+
 .sidebar {
   position: sticky;
   top: 0;
@@ -1928,6 +1951,48 @@ button:disabled {
 
 .command-trigger svg {
   color: var(--brand-strong);
+}
+
+.performance-mode-toggle {
+  min-height: 34px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 999px;
+  padding: 0 8px 0 10px;
+  background: linear-gradient(135deg, #f8fafc, #ffffff);
+  color: #18343c;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 900;
+  box-shadow: 0 8px 18px rgba(15, 48, 53, 0.06);
+}
+
+.performance-mode-toggle svg {
+  color: #64748b;
+}
+
+.performance-mode-toggle b {
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: rgba(100, 116, 139, 0.1);
+  color: #475569;
+  font-size: 11px;
+}
+
+.performance-mode-toggle.active {
+  border-color: rgba(20, 184, 166, 0.36);
+  background: linear-gradient(135deg, #ecfeff, #f0fdfa);
+  box-shadow: 0 8px 18px rgba(20, 184, 166, 0.12);
+}
+
+.performance-mode-toggle.active svg {
+  color: #0f766e;
+}
+
+.performance-mode-toggle.active b {
+  background: rgba(20, 184, 166, 0.16);
+  color: #0f766e;
 }
 
 .launch-guide-open {
@@ -3130,6 +3195,40 @@ main {
 .map-asset-loader svg {
   color: var(--brand-strong);
   animation: spin 1.4s linear infinite;
+}
+
+.map-asset-loader.manual {
+  border-color: rgba(59, 130, 246, 0.18);
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.9);
+  color: #1f3f56;
+}
+
+.map-asset-loader.manual svg {
+  color: #2563eb;
+  animation: none;
+}
+
+.map-asset-loader button {
+  border: 0;
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: linear-gradient(135deg, #0f766e, #2563eb);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 8px 16px rgba(15, 118, 110, 0.18);
+}
+
+.map-asset-loader button:hover {
+  transform: translateY(-1px);
+}
+
+.map-asset-loader small {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .map-transform-layer {
