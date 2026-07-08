@@ -1799,6 +1799,24 @@ async function assertSshTerminalPanel(targetPage) {
     if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(terminalTelemetryText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(terminalTelemetryText)) {
       throw new Error('SSH terminal live telemetry rendered a raw IP address or API key');
     }
+    await targetPage.locator('[data-ssh-diagnostics-summary="true"]').waitFor({ timeout: 5000 });
+    const collapsedDiagnosticsCount = await targetPage.locator('[data-ssh-terminal-bottleneck="true"], [data-ssh-terminal-root-cause="true"], [data-ssh-terminal-lag-action="true"], [data-ssh-self-diagnostic-wizard="true"], [data-ssh-terminal-latency-report="true"], [data-ssh-terminal-support-bundle="true"]').count();
+    if (collapsedDiagnosticsCount !== 0) {
+      throw new Error(`SSH heavy diagnostics should be lazy-mounted while collapsed, got ${collapsedDiagnosticsCount} mounted panels`);
+    }
+    const terminalDiagnosticsSummaryText = await targetPage.locator('[data-ssh-diagnostics-summary="true"]').innerText();
+    if (!/Diagnostics summary|Diagnostics collapsed/i.test(terminalDiagnosticsSummaryText) || !/Bottleneck|Real-time lag root cause|Latency sampler|One-click doctor|Next action|Field evidence pack/i.test(terminalDiagnosticsSummaryText)) {
+      throw new Error(`SSH diagnostics summary did not expose the collapsed evidence overview: ${terminalDiagnosticsSummaryText}`);
+    }
+    const diagnosticsChipCount = await targetPage.locator('[data-ssh-diagnostics-chip]').count();
+    if (diagnosticsChipCount !== 6) {
+      throw new Error(`SSH diagnostics summary should expose six compact chips, got ${diagnosticsChipCount}`);
+    }
+    await targetPage.locator('[data-ssh-diagnostics-toggle="true"]').click();
+    await targetPage.waitForFunction(() => {
+      const toggle = document.querySelector('[data-ssh-diagnostics-toggle="true"]');
+      return toggle?.getAttribute('aria-expanded') === 'true';
+    }, undefined, { timeout: 5000 });
     await targetPage.locator('[data-ssh-terminal-bottleneck="true"]').waitFor({ timeout: 5000 });
     const terminalBottleneckText = await targetPage.locator('[data-ssh-terminal-bottleneck="true"]').innerText();
     if (!/Bottleneck radar/i.test(terminalBottleneckText) || !/Network/i.test(terminalBottleneckText) || !/Input/i.test(terminalBottleneckText) || !/Output/i.test(terminalBottleneckText) || !/Render/i.test(terminalBottleneckText)) {
@@ -1999,7 +2017,7 @@ async function assertSshTerminalPanel(targetPage) {
     await targetPage.waitForFunction(() => {
       const shell = document.querySelector('.ssh-terminal-shell');
       return shell?.classList.contains('focus-mode')
-        && document.querySelectorAll('[data-ssh-terminal-telemetry="true"], [data-ssh-terminal-bottleneck="true"], [data-ssh-terminal-root-cause="true"], [data-ssh-terminal-experience-center="true"], [data-ssh-terminal-latency-report="true"], [data-ssh-terminal-support-bundle="true"], [data-ssh-quick-command-deck="true"]').length === 0;
+        && document.querySelectorAll('[data-ssh-terminal-telemetry="true"], [data-ssh-diagnostics-summary="true"], [data-ssh-terminal-bottleneck="true"], [data-ssh-terminal-root-cause="true"], [data-ssh-terminal-experience-center="true"], [data-ssh-terminal-latency-report="true"], [data-ssh-terminal-support-bundle="true"], [data-ssh-quick-command-deck="true"]').length === 0;
     }, undefined, { timeout: 5000 });
     const focusPreference = await targetPage.evaluate(() => window.localStorage.getItem('colipas.sshTerminalFocusMode.v1'));
     if (focusPreference !== 'true') {

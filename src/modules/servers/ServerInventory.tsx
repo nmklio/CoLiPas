@@ -88,6 +88,7 @@ const terminalPasteReviewPreviewLines = 8;
 const terminalPasteReviewPreviewChars = 560;
 const terminalTextEncoder = new TextEncoder();
 const terminalFocusModeStorageKey = 'colipas.sshTerminalFocusMode.v1';
+const terminalDiagnosticsExpandedStorageKey = 'colipas.sshDiagnosticsExpanded.v1';
 const terminalLatencyReportStorageKey = 'colipas.sshLatencyReport.v1';
 const terminalLatencyReportHistoryStorageKey = 'colipas.sshLatencyReportHistory.v1';
 const terminalLatencyReportHistoryLimit = 12;
@@ -348,6 +349,14 @@ interface TerminalExperienceCenter {
   pills: TerminalExperiencePill[];
 }
 
+interface TerminalDiagnosticsSummaryItem {
+  id: 'bottleneck' | 'root-cause' | 'action' | 'self-diagnostic' | 'latency' | 'support';
+  label: string;
+  value: string;
+  detail: string;
+  tone: TerminalNetworkQuality['tone'];
+}
+
 type SshConnectionDoctorStepId = 'asset' | 'credential' | 'backend' | 'shell' | 'terminal';
 const sshConnectionDoctorStepIds: SshConnectionDoctorStepId[] = ['asset', 'credential', 'backend', 'shell', 'terminal'];
 
@@ -589,6 +598,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const [terminalPasteReview, setTerminalPasteReview] = useState<TerminalPasteReview | null>(null);
   const [terminalPasteSending, setTerminalPasteSending] = useState(false);
   const [terminalFocusMode, setTerminalFocusMode] = useState(() => readTerminalFocusMode());
+  const [terminalDiagnosticsExpanded, setTerminalDiagnosticsExpanded] = useState(() => readTerminalDiagnosticsExpanded());
   const [sshRunbookCommands, setSshRunbookCommands] = useState<SshRunbookCommand[]>([]);
   const [sshRunbookForm, setSshRunbookForm] = useState({ title: '', command: '' });
   const [editingSshRunbookId, setEditingSshRunbookId] = useState('');
@@ -749,6 +759,73 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     }),
     [terminalQualityInsight, terminalTelemetry, terminalBottleneckAdvisor, terminalLatencyReport, terminalNetworkStats, terminalSelfTest, terminalShellId, t],
   );
+  const terminalDiagnosticsSummary = useMemo(() => {
+    const firstOutputSection = terminalLatencyReport?.sections.find((section) => section.id === 'first-output');
+    const items: TerminalDiagnosticsSummaryItem[] = [
+      {
+        id: 'bottleneck',
+        label: t('servers.bottleneckTitle'),
+        value: terminalBottleneckAdvisor.primaryLabel,
+        detail: terminalBottleneckAdvisor.title,
+        tone: terminalBottleneckAdvisor.tone,
+      },
+      {
+        id: 'root-cause',
+        label: t('servers.rootCauseEyebrow'),
+        value: terminalLagRootCause.confidenceLabel,
+        detail: terminalLagRootCause.title,
+        tone: terminalLagRootCause.tone,
+      },
+      {
+        id: 'latency',
+        label: t('servers.terminalLatencyReportEyebrow'),
+        value: firstOutputSection?.value ?? t('servers.terminalLatencyReportSourcePending'),
+        detail: terminalLatencyReport?.title ?? t('servers.terminalLatencyReportSourcePending'),
+        tone: terminalLatencyReport?.tone ?? 'pending',
+      },
+      {
+        id: 'self-diagnostic',
+        label: t('servers.terminalSelfDiagnosticEyebrow'),
+        value: `${Math.round(terminalSelfDiagnosticGuide.progress)}%`,
+        detail: terminalSelfDiagnosticGuide.title,
+        tone: terminalSelfDiagnosticGuide.tone,
+      },
+      {
+        id: 'action',
+        label: t('servers.terminalLatencyReportAction'),
+        value: terminalLagAction?.buttonLabel ?? t('servers.terminalSelfDiagnosticActionWaiting'),
+        detail: terminalLagAction?.title ?? t('servers.terminalDiagnosticsActionFallback'),
+        tone: terminalLagAction?.tone ?? terminalLagRootCause.tone,
+      },
+      {
+        id: 'support',
+        label: t('servers.terminalSupportBundleEyebrow'),
+        value: String(terminalSupportBundle?.sections.length ?? 0),
+        detail: terminalSupportBundle?.title ?? t('servers.terminalSupportBundleNoSelfTest'),
+        tone: terminalSupportBundle?.tone ?? 'pending',
+      },
+    ];
+    const tone: TerminalNetworkQuality['tone'] = items.some((item) => item.tone === 'slow')
+      ? 'slow'
+      : items.some((item) => item.tone === 'warn')
+        ? 'warn'
+        : items.some((item) => item.tone === 'pending')
+          ? 'pending'
+          : 'good';
+    return {
+      tone,
+      items,
+      count: items.length,
+    };
+  }, [
+    terminalBottleneckAdvisor,
+    terminalLagRootCause,
+    terminalLagAction,
+    terminalLatencyReport,
+    terminalSelfDiagnosticGuide,
+    terminalSupportBundle,
+    t,
+  ]);
   const sshRunbookRecommendations = useMemo(
     () => buildSshRunbookRecommendations(sshRunbookCommands, sshDoctorReport, terminalBottleneckAdvisor, Boolean(terminalShellId), t),
     [sshRunbookCommands, sshDoctorReport, terminalBottleneckAdvisor, terminalShellId, t],
@@ -875,6 +952,10 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     }
     scheduleTerminalFit(true);
   }, [terminalFocusMode]);
+
+  useEffect(() => {
+    writeTerminalDiagnosticsExpanded(terminalDiagnosticsExpanded);
+  }, [terminalDiagnosticsExpanded]);
 
   useEffect(() => {
     if (!sshConsoleOpen || !activeSshServer?.ssh?.connected) {
@@ -1899,6 +1980,55 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                 </div>
                 )}
                 {!terminalFocusMode && (
+                <div
+                  className={`ssh-terminal-diagnostics-summary ${terminalDiagnosticsSummary.tone}`}
+                  data-ssh-diagnostics-summary="true"
+                  aria-live="polite"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <div className="ssh-terminal-diagnostics-copy">
+                    <span>{t('servers.terminalDiagnosticsEyebrow')}</span>
+                    <strong>
+                      {terminalDiagnosticsExpanded
+                        ? t('servers.terminalDiagnosticsExpandedTitle', { count: terminalDiagnosticsSummary.count })
+                        : t('servers.terminalDiagnosticsCollapsedTitle', { count: terminalDiagnosticsSummary.count })}
+                    </strong>
+                    <small>
+                      {terminalDiagnosticsExpanded
+                        ? t('servers.terminalDiagnosticsExpandedDetail', { count: terminalDiagnosticsSummary.count })
+                        : t('servers.terminalDiagnosticsCollapsedDetail', { count: terminalDiagnosticsSummary.count })}
+                    </small>
+                  </div>
+                  <div className="ssh-terminal-diagnostics-chips">
+                    {terminalDiagnosticsSummary.items.map((item) => (
+                      <article key={item.id} className={item.tone} data-ssh-diagnostics-chip={item.id}>
+                        <span>{item.label}</span>
+                        <strong>{item.value}</strong>
+                        <small>{item.detail}</small>
+                      </article>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    data-ssh-diagnostics-toggle="true"
+                    aria-expanded={terminalDiagnosticsExpanded}
+                    onClick={() => setTerminalDiagnosticsExpanded((value) => !value)}
+                  >
+                    {terminalDiagnosticsExpanded ? (
+                      <>
+                        <ChevronUp size={14} />
+                        {t('servers.terminalDiagnosticsCollapse')}
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown size={14} />
+                        {t('servers.terminalDiagnosticsExpand')}
+                      </>
+                    )}
+                  </button>
+                </div>
+                )}
+                {!terminalFocusMode && terminalDiagnosticsExpanded && (
                 <div className={`ssh-terminal-bottleneck ${terminalBottleneckAdvisor.tone}`} data-ssh-terminal-bottleneck="true" aria-live="polite">
                   <div className="ssh-terminal-bottleneck-summary">
                     <span>{t('servers.bottleneckTitle')}</span>
@@ -1920,7 +2050,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                   </div>
                 </div>
                 )}
-                {!terminalFocusMode && (
+                {!terminalFocusMode && terminalDiagnosticsExpanded && (
                 <div className={`ssh-terminal-root-cause ${terminalLagRootCause.tone}`} data-ssh-terminal-root-cause="true" aria-live="polite">
                   <div className="ssh-terminal-root-cause-summary">
                     <span><Sparkles size={14} /> {t('servers.rootCauseEyebrow')}</span>
@@ -1946,7 +2076,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                   </div>
                 </div>
                 )}
-                {!terminalFocusMode && terminalLagAction && (
+                {!terminalFocusMode && terminalDiagnosticsExpanded && terminalLagAction && (
                   <div className={`ssh-terminal-lag-action ${terminalLagAction.tone}`} data-ssh-terminal-lag-action="true" aria-live="polite" onClick={(event) => event.stopPropagation()}>
                     <div className="ssh-terminal-lag-action-copy">
                       <span><Sparkles size={14} /> {t('servers.terminalLagActionEyebrow')}</span>
@@ -1963,7 +2093,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     </button>
                   </div>
                 )}
-                {!terminalFocusMode && terminalSelfDiagnosticGuide && (
+                {!terminalFocusMode && terminalDiagnosticsExpanded && terminalSelfDiagnosticGuide && (
                   <div className={`ssh-terminal-self-diagnostic ${terminalSelfDiagnosticGuide.tone}`} data-ssh-self-diagnostic-wizard="true" aria-live="polite" onClick={(event) => event.stopPropagation()}>
                     <div className="ssh-terminal-self-diagnostic-copy">
                       <span><ShieldCheck size={14} /> {t('servers.terminalSelfDiagnosticEyebrow')}</span>
@@ -1990,7 +2120,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     </button>
                   </div>
                 )}
-                {!terminalFocusMode && terminalLatencyReport && (
+                {!terminalFocusMode && terminalDiagnosticsExpanded && terminalLatencyReport && (
                   <div className={`ssh-terminal-latency-report ${terminalLatencyReport.tone}`} data-ssh-terminal-latency-report="true" aria-live="polite" onClick={(event) => event.stopPropagation()}>
                     <div className="ssh-terminal-latency-report-copy">
                       <span><Network size={14} /> {t('servers.terminalLatencyReportEyebrow')}</span>
@@ -2011,7 +2141,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     </button>
                   </div>
                 )}
-                {!terminalFocusMode && terminalSupportBundle && (
+                {!terminalFocusMode && terminalDiagnosticsExpanded && terminalSupportBundle && (
                   <div className={`ssh-terminal-support-bundle ${terminalSupportBundle.tone}`} data-ssh-terminal-support-bundle="true" aria-live="polite" onClick={(event) => event.stopPropagation()}>
                     <div className="ssh-terminal-support-bundle-copy">
                       <span><FileText size={14} /> {t('servers.terminalSupportBundleEyebrow')}</span>
@@ -4619,6 +4749,24 @@ function writeTerminalFocusMode(enabled: boolean) {
     window.localStorage.setItem(terminalFocusModeStorageKey, enabled ? 'true' : 'false');
   } catch {
     // Focus mode is a UI preference and must never block the terminal.
+  }
+}
+
+function readTerminalDiagnosticsExpanded() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  return window.localStorage.getItem(terminalDiagnosticsExpandedStorageKey) === 'true';
+}
+
+function writeTerminalDiagnosticsExpanded(enabled: boolean) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  try {
+    window.localStorage.setItem(terminalDiagnosticsExpandedStorageKey, enabled ? 'true' : 'false');
+  } catch {
+    // Diagnostics expansion is a UI preference and must never block terminal interaction.
   }
 }
 
