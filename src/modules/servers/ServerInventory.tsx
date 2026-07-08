@@ -328,6 +328,26 @@ interface TerminalLatencyReport {
   text: string;
 }
 
+interface TerminalExperiencePill {
+  id: 'quality' | 'bottleneck' | 'latency' | 'render';
+  label: string;
+  value: string;
+  detail: string;
+  tone: TerminalNetworkQuality['tone'];
+}
+
+interface TerminalExperienceCenter {
+  tone: TerminalNetworkQuality['tone'];
+  score: number;
+  title: string;
+  detail: string;
+  evidence: string;
+  primaryAction: 'self-test' | 'copy-latency' | 'focus';
+  primaryActionLabel: string;
+  primaryActionDetail: string;
+  pills: TerminalExperiencePill[];
+}
+
 type SshConnectionDoctorStepId = 'asset' | 'credential' | 'backend' | 'shell' | 'terminal';
 const sshConnectionDoctorStepIds: SshConnectionDoctorStepId[] = ['asset', 'credential', 'backend', 'shell', 'terminal'];
 
@@ -715,6 +735,19 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
       t,
     }),
     [terminalTelemetry, terminalBottleneckAdvisor, terminalLagRootCause, terminalNetworkStats, terminalTransport, terminalSelfTest, terminalShellId, t],
+  );
+  const terminalExperienceCenter = useMemo(
+    () => buildTerminalExperienceCenter({
+      qualityInsight: terminalQualityInsight,
+      telemetry: terminalTelemetry,
+      bottleneckAdvisor: terminalBottleneckAdvisor,
+      latencyReport: terminalLatencyReport,
+      networkStats: terminalNetworkStats,
+      selfTest: terminalSelfTest,
+      connected: Boolean(terminalShellId),
+      t,
+    }),
+    [terminalQualityInsight, terminalTelemetry, terminalBottleneckAdvisor, terminalLatencyReport, terminalNetworkStats, terminalSelfTest, terminalShellId, t],
   );
   const sshRunbookRecommendations = useMemo(
     () => buildSshRunbookRecommendations(sshRunbookCommands, sshDoctorReport, terminalBottleneckAdvisor, Boolean(terminalShellId), t),
@@ -1800,6 +1833,43 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     </div>
                   </div>
                 </div>
+                {!terminalFocusMode && terminalExperienceCenter && (
+                  <div className={`ssh-terminal-experience-center ${terminalExperienceCenter.tone}`} data-ssh-terminal-experience-center="true" aria-live="polite" onClick={(event) => event.stopPropagation()}>
+                    <div className="ssh-terminal-experience-copy">
+                      <span><Sparkles size={14} /> {t('servers.terminalExperienceEyebrow')}</span>
+                      <strong>{terminalExperienceCenter.title}</strong>
+                      <small>{terminalExperienceCenter.detail}</small>
+                    </div>
+                    <div className="ssh-terminal-experience-score" aria-label={`${t('servers.terminalExperienceScoreLabel')}: ${terminalExperienceCenter.score}`}>
+                      <b>{terminalExperienceCenter.score}</b>
+                      <i aria-hidden="true"><em style={{ width: `${terminalExperienceCenter.score}%` }} /></i>
+                      <small>{terminalExperienceCenter.evidence}</small>
+                    </div>
+                    <div className="ssh-terminal-experience-pills">
+                      {terminalExperienceCenter.pills.map((pill) => (
+                        <article key={pill.id} className={pill.tone} data-ssh-terminal-experience-pill={pill.id}>
+                          <span>{pill.label}</span>
+                          <strong>{pill.value}</strong>
+                          <small>{pill.detail}</small>
+                        </article>
+                      ))}
+                    </div>
+                    <div className="ssh-terminal-experience-actions">
+                      <button
+                        type="button"
+                        data-ssh-experience-action={terminalExperienceCenter.primaryAction}
+                        onClick={() => runTerminalExperienceAction(terminalExperienceCenter.primaryAction)}
+                        disabled={!terminalShellId || sshInterrupting || (terminalExperienceCenter.primaryAction === 'self-test' && terminalSelfTestRunning)}
+                      >
+                        {terminalExperienceCenter.primaryActionLabel}
+                        <small>{terminalExperienceCenter.primaryActionDetail}</small>
+                      </button>
+                      <button type="button" data-ssh-experience-action="copy-latency" onClick={copyTerminalLatencyReport} disabled={!terminalShellId || !terminalLatencyReport}>
+                        {t('servers.terminalExperienceCopyLatency')}
+                      </button>
+                    </div>
+                  </div>
+                )}
                 {!terminalFocusMode && (
                 <div className={`ssh-terminal-quality ${terminalQualityInsight.tone}`} aria-live="polite">
                   <span className="ssh-terminal-quality-beacon" aria-hidden="true" />
@@ -3642,6 +3712,19 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     }
   }
 
+  function runTerminalExperienceAction(action: TerminalExperienceCenter['primaryAction']) {
+    if (action === 'self-test') {
+      runTerminalSelfTest();
+      return;
+    }
+    if (action === 'copy-latency') {
+      void copyTerminalLatencyReport();
+      return;
+    }
+    setTerminalFocusMode(true);
+    xtermRef.current?.focus();
+  }
+
   function runTerminalSelfDiagnosticAction(action: TerminalSelfDiagnosticAction) {
     if (action === 'wait') {
       showActionMessage(t('servers.terminalSelfDiagnosticWaiting'));
@@ -5197,6 +5280,147 @@ function buildTerminalSelfDiagnosticGuide({
   };
 }
 
+
+
+function buildTerminalExperienceCenter({
+  qualityInsight,
+  telemetry,
+  bottleneckAdvisor,
+  latencyReport,
+  networkStats,
+  selfTest,
+  connected,
+  t,
+}: {
+  qualityInsight: TerminalQualityInsight;
+  telemetry: TerminalTelemetryState;
+  bottleneckAdvisor: TerminalBottleneckAdvisor;
+  latencyReport: TerminalLatencyReport | null;
+  networkStats: TerminalNetworkStats | null;
+  selfTest: TerminalSelfTestState | null;
+  connected: boolean;
+  t: (key: string, vars?: Record<string, string | number>) => string;
+}): TerminalExperienceCenter | null {
+  if (!connected) {
+    return null;
+  }
+
+  const primary = getPrimaryBottleneckItem(bottleneckAdvisor) ?? bottleneckAdvisor.items[0] ?? null;
+  const latencySections = latencyReport?.sections ?? [];
+  const latencyPenalty = Math.max(0, ...latencySections.map((section) => getTerminalTonePenalty(section.tone)));
+  const primaryPenalty = primary ? Math.round(primary.level * 0.58) : 12;
+  const renderPenalty = telemetry.renderLagMs >= 64 || telemetry.pendingBytes >= terminalWriteLargeBacklogThreshold
+    ? 42
+    : telemetry.renderLagMs >= 24 || telemetry.pendingBytes > 0
+      ? 24
+      : 4;
+  const selfTestPenalty = !selfTest
+    ? 8
+    : selfTest.status === 'complete'
+      ? 0
+      : 18;
+  const score = Math.max(0, Math.min(100, 100 - Math.max(primaryPenalty, latencyPenalty, renderPenalty, selfTestPenalty)));
+  const tone: TerminalNetworkQuality['tone'] = score < 58 || bottleneckAdvisor.tone === 'slow' || latencyReport?.tone === 'slow'
+    ? 'slow'
+    : score < 78 || bottleneckAdvisor.tone === 'warn' || latencyReport?.tone === 'warn'
+      ? 'warn'
+      : latencyReport?.tone === 'pending' || qualityInsight.tone === 'pending'
+        ? 'pending'
+        : 'good';
+  const firstOutputSection = latencySections.find((section) => section.id === 'first-output');
+  const renderSection = latencySections.find((section) => section.id === 'render');
+  const networkLabel = networkStats
+    ? `${formatTerminalRtt(networkStats.rttMs)} / ${formatBytesPerSecond(networkStats.throughputBytesPerSecond)}`
+    : selfTest
+      ? `${formatTerminalRtt(selfTest.rttMs)} / ${formatBytesPerSecond(selfTest.throughputBytesPerSecond)}`
+      : t('servers.terminalSupportBundleNoNetwork');
+  const primaryAction: TerminalExperienceCenter['primaryAction'] = !selfTest || selfTest.status !== 'complete'
+    ? 'self-test'
+    : tone === 'good'
+      ? 'focus'
+      : 'copy-latency';
+  const primaryActionLabel = primaryAction === 'self-test'
+    ? t('servers.terminalExperienceActionSelfTest')
+    : primaryAction === 'focus'
+      ? t('servers.terminalExperienceActionFocus')
+      : t('servers.terminalExperienceActionCopyLatency');
+  const primaryActionDetail = primaryAction === 'self-test'
+    ? t('servers.terminalExperienceActionSelfTestDetail')
+    : primaryAction === 'focus'
+      ? t('servers.terminalExperienceActionFocusDetail')
+      : t('servers.terminalExperienceActionCopyLatencyDetail');
+  const title = tone === 'slow'
+    ? t('servers.terminalExperienceSlowTitle')
+    : tone === 'warn'
+      ? t('servers.terminalExperienceWarnTitle')
+      : tone === 'good'
+        ? t('servers.terminalExperienceGoodTitle')
+        : t('servers.terminalExperiencePendingTitle');
+  const detail = t('servers.terminalExperienceDetail', {
+    score,
+    bottleneck: primary ? primary.label : bottleneckAdvisor.title,
+  });
+  const rawPills: TerminalExperiencePill[] = [
+    {
+      id: 'quality',
+      label: t('servers.terminalExperiencePillQuality'),
+      value: qualityInsight.title,
+      detail: qualityInsight.metric,
+      tone: qualityInsight.tone,
+    },
+    {
+      id: 'bottleneck',
+      label: t('servers.terminalExperiencePillBottleneck'),
+      value: primary ? primary.value : '--',
+      detail: primary ? primary.label : bottleneckAdvisor.primaryLabel,
+      tone: primary?.tone ?? bottleneckAdvisor.tone,
+    },
+    {
+      id: 'latency',
+      label: t('servers.terminalExperiencePillLatency'),
+      value: firstOutputSection?.value ?? '--',
+      detail: firstOutputSection?.label ?? networkLabel,
+      tone: firstOutputSection?.tone ?? (networkStats ? getTerminalNetworkQuality(networkStats, t).tone : 'pending'),
+    },
+    {
+      id: 'render',
+      label: t('servers.terminalExperiencePillRender'),
+      value: renderSection?.value ?? `${Math.round(telemetry.renderLagMs)}ms`,
+      detail: renderSection?.detail ?? t('servers.telemetryRenderDetail', { pending: formatCompactBytes(telemetry.pendingBytes), peak: formatCompactBytes(telemetry.peakPendingBytes) }),
+      tone: renderSection?.tone ?? getBottleneckTone(renderPenalty, connected),
+    },
+  ];
+  const pills: TerminalExperiencePill[] = rawPills.map((pill) => ({
+    ...pill,
+    value: sanitizeSshDoctorText(pill.value),
+    detail: sanitizeSshDoctorText(pill.detail),
+  }));
+
+  return {
+    tone,
+    score,
+    title,
+    detail: sanitizeSshDoctorText(detail),
+    evidence: sanitizeSshDoctorText(t('servers.terminalExperienceEvidence', { network: networkLabel, action: primaryActionLabel })),
+    primaryAction,
+    primaryActionLabel,
+    primaryActionDetail,
+    pills,
+  };
+}
+
+function getTerminalTonePenalty(tone: TerminalNetworkQuality['tone']) {
+  if (tone === 'slow') {
+    return 54;
+  }
+  if (tone === 'warn') {
+    return 30;
+  }
+  if (tone === 'pending') {
+    return 12;
+  }
+  return 0;
+}
 
 function buildTerminalLatencyReport({
   telemetry,

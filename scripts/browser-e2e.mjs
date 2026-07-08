@@ -1879,6 +1879,22 @@ async function assertSshTerminalPanel(targetPage) {
     if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(terminalSelfDiagnosticText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(terminalSelfDiagnosticText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(terminalSelfDiagnosticText)) {
       throw new Error('SSH terminal self-diagnostic wizard rendered a raw IP address or secret');
     }
+    await targetPage.locator('[data-ssh-terminal-experience-center="true"]').waitFor({ timeout: 5000 });
+    const terminalExperienceText = await targetPage.locator('[data-ssh-terminal-experience-center="true"]').innerText();
+    if (!/SSH experience center/i.test(terminalExperienceText) || !/(Terminal experience|Collecting experience|Terminal has mild|Terminal lag)/i.test(terminalExperienceText) || !/Experience score|State|Bottleneck|First output|Render/i.test(terminalExperienceText)) {
+      throw new Error(`SSH experience center did not render the consolidated experience summary: ${terminalExperienceText}`);
+    }
+    const terminalExperiencePillCount = await targetPage.locator('[data-ssh-terminal-experience-pill]').count();
+    if (terminalExperiencePillCount !== 4) {
+      throw new Error(`SSH experience center should expose four compact pills, got ${terminalExperiencePillCount}`);
+    }
+    const terminalExperienceActionCount = await targetPage.locator('[data-ssh-experience-action]').count();
+    if (terminalExperienceActionCount < 2) {
+      throw new Error(`SSH experience center should expose primary and copy actions, got ${terminalExperienceActionCount}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(terminalExperienceText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(terminalExperienceText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(terminalExperienceText)) {
+      throw new Error('SSH experience center rendered a raw IP address or secret');
+    }
     await targetPage.locator('[data-ssh-terminal-latency-report="true"]').waitFor({ timeout: 5000 });
     const terminalLatencyReportText = await targetPage.locator('[data-ssh-terminal-latency-report="true"]').innerText();
     if (!/SSH latency sampling report/i.test(terminalLatencyReportText) || !/Latency sampler/i.test(terminalLatencyReportText) || !/Input echo/i.test(terminalLatencyReportText) || !/First output/i.test(terminalLatencyReportText) || !/Output throughput/i.test(terminalLatencyReportText) || !/Browser render/i.test(terminalLatencyReportText) || !/Channel/i.test(terminalLatencyReportText) || !/Next action/i.test(terminalLatencyReportText)) {
@@ -1983,7 +1999,7 @@ async function assertSshTerminalPanel(targetPage) {
     await targetPage.waitForFunction(() => {
       const shell = document.querySelector('.ssh-terminal-shell');
       return shell?.classList.contains('focus-mode')
-        && document.querySelectorAll('[data-ssh-terminal-telemetry="true"], [data-ssh-terminal-bottleneck="true"], [data-ssh-terminal-root-cause="true"], [data-ssh-terminal-latency-report="true"], [data-ssh-terminal-support-bundle="true"], [data-ssh-quick-command-deck="true"]').length === 0;
+        && document.querySelectorAll('[data-ssh-terminal-telemetry="true"], [data-ssh-terminal-bottleneck="true"], [data-ssh-terminal-root-cause="true"], [data-ssh-terminal-experience-center="true"], [data-ssh-terminal-latency-report="true"], [data-ssh-terminal-support-bundle="true"], [data-ssh-quick-command-deck="true"]').length === 0;
     }, undefined, { timeout: 5000 });
     const focusPreference = await targetPage.evaluate(() => window.localStorage.getItem('colipas.sshTerminalFocusMode.v1'));
     if (focusPreference !== 'true') {
