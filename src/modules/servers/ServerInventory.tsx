@@ -53,6 +53,7 @@ interface ServerInventoryProps {
   allServers: ServerNode[];
   servers: ServerNode[];
   filters: ServerFilters;
+  performanceMode?: boolean;
   onFiltersChange: (filters: ServerFilters) => void;
   onTriageDraftOpen?: (triageId: ServerFleetTriageCardId) => void;
   onServerConnected: () => Promise<void> | void;
@@ -89,6 +90,7 @@ const terminalPasteReviewPreviewChars = 560;
 const terminalTextEncoder = new TextEncoder();
 const terminalFocusModeStorageKey = 'colipas.sshTerminalFocusMode.v1';
 const sshConsoleMetaCollapsedStorageKey = 'colipas.sshConsoleMetaCollapsed.v1';
+const terminalLiteModeStorageKey = 'colipas.sshTerminalLiteMode.v1';
 const terminalDiagnosticsExpandedStorageKey = 'colipas.sshDiagnosticsExpanded.v1';
 const terminalLatencyReportStorageKey = 'colipas.sshLatencyReport.v1';
 const terminalLatencyReportHistoryStorageKey = 'colipas.sshLatencyReportHistory.v1';
@@ -565,9 +567,10 @@ const initialForm: ConnectServerPayload = {
   },
 };
 
-export function ServerInventory({ allServers, servers, filters, onFiltersChange, onTriageDraftOpen, onServerConnected, onAuditTraceOpen, releaseFocusAnchor }: ServerInventoryProps) {
+export function ServerInventory({ allServers, servers, filters, performanceMode = false, onFiltersChange, onTriageDraftOpen, onServerConnected, onAuditTraceOpen, releaseFocusAnchor }: ServerInventoryProps) {
   const { language, t } = useI18n();
   const regions = useMemo(() => buildSortedRegions(allServers), [allServers]);
+  const initialTerminalLiteModePreference = useMemo(() => readTerminalLiteModePreference(), []);
   const scopedRegions = useMemo(() => normalizeScopedRegions(filters.regionScope), [filters.regionScope]);
   const providerFilters = useMemo(() => buildProviderOptions(allServers.map((server) => server.provider)), [allServers]);
   const healthScopeLabel = filters.health ? t(`servers.healthScope.${filters.health}`) : '';
@@ -600,6 +603,8 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const [terminalPasteSending, setTerminalPasteSending] = useState(false);
   const [terminalFocusMode, setTerminalFocusMode] = useState(() => readTerminalFocusMode());
   const [sshConsoleMetaCollapsed, setSshConsoleMetaCollapsed] = useState(() => readSshConsoleMetaCollapsed());
+  const terminalLiteModeCustomizedRef = useRef(initialTerminalLiteModePreference !== null);
+  const [terminalLiteMode, setTerminalLiteMode] = useState(() => initialTerminalLiteModePreference ?? performanceMode);
   const [terminalDiagnosticsExpanded, setTerminalDiagnosticsExpanded] = useState(() => readTerminalDiagnosticsExpanded());
   const [sshRunbookCommands, setSshRunbookCommands] = useState<SshRunbookCommand[]>([]);
   const [sshRunbookForm, setSshRunbookForm] = useState({ title: '', command: '' });
@@ -828,6 +833,23 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     terminalSupportBundle,
     t,
   ]);
+  const terminalInsightPanelsVisible = !terminalFocusMode && !terminalLiteMode;
+  const terminalLiteModeSummary = useMemo(() => ({
+    tone: terminalExperienceCenter?.tone ?? terminalDiagnosticsSummary.tone,
+    title: terminalExperienceCenter?.title ?? t('servers.terminalLiteModeTitle'),
+    detail: t('servers.terminalLiteModeDetail', { count: terminalDiagnosticsSummary.count }),
+    score: terminalExperienceCenter ? String(terminalExperienceCenter.score) : '—',
+    network: terminalNetworkQuality?.label ?? t('servers.terminalNetworkPending'),
+    bottleneck: terminalBottleneckAdvisor.primaryLabel,
+    actionLabel: terminalExperienceCenter?.primaryActionLabel ?? t('servers.terminalDiagnosticsExpand'),
+    actionDetail: terminalExperienceCenter?.primaryActionDetail ?? t('servers.terminalLiteModeActionExpandDetail'),
+  }), [
+    terminalExperienceCenter,
+    terminalDiagnosticsSummary,
+    terminalNetworkQuality,
+    terminalBottleneckAdvisor,
+    t,
+  ]);
   const sshRunbookRecommendations = useMemo(
     () => buildSshRunbookRecommendations(sshRunbookCommands, sshDoctorReport, terminalBottleneckAdvisor, Boolean(terminalShellId), t),
     [sshRunbookCommands, sshDoctorReport, terminalBottleneckAdvisor, terminalShellId, t],
@@ -958,6 +980,18 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   useEffect(() => {
     writeSshConsoleMetaCollapsed(sshConsoleMetaCollapsed);
   }, [sshConsoleMetaCollapsed]);
+
+  useEffect(() => {
+    if (terminalLiteModeCustomizedRef.current) {
+      writeTerminalLiteModePreference(terminalLiteMode);
+    }
+  }, [terminalLiteMode]);
+
+  useEffect(() => {
+    if (!terminalLiteModeCustomizedRef.current) {
+      setTerminalLiteMode(performanceMode);
+    }
+  }, [performanceMode]);
 
   useEffect(() => {
     writeTerminalDiagnosticsExpanded(terminalDiagnosticsExpanded);
@@ -1925,6 +1959,21 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                       </button>
                       <button
                         type="button"
+                        data-ssh-terminal-lite-toggle="true"
+                        className={terminalLiteMode ? 'active' : undefined}
+                        aria-pressed={terminalLiteMode}
+                        aria-label={terminalLiteMode ? t('servers.terminalLiteModeOff') : t('servers.terminalLiteModeOn')}
+                        title={terminalLiteMode ? t('servers.terminalLiteModeOff') : t('servers.terminalLiteModeOn')}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          terminalLiteModeCustomizedRef.current = true;
+                          setTerminalLiteMode((value) => !value);
+                        }}
+                      >
+                        <Database size={14} />
+                      </button>
+                      <button
+                        type="button"
                         data-ssh-channel-switch="true"
                         aria-label={terminalTransport === 'compatible' ? t('servers.retryWebSocketChannel') : t('servers.switchToCompatibleChannel')}
                         title={terminalTransport === 'compatible' ? t('servers.retryWebSocketChannel') : t('servers.switchToCompatibleChannel')}
@@ -1974,7 +2023,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     </div>
                   </div>
                 </div>
-                {!terminalFocusMode && terminalExperienceCenter && (
+                {terminalInsightPanelsVisible && terminalExperienceCenter && (
                   <div className={`ssh-terminal-experience-center ${terminalExperienceCenter.tone}`} data-ssh-terminal-experience-center="true" aria-live="polite" onClick={(event) => event.stopPropagation()}>
                     <div className="ssh-terminal-experience-copy">
                       <span><Sparkles size={14} /> {t('servers.terminalExperienceEyebrow')}</span>
@@ -2011,7 +2060,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     </div>
                   </div>
                 )}
-                {!terminalFocusMode && (
+                {terminalInsightPanelsVisible && (
                 <div className={`ssh-terminal-quality ${terminalQualityInsight.tone}`} aria-live="polite">
                   <span className="ssh-terminal-quality-beacon" aria-hidden="true" />
                   <div>
@@ -2021,7 +2070,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                   <code>{terminalQualityInsight.metric}</code>
                 </div>
                 )}
-                {!terminalFocusMode && (
+                {terminalInsightPanelsVisible && (
                 <div className={`ssh-terminal-telemetry ${terminalTelemetryInsight.tone}`} data-ssh-terminal-telemetry="true" aria-live="polite">
                   <div className="ssh-terminal-telemetry-heading">
                     <span>{t('servers.telemetryTitle')}</span>
@@ -2039,7 +2088,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                   </div>
                 </div>
                 )}
-                {!terminalFocusMode && (
+                {terminalInsightPanelsVisible && (
                 <div
                   className={`ssh-terminal-diagnostics-summary ${terminalDiagnosticsSummary.tone}`}
                   data-ssh-diagnostics-summary="true"
@@ -2088,7 +2137,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                   </button>
                 </div>
                 )}
-                {!terminalFocusMode && terminalDiagnosticsExpanded && (
+                {terminalInsightPanelsVisible && terminalDiagnosticsExpanded && (
                 <div className={`ssh-terminal-bottleneck ${terminalBottleneckAdvisor.tone}`} data-ssh-terminal-bottleneck="true" aria-live="polite">
                   <div className="ssh-terminal-bottleneck-summary">
                     <span>{t('servers.bottleneckTitle')}</span>
@@ -2110,7 +2159,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                   </div>
                 </div>
                 )}
-                {!terminalFocusMode && terminalDiagnosticsExpanded && (
+                {terminalInsightPanelsVisible && terminalDiagnosticsExpanded && (
                 <div className={`ssh-terminal-root-cause ${terminalLagRootCause.tone}`} data-ssh-terminal-root-cause="true" aria-live="polite">
                   <div className="ssh-terminal-root-cause-summary">
                     <span><Sparkles size={14} /> {t('servers.rootCauseEyebrow')}</span>
@@ -2136,7 +2185,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                   </div>
                 </div>
                 )}
-                {!terminalFocusMode && terminalDiagnosticsExpanded && terminalLagAction && (
+                {terminalInsightPanelsVisible && terminalDiagnosticsExpanded && terminalLagAction && (
                   <div className={`ssh-terminal-lag-action ${terminalLagAction.tone}`} data-ssh-terminal-lag-action="true" aria-live="polite" onClick={(event) => event.stopPropagation()}>
                     <div className="ssh-terminal-lag-action-copy">
                       <span><Sparkles size={14} /> {t('servers.terminalLagActionEyebrow')}</span>
@@ -2153,7 +2202,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     </button>
                   </div>
                 )}
-                {!terminalFocusMode && terminalDiagnosticsExpanded && terminalSelfDiagnosticGuide && (
+                {terminalInsightPanelsVisible && terminalDiagnosticsExpanded && terminalSelfDiagnosticGuide && (
                   <div className={`ssh-terminal-self-diagnostic ${terminalSelfDiagnosticGuide.tone}`} data-ssh-self-diagnostic-wizard="true" aria-live="polite" onClick={(event) => event.stopPropagation()}>
                     <div className="ssh-terminal-self-diagnostic-copy">
                       <span><ShieldCheck size={14} /> {t('servers.terminalSelfDiagnosticEyebrow')}</span>
@@ -2180,7 +2229,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     </button>
                   </div>
                 )}
-                {!terminalFocusMode && terminalDiagnosticsExpanded && terminalLatencyReport && (
+                {terminalInsightPanelsVisible && terminalDiagnosticsExpanded && terminalLatencyReport && (
                   <div className={`ssh-terminal-latency-report ${terminalLatencyReport.tone}`} data-ssh-terminal-latency-report="true" aria-live="polite" onClick={(event) => event.stopPropagation()}>
                     <div className="ssh-terminal-latency-report-copy">
                       <span><Network size={14} /> {t('servers.terminalLatencyReportEyebrow')}</span>
@@ -2201,7 +2250,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                     </button>
                   </div>
                 )}
-                {!terminalFocusMode && terminalDiagnosticsExpanded && terminalSupportBundle && (
+                {terminalInsightPanelsVisible && terminalDiagnosticsExpanded && terminalSupportBundle && (
                   <div className={`ssh-terminal-support-bundle ${terminalSupportBundle.tone}`} data-ssh-terminal-support-bundle="true" aria-live="polite" onClick={(event) => event.stopPropagation()}>
                     <div className="ssh-terminal-support-bundle-copy">
                       <span><FileText size={14} /> {t('servers.terminalSupportBundleEyebrow')}</span>
@@ -2245,6 +2294,56 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                       </button>
                       <button type="button" className="tool-button" data-ssh-paste-review-cancel="true" onClick={cancelReviewedTerminalPaste} disabled={terminalPasteSending}>
                         {t('servers.sshPasteReviewCancel')}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {!terminalFocusMode && terminalLiteMode && (
+                  <div className={`ssh-terminal-lite-summary ${terminalLiteModeSummary.tone}`} data-ssh-terminal-lite-summary="true" aria-live="polite" onClick={(event) => event.stopPropagation()}>
+                    <div className="ssh-terminal-lite-copy">
+                      <span><Database size={14} /> {t('servers.terminalLiteModeEyebrow')}</span>
+                      <strong>{terminalLiteModeSummary.title}</strong>
+                      <small>{terminalLiteModeSummary.detail}</small>
+                    </div>
+                    <div className="ssh-terminal-lite-pills">
+                      <article data-ssh-terminal-lite-pill="score">
+                        <span>{t('servers.terminalLiteModeScore')}</span>
+                        <strong>{terminalLiteModeSummary.score}</strong>
+                        <small>{t('servers.terminalExperienceScoreLabel')}</small>
+                      </article>
+                      <article data-ssh-terminal-lite-pill="network">
+                        <span>{t('servers.terminalLiteModeNetwork')}</span>
+                        <strong>{terminalLiteModeSummary.network}</strong>
+                        <small>{terminalNetworkLabel ?? t('servers.terminalNetworkPending')}</small>
+                      </article>
+                      <article data-ssh-terminal-lite-pill="bottleneck">
+                        <span>{t('servers.terminalLiteModeBottleneck')}</span>
+                        <strong>{terminalLiteModeSummary.bottleneck}</strong>
+                        <small>{terminalBottleneckAdvisor.title}</small>
+                      </article>
+                    </div>
+                    <div className="ssh-terminal-lite-actions">
+                      {terminalExperienceCenter && (
+                        <button
+                          type="button"
+                          data-ssh-terminal-lite-action="primary"
+                          onClick={() => runTerminalExperienceAction(terminalExperienceCenter.primaryAction)}
+                          disabled={!terminalShellId || sshInterrupting || (terminalExperienceCenter.primaryAction === 'self-test' && terminalSelfTestRunning)}
+                        >
+                          {terminalLiteModeSummary.actionLabel}
+                          <small>{terminalLiteModeSummary.actionDetail}</small>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        data-ssh-terminal-lite-expand="true"
+                        onClick={() => {
+                          terminalLiteModeCustomizedRef.current = true;
+                          setTerminalLiteMode(false);
+                        }}
+                      >
+                        {t('servers.terminalLiteModeExpand')}
+                        <small>{t('servers.terminalLiteModeExpandDetail')}</small>
                       </button>
                     </div>
                   </div>
@@ -4827,6 +4926,31 @@ function writeSshConsoleMetaCollapsed(enabled: boolean) {
     window.localStorage.setItem(sshConsoleMetaCollapsedStorageKey, enabled ? 'true' : 'false');
   } catch {
     // SSH console layout preference is best-effort and must never block terminal use.
+  }
+}
+
+function readTerminalLiteModePreference() {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  const raw = window.localStorage.getItem(terminalLiteModeStorageKey);
+  if (raw === 'true') {
+    return true;
+  }
+  if (raw === 'false') {
+    return false;
+  }
+  return null;
+}
+
+function writeTerminalLiteModePreference(enabled: boolean) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  try {
+    window.localStorage.setItem(terminalLiteModeStorageKey, enabled ? 'true' : 'false');
+  } catch {
+    // SSH lite-mode preference is best-effort and must never block terminal use.
   }
 }
 

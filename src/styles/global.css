@@ -6397,6 +6397,157 @@ td span,
   opacity: 0.55;
 }
 
+.ssh-terminal-lite-summary {
+  order: 3;
+  flex: 0 0 auto;
+  min-height: 74px;
+  border-bottom: 1px solid rgba(132, 179, 183, 0.14);
+  padding: 10px 12px;
+  background:
+    radial-gradient(circle at 0 0, rgba(94, 234, 212, 0.12), transparent 32%),
+    linear-gradient(135deg, rgba(4, 22, 24, 0.98), rgba(3, 7, 8, 0.99));
+  display: grid;
+  grid-template-columns: minmax(190px, 0.7fr) minmax(300px, 1fr) auto;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.ssh-terminal-lite-summary.warn {
+  background:
+    radial-gradient(circle at 0 0, rgba(250, 204, 21, 0.14), transparent 32%),
+    linear-gradient(135deg, rgba(30, 24, 8, 0.98), rgba(3, 7, 8, 0.99));
+}
+
+.ssh-terminal-lite-summary.slow {
+  background:
+    radial-gradient(circle at 0 0, rgba(251, 113, 133, 0.14), transparent 32%),
+    linear-gradient(135deg, rgba(36, 11, 15, 0.98), rgba(3, 7, 8, 0.99));
+}
+
+.ssh-terminal-lite-summary.pending {
+  background:
+    radial-gradient(circle at 0 0, rgba(148, 163, 184, 0.14), transparent 32%),
+    linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgba(3, 7, 8, 0.99));
+}
+
+.ssh-terminal-lite-copy {
+  min-width: 0;
+  border-right: 1px solid rgba(103, 232, 249, 0.13);
+  padding-right: 10px;
+  display: grid;
+  align-content: center;
+  gap: 3px;
+}
+
+.ssh-terminal-lite-copy span {
+  color: #67e8f9;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ssh-terminal-lite-copy strong {
+  min-width: 0;
+  color: #f8fffb;
+  font-size: 13px;
+  font-weight: 950;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ssh-terminal-lite-copy small {
+  min-width: 0;
+  color: #9eb4ba;
+  font-size: 10px;
+  font-weight: 730;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ssh-terminal-lite-pills {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ssh-terminal-lite-pills article {
+  min-width: 0;
+  border: 1px solid rgba(103, 232, 249, 0.14);
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.045);
+  display: grid;
+  gap: 2px;
+}
+
+.ssh-terminal-lite-pills span,
+.ssh-terminal-lite-pills strong,
+.ssh-terminal-lite-pills small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ssh-terminal-lite-pills span {
+  color: #9fb8bd;
+  font-size: 9px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.ssh-terminal-lite-pills strong {
+  color: #f8fffb;
+  font-size: 12px;
+  font-weight: 920;
+}
+
+.ssh-terminal-lite-pills small {
+  color: #8da7ad;
+  font-size: 10px;
+  font-weight: 720;
+}
+
+.ssh-terminal-lite-actions {
+  min-width: 150px;
+  display: grid;
+  align-content: center;
+  gap: 6px;
+}
+
+.ssh-terminal-lite-actions button {
+  border: 1px solid rgba(103, 232, 249, 0.28);
+  border-radius: 999px;
+  padding: 7px 11px;
+  background: rgba(14, 116, 144, 0.14);
+  color: #e6fffb;
+  font-weight: 900;
+}
+
+.ssh-terminal-lite-actions button small {
+  display: block;
+  color: #a5f3fc;
+  font-size: 9px;
+}
+
+.ssh-terminal-lite-actions button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(103, 232, 249, 0.46);
+  background: rgba(14, 116, 144, 0.22);
+}
+
+.ssh-terminal-lite-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .ssh-terminal-quality {
   order: 5;
   flex: 0 0 auto;
@@ -18779,6 +18930,32 @@ pre {
   }
 
   .ssh-terminal-experience-actions button {
+    justify-self: stretch;
+  }
+
+  .ssh-terminal-lite-summary {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 9px 12px 11px;
+  }
+
+  .ssh-terminal-lite-copy {
+    border-right: 0;
+    border-bottom: 1px solid rgba(103, 232, 249, 0.15);
+    padding-right: 0;
+    padding-bottom: 8px;
+  }
+
+  .ssh-terminal-lite-pills {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .ssh-terminal-lite-pills small {
+    white-space: normal;
+  }
+
+  .ssh-terminal-lite-actions button {
     justify-self: stretch;
   }
 

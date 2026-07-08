@@ -1486,6 +1486,7 @@ export function App() {
                 releaseFocusAnchor={activeReleaseFixAnchor === 'server-ssh' ? activeReleaseFixAnchor : undefined}
                 allServers={overview.servers}
                 servers={filteredServers}
+                performanceMode={performanceMode}
               />
             </Suspense>
           )}

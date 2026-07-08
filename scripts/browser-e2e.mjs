@@ -69,6 +69,7 @@ async function createE2ePage(options) {
     window.localStorage.removeItem('colipas.sshTerminalSupportSnapshotHistory.v1');
     window.localStorage.removeItem('colipas.sshLatencyReport.v1');
     window.localStorage.removeItem('colipas.sshLatencyReportHistory.v1');
+    window.localStorage.removeItem('colipas.sshTerminalLiteMode.v1');
     window.localStorage.removeItem('colipas.launchGuide.dismissed.v1');
   });
   targetPage.on('console', (message) => {
@@ -1326,6 +1327,41 @@ async function assertSshTerminalPanel(targetPage) {
     }
     await targetPage.locator('[data-ssh-quick-command-deck="true"]').waitFor({ timeout: 5000 });
     await ensureSshQuickCommandsEnabled(targetPage, sshServerRow);
+    const liteToggleButton = targetPage.locator('[data-ssh-terminal-lite-toggle="true"]');
+    await liteToggleButton.waitFor({ timeout: 5000 });
+    await targetPage.locator('[data-ssh-terminal-experience-center="true"]').waitFor({ timeout: 5000 });
+    await liteToggleButton.click();
+    await targetPage.locator('[data-ssh-terminal-lite-summary="true"]').waitFor({ timeout: 5000 });
+    await targetPage.waitForFunction(() => {
+      const heavyPanels = [
+        '[data-ssh-terminal-experience-center="true"]',
+        '[data-ssh-terminal-telemetry="true"]',
+        '[data-ssh-diagnostics-summary="true"]',
+      ];
+      return heavyPanels.every((selector) => !document.querySelector(selector));
+    }, undefined, { timeout: 5000 });
+    const liteStoredPreference = await targetPage.evaluate(() => window.localStorage.getItem('colipas.sshTerminalLiteMode.v1'));
+    if (liteStoredPreference !== 'true') {
+      throw new Error(`SSH terminal lite workspace preference did not persist: ${liteStoredPreference}`);
+    }
+    const liteSummaryText = await targetPage.locator('[data-ssh-terminal-lite-summary="true"]').innerText();
+    if (!/Lite workspace|Score|Link|Bottleneck|Expand full diagnostics/i.test(liteSummaryText)) {
+      throw new Error(`SSH terminal lite workspace summary is incomplete: ${liteSummaryText}`);
+    }
+    await captureVisualEvidence(targetPage, 'desktop-ssh-lite-workspace', ['.ssh-console', '[data-ssh-terminal-lite-summary="true"]', '.ssh-terminal-screen']);
+    await targetPage.locator('.ssh-terminal-screen').click();
+    await targetPage.keyboard.type('lite-mode-ok', { delay: 1 });
+    await targetPage.keyboard.press('Enter');
+    await targetPage.waitForFunction(() => {
+      const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
+      return terminalText.includes('simulated$ lite-mode-ok') && terminalText.includes('command simulated.');
+    }, undefined, { timeout: 10000 });
+    await targetPage.locator('[data-ssh-terminal-lite-expand="true"]').click();
+    await targetPage.locator('[data-ssh-terminal-experience-center="true"]').waitFor({ timeout: 5000 });
+    const liteExpandedPreference = await targetPage.evaluate(() => window.localStorage.getItem('colipas.sshTerminalLiteMode.v1'));
+    if (liteExpandedPreference !== 'false') {
+      throw new Error(`SSH terminal lite workspace expansion did not persist: ${liteExpandedPreference}`);
+    }
     const quickCommandText = await targetPage.locator('[data-ssh-quick-command-deck="true"]').innerText();
     const requiredQuickCommandLabels = ['Terminal runbook', 'System and uptime', 'Disk space', 'Memory pressure', 'Interfaces and addresses', 'Top CPU processes', 'Recent warning logs'];
     const missingQuickCommandLabels = requiredQuickCommandLabels.filter((label) => !quickCommandText.toLowerCase().includes(label.toLowerCase()));
