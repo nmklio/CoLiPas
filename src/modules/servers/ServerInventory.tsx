@@ -1,7 +1,7 @@
 import { FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import type { Terminal as XTerm, IDisposable } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
-import { ChevronDown, ChevronUp, Copy, Cpu, Database, Edit3, Eraser, FileKey2, FileText, Globe2, KeyRound, Network, Plus, Power, PowerOff, RotateCcw, Search, Server, ShieldCheck, Sparkles, Star, Terminal, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Cpu, Database, Edit3, Eraser, FileKey2, FileText, Globe2, KeyRound, Network, Plus, Power, PowerOff, RotateCcw, Search, Server, ShieldCheck, Sparkles, Star, Terminal, Trash2, X } from 'lucide-react';
 import { Language, useI18n } from '../../i18n';
 import {
   closeServerShell,
@@ -88,6 +88,7 @@ const terminalPasteReviewPreviewLines = 8;
 const terminalPasteReviewPreviewChars = 560;
 const terminalTextEncoder = new TextEncoder();
 const terminalFocusModeStorageKey = 'colipas.sshTerminalFocusMode.v1';
+const sshConsoleMetaCollapsedStorageKey = 'colipas.sshConsoleMetaCollapsed.v1';
 const terminalDiagnosticsExpandedStorageKey = 'colipas.sshDiagnosticsExpanded.v1';
 const terminalLatencyReportStorageKey = 'colipas.sshLatencyReport.v1';
 const terminalLatencyReportHistoryStorageKey = 'colipas.sshLatencyReportHistory.v1';
@@ -598,6 +599,7 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
   const [terminalPasteReview, setTerminalPasteReview] = useState<TerminalPasteReview | null>(null);
   const [terminalPasteSending, setTerminalPasteSending] = useState(false);
   const [terminalFocusMode, setTerminalFocusMode] = useState(() => readTerminalFocusMode());
+  const [sshConsoleMetaCollapsed, setSshConsoleMetaCollapsed] = useState(() => readSshConsoleMetaCollapsed());
   const [terminalDiagnosticsExpanded, setTerminalDiagnosticsExpanded] = useState(() => readTerminalDiagnosticsExpanded());
   const [sshRunbookCommands, setSshRunbookCommands] = useState<SshRunbookCommand[]>([]);
   const [sshRunbookForm, setSshRunbookForm] = useState({ title: '', command: '' });
@@ -952,6 +954,10 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
     }
     scheduleTerminalFit(true);
   }, [terminalFocusMode]);
+
+  useEffect(() => {
+    writeSshConsoleMetaCollapsed(sshConsoleMetaCollapsed);
+  }, [sshConsoleMetaCollapsed]);
 
   useEffect(() => {
     writeTerminalDiagnosticsExpanded(terminalDiagnosticsExpanded);
@@ -1786,38 +1792,92 @@ export function ServerInventory({ allServers, servers, filters, onFiltersChange,
                 <h3 id="ssh-console-title"><Terminal size={18} /> {activeSshServer.name}</h3>
                 <p>{t('servers.sshDesc')}</p>
               </div>
-              <button type="button" className="icon-button" aria-label={t('common.cancel')} onClick={closeSshConsole}>
-                <X size={17} />
-              </button>
+              <div className="ssh-console-header-actions">
+                <button
+                  type="button"
+                  className="icon-button"
+                  data-ssh-console-meta-toggle="true"
+                  aria-pressed={sshConsoleMetaCollapsed}
+                  aria-label={sshConsoleMetaCollapsed ? t('servers.expandSshMeta') : t('servers.collapseSshMeta')}
+                  title={sshConsoleMetaCollapsed ? t('servers.expandSshMeta') : t('servers.collapseSshMeta')}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setSshConsoleMetaCollapsed((value) => !value);
+                  }}
+                >
+                  {sshConsoleMetaCollapsed ? <ChevronRight size={17} /> : <ChevronLeft size={17} />}
+                </button>
+                <button
+                  type="button"
+                  className="icon-button"
+                  data-ssh-console-close="true"
+                  aria-label={t('common.cancel')}
+                  onClick={closeSshConsole}
+                >
+                  <X size={17} />
+                </button>
+              </div>
             </div>
-            <div className="ssh-console-body">
-              <aside className="ssh-console-meta">
-                <div>
-                  <span>{t('servers.tableProvider')}</span>
-                  <strong>{providerDisplayName(activeSshServer.provider)}</strong>
-                  <small>{regionDisplayName(activeSshServer.region)}</small>
-                </div>
-                <div>
-                  <span>{t('servers.tableNetwork')}</span>
-                  <strong>{activeSshServer.publicIp}</strong>
-                  <small>{activeSshServer.privateIp}</small>
-                </div>
-                <div>
-                  <span>{t('servers.tableSsh')}</span>
-                  <strong>{activeSshServer.ssh.username}@{activeSshServer.ssh.host}:{activeSshServer.ssh.port}</strong>
-                  <small>{activeSshServer.ssh.authType === 'password' ? t('servers.passwordAuth') : t('servers.keyAuth')}</small>
-                </div>
-                <div className="ssh-console-actions">
-                  <button type="button" onClick={() => runAction(activeSshServer, 'powerOn')}>
-                    <Power size={15} /> {t('servers.powerOn')}
-                  </button>
-                  <button type="button" onClick={() => runAction(activeSshServer, 'shutdown')}>
-                    <PowerOff size={15} /> {t('servers.shutdown')}
-                  </button>
-                  <button type="button" onClick={() => runAction(activeSshServer, 'reboot')}>
-                    <RotateCcw size={15} /> {t('servers.reboot')}
-                  </button>
-                </div>
+            <div className={sshConsoleMetaCollapsed ? 'ssh-console-body collapsed' : 'ssh-console-body'}>
+              <aside
+                className={sshConsoleMetaCollapsed ? 'ssh-console-meta collapsed' : 'ssh-console-meta'}
+                data-ssh-console-meta="true"
+                data-ssh-console-meta-state={sshConsoleMetaCollapsed ? 'collapsed' : 'expanded'}
+              >
+                {sshConsoleMetaCollapsed ? (
+                  <>
+                    <div className="ssh-console-meta-card compact" title={`${providerDisplayName(activeSshServer.provider)} · ${regionDisplayName(activeSshServer.region)}`}>
+                      <Globe2 size={15} />
+                      <strong>{providerDisplayName(activeSshServer.provider)}</strong>
+                      <small>{regionDisplayName(activeSshServer.region)}</small>
+                    </div>
+                    <div className="ssh-console-meta-card compact" title={`${activeSshServer.ssh.username}@${activeSshServer.ssh.host}:${activeSshServer.ssh.port}`}>
+                      <Terminal size={15} />
+                      <strong>{activeSshServer.ssh.username}</strong>
+                      <small>{activeSshServer.ssh.port}</small>
+                    </div>
+                    <div className="ssh-console-actions ssh-console-actions-compact">
+                      <button type="button" aria-label={t('servers.powerOn')} title={t('servers.powerOn')} onClick={() => runAction(activeSshServer, 'powerOn')}>
+                        <Power size={15} />
+                      </button>
+                      <button type="button" aria-label={t('servers.shutdown')} title={t('servers.shutdown')} onClick={() => runAction(activeSshServer, 'shutdown')}>
+                        <PowerOff size={15} />
+                      </button>
+                      <button type="button" aria-label={t('servers.reboot')} title={t('servers.reboot')} onClick={() => runAction(activeSshServer, 'reboot')}>
+                        <RotateCcw size={15} />
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <span>{t('servers.tableProvider')}</span>
+                      <strong>{providerDisplayName(activeSshServer.provider)}</strong>
+                      <small>{regionDisplayName(activeSshServer.region)}</small>
+                    </div>
+                    <div>
+                      <span>{t('servers.tableNetwork')}</span>
+                      <strong>{activeSshServer.publicIp}</strong>
+                      <small>{activeSshServer.privateIp}</small>
+                    </div>
+                    <div>
+                      <span>{t('servers.tableSsh')}</span>
+                      <strong>{activeSshServer.ssh.username}@{activeSshServer.ssh.host}:{activeSshServer.ssh.port}</strong>
+                      <small>{activeSshServer.ssh.authType === 'password' ? t('servers.passwordAuth') : t('servers.keyAuth')}</small>
+                    </div>
+                    <div className="ssh-console-actions">
+                      <button type="button" onClick={() => runAction(activeSshServer, 'powerOn')}>
+                        <Power size={15} /> {t('servers.powerOn')}
+                      </button>
+                      <button type="button" onClick={() => runAction(activeSshServer, 'shutdown')}>
+                        <PowerOff size={15} /> {t('servers.shutdown')}
+                      </button>
+                      <button type="button" onClick={() => runAction(activeSshServer, 'reboot')}>
+                        <RotateCcw size={15} /> {t('servers.reboot')}
+                      </button>
+                    </div>
+                  </>
+                )}
               </aside>
               <div className={terminalFocusMode ? 'ssh-terminal-shell focus-mode' : 'ssh-terminal-shell'} onClick={() => xtermRef.current?.focus()}>
                 <div className="ssh-terminal-titlebar">
@@ -4749,6 +4809,24 @@ function writeTerminalFocusMode(enabled: boolean) {
     window.localStorage.setItem(terminalFocusModeStorageKey, enabled ? 'true' : 'false');
   } catch {
     // Focus mode is a UI preference and must never block the terminal.
+  }
+}
+
+function readSshConsoleMetaCollapsed() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  return window.localStorage.getItem(sshConsoleMetaCollapsedStorageKey) === 'true';
+}
+
+function writeSshConsoleMetaCollapsed(enabled: boolean) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  try {
+    window.localStorage.setItem(sshConsoleMetaCollapsedStorageKey, enabled ? 'true' : 'false');
+  } catch {
+    // SSH console layout preference is best-effort and must never block terminal use.
   }
 }
 

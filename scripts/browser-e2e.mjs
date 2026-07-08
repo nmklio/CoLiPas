@@ -205,7 +205,7 @@ async function ensureSshQuickCommandsEnabled(targetPage, sshServerRow) {
     return;
   }
 
-  await targetPage.locator('.ssh-console-header .icon-button').click();
+  await targetPage.locator('[data-ssh-console-close="true"]').click();
   await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });
   await targetPage.waitForFunction(async () => {
     const response = await fetch('/api/servers/shells/status');
@@ -1266,7 +1266,7 @@ async function assertSshTerminalPanel(targetPage) {
     await captureVisualEvidence(targetPage, 'desktop-ssh-connection-doctor', ['[data-ssh-connection-doctor="true"]']);
     await targetPage.getByRole('button', { name: /open ssh terminal/i }).click();
     await targetPage.locator('.ssh-console').waitFor({ timeout: 10000 });
-    await targetPage.locator('.ssh-console-header .icon-button').click();
+    await targetPage.locator('[data-ssh-console-close="true"]').click();
     await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });
     await targetPage.waitForFunction(() => {
       const messageText = Array.from(document.querySelectorAll('.action-message'))
@@ -1280,6 +1280,25 @@ async function assertSshTerminalPanel(targetPage) {
     await targetPage.locator('.ssh-terminal-screen .xterm').waitFor({ timeout: 10000 });
     await targetPage.locator('.ssh-terminal-session-count').filter({ hasText: /(?:sessions|会话|セッション)\s*1/i }).waitFor({ timeout: 10000 });
     await targetPage.locator('.ssh-terminal-network').filter({ hasText: /RTT/i }).waitFor({ timeout: 10000 });
+    const metaToggleButton = targetPage.locator('[data-ssh-console-meta-toggle="true"]');
+    await metaToggleButton.waitFor({ timeout: 5000 });
+    const terminalWidthBeforeMetaCollapse = await targetPage.locator('.ssh-terminal-screen').evaluate((node) => node.getBoundingClientRect().width);
+    await metaToggleButton.click();
+    await targetPage.waitForFunction(() => document.querySelector('[data-ssh-console-meta-state="collapsed"]'));
+    const storedCollapsedMetaPreference = await targetPage.evaluate(() => window.localStorage.getItem('colipas.sshConsoleMetaCollapsed.v1'));
+    if (storedCollapsedMetaPreference !== 'true') {
+      throw new Error(`SSH console meta collapse preference did not persist: ${storedCollapsedMetaPreference}`);
+    }
+    const terminalWidthAfterMetaCollapse = await targetPage.locator('.ssh-terminal-screen').evaluate((node) => node.getBoundingClientRect().width);
+    if (terminalWidthAfterMetaCollapse <= terminalWidthBeforeMetaCollapse + 8) {
+      throw new Error(`SSH console meta collapse should widen the xterm viewport: before ${terminalWidthBeforeMetaCollapse}, after ${terminalWidthAfterMetaCollapse}`);
+    }
+    await metaToggleButton.click();
+    await targetPage.waitForFunction(() => document.querySelector('[data-ssh-console-meta-state="expanded"]'));
+    const storedExpandedMetaPreference = await targetPage.evaluate(() => window.localStorage.getItem('colipas.sshConsoleMetaCollapsed.v1'));
+    if (storedExpandedMetaPreference !== 'false') {
+      throw new Error(`SSH console meta expansion preference did not persist: ${storedExpandedMetaPreference}`);
+    }
     const sshTerminalLayout = await targetPage.evaluate(() => {
       const shell = document.querySelector('.ssh-terminal-shell')?.getBoundingClientRect();
       const titlebar = document.querySelector('.ssh-terminal-titlebar')?.getBoundingClientRect();
@@ -2113,7 +2132,7 @@ async function assertSshTerminalPanel(targetPage) {
     if (reopenedText?.includes('simulated$ pwd')) {
       throw new Error('SSH terminal preserved the old shell buffer after disconnecting the panel');
     }
-    await targetPage.locator('.ssh-console-header .icon-button').click();
+    await targetPage.locator('[data-ssh-console-close="true"]').click();
     await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });
     const closeMessage = targetPage.locator('.action-message').filter({ hasText: /disconnected/i });
     await closeMessage.waitFor({ timeout: 5000 });

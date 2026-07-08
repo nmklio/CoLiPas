@@ -5824,6 +5824,13 @@ td span,
   gap: 14px;
 }
 
+.ssh-console-header-actions {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .ssh-console-header > div {
   min-width: 0;
   display: grid;
@@ -5881,6 +5888,10 @@ td span,
   background: #081417;
 }
 
+.ssh-console-body.collapsed {
+  grid-template-columns: 88px minmax(0, 1fr);
+}
+
 .ssh-console-meta {
   min-height: 0;
   padding: 10px;
@@ -5890,6 +5901,11 @@ td span,
   display: grid;
   align-content: start;
   gap: 8px;
+}
+
+.ssh-console-meta.collapsed {
+  padding: 10px 8px;
+  gap: 10px;
 }
 
 .ssh-console-meta > div {
@@ -5917,10 +5933,35 @@ td span,
   font-size: 12px;
 }
 
+.ssh-console-meta-card.compact {
+  min-height: 76px;
+  padding: 10px 8px;
+  justify-items: center;
+  align-content: center;
+  text-align: center;
+  gap: 6px;
+}
+
+.ssh-console-meta-card.compact svg {
+  color: #85f2df;
+}
+
+.ssh-console-meta-card.compact strong,
+.ssh-console-meta-card.compact small {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .ssh-console-meta .ssh-console-actions {
   border: 0;
   padding: 0;
   background: transparent;
+}
+
+.ssh-console-meta.collapsed .ssh-console-actions {
+  gap: 8px;
 }
 
 .ssh-console-actions button {
@@ -5939,6 +5980,20 @@ td span,
 .ssh-console-actions button:hover {
   border-color: rgba(151, 193, 196, 0.45);
   background: rgba(255, 255, 255, 0.12);
+}
+
+.ssh-console-actions-compact {
+  border: 1px solid rgba(151, 193, 196, 0.18);
+  border-radius: 8px;
+  padding: 8px 6px;
+  background: rgba(255, 255, 255, 0.05);
+  display: grid;
+  gap: 8px;
+}
+
+.ssh-console-actions-compact button {
+  min-height: 36px;
+  padding: 0;
 }
 
 .ssh-terminal-shell {
@@ -18528,10 +18583,24 @@ pre {
     overflow: auto;
   }
 
+  .ssh-console-body.collapsed {
+    grid-template-columns: 1fr;
+  }
+
   .ssh-console-meta {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     border-right: 0;
     border-bottom: 1px solid rgba(132, 179, 183, 0.18);
+  }
+
+  .ssh-console-meta.collapsed {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    padding: 10px;
+  }
+
+  .ssh-console-meta.collapsed .ssh-console-actions-compact {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .ssh-console-meta .ssh-console-actions {
