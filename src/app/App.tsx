@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   Bot,
@@ -18,18 +18,16 @@ import {
   Search,
   Server,
   ShieldCheck,
+  Sparkles,
   TerminalSquare,
   UserCog,
   X,
 } from 'lucide-react';
 import { getLocale, languageOptions, useI18n } from '../i18n';
-import { AIConsole } from '../modules/ai/AIConsole';
 import { LoginPage } from './LoginPage';
-import { CustomApiLab } from '../modules/custom-api/CustomApiLab';
-import { OperationsCenter, type OperationsDraft } from '../modules/operations/OperationsCenter';
-import { MonitoringOverview, type OverviewPreflightSnapshot } from '../modules/overview/MonitoringOverview';
-import { SecurityPanel } from '../modules/security/SecurityPanel';
-import { ServerInventory, type ServerFleetTriageCardId } from '../modules/servers/ServerInventory';
+import type { OperationsDraft } from '../modules/operations/OperationsCenter';
+import type { OverviewPreflightSnapshot } from '../modules/overview/MonitoringOverview';
+import type { ServerFleetTriageCardId } from '../modules/servers/ServerInventory';
 import { BrandIcon } from './BrandIcon';
 import {
   cloudAccounts as fallbackCloudAccounts,
@@ -105,6 +103,85 @@ const sections: Array<{ id: SectionId; labelKey: string; icon: typeof LayoutDash
   { id: 'api', labelKey: 'nav.api', icon: PlugZap },
   { id: 'security', labelKey: 'nav.security', icon: ShieldCheck },
 ];
+
+const LazyMonitoringOverview = lazy(async () => {
+  const module = await import('../modules/overview/MonitoringOverview');
+  return { default: module.MonitoringOverview };
+});
+const LazyServerInventory = lazy(async () => {
+  const module = await import('../modules/servers/ServerInventory');
+  return { default: module.ServerInventory };
+});
+const LazyOperationsCenter = lazy(async () => {
+  const module = await import('../modules/operations/OperationsCenter');
+  return { default: module.OperationsCenter };
+});
+const LazyCustomApiLab = lazy(async () => {
+  const module = await import('../modules/custom-api/CustomApiLab');
+  return { default: module.CustomApiLab };
+});
+const LazySecurityPanel = lazy(async () => {
+  const module = await import('../modules/security/SecurityPanel');
+  return { default: module.SecurityPanel };
+});
+const LazyAIConsole = lazy(async () => {
+  const module = await import('../modules/ai/AIConsole');
+  return { default: module.AIConsole };
+});
+
+function preloadSectionModule(section: SectionId) {
+  if (section === 'overview') {
+    void import('../modules/overview/MonitoringOverview');
+    return;
+  }
+  if (section === 'servers') {
+    void import('../modules/servers/ServerInventory');
+    return;
+  }
+  if (section === 'operations') {
+    void import('../modules/operations/OperationsCenter');
+    return;
+  }
+  if (section === 'api') {
+    void import('../modules/custom-api/CustomApiLab');
+    return;
+  }
+  if (section === 'security') {
+    void import('../modules/security/SecurityPanel');
+    return;
+  }
+  preloadAiConsole();
+}
+
+function preloadAiConsole() {
+  void import('../modules/ai/AIConsole');
+}
+
+function warmIdleAdminModules(activeSection: SectionId, aiCollapsed: boolean) {
+  const warmSections: SectionId[] = activeSection === 'overview'
+    ? ['servers', 'operations', 'security']
+    : ['overview', 'servers', 'operations'];
+  warmSections.forEach(preloadSectionModule);
+  if (!aiCollapsed || activeSection === 'ai') {
+    preloadAiConsole();
+  }
+}
+
+function ModuleLoadingFallback({ title, compact = false }: { title: string; compact?: boolean }) {
+  const { t } = useI18n();
+  return (
+    <section className={compact ? 'module-loading-card compact' : 'module-loading-card'} aria-busy="true">
+      <div className="module-loading-orb" aria-hidden="true">
+        <Sparkles size={20} />
+      </div>
+      <div>
+        <p>{t('app.moduleLoadingOptimize')}</p>
+        <h2>{t('app.moduleLoadingTitle', { title })}</h2>
+        <span>{t('app.moduleLoadingDetail')}</span>
+      </div>
+    </section>
+  );
+}
 
 interface CommandPaletteAction {
   id: string;
@@ -342,6 +419,28 @@ export function App() {
   }, [session?.authenticated]);
 
   useEffect(() => {
+    if (!session?.authenticated) {
+      return undefined;
+    }
+
+    preloadSectionModule(activeSection);
+    if (activeSection === 'overview') {
+      preloadSectionModule('servers');
+    }
+    if (!aiCollapsed || activeSection === 'ai' || aiSeedQuestion || releaseFixFocus?.targetSection === 'ai') {
+      preloadAiConsole();
+    }
+
+    if (typeof window.requestIdleCallback === 'function') {
+      const handle = window.requestIdleCallback(() => warmIdleAdminModules(activeSection, aiCollapsed), { timeout: 2600 });
+      return () => window.cancelIdleCallback(handle);
+    }
+
+    const timer = window.setTimeout(() => warmIdleAdminModules(activeSection, aiCollapsed), 1200);
+    return () => window.clearTimeout(timer);
+  }, [activeSection, aiCollapsed, aiSeedQuestion, releaseFixFocus?.targetSection, session?.authenticated]);
+
+  useEffect(() => {
     function syncRouteFromHash() {
       const route = readHashRoute();
       setActiveSection(route.section);
@@ -558,6 +657,7 @@ export function App() {
     : commandPaletteActions;
   const activeReleaseFixFocus = releaseFixFocus?.targetSection === activeSection ? releaseFixFocus : null;
   const activeReleaseFixAnchor = activeReleaseFixFocus?.anchor ?? '';
+  const shouldRenderAiConsole = !aiCollapsed || Boolean(aiSeedQuestion) || releaseFixFocus?.targetSection === 'ai';
 
   function scrollReleaseFocusAnchor(anchor = activeReleaseFixAnchor) {
     if (!anchor || typeof document === 'undefined') {
@@ -1039,6 +1139,8 @@ export function App() {
                 key={section.id}
                 type="button"
                 className={activeSection === section.id ? 'nav-item active' : 'nav-item'}
+                onMouseEnter={() => preloadSectionModule(section.id)}
+                onFocus={() => preloadSectionModule(section.id)}
                 onClick={() => navigateToSection(section.id)}
               >
                 <Icon size={18} aria-hidden="true" />
@@ -1311,46 +1413,52 @@ export function App() {
           )}
 
           {activeSection === 'overview' && (
-            <MonitoringOverview
-              servers={overview.servers}
-              events={overview.operationEvents}
-              onlineCount={onlineCount}
-              avgCpu={avgCpu}
-              opsPreflightSnapshot={overviewPreflightSnapshot}
-              onRegionServersOpen={openServersForRegion}
-              onHealthSignalOpen={openHealthSignal}
-              onOperationsDraftOpen={openOverviewOperationsDraft}
-              onOpsPreflightTraceOpen={openSecurityTrace}
-            />
+            <Suspense fallback={<ModuleLoadingFallback title={t('nav.overview')} />}>
+              <LazyMonitoringOverview
+                servers={overview.servers}
+                events={overview.operationEvents}
+                onlineCount={onlineCount}
+                avgCpu={avgCpu}
+                opsPreflightSnapshot={overviewPreflightSnapshot}
+                onRegionServersOpen={openServersForRegion}
+                onHealthSignalOpen={openHealthSignal}
+                onOperationsDraftOpen={openOverviewOperationsDraft}
+                onOpsPreflightTraceOpen={openSecurityTrace}
+              />
+            </Suspense>
           )}
 
           {activeSection === 'servers' && (
-            <ServerInventory
-              filters={filters}
-              onFiltersChange={setFilters}
-              onTriageDraftOpen={openServerTriageOperationsDraft}
-              onServerConnected={() => {
-                void refreshOverview();
-              }}
-              onAuditTraceOpen={openSecurityTrace}
-              releaseFocusAnchor={activeReleaseFixAnchor === 'server-ssh' ? activeReleaseFixAnchor : undefined}
-              allServers={overview.servers}
-              servers={filteredServers}
-            />
+            <Suspense fallback={<ModuleLoadingFallback title={t('nav.servers')} />}>
+              <LazyServerInventory
+                filters={filters}
+                onFiltersChange={setFilters}
+                onTriageDraftOpen={openServerTriageOperationsDraft}
+                onServerConnected={() => {
+                  void refreshOverview();
+                }}
+                onAuditTraceOpen={openSecurityTrace}
+                releaseFocusAnchor={activeReleaseFixAnchor === 'server-ssh' ? activeReleaseFixAnchor : undefined}
+                allServers={overview.servers}
+                servers={filteredServers}
+              />
+            </Suspense>
           )}
 
           {activeSection === 'operations' && (
-            <OperationsCenter
-              events={overview.operationEvents}
-              servers={overview.servers}
-              draft={operationDraft}
-              onDraftPreflight={recordOverviewDraftPreflight}
-              onTaskFinished={() => {
-                void refreshOverview();
-              }}
-              onAuditTraceOpen={openSecurityTrace}
-              releaseFocusAnchor={activeReleaseFixAnchor === 'operations-builder' ? activeReleaseFixAnchor : undefined}
-            />
+            <Suspense fallback={<ModuleLoadingFallback title={t('nav.operations')} />}>
+              <LazyOperationsCenter
+                events={overview.operationEvents}
+                servers={overview.servers}
+                draft={operationDraft}
+                onDraftPreflight={recordOverviewDraftPreflight}
+                onTaskFinished={() => {
+                  void refreshOverview();
+                }}
+                onAuditTraceOpen={openSecurityTrace}
+                releaseFocusAnchor={activeReleaseFixAnchor === 'operations-builder' ? activeReleaseFixAnchor : undefined}
+              />
+            </Suspense>
           )}
 
           {activeSection === 'ai' && (
@@ -1424,38 +1532,53 @@ export function App() {
             </section>
           )}
 
-          {activeSection === 'api' && <CustomApiLab releaseFocusAnchor={activeReleaseFixAnchor === 'api-request' ? activeReleaseFixAnchor : undefined} />}
+          {activeSection === 'api' && (
+            <Suspense fallback={<ModuleLoadingFallback title={t('nav.api')} />}>
+              <LazyCustomApiLab releaseFocusAnchor={activeReleaseFixAnchor === 'api-request' ? activeReleaseFixAnchor : undefined} />
+            </Suspense>
+          )}
 
           {activeSection === 'security' && (
-            <SecurityPanel
-              events={overview.operationEvents}
-              opsPreflightSnapshot={overviewPreflightSnapshot}
-              onNavigate={(section, focus) => {
-                navigateToSection(section, focus);
-              }}
-              onRemediated={() => {
-                void refreshOverview();
-              }}
-              focusTraceId={securityTraceFocusId}
-              onTraceFocused={() => setSecurityTraceFocusId('')}
-              onTraceFilterChange={handleSecurityTraceFilterChange}
-            />
+            <Suspense fallback={<ModuleLoadingFallback title={t('nav.security')} />}>
+              <LazySecurityPanel
+                events={overview.operationEvents}
+                opsPreflightSnapshot={overviewPreflightSnapshot}
+                onNavigate={(section, focus) => {
+                  navigateToSection(section, focus);
+                }}
+                onRemediated={() => {
+                  void refreshOverview();
+                }}
+                focusTraceId={securityTraceFocusId}
+                onTraceFocused={() => setSecurityTraceFocusId('')}
+                onTraceFilterChange={handleSecurityTraceFilterChange}
+              />
+            </Suspense>
           )}
         </main>
 
-        <AIConsole
-          servers={overview.servers}
-          events={overview.operationEvents}
-          collapsed={aiCollapsed}
-          seedQuestion={aiSeedQuestion}
-          onCollapse={() => setAiCollapsed(true)}
-          onExpand={() => setAiCollapsed(false)}
-          onSeedQuestionConsumed={() => setAiSeedQuestion('')}
-          onTaskFinished={() => {
-            void refreshOverview();
-          }}
-          releaseFocusAnchor={releaseFixFocus?.targetSection === 'ai' ? releaseFixFocus.anchor : undefined}
-        />
+        {shouldRenderAiConsole ? (
+          <Suspense fallback={<ModuleLoadingFallback title={t('nav.ai')} compact />}>
+            <LazyAIConsole
+              servers={overview.servers}
+              events={overview.operationEvents}
+              collapsed={aiCollapsed}
+              seedQuestion={aiSeedQuestion}
+              onCollapse={() => setAiCollapsed(true)}
+              onExpand={() => setAiCollapsed(false)}
+              onSeedQuestionConsumed={() => setAiSeedQuestion('')}
+              onTaskFinished={() => {
+                void refreshOverview();
+              }}
+              releaseFocusAnchor={releaseFixFocus?.targetSection === 'ai' ? releaseFixFocus.anchor : undefined}
+            />
+          </Suspense>
+        ) : (
+          <button type="button" className="ai-launcher" aria-label={t('ai.launch')} title={t('ai.launch')} onClick={() => setAiCollapsed(false)}>
+            <Bot size={18} />
+            <span>AI</span>
+          </button>
+        )}
 
         {commandPaletteOpen && (
           <div

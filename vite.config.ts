@@ -32,6 +32,9 @@ export default defineConfig({
           if (normalizedId.includes('/src/modules/operations/')) {
             return 'module-operations';
           }
+          if (normalizedId.includes('/src/modules/ai/')) {
+            return 'module-ai';
+          }
           if (normalizedId.includes('/src/modules/custom-api/')) {
             return 'module-custom-api';
           }

@@ -3527,6 +3527,67 @@ main {
   box-shadow: 0 16px 38px rgba(18, 35, 41, 0.07);
 }
 
+.module-loading-card {
+  min-height: 260px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  padding: 28px;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 48px 48px, rgba(45, 212, 191, 0.22), transparent 38%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(241, 249, 255, 0.94));
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.08);
+  color: var(--text);
+}
+
+.module-loading-card.compact {
+  position: fixed;
+  right: 26px;
+  bottom: 26px;
+  z-index: 44;
+  min-height: 0;
+  width: min(360px, calc(100vw - 40px));
+  padding: 16px;
+  border-radius: 18px;
+}
+
+.module-loading-orb {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  background: linear-gradient(135deg, var(--brand), var(--brand-strong));
+  color: #fff;
+  box-shadow: 0 16px 32px rgba(15, 118, 110, 0.22);
+  animation: module-loading-pulse 1.7s ease-in-out infinite;
+}
+
+.module-loading-card p {
+  margin: 0 0 6px;
+  color: var(--brand-strong);
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.module-loading-card h2 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.module-loading-card span {
+  display: block;
+  margin-top: 8px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
 .launch-guide {
   position: relative;
   min-width: 0;
@@ -11249,6 +11310,19 @@ pre {
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes module-loading-pulse {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+    box-shadow: 0 16px 32px rgba(15, 118, 110, 0.22);
+  }
+
+  50% {
+    transform: translateY(-2px) scale(1.03);
+    box-shadow: 0 20px 44px rgba(37, 99, 235, 0.2);
   }
 }
 

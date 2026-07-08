@@ -48,6 +48,7 @@ assertCustomApiProxySecurityGuards();
 assertSqlitePersistenceGuards();
 assertRepositoryIgnoreGuards();
 assertBuildChunkingGuards();
+assertAdminModuleLazyLoadingGuards();
 assertStandalonePerformanceCheckGuards();
 assertRepositoryPreviewAssetGuards();
 assertInteractiveDeployDocsAndScriptGuards();
@@ -4922,6 +4923,7 @@ function assertBuildChunkingGuards() {
     "'module-security'",
     "'module-overview'",
     "'module-operations'",
+    "'module-ai'",
     "'module-custom-api'",
   ];
   const missing = requiredFragments.filter((fragment) => !viteConfig.includes(fragment));
@@ -4930,6 +4932,58 @@ function assertBuildChunkingGuards() {
   }
 
   console.log('ok production build splits React, map, icon vendors, and heavy admin modules');
+}
+
+function assertAdminModuleLazyLoadingGuards() {
+  const appSource = fs.readFileSync(new URL('../src/app/App.tsx', import.meta.url), 'utf8');
+  const globalCss = fs.readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
+  const i18nSource = fs.readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
+  const requiredAppFragments = [
+    'const LazyMonitoringOverview = lazy',
+    'const LazyServerInventory = lazy',
+    'const LazyOperationsCenter = lazy',
+    'const LazyCustomApiLab = lazy',
+    'const LazySecurityPanel = lazy',
+    'const LazyAIConsole = lazy',
+    'function preloadSectionModule(section: SectionId)',
+    'function warmIdleAdminModules(activeSection: SectionId, aiCollapsed: boolean)',
+    'requestIdleCallback',
+    'onMouseEnter={() => preloadSectionModule(section.id)}',
+    'shouldRenderAiConsole ? (',
+    "<Suspense fallback={<ModuleLoadingFallback title={t('nav.servers')} />}>",
+    '<button type="button" className="ai-launcher"',
+  ];
+  const missingAppFragments = requiredAppFragments.filter((fragment) => !appSource.includes(fragment));
+  if (missingAppFragments.length) {
+    throw new Error(`Admin lazy loading guard is incomplete: ${missingAppFragments.join(', ')}`);
+  }
+
+  const forbiddenStaticImports = [
+    "import { AIConsole } from '../modules/ai/AIConsole'",
+    "import { ServerInventory",
+    "import { MonitoringOverview",
+    "import { OperationsCenter",
+    "import { CustomApiLab",
+    "import { SecurityPanel",
+  ].filter((fragment) => appSource.includes(fragment));
+  if (forbiddenStaticImports.length) {
+    throw new Error(`Admin modules must stay lazy-loaded instead of static imports: ${forbiddenStaticImports.join(', ')}`);
+  }
+
+  const missingCssFragments = ['.module-loading-card', '.module-loading-orb', '@keyframes module-loading-pulse']
+    .filter((fragment) => !globalCss.includes(fragment));
+  if (missingCssFragments.length) {
+    throw new Error(`Admin lazy loading UI CSS is incomplete: ${missingCssFragments.join(', ')}`);
+  }
+
+  for (const key of ['app.moduleLoadingOptimize', 'app.moduleLoadingTitle', 'app.moduleLoadingDetail']) {
+    const count = (i18nSource.match(new RegExp(key.replaceAll('.', '\\.'), 'g')) ?? []).length;
+    if (count < 3) {
+      throw new Error(`Admin lazy loading i18n key is missing languages: ${key}`);
+    }
+  }
+
+  console.log('ok admin modules lazy-load with idle prewarm and localized skeleton UI');
 }
 
 function assertStandalonePerformanceCheckGuards() {
@@ -5562,7 +5616,7 @@ function assertOverviewMapInteractionGuards() {
     'servers.clearHealthScope',
   ], 'server health filter chip');
   assertFileContains('src/app/App.tsx', [
-    'type ServerFleetTriageCardId',
+    'ServerFleetTriageCardId',
     'function openServerTriageOperationsDraft(triageId: ServerFleetTriageCardId)',
     'setOperationDraft({',
     'id: `server-triage-${triageId}-',
