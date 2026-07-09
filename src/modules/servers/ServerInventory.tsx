@@ -1,7 +1,7 @@
 import { FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import type { Terminal as XTerm, IDisposable } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Cpu, Database, Edit3, Eraser, FileKey2, FileText, Globe2, KeyRound, Network, Plus, Power, PowerOff, RotateCcw, Search, Server, ShieldCheck, Sparkles, Star, Terminal, Trash2, X } from 'lucide-react';
+import { BookmarkCheck, BookmarkPlus, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Cpu, Database, Edit3, Eraser, FileKey2, FileText, Globe2, KeyRound, Network, Plus, Power, PowerOff, RotateCcw, Search, Server, ShieldCheck, Sparkles, Star, Terminal, Trash2, X } from 'lucide-react';
 import { Language, useI18n } from '../../i18n';
 import {
   closeServerShell,
@@ -38,6 +38,17 @@ import { CloudProvider, ServerNode, ServerStatus, SshAuthType, SshRunbookCommand
 import { formatRegionName, percentClass, statusLabel } from '../../utils/format';
 import { ServerFilters } from './serverFilters';
 import { baseCloudProviders, customProviderFilterValue, resolveServerLifecycleStatus } from '../../shared/serverFilters';
+import {
+  captureFleetViewFilters,
+  countFleetViewFilters,
+  createFleetView,
+  fleetViewsLimit,
+  normalizeFleetViewName,
+  readFleetViews,
+  sameFleetViewFilters,
+  writeFleetViews,
+  type FleetView,
+} from './fleetViews';
 import {
   addSshTerminalSupportSnapshotToHistory,
   normalizeSshTerminalSupportSnapshot,
@@ -627,6 +638,10 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
   const [formOpen, setFormOpen] = useState(false);
   const [formDismissed, setFormDismissed] = useState(false);
   const [visibleServerLimit, setVisibleServerLimit] = useState(serverRenderBatchSize);
+  const [fleetViews, setFleetViews] = useState<FleetView[]>(readFleetViews);
+  const [fleetViewComposerOpen, setFleetViewComposerOpen] = useState(false);
+  const [fleetViewName, setFleetViewName] = useState('');
+  const [fleetViewMessage, setFleetViewMessage] = useState('');
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -674,6 +689,11 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
   const fleetTriageCards = useMemo(() => buildServerFleetTriageCards(allServers, t), [allServers, t]);
   const visibleServerRows = useMemo(() => servers.slice(0, visibleServerLimit), [servers, visibleServerLimit]);
   const hiddenServerCount = Math.max(servers.length - visibleServerRows.length, 0);
+  const activeFleetViewId = useMemo(
+    () => fleetViews.find((view) => sameFleetViewFilters(view.filters, filters))?.id ?? '',
+    [filters, fleetViews],
+  );
+  const activeFleetFilterCount = useMemo(() => countFleetViewFilters(filters), [filters]);
   const allServersById = useMemo(() => buildServerById(allServers), [allServers]);
   const activeSshServer = useMemo(() => allServersById.get(sshPanelServerId) ?? null, [allServersById, sshPanelServerId]);
   const sshDoctorServer = useMemo(() => (sshDoctorReport ? allServersById.get(sshDoctorReport.serverId) ?? null : null), [allServersById, sshDoctorReport]);
@@ -956,6 +976,14 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
   }, [filters.provider, filters.query, filters.region, filters.status, regionScopeKey, servers.length]);
 
   useEffect(() => {
+    if (!fleetViewMessage) {
+      return undefined;
+    }
+    const timerId = window.setTimeout(() => setFleetViewMessage(''), actionMessageAutoDismissMs);
+    return () => window.clearTimeout(timerId);
+  }, [fleetViewMessage]);
+
+  useEffect(() => {
     formRef.current = form;
   }, [form]);
 
@@ -1192,6 +1220,54 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
     }
   }
 
+  function applyFleetView(view: FleetView) {
+    const nextFilters = captureFleetViewFilters(view.filters);
+    onFiltersChange(nextFilters);
+    setFleetViewMessage(t('servers.viewsApplied', {
+      name: view.name,
+      count: countFleetViewFilters(nextFilters),
+    }));
+  }
+
+  function saveFleetView() {
+    const name = normalizeFleetViewName(fleetViewName);
+    if (!name) {
+      setFleetViewMessage(t('servers.viewsNameRequired'));
+      return;
+    }
+    if (fleetViews.some((view) => view.name.localeCompare(name, undefined, { sensitivity: 'accent' }) === 0)) {
+      setFleetViewMessage(t('servers.viewsNameExists'));
+      return;
+    }
+    if (fleetViews.length >= fleetViewsLimit) {
+      setFleetViewMessage(t('servers.viewsLimit', { count: fleetViewsLimit }));
+      return;
+    }
+
+    const view = createFleetView(name, filters);
+    if (!view) {
+      setFleetViewMessage(t('servers.viewsNameRequired'));
+      return;
+    }
+
+    const nextViews = [view, ...fleetViews];
+    setFleetViews(nextViews);
+    writeFleetViews(nextViews);
+    setFleetViewName('');
+    setFleetViewComposerOpen(false);
+    setFleetViewMessage(t('servers.viewsSaved', {
+      name: view.name,
+      count: countFleetViewFilters(view.filters),
+    }));
+  }
+
+  function removeFleetView(view: FleetView) {
+    const nextViews = fleetViews.filter((candidate) => candidate.id !== view.id);
+    setFleetViews(nextViews);
+    writeFleetViews(nextViews);
+    setFleetViewMessage(t('servers.viewsRemoved', { name: view.name }));
+  }
+
   return (
     <section className="module-section" aria-labelledby="servers-title">
       <div className="section-header">
@@ -1292,6 +1368,105 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
           </div>
         </div>
       )}
+
+      <section className="fleet-view-shelf" data-server-fleet-views="true" aria-labelledby="fleet-views-title">
+        <div className="fleet-view-head">
+          <div>
+            <span><BookmarkCheck size={14} /> {t('servers.viewsEyebrow')}</span>
+            <strong id="fleet-views-title">{t('servers.viewsTitle')}</strong>
+            <small>{t('servers.viewsDetail')}</small>
+          </div>
+          <button
+            type="button"
+            className="fleet-view-save-button"
+            data-server-fleet-view-toggle="true"
+            aria-expanded={fleetViewComposerOpen}
+            onClick={() => {
+              setFleetViewMessage('');
+              setFleetViewComposerOpen((current) => !current);
+            }}
+          >
+            <BookmarkPlus size={15} />
+            {t('servers.viewsSave')}
+          </button>
+        </div>
+
+        {fleetViewComposerOpen && (
+          <form
+            className="fleet-view-composer"
+            data-server-fleet-view-composer="true"
+            onSubmit={(event) => {
+              event.preventDefault();
+              saveFleetView();
+            }}
+          >
+            <label>
+              {t('servers.viewsName')}
+              <input
+                value={fleetViewName}
+                maxLength={36}
+                onChange={(event) => setFleetViewName(event.target.value)}
+                placeholder={t('servers.viewsNamePlaceholder')}
+                autoComplete="off"
+              />
+            </label>
+            <span className="fleet-view-filter-count">{t('servers.viewsFilterCount', { count: activeFleetFilterCount })}</span>
+            <button type="submit" className="tool-button primary" data-server-fleet-view-save="true">
+              {t('servers.viewsSaveCurrent')}
+            </button>
+            <button
+              type="button"
+              className="tool-button"
+              onClick={() => {
+                setFleetViewName('');
+                setFleetViewComposerOpen(false);
+              }}
+            >
+              {t('servers.viewsCancel')}
+            </button>
+          </form>
+        )}
+
+        <div className="fleet-view-list" role="list" aria-label={t('servers.viewsTitle')}>
+          {fleetViews.length === 0 ? (
+            <p className="fleet-view-empty">{t('servers.viewsEmpty')}</p>
+          ) : (
+            fleetViews.map((view) => {
+              const active = view.id === activeFleetViewId;
+              return (
+                <article
+                  key={view.id}
+                  className={`fleet-view-chip${active ? ' active' : ''}`}
+                  role="listitem"
+                  data-server-fleet-view={view.id}
+                >
+                  <button
+                    type="button"
+                    data-server-fleet-view-apply={view.id}
+                    aria-pressed={active}
+                    onClick={() => applyFleetView(view)}
+                  >
+                    <BookmarkCheck size={14} />
+                    <span>{view.name}</span>
+                    <em>{t('servers.viewsFilterCount', { count: countFleetViewFilters(view.filters) })}</em>
+                  </button>
+                  <button
+                    type="button"
+                    className="fleet-view-remove"
+                    data-server-fleet-view-remove={view.id}
+                    aria-label={t('servers.viewsRemove', { name: view.name })}
+                    title={t('servers.viewsRemove', { name: view.name })}
+                    onClick={() => removeFleetView(view)}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </article>
+              );
+            })
+          )}
+        </div>
+        <p className="fleet-view-note">{fleetViewMessage || t('servers.viewsBrowserOnly')}</p>
+      </section>
 
       <div className="filters-row server-filter-row">
         <label>

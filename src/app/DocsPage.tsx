@@ -1,5 +1,6 @@
 import {
   ArrowRight,
+  BookmarkCheck,
   Bot,
   CheckCircle2,
   CloudCog,
@@ -112,6 +113,13 @@ const usageBlocks = [
     points: ['查看 blocked/failed 事件', '按风险进入对应模块', '修复动作也会留下审计'],
   },
 ];
+
+const fleetViewUsageBlock = {
+  icon: BookmarkCheck,
+  title: '保存资产视图',
+  body: '服务器页面可把当前的关键词、厂商、状态、地域、地图范围和健康筛选保存为资产视图；点击视图即可恢复同一工作范围。',
+  points: ['最多保存 8 个常用视图', '只保存在当前浏览器，不上传筛选或资产信息', '删除视图不会删除服务器或任何运行数据'],
+};
 
 const apiRows = [
   ['GET /api/health', '服务健康状态、SQLite 驱动和运行时间。'],
@@ -257,7 +265,7 @@ export function DocsPage({ onLogin }: DocsPageProps) {
               <p>建议按以下顺序使用。每个模块都会与资产、事件、审计和 AI 上下文联动。</p>
             </div>
             <div className="docs-usage-grid">
-              {usageBlocks.map((block) => {
+              {[...usageBlocks, fleetViewUsageBlock].map((block) => {
                 const Icon = block.icon;
                 return (
                   <article key={block.title} className="docs-usage-card">

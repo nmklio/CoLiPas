@@ -31,6 +31,7 @@ assertCloudAccountsI18nCoverage();
 assertCustomApiSecretNotPersisted();
 assertOverviewMapInteractionGuards();
 assertMapRegionScopeLifecycleGuards();
+assertFleetViewGuards();
 assertOverviewServerFilterLinkage();
 assertSessionCookieSecurityGuards();
 assertServerIdentityDetectionGuards();
@@ -1735,7 +1736,12 @@ const failedSshConnectResponse = await fetch(`${baseUrl}/api/servers`, {
 if (failedSshConnectResponse.status !== 422 && failedSshConnectResponse.status !== 408) {
   throw new Error(`/api/servers real SSH verification expected 422 or 408, got ${failedSshConnectResponse.status}`);
 }
-console.log('ok /api/servers blocks unreachable real SSH access');
+await new Promise((resolve) => setTimeout(resolve, 250));
+const healthAfterFailedSshConnect = await fetch(`${baseUrl}/api/health`);
+if (!healthAfterFailedSshConnect.ok) {
+  throw new Error(`/api/health must remain available after failed real SSH verification, got ${healthAfterFailedSshConnect.status}`);
+}
+console.log('ok /api/servers blocks unreachable real SSH access and releases the failed verification cleanly');
 
 const identityInspectResponse = await fetch(`${baseUrl}/api/servers/inspect`, {
   method: 'POST',
@@ -5762,6 +5768,96 @@ function assertMapRegionScopeLifecycleGuards() {
   }
 
   console.log('ok map region scope clears stale regions after inventory changes');
+}
+
+function assertFleetViewGuards() {
+  const inventorySource = fs.readFileSync(new URL('../src/modules/servers/ServerInventory.tsx', import.meta.url), 'utf8');
+  const fleetViewSource = fs.readFileSync(new URL('../src/modules/servers/fleetViews.ts', import.meta.url), 'utf8');
+  const i18nSource = fs.readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
+  const globalCss = fs.readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
+  const browserE2eSource = fs.readFileSync(new URL('../scripts/browser-e2e.mjs', import.meta.url), 'utf8');
+  const marketingSource = fs.readFileSync(new URL('../src/app/MarketingPage.tsx', import.meta.url), 'utf8');
+  const docsSource = fs.readFileSync(new URL('../src/app/DocsPage.tsx', import.meta.url), 'utf8');
+  const readmeSource = fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+  const cnReadmeSource = fs.readFileSync(new URL('../README_CN.md', import.meta.url), 'utf8');
+  const jpReadmeSource = fs.readFileSync(new URL('../README_JP.md', import.meta.url), 'utf8');
+  const serverUpdateSource = fs.readFileSync(new URL('../deploy/server-update.sh', import.meta.url), 'utf8');
+
+  const requiredInventory = [
+    "from './fleetViews'",
+    'data-server-fleet-views="true"',
+    'data-server-fleet-view-toggle="true"',
+    'data-server-fleet-view-save="true"',
+    'data-server-fleet-view-apply={view.id}',
+    'data-server-fleet-view-remove={view.id}',
+    'function applyFleetView(view: FleetView)',
+    'function saveFleetView()',
+    'function removeFleetView(view: FleetView)',
+    'writeFleetViews(nextViews)',
+    'fleetViewsLimit',
+  ];
+  const missingInventory = requiredInventory.filter((fragment) => !inventorySource.includes(fragment));
+  if (missingInventory.length) {
+    throw new Error(`Fleet view UI wiring is incomplete: ${missingInventory.join(', ')}`);
+  }
+
+  const requiredStorage = [
+    "fleetViewsStorageKey = 'colipas.serverFleetViews.v1'",
+    'fleetViewsLimit = 8',
+    'captureFleetViewFilters',
+    'sameFleetViewFilters',
+    'normalizeFleetViewName',
+    'normalizeRegionScope',
+    "validStatuses = new Set<string>(['all', 'running', 'stopped', 'warning', 'provisioning', 'unconnected'])",
+    "validHealthFilters = new Set<string>(['resourcePressure', 'sshMissing', 'sshSimulated'])",
+    'window.localStorage.setItem',
+    'slice(0, 12)',
+  ];
+  const missingStorage = requiredStorage.filter((fragment) => !fleetViewSource.includes(fragment));
+  if (missingStorage.length) {
+    throw new Error(`Fleet view browser-storage sanitization is incomplete: ${missingStorage.join(', ')}`);
+  }
+  if (fleetViewSource.includes('publicIp') || fleetViewSource.includes('password') || fleetViewSource.includes('privateKey')) {
+    throw new Error('Fleet views must not model or persist server addresses or credentials');
+  }
+
+  const i18nKeys = [
+    'servers.viewsEyebrow',
+    'servers.viewsTitle',
+    'servers.viewsDetail',
+    'servers.viewsSave',
+    'servers.viewsFilterCount',
+    'servers.viewsBrowserOnly',
+    'servers.viewsRemove',
+  ];
+  for (const key of i18nKeys) {
+    const count = (i18nSource.match(new RegExp(key.replaceAll('.', '\\.'), 'g')) ?? []).length;
+    if (count < 3) {
+      throw new Error(`Fleet view i18n key is missing language coverage: ${key}`);
+    }
+  }
+  for (const cssSelector of ['.fleet-view-shelf', '.fleet-view-composer', '.fleet-view-chip', '.fleet-view-remove']) {
+    if (!globalCss.includes(cssSelector)) {
+      throw new Error(`Fleet view responsive UI style is missing: ${cssSelector}`);
+    }
+  }
+  for (const [name, source, phrase] of [
+    ['README.md', readmeSource, 'Fleet views'],
+    ['README_CN.md', cnReadmeSource, '资产视图'],
+    ['README_JP.md', jpReadmeSource, '資産ビュー'],
+    ['MarketingPage.tsx', marketingSource, '资产视图'],
+    ['DocsPage.tsx', docsSource, '保存资产视图'],
+    ['server-update.sh landing page', serverUpdateSource, 'data-colipas-feature="fleet-views"'],
+    ['server-update.sh docs page', serverUpdateSource, 'data-colipas-docs-fleet-views="true"'],
+  ]) {
+    if (!source.includes(phrase)) {
+      throw new Error(`${name} must document fleet views`);
+    }
+  }
+  if (!browserE2eSource.includes('assertFleetViews') || !browserE2eSource.includes("colipas.serverFleetViews.v1")) {
+    throw new Error('Fleet views must have browser persistence regression coverage');
+  }
+  console.log('ok fleet views stay browser-only, restore sanitized filter scopes, and remain documented');
 }
 
 function assertOverviewServerFilterLinkage() {

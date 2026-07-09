@@ -59,6 +59,10 @@ try {
 async function createE2ePage(options) {
   const targetPage = await browser.newPage(options);
   await targetPage.addInitScript(() => {
+    if (window.sessionStorage.getItem('colipas.browserE2e.initialized.v1') === '1') {
+      return;
+    }
+    window.sessionStorage.setItem('colipas.browserE2e.initialized.v1', '1');
     window.localStorage.setItem('colipas.language', 'en');
     window.localStorage.removeItem('colipas.aiConsoleState');
     window.localStorage.removeItem('colipas.aiResponseCache');
@@ -70,6 +74,7 @@ async function createE2ePage(options) {
     window.localStorage.removeItem('colipas.sshLatencyReport.v1');
     window.localStorage.removeItem('colipas.sshLatencyReportHistory.v1');
     window.localStorage.removeItem('colipas.sshTerminalLiteMode.v1');
+    window.localStorage.removeItem('colipas.serverFleetViews.v1');
     window.localStorage.removeItem('colipas.launchGuide.dismissed.v1');
     window.localStorage.removeItem('colipas.launchGuide.view.v1');
   });
@@ -549,10 +554,12 @@ async function assertReleaseEvidenceBrief(targetPage) {
     window.__colipasCopiedSshSupportBundleText = '';
     window.__colipasCopiedSshSupportTicketText = '';
     window.__colipasCopiedSshTerminalSnapshotText = '';
+    window.__colipasClipboardWriteCount = 0;
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: {
         writeText: async (text) => {
+          window.__colipasClipboardWriteCount += 1;
           if (/Release fix checklist/i.test(text)) {
             window.__colipasCopiedReleaseFixChecklistText = text;
           } else if (/Release fix router/i.test(text)) {
@@ -563,10 +570,10 @@ async function assertReleaseEvidenceBrief(targetPage) {
             window.__colipasCopiedReleaseCockpitText = text;
           } else if (/SSH lag ticket template/i.test(text)) {
             window.__colipasCopiedSshSupportTicketText = text;
-          } else if (/SSH sanitized diagnosis pack/i.test(text)) {
-            window.__colipasCopiedSshTerminalSnapshotText = text;
           } else if (/SSH sanitized support bundle/i.test(text)) {
             window.__colipasCopiedSshSupportBundleText = text;
+          } else if (/SSH sanitized diagnosis pack/i.test(text)) {
+            window.__colipasCopiedSshTerminalSnapshotText = text;
           } else if (/SSH lag diagnosis report/i.test(text)) {
             window.__colipasCopiedSshLagReportText = text;
           } else if (/SSH flight recorder/i.test(text)) {
@@ -618,12 +625,30 @@ async function assertReleaseEvidenceBrief(targetPage) {
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedReleaseHandoffText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedReleaseHandoffText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(copiedReleaseHandoffText)) {
     throw new Error('Release handoff pack copy output leaked a raw IP address or secret');
   }
-  await targetPage.locator('[data-ssh-support-bundle="true"]').waitFor({ timeout: 5000 });
-  const sshSupportBundleText = await targetPage.locator('[data-ssh-support-bundle="true"]').innerText();
+  const sshSupportBundle = targetPage.locator('[data-ssh-support-bundle="true"]');
+  await sshSupportBundle.waitFor({ timeout: 5000 });
+  const sshSupportBundleText = await sshSupportBundle.innerText();
   if (!/SSH sanitized support bundle/i.test(sshSupportBundleText) || !/Bundle contents/i.test(sshSupportBundleText) || !/Performance summary/i.test(sshSupportBundleText) || !/Bottleneck trend/i.test(sshSupportBundleText)) {
     throw new Error(`SSH support bundle did not render all evidence sections: ${sshSupportBundleText}`);
   }
-  await targetPage.getByRole('button', { name: /copy support bundle/i }).click();
+  await sshSupportBundle.getByRole('button', { name: /copy support bundle/i }).click();
+  try {
+    await targetPage.waitForFunction(
+      () => typeof window.__colipasCopiedSshSupportBundleText === 'string'
+        && window.__colipasCopiedSshSupportBundleText.length > 0,
+      undefined,
+      { timeout: 5000 },
+    );
+  } catch (error) {
+    const state = await targetPage.evaluate(() => ({
+      clipboardWrites: window.__colipasClipboardWriteCount ?? 0,
+      copiedTextLength: (window.__colipasCopiedSshSupportBundleText ?? '').length,
+      feedback: Array.from(document.querySelectorAll('.remediation-message, .action-message'))
+        .map((element) => element.textContent?.trim())
+        .filter(Boolean),
+    }));
+    throw new Error(`SSH support bundle copy did not reach the clipboard mock: ${JSON.stringify(state)}; ${error instanceof Error ? error.message : String(error)}`);
+  }
   const copiedSshSupportBundleText = await targetPage.evaluate(() => window.__colipasCopiedSshSupportBundleText ?? '');
   if (!/SSH sanitized support bundle/i.test(copiedSshSupportBundleText) || !/Performance summary/i.test(copiedSshSupportBundleText) || !/Lag diagnosis/i.test(copiedSshSupportBundleText) || !/Flight recorder/i.test(copiedSshSupportBundleText) || !/Real sampler/i.test(copiedSshSupportBundleText) || !/Bottleneck trend/i.test(copiedSshSupportBundleText) || !/This support bundle only includes sanitized aggregate metrics/i.test(copiedSshSupportBundleText)) {
     throw new Error(`SSH support bundle copy output is incomplete: ${copiedSshSupportBundleText}`);
@@ -1128,6 +1153,62 @@ async function deleteTemporaryAssetServer(targetPage, serverId) {
   }
 }
 
+async function assertFleetViews(targetPage, sshServer) {
+  const shelf = targetPage.locator('[data-server-fleet-views="true"]');
+  await shelf.waitFor({ timeout: 10000 });
+  const initialShelfText = await shelf.innerText();
+  if (!/Fleet views|Save common filters|browser only/i.test(initialShelfText)) {
+    throw new Error(`Fleet view shelf did not render its browser-only guidance: ${initialShelfText}`);
+  }
+
+  const queryInput = targetPage.locator('.server-filter-row input').first();
+  await queryInput.fill(sshServer.name);
+  const viewName = `SSH focus ${Date.now()}`;
+  await targetPage.locator('[data-server-fleet-view-toggle="true"]').click();
+  const composer = targetPage.locator('[data-server-fleet-view-composer="true"]');
+  await composer.waitFor({ timeout: 5000 });
+  await composer.locator('input').fill(viewName);
+  await composer.locator('[data-server-fleet-view-save="true"]').click();
+  const savedChip = targetPage.locator('[data-server-fleet-view]').filter({ hasText: viewName });
+  await savedChip.waitFor({ timeout: 5000 });
+  const activeSaveState = await savedChip.locator('[data-server-fleet-view-apply]').getAttribute('aria-pressed');
+  if (activeSaveState !== 'true') {
+    throw new Error(`Newly saved fleet view should be active, got ${activeSaveState ?? 'missing'}`);
+  }
+
+  await queryInput.fill('');
+  await savedChip.locator('[data-server-fleet-view-apply]').click();
+  await targetPage.waitForFunction((expectedName) => {
+    const input = document.querySelector('.server-filter-row input');
+    return input instanceof HTMLInputElement && input.value === expectedName;
+  }, sshServer.name, { timeout: 5000 });
+  const activeRestoreState = await savedChip.locator('[data-server-fleet-view-apply]').getAttribute('aria-pressed');
+  if (activeRestoreState !== 'true') {
+    throw new Error(`Restored fleet view should become active, got ${activeRestoreState ?? 'missing'}`);
+  }
+
+  await targetPage.reload({ waitUntil: 'networkidle' });
+  const persistedChip = targetPage.locator('[data-server-fleet-view]').filter({ hasText: viewName });
+  await persistedChip.waitFor({ timeout: 10000 });
+  const storedViews = await targetPage.evaluate(() => window.localStorage.getItem('colipas.serverFleetViews.v1') ?? '');
+  if (!storedViews.includes(viewName) || /(?:\d{1,3}\.){3}\d{1,3}|test-browser-e2e-value|BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY|password=|passphrase=/i.test(storedViews)) {
+    throw new Error(`Fleet view browser storage should only retain sanitized filter data: ${storedViews}`);
+  }
+  const persistedViews = JSON.parse(storedViews);
+  if (!Array.isArray(persistedViews) || persistedViews.length !== 1 || Object.keys(persistedViews[0].filters ?? {}).some((key) => !['query', 'provider', 'status', 'region', 'regionScope', 'health'].includes(key))) {
+    throw new Error(`Fleet view browser storage has an unexpected schema: ${storedViews}`);
+  }
+
+  await persistedChip.locator('[data-server-fleet-view-remove]').click();
+  await persistedChip.waitFor({ state: 'detached', timeout: 5000 });
+  const afterRemoval = await targetPage.evaluate(() => window.localStorage.getItem('colipas.serverFleetViews.v1') ?? '');
+  if (afterRemoval !== '[]') {
+    throw new Error(`Removing a fleet view should remove only that view from browser storage: ${afterRemoval}`);
+  }
+  await queryInput.fill('');
+  console.log('ok browser e2e saves, restores, persists, and removes browser-only fleet views without asset leakage');
+}
+
 async function assertSshTerminalPanel(targetPage) {
   const sshServer = await createTemporarySimulatedSshServer(targetPage);
   try {
@@ -1161,6 +1242,7 @@ async function assertSshTerminalPanel(targetPage) {
     await targetPage.locator('.server-workspace-row').filter({ hasText: sshServer.name }).waitFor({ timeout: 5000 });
     await simulatedScopeChip.getByRole('button', { name: /clear health filter/i }).click();
     await targetPage.locator('[data-health-scope-chip="true"]').waitFor({ state: 'detached', timeout: 5000 });
+    await assertFleetViews(targetPage, sshServer);
     await targetPage.locator('[data-server-triage-draft="sshSimulated"]').click();
     await targetPage.waitForURL(/#operations$/, { timeout: 10000 });
     const triageDraftBanner = targetPage.locator('[data-ops-draft-banner="true"]');

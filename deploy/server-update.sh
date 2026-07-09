@@ -269,6 +269,11 @@ if (!html.includes('data-colipas-feature="contextual-launch-summary"')) {
       <article class="feature-card" data-colipas-feature="contextual-launch-summary">${landingIcon('checklist', 'icon feature-icon')}<h3>上下文上线检查</h3><p>总览保留完整上线清单；进入服务器、AI、运维、API 和安全工作区后自动压缩为摘要，需要证据时再一键展开。</p><div class="tags"><span>渐进披露</span><span>性能模式联动</span></div></article>`);
 }
 
+if (!html.includes('data-colipas-feature="fleet-views"')) {
+  replaceOnce(/(<div class="feature-grid">)/, `$1
+      <article class="feature-card" data-colipas-feature="fleet-views">${landingIcon('checklist', 'icon feature-icon')}<h3>资产视图</h3><p>把关键词、厂商、状态、地域和健康筛选保存为浏览器本机视图，排障时可一键恢复工作范围。</p><div class="tags"><span>本机保存</span><span>一键恢复</span></div></article>`);
+}
+
 replaceAll(/<article class="deploy-card"><h3>Linux systemd<\/h3>/g, `<article class="deploy-card">${landingIcon('terminal', 'deploy-icon')}<h3>Linux systemd</h3>`);
 replaceAll(/<article class="deploy-card"><h3>Node 20\+<\/h3>/g, `<article class="deploy-card">${landingIcon('code', 'deploy-icon')}<h3>Node 20+</h3>`);
 replaceAll(/<article class="deploy-card"><h3>Docker Compose<\/h3>/g, `<article class="deploy-card">${landingIcon('database', 'deploy-icon')}<h3>Docker Compose</h3>`);
@@ -1622,6 +1627,23 @@ curl -fsS http://127.0.0.1:8080/api/health</pre>
 </body>
 </html>
 HTML
+  DOCS_FILE="$LANDING_ROOT/docs.html" node <<'NODE'
+const fs = require('node:fs');
+
+const file = process.env.DOCS_FILE;
+let html = fs.readFileSync(file, 'utf8');
+if (!html.includes('data-colipas-docs-fleet-views="true"')) {
+  html = html.replace(
+    /(<section id="server-access"[\s\S]*?<div class="grid">)/,
+    `$1
+          <article class="doc-card" data-colipas-docs-fleet-views="true">
+            <h3>资产视图</h3>
+            <p>保存当前的关键词、厂商、状态、地域、地图范围和健康筛选；点击已保存视图即可恢复同一排障范围。视图最多保存 8 个，只存在当前浏览器，不会上传筛选内容或资产信息。</p>
+          </article>`,
+  );
+}
+fs.writeFileSync(file, html);
+NODE
   echo "CoLiPas cloud server management panel docs page ready: $LANDING_ROOT/docs.html"
 }
 

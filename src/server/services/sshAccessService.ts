@@ -599,20 +599,43 @@ export async function collectSshMetrics(credential: StoredSshCredential, mode: S
 function connectSsh(input: SshCredentialInput, host: string) {
   return new Promise<void>((resolve, reject) => {
     const client = new Client();
-    const timer = setTimeout(() => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const fail = (error: HttpError) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timer) {
+        clearTimeout(timer);
+      }
       client.destroy();
-      reject(new HttpError(408, 'SSH connection timed out. Check port 22, firewall, security group, and credentials, or use asset-only mode first.', 'SSH_TIMEOUT'));
+      reject(error);
+    };
+
+    const succeed = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timer) {
+        clearTimeout(timer);
+      }
+      client.end();
+      resolve();
+    };
+
+    timer = setTimeout(() => {
+      fail(new HttpError(408, 'SSH connection timed out. Check port 22, firewall, security group, and credentials, or use asset-only mode first.', 'SSH_TIMEOUT'));
     }, sshReadyTimeoutMs);
 
     client
       .on('ready', () => {
-        clearTimeout(timer);
-        client.end();
-        resolve();
+        succeed();
       })
       .on('error', (error) => {
-        clearTimeout(timer);
-        reject(new HttpError(422, `SSH connection failed: ${redactSensitiveText(error.message)}`, 'SSH_CONNECT_FAILED'));
+        fail(new HttpError(422, `SSH connection failed: ${redactSensitiveText(error.message)}`, 'SSH_CONNECT_FAILED'));
       })
       .connect({
         host,

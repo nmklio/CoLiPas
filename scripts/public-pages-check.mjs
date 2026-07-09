@@ -120,6 +120,8 @@ function buildLandingCheck() {
       await expectLocatorCountAtLeast(page.locator('section, article, .feature-card, .position-card, .deploy-card'), 6, 'landing content sections');
       await expectLocatorCount(page.locator('[data-colipas-feature="contextual-launch-summary"]'), 1, 'landing contextual launch guide feature card');
       await expectText(page.locator('[data-colipas-feature="contextual-launch-summary"]'), /上线检查|release checklist|workspace summary/i, 'landing contextual launch guide copy');
+      await expectLocatorCount(page.locator('[data-colipas-feature="fleet-views"]'), 1, 'landing fleet views feature card');
+      await expectText(page.locator('[data-colipas-feature="fleet-views"]'), /资产视图|fleet views|browser/i, 'landing fleet views copy');
       await expectLocatorCountAtLeast(page.locator('.feature-card .feature-icon svg'), 7, 'landing feature SVG icons');
       await expectLocatorCountAtLeast(page.locator('.position-card.position-flow-card'), 4, 'landing redesigned flow position cards');
       await expectLocatorCount(page.locator('.position-card .position-step'), 4, 'landing position flow step numbers');
@@ -155,6 +157,8 @@ function buildDocsCheck() {
       await expectTextAbsent(page, /不要把真实密码写进公开仓库或截图|公开仓库或截图|ChangeThisStrongPassword123|NewStrongPassword123|admin123456|乱填|类 VNC|\u4e91\u7ef4|截图里的真实资产|当作正式服务|开发者改代码后再上线|演示后台|演示登录|默认演示密码|是不是固定/, 'docs awkward wording');
       await expectLocatorCount(page.locator('#launch-checklist'), 1, 'docs contextual launch guide section');
       await expectText(page.locator('#launch-checklist'), /上线检查|workspace summary|release checklist/i, 'docs contextual launch guide copy');
+      await expectLocatorCount(page.locator('[data-colipas-docs-fleet-views="true"]'), 1, 'docs fleet views section');
+      await expectText(page.locator('[data-colipas-docs-fleet-views="true"]'), /资产视图|fleet views|browser/i, 'docs fleet views copy');
       await assertSensitiveTextAbsent(page, 'docs');
     },
   };
