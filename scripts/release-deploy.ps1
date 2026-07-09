@@ -339,6 +339,15 @@ function ConvertTo-DeployTargets {
       $userName = Get-PropertyValue $item "user" $RemoteUser
       $command = Get-PropertyValue $item "command" $RemoteCommand
       $targetName = Get-PropertyValue $item "name" $hostName
+      $termarkAssetId = Get-PropertyValue $item "termarkAssetId" ""
+      $configuredTransport = (Get-PropertyValue $item "transport" "").Trim().ToLowerInvariant()
+      $transport = if ($configuredTransport) {
+        $configuredTransport
+      } elseif (-not [string]::IsNullOrWhiteSpace($termarkAssetId)) {
+        "termark"
+      } else {
+        "ssh"
+      }
 
       if ([string]::IsNullOrWhiteSpace($hostName)) {
         throw "Release target '$targetName' is missing host."
@@ -349,12 +358,20 @@ function ConvertTo-DeployTargets {
       if ([string]::IsNullOrWhiteSpace($command)) {
         throw "Release target '$targetName' is missing command."
       }
+      if ($transport -notin @("ssh", "termark")) {
+        throw "Release target '$targetName' has unsupported transport '$transport'."
+      }
+      if ($transport -eq "termark" -and [string]::IsNullOrWhiteSpace($termarkAssetId)) {
+        throw "Release target '$targetName' uses Termark transport but is missing termarkAssetId."
+      }
 
       $targets += [pscustomobject]@{
         name = $targetName
         host = $hostName
         user = $userName
         command = $command
+        transport = $transport
+        termarkAssetId = $termarkAssetId
         sshKey = Get-PropertyValue $item "sshKey" $SshKey
         sshPort = Get-PropertyInt $item @("sshPort", "port") 0
         publicBaseUrl = Get-PropertyValue $item "publicBaseUrl" $ProductionBaseUrl
@@ -385,6 +402,8 @@ function Get-DeployTargets {
     host = $RemoteHost
     user = $RemoteUser
     command = $RemoteCommand
+    transport = "ssh"
+    termarkAssetId = ""
     sshKey = $SshKey
     sshPort = 0
     publicBaseUrl = $ProductionBaseUrl
@@ -402,6 +421,8 @@ function Write-DeployPlan {
       host = $_.host
       user = $_.user
       command = $_.command
+      transport = $_.transport
+      termarkAssetConfigured = -not [string]::IsNullOrWhiteSpace($_.termarkAssetId)
       sshKeyConfigured = -not [string]::IsNullOrWhiteSpace($_.sshKey)
       publicBaseUrl = $_.publicBaseUrl
       publicMode = $_.publicMode
@@ -491,6 +512,60 @@ function Invoke-SshWithDiagnostics {
   }
 }
 
+function Get-TermarkFailureHint {
+  param(
+    [int]$ExitCode,
+    [string[]]$OutputLines
+  )
+
+  $combined = (($OutputLines | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join "`n")
+  if ($combined -match '(?i)(authentication failed|permission denied|publickey|password)') {
+    return "Termark transport authentication failed. Check the saved Termark asset credentials and access policy."
+  }
+  if ($combined -match '(?i)(connection refused|connection timed out|operation timed out|no route to host|network is unreachable)') {
+    return "Termark transport could not reach the target. Check the saved asset connection and remote SSH availability."
+  }
+  if ($combined -match '(?i)(asset.*not found|unknown asset|not configured)') {
+    return "Termark transport could not resolve the configured asset. Check the local release target mapping."
+  }
+  if ($combined -match '(?i)(command not found|no such file or directory|not found)') {
+    return "Remote update command failed before deployment. Check that the configured update script exists and is executable on the target."
+  }
+
+  return "Termark transport failed with exit code $ExitCode. Check the saved asset connection and remote update command."
+}
+
+function Invoke-TermarkWithDiagnostics {
+  param(
+    [string]$TargetName,
+    [string]$AssetId,
+    [string]$Command
+  )
+
+  if (-not (Get-Command termark -ErrorAction SilentlyContinue)) {
+    throw "Target $TargetName requires Termark transport, but the local termark command is unavailable."
+  }
+
+  $capturedLines = [Collections.Generic.List[string]]::new()
+  $previousErrorActionPreference = $ErrorActionPreference
+  try {
+    $ErrorActionPreference = "Continue"
+    & termark exec $AssetId $Command 2>&1 | ForEach-Object {
+      $line = [string]$_
+      $capturedLines.Add($line)
+      Write-Host $line
+    }
+    $termarkExitCode = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+  }
+
+  if ($termarkExitCode -ne 0) {
+    $hint = Get-TermarkFailureHint -ExitCode $termarkExitCode -OutputLines $capturedLines.ToArray()
+    throw "Target $TargetName update failed with exit code $termarkExitCode. $hint"
+  }
+}
+
 function Invoke-TargetUpdate {
   param([object]$Target)
 
@@ -521,6 +596,12 @@ function Invoke-TargetUpdate {
     $evidenceCommand = "sudo env $releaseEnv $($Matches[1])"
   } else {
     $evidenceCommand = "$releaseEnv $targetCommand"
+  }
+
+  if ($Target.transport -eq "termark") {
+    Write-Host "Updating target $($Target.name) through Termark transport."
+    Invoke-TermarkWithDiagnostics -TargetName $Target.name -AssetId $Target.termarkAssetId -Command $evidenceCommand
+    return
   }
 
   $sshArgs += @("-o", "StrictHostKeyChecking=accept-new", "$($Target.user)@$($Target.host)", $evidenceCommand)
@@ -1103,6 +1184,89 @@ esac
   }
 }
 
+function Test-TermarkTargetTransport {
+  $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("colipas-release-termark-selftest-" + [Guid]::NewGuid().ToString("N"))
+  New-Item -ItemType Directory -Path $tempRoot | Out-Null
+  $mockTermarkPath = Join-Path $tempRoot "termark.cmd"
+  $mockTermarkUnixPath = Join-Path $tempRoot "termark"
+  $capturePath = Join-Path $tempRoot "termark-calls.txt"
+  $previousPath = $env:PATH
+  $previousCapture = $env:COLIPAS_TERMARK_SELFTEST_CAPTURE
+  $previousResults = $script:TargetUpdateResults
+  $previousSuccessfulTargets = $script:SuccessfulDeployTargets
+  $previousPublishedCommit = $script:PublishedCommitSha
+
+  try {
+    @'
+@echo off
+echo %*>>"%COLIPAS_TERMARK_SELFTEST_CAPTURE%"
+echo %* | findstr /C:"exec termark-selftest-asset" >nul
+if errorlevel 1 exit /b 31
+exit /b 0
+'@ | Set-Content -LiteralPath $mockTermarkPath -Encoding ASCII
+    @'
+#!/usr/bin/env sh
+printf '%s\n' "$*" >> "$COLIPAS_TERMARK_SELFTEST_CAPTURE"
+case "$*" in
+  *"exec termark-selftest-asset"*) exit 0 ;;
+  *) exit 31 ;;
+esac
+'@ | Set-Content -LiteralPath $mockTermarkUnixPath -Encoding ASCII
+    if (Get-Command chmod -ErrorAction SilentlyContinue) {
+      & chmod +x $mockTermarkUnixPath
+    }
+
+    $env:COLIPAS_TERMARK_SELFTEST_CAPTURE = $capturePath
+    $env:PATH = "$tempRoot$([IO.Path]::PathSeparator)$previousPath"
+    $script:PublishedCommitSha = "abcdef1234567890abcdef1234567890abcdef12"
+    $targets = @(
+      [pscustomobject]@{
+        name = "termark-target"
+        host = "ssh-host-should-not-be-used"
+        user = "mock-user"
+        command = "mock-update"
+        transport = "termark"
+        termarkAssetId = "termark-selftest-asset"
+        sshKey = ""
+        sshPort = 0
+        publicBaseUrl = "https://termark.example.test"
+        publicMode = "admin"
+        deploymentMode = "docker"
+        skipPublicValidation = $false
+        updateAttempts = 1
+        retryDelaySeconds = 0
+      }
+    )
+
+    if ($targets.Count -ne 1 -or $targets[0].transport -ne "termark" -or $targets[0].termarkAssetId -ne "termark-selftest-asset") {
+      throw "Termark target self-test did not preserve the configured asset transport."
+    }
+
+    Invoke-TargetUpdates $targets
+    if ($script:SuccessfulDeployTargets.Count -ne 1 -or $script:SuccessfulDeployTargets[0].name -ne "termark-target") {
+      throw "Termark target update did not record a successful deployment."
+    }
+
+    $captured = Get-Content -LiteralPath $capturePath -Raw
+    if (-not $captured.Contains("exec termark-selftest-asset") -or -not $captured.Contains("RELEASE_TARGET_NAME=") -or $captured.Contains("ssh-host-should-not-be-used")) {
+      throw "Termark target update did not use the sanitized asset transport command."
+    }
+
+    Write-Host "ok release deploy selects configured Termark assets without falling back to direct SSH"
+  } finally {
+    $env:PATH = $previousPath
+    $script:TargetUpdateResults = $previousResults
+    $script:SuccessfulDeployTargets = $previousSuccessfulTargets
+    $script:PublishedCommitSha = $previousPublishedCommit
+    if ($null -eq $previousCapture) {
+      Remove-Item Env:\COLIPAS_TERMARK_SELFTEST_CAPTURE -ErrorAction SilentlyContinue
+    } else {
+      $env:COLIPAS_TERMARK_SELFTEST_CAPTURE = $previousCapture
+    }
+    Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
+  }
+}
+
 function Test-TargetHealthCommitValidation {
   $expectedCommit = "abcdef1234567890abcdef1234567890abcdef12"
   $matchingHealth = [pscustomobject]@{
@@ -1333,6 +1497,7 @@ if ($SelfTest) {
   Test-GitHubApiJsonFallback
   Test-GitHubApiCommitObjectImport
   Test-TargetUpdateFailureIsolation
+  Test-TermarkTargetTransport
   Test-TargetHealthCommitValidation
   exit 0
 }

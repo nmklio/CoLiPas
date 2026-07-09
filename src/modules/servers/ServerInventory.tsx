@@ -693,6 +693,7 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
     () => fleetViews.find((view) => sameFleetViewFilters(view.filters, filters))?.id ?? '',
     [filters, fleetViews],
   );
+  const fleetViewsEmpty = fleetViews.length === 0;
   const activeFleetFilterCount = useMemo(() => countFleetViewFilters(filters), [filters]);
   const allServersById = useMemo(() => buildServerById(allServers), [allServers]);
   const activeSshServer = useMemo(() => allServersById.get(sshPanelServerId) ?? null, [allServersById, sshPanelServerId]);
@@ -1369,12 +1370,17 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
         </div>
       )}
 
-      <section className="fleet-view-shelf" data-server-fleet-views="true" aria-labelledby="fleet-views-title">
+      <section
+        className={`fleet-view-shelf${fleetViewsEmpty ? ' is-empty' : ''}${fleetViewComposerOpen ? ' is-composing' : ''}`}
+        data-server-fleet-views="true"
+        data-server-fleet-view-state={fleetViewsEmpty ? (fleetViewComposerOpen ? 'composing-empty' : 'empty') : 'saved'}
+        aria-labelledby="fleet-views-title"
+      >
         <div className="fleet-view-head">
           <div>
             <span><BookmarkCheck size={14} /> {t('servers.viewsEyebrow')}</span>
-            <strong id="fleet-views-title">{t('servers.viewsTitle')}</strong>
-            <small>{t('servers.viewsDetail')}</small>
+            <strong id="fleet-views-title">{fleetViewsEmpty ? t('servers.viewsEmptyTitle') : t('servers.viewsTitle')}</strong>
+            <small>{fleetViewsEmpty ? t('servers.viewsEmptyDetail') : t('servers.viewsDetail')}</small>
           </div>
           <button
             type="button"
@@ -1427,11 +1433,9 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
           </form>
         )}
 
-        <div className="fleet-view-list" role="list" aria-label={t('servers.viewsTitle')}>
-          {fleetViews.length === 0 ? (
-            <p className="fleet-view-empty">{t('servers.viewsEmpty')}</p>
-          ) : (
-            fleetViews.map((view) => {
+        {!fleetViewsEmpty && (
+          <div className="fleet-view-list" role="list" aria-label={t('servers.viewsTitle')}>
+            {fleetViews.map((view) => {
               const active = view.id === activeFleetViewId;
               return (
                 <article
@@ -1463,9 +1467,10 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
                 </article>
               );
             })
-          )}
-        </div>
-        <p className="fleet-view-note">{fleetViewMessage || t('servers.viewsBrowserOnly')}</p>
+            }
+          </div>
+        )}
+        <p className="fleet-view-note">{fleetViewMessage || (fleetViewsEmpty ? t('servers.viewsBrowserOnly') : t('servers.viewsBrowserOnly'))}</p>
       </section>
 
       <div className="filters-row server-filter-row">

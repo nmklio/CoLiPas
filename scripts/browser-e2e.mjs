@@ -1156,8 +1156,11 @@ async function deleteTemporaryAssetServer(targetPage, serverId) {
 async function assertFleetViews(targetPage, sshServer) {
   const shelf = targetPage.locator('[data-server-fleet-views="true"]');
   await shelf.waitFor({ timeout: 10000 });
+  if (await shelf.getAttribute('data-server-fleet-view-state') !== 'empty') {
+    throw new Error('A first-time fleet view shelf should use the compact empty state.');
+  }
   const initialShelfText = await shelf.innerText();
-  if (!/Fleet views|Save common filters|browser only/i.test(initialShelfText)) {
+  if (!/Fleet views|first working scope|browser only/i.test(initialShelfText)) {
     throw new Error(`Fleet view shelf did not render its browser-only guidance: ${initialShelfText}`);
   }
 
@@ -1171,6 +1174,9 @@ async function assertFleetViews(targetPage, sshServer) {
   await composer.locator('[data-server-fleet-view-save="true"]').click();
   const savedChip = targetPage.locator('[data-server-fleet-view]').filter({ hasText: viewName });
   await savedChip.waitFor({ timeout: 5000 });
+  if (await shelf.getAttribute('data-server-fleet-view-state') !== 'saved') {
+    throw new Error('Saving a fleet view should expand the shelf into the saved-view state.');
+  }
   const activeSaveState = await savedChip.locator('[data-server-fleet-view-apply]').getAttribute('aria-pressed');
   if (activeSaveState !== 'true') {
     throw new Error(`Newly saved fleet view should be active, got ${activeSaveState ?? 'missing'}`);
@@ -1204,6 +1210,9 @@ async function assertFleetViews(targetPage, sshServer) {
   const afterRemoval = await targetPage.evaluate(() => window.localStorage.getItem('colipas.serverFleetViews.v1') ?? '');
   if (afterRemoval !== '[]') {
     throw new Error(`Removing a fleet view should remove only that view from browser storage: ${afterRemoval}`);
+  }
+  if (await shelf.getAttribute('data-server-fleet-view-state') !== 'empty') {
+    throw new Error('Removing the final fleet view should restore the compact empty state.');
   }
   await queryInput.fill('');
   console.log('ok browser e2e saves, restores, persists, and removes browser-only fleet views without asset leakage');
@@ -2682,6 +2691,7 @@ async function assertMobileConsoleAndMap() {
     await openAndLogin(mobilePage, `${baseUrl}/admin/#overview`);
     await mobilePage.getByRole('button', { name: /open navigation/i }).waitFor({ timeout: 5000 });
     await assertNoHorizontalOverflow(mobilePage, 'mobile console after login');
+    await assertElementHorizontallyWithinViewport(mobilePage, '[data-launch-guide="true"]', 'mobile compact launch guide');
 
     await mobilePage.locator('.account-settings-trigger').click();
     await mobilePage.locator('.account-modal').waitFor({ timeout: 5000 });
@@ -2755,9 +2765,11 @@ async function assertMobileModuleLayoutSweep() {
     await assertMobileSection(mobilePage, /^Servers$/i, /#servers$/, [
       '.server-summary-grid',
       '.server-triage-strip',
+      '[data-server-fleet-views="true"]',
       '.server-filter-row',
       '.server-workspace-row',
     ]);
+    await assertElementHorizontallyWithinViewport(mobilePage, '[data-server-fleet-views="true"]', 'mobile fleet views');
     await assertSingleColumnStack(mobilePage, '.server-workspace-row', 'mobile server inventory row');
     await assertMobileServerOpsLayout(mobilePage);
     await mobilePage.locator('.module-section .section-header .tool-button.primary').first().click();
