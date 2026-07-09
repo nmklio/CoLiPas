@@ -4660,7 +4660,7 @@ main {
 .server-triage-cards {
   min-width: 0;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -9555,6 +9555,99 @@ td span,
   gap: 12px;
 }
 
+.ops-action-steps {
+  min-width: 0;
+  border: 1px solid rgba(15, 118, 110, 0.2);
+  border-radius: 14px;
+  padding: 7px;
+  background:
+    radial-gradient(circle at 8% 0%, rgba(45, 212, 191, 0.12), transparent 30%),
+    linear-gradient(135deg, #f8fdfc, #ffffff);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  box-shadow: 0 12px 28px rgba(18, 57, 55, 0.06);
+}
+
+.ops-action-step {
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 8px;
+  background: transparent;
+  color: var(--text);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  text-align: left;
+  transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.ops-action-step:hover,
+.ops-action-step:focus-visible {
+  border-color: rgba(15, 118, 110, 0.3);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 9px 18px rgba(18, 57, 55, 0.08);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.ops-action-step-icon {
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 10px;
+  background: #e8f6f3;
+  color: var(--brand-strong);
+  display: grid;
+  place-items: center;
+}
+
+.ops-action-step > span:last-child {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.ops-action-step strong,
+.ops-action-step small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ops-action-step strong {
+  color: #173b3d;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.ops-action-step small {
+  color: #5d7479;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.ops-action-step.pending .ops-action-step-icon {
+  border-color: rgba(100, 116, 139, 0.2);
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.ops-action-step.blocked .ops-action-step-icon {
+  border-color: rgba(194, 65, 53, 0.24);
+  background: #fff1ef;
+  color: #b42318;
+}
+
+.ops-action-step.warn .ops-action-step-icon {
+  border-color: rgba(217, 119, 6, 0.24);
+  background: #fff7e8;
+  color: #a16207;
+}
+
 .ops-draft-banner {
   border: 1px solid rgba(15, 118, 110, 0.2);
   border-radius: 10px;
@@ -9829,6 +9922,18 @@ td span,
   box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06);
 }
 
+.ops-decision-panel {
+  min-width: 0;
+  border: 1px solid rgba(124, 153, 161, 0.18);
+  border-radius: 14px;
+  padding: 10px;
+  background:
+    linear-gradient(135deg, rgba(248, 252, 252, 0.92), rgba(255, 255, 255, 0.98)),
+    repeating-linear-gradient(90deg, rgba(15, 118, 110, 0.035) 0 1px, transparent 1px 15px);
+  display: grid;
+  gap: 9px;
+}
+
 .ops-draft-risk-card.ready {
   border-color: #b8dfcb;
   background: linear-gradient(135deg, #f4fbf7, #ffffff);
@@ -9939,14 +10044,28 @@ td span,
 
 .ops-runner-footer {
   border: 1px solid #d1e0e4;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 11px 12px;
   background:
     linear-gradient(135deg, #eef8f6, #ffffff 56%);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
+}
+
+.ops-runner-footer-actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ops-runner-footer-actions:focus {
+  outline: 2px solid rgba(15, 118, 110, 0.3);
+  outline-offset: 3px;
 }
 
 .ops-runner-footer span,
@@ -9969,8 +10088,8 @@ td span,
 
 .ops-preflight-card {
   min-width: 0;
-  border: 1px solid #d9e6e8;
-  border-radius: 8px;
+  border: 1px solid #d5e4e5;
+  border-radius: 10px;
   padding: 11px 12px;
   background: #ffffff;
   display: grid;
@@ -10004,6 +10123,11 @@ td span,
 
 .ops-preflight-card strong {
   color: var(--text);
+}
+
+.ops-preflight-card:focus {
+  outline: 2px solid rgba(15, 118, 110, 0.3);
+  outline-offset: 3px;
 }
 
 .ops-preflight-card ul {
@@ -19228,9 +19352,15 @@ pre {
   }
 
   .ops-builder,
-  .ops-runner-footer {
+  .ops-runner-footer,
+  .ops-runner-footer-actions {
     min-width: 0;
     max-width: 100%;
+  }
+
+  .ops-runner-footer-actions {
+    display: grid;
+    grid-template-columns: 1fr;
   }
 
   .ops-runner-footer .tool-button {

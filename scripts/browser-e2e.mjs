@@ -2383,6 +2383,31 @@ async function assertOperationsResultTraceRoundTrip(targetPage) {
   await targetPage.waitForURL(/#operations$/, { timeout: 10000 });
   await targetPage.getByRole('button', { name: /new task/i }).click();
   await targetPage.locator('.ops-builder').waitFor({ timeout: 10000 });
+  const operationSteps = targetPage.locator('[data-ops-action-steps="true"]');
+  await operationSteps.waitFor({ timeout: 10000 });
+  const operationStepCount = await operationSteps.locator('[data-ops-action-step]').count();
+  if (operationStepCount !== 4) {
+    throw new Error(`Operations execution path should expose four steps, got ${operationStepCount}`);
+  }
+  const operationStepsText = await operationSteps.innerText();
+  if (!/Task type|Target scope|Risk preflight|Run task/i.test(operationStepsText)) {
+    throw new Error(`Operations execution path is incomplete: ${operationStepsText}`);
+  }
+  await operationSteps.locator('[data-ops-action-step="scope"]').click();
+  await targetPage.waitForFunction(
+    () => document.activeElement instanceof HTMLSelectElement
+      && document.activeElement.closest('.ops-form-grid') !== null,
+    null,
+    { timeout: 5000 },
+  );
+  await operationSteps.locator('[data-ops-action-step="preflight"]').click();
+  await targetPage.waitForFunction(
+    () => document.activeElement?.getAttribute('data-ops-draft-preflight-button') === 'true'
+      || document.activeElement?.getAttribute('data-ops-preflight-card') === 'true',
+    null,
+    { timeout: 5000 },
+  );
+  await targetPage.locator('[data-ops-decision-panel="true"]').waitFor({ timeout: 10000 });
 
   const tagScopeLabel = `ops-${Date.now().toString(36)}`;
   const tagScopeValue = tagScopeLabel.toLocaleLowerCase();
@@ -2874,6 +2899,11 @@ async function assertMobileModuleLayoutSweep() {
     await mobilePage.locator('.ops-builder').waitFor({ timeout: 5000 });
     await assertElementHorizontallyWithinViewport(mobilePage, '.ops-builder', 'mobile operations builder');
     await assertSingleColumnStack(mobilePage, '.ops-type-grid', 'mobile operations task cards');
+    await assertElementHorizontallyWithinViewport(mobilePage, '[data-ops-action-steps="true"]', 'mobile operations execution path');
+    const mobileOperationsStepColumns = await mobilePage.locator('[data-ops-action-steps="true"]').evaluate((element) => getComputedStyle(element).gridTemplateColumns);
+    if (mobileOperationsStepColumns.split(' ').filter(Boolean).length !== 2) {
+      throw new Error(`Mobile operations execution path should use two columns, got ${mobileOperationsStepColumns}`);
+    }
     await mobilePage.locator('.ops-form-grid select').selectOption('tag');
     await mobilePage.locator('[data-ops-tag-scope="true"]').waitFor({ timeout: 5000 });
     await assertElementHorizontallyWithinViewport(mobilePage, '[data-ops-tag-scope="true"]', 'mobile operations tag scope');

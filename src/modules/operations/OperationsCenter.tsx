@@ -160,6 +160,15 @@ type Copy = {
   draftLocatorServers: string;
   draftLocatorCommand: string;
   draftLocatorPreflight: string;
+  workflowProgress: string;
+  workflowStepTask: string;
+  workflowStepScope: string;
+  workflowStepPreflight: string;
+  workflowStepExecute: string;
+  workflowStepReady: string;
+  workflowStepPending: string;
+  workflowStepBlocked: string;
+  workflowStepWarn: string;
   preflightFixTitle: string;
   preflightFixBlocked: string;
   preflightFixWarn: string;
@@ -261,6 +270,15 @@ const copyByLanguage: Record<string, Copy> = {
     draftLocatorServers: '选择服务器',
     draftLocatorCommand: '检查 SSH 命令',
     draftLocatorPreflight: '运行预检',
+    workflowProgress: '执行路径',
+    workflowStepTask: '任务类型',
+    workflowStepScope: '目标范围',
+    workflowStepPreflight: '风险预检',
+    workflowStepExecute: '执行任务',
+    workflowStepReady: '就绪',
+    workflowStepPending: '待配置',
+    workflowStepBlocked: '已阻断',
+    workflowStepWarn: '需复核',
     preflightFixTitle: '修复草稿建议',
     preflightFixBlocked: '预检发现 {count} 个阻断目标，建议先生成资产巡检草稿同步 SSH 状态。',
     preflightFixWarn: '预检要求确认高影响动作，建议生成确认草稿并保留目标上下文。',
@@ -355,6 +373,15 @@ const copyByLanguage: Record<string, Copy> = {
     draftLocatorServers: 'Select servers',
     draftLocatorCommand: 'Check SSH command',
     draftLocatorPreflight: 'Run preflight',
+    workflowProgress: 'Execution path',
+    workflowStepTask: 'Task type',
+    workflowStepScope: 'Target scope',
+    workflowStepPreflight: 'Risk preflight',
+    workflowStepExecute: 'Run task',
+    workflowStepReady: 'Ready',
+    workflowStepPending: 'Needs setup',
+    workflowStepBlocked: 'Blocked',
+    workflowStepWarn: 'Review',
     preflightFixTitle: 'Fix draft suggestion',
     preflightFixBlocked: 'Preflight found {count} blocked target(s). Create an asset sweep draft first to resync SSH state.',
     preflightFixWarn: 'Preflight requires confirmation for a high-impact action. Create a confirmation draft while keeping the target context.',
@@ -448,6 +475,15 @@ const copyByLanguage: Record<string, Copy> = {
     draftLocatorServers: 'サーバーを選択',
     draftLocatorCommand: 'SSH コマンドを確認',
     draftLocatorPreflight: 'プリフライト実行',
+    workflowProgress: '実行パス',
+    workflowStepTask: 'タスク種別',
+    workflowStepScope: '対象範囲',
+    workflowStepPreflight: 'リスク確認',
+    workflowStepExecute: '実行',
+    workflowStepReady: '準備完了',
+    workflowStepPending: '設定待ち',
+    workflowStepBlocked: 'ブロック中',
+    workflowStepWarn: '確認が必要',
     preflightFixTitle: '修正草案の提案',
     preflightFixBlocked: 'プリフライトで {count} 件のブロック対象を検出しました。先に資産巡回草案で SSH 状態を同期してください。',
     preflightFixWarn: '高影響操作の確認が必要です。対象コンテキストを保った確認草案を生成します。',
@@ -580,8 +616,11 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
   const targetScopeRef = useRef<HTMLSelectElement>(null);
   const tagScopeRef = useRef<HTMLSelectElement>(null);
   const serverPickerRef = useRef<HTMLDivElement>(null);
+  const taskTypeRef = useRef<HTMLDivElement>(null);
   const commandInputRef = useRef<HTMLTextAreaElement>(null);
   const preflightButtonRef = useRef<HTMLButtonElement>(null);
+  const runnerActionsRef = useRef<HTMLDivElement>(null);
+  const preflightCardRef = useRef<HTMLDivElement>(null);
   const operationsReleaseFocusActive = releaseFocusAnchor === 'operations-builder';
 
   const taskMeta = useMemo(() => buildTaskMeta(language), [language]);
@@ -648,6 +687,47 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
     () => buildPreflightAdvisorEntries(preflightHistory),
     [preflightHistory],
   );
+  const operationWorkflowSteps = useMemo(() => {
+    const preflightStepTone = preflight ? preflightTone(preflight) : 'pending';
+    const scopeStepTone = previewCount > 0 ? 'ready' : 'blocked';
+
+    return [
+      {
+        id: 'task' as const,
+        icon: Workflow,
+        label: copy.workflowStepTask,
+        status: copy.workflowStepReady,
+        tone: 'ready' as const,
+      },
+      {
+        id: 'scope' as const,
+        icon: Server,
+        label: copy.workflowStepScope,
+        status: previewCount > 0 ? `${previewCount} ${t('common.servers')}` : copy.workflowStepBlocked,
+        tone: scopeStepTone,
+      },
+      {
+        id: 'preflight' as const,
+        icon: ShieldCheck,
+        label: copy.workflowStepPreflight,
+        status: preflight
+          ? preflightStatusText(preflight, preflightCopy)
+          : copy.workflowStepPending,
+        tone: preflightStepTone,
+      },
+      {
+        id: 'execute' as const,
+        icon: PlayCircle,
+        label: copy.workflowStepExecute,
+        status: preflight?.ok
+          ? preflightStepTone === 'warn'
+            ? copy.workflowStepWarn
+            : copy.workflowStepReady
+          : copy.workflowStepPending,
+        tone: preflight?.ok ? preflightStepTone : 'pending',
+      },
+    ];
+  }, [copy, preflight, preflightCopy, previewCount, t]);
 
   useEffect(() => {
     if (sshRequiredTask && targetMode === 'allServers') {
@@ -835,34 +915,52 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
     ));
   }
 
-  function focusOperationLocator(target: DraftRiskFocusTarget) {
-    const focusElement = (element: HTMLElement | null) => {
-      if (!element) {
-        return;
-      }
-      element.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      element.focus({ preventScroll: true });
-    };
+  function focusOperationElement(element: HTMLElement | null) {
+    if (!element) {
+      return;
+    }
+    element.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    element.focus({ preventScroll: true });
+  }
 
+  function focusOperationLocator(target: DraftRiskFocusTarget) {
     if (target === 'scope') {
-      focusElement(targetScopeRef.current);
+      focusOperationElement(targetScopeRef.current);
       return;
     }
     if (target === 'servers') {
       if (targetMode === 'tag') {
-        window.setTimeout(() => focusElement(tagScopeRef.current ?? targetScopeRef.current), 0);
+        window.setTimeout(() => focusOperationElement(tagScopeRef.current ?? targetScopeRef.current), 0);
         return;
       }
       setTargetMode('selected');
-      window.setTimeout(() => focusElement(serverPickerRef.current ?? targetScopeRef.current), 0);
+      window.setTimeout(() => focusOperationElement(serverPickerRef.current ?? targetScopeRef.current), 0);
       return;
     }
     if (target === 'command') {
       setTaskType('sshCommand');
-      window.setTimeout(() => focusElement(commandInputRef.current), 0);
+      window.setTimeout(() => focusOperationElement(commandInputRef.current), 0);
       return;
     }
-    focusElement(preflightButtonRef.current);
+    focusOperationElement(preflightButtonRef.current);
+  }
+
+  function focusOperationWorkflowStep(step: OperationWorkflowStepId) {
+    if (step === 'task') {
+      focusOperationElement(taskTypeRef.current);
+      return;
+    }
+    if (step === 'scope') {
+      focusOperationElement(targetScopeRef.current);
+      return;
+    }
+    if (step === 'preflight') {
+      focusOperationElement(preflightButtonRef.current?.disabled
+        ? preflightCardRef.current
+        : preflightButtonRef.current);
+      return;
+    }
+    focusOperationElement(runnerActionsRef.current);
   }
 
   function applyFixDraftObject(fixDraft: PreflightFixDraft) {
@@ -987,7 +1085,29 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
                 </div>
               )}
 
-              <div className="ops-type-grid" role="group" aria-label={t('ops.workflow')}>
+              <nav className="ops-action-steps" data-ops-action-steps="true" aria-label={copy.workflowProgress}>
+                {operationWorkflowSteps.map((step) => {
+                  const Icon = step.icon;
+                  return (
+                    <button
+                      key={step.id}
+                      type="button"
+                      className={`ops-action-step ${step.tone}`}
+                      data-ops-action-step={step.id}
+                      aria-label={`${step.label}: ${step.status}`}
+                      onClick={() => focusOperationWorkflowStep(step.id)}
+                    >
+                      <span className="ops-action-step-icon"><Icon size={16} /></span>
+                      <span>
+                        <strong>{step.label}</strong>
+                        <small>{step.status}</small>
+                      </span>
+                    </button>
+                  );
+                })}
+              </nav>
+
+              <div className="ops-type-grid" ref={taskTypeRef} role="group" aria-label={t('ops.workflow')} tabIndex={-1}>
                 {taskIds.map((id) => {
                   const meta = taskMeta[id];
                   const Icon = meta.icon;
@@ -1116,44 +1236,45 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
                 </div>
               )}
 
-              <div className={`ops-draft-risk-card ${draftRiskSummary.tone}`} data-ops-draft-risk-summary="true">
-                <div className="ops-draft-risk-heading">
-                  <span>{draftRiskSummary.tone === 'ready' ? <ShieldCheck size={16} /> : <AlertTriangle size={16} />} {copy.draftRiskTitle}</span>
-                  <strong>{draftRiskSummary.message}</strong>
+              <div className="ops-decision-panel" data-ops-decision-panel="true">
+                <div className={`ops-draft-risk-card ${draftRiskSummary.tone}`} data-ops-draft-risk-summary="true">
+                  <div className="ops-draft-risk-heading">
+                    <span>{draftRiskSummary.tone === 'ready' ? <ShieldCheck size={16} /> : <AlertTriangle size={16} />} {copy.draftRiskTitle}</span>
+                    <strong>{draftRiskSummary.message}</strong>
+                  </div>
+                  <div className="ops-draft-risk-grid">
+                    <div>
+                      <small>{copy.draftRiskTask}</small>
+                      <strong>{draftRiskSummary.taskLabel}</strong>
+                    </div>
+                    <div>
+                      <small>{copy.draftRiskTargetMode}</small>
+                      <strong>{draftRiskSummary.targetModeLabel}</strong>
+                    </div>
+                    <div>
+                      <small>{copy.draftRiskTargets}</small>
+                      <strong>{previewCount}</strong>
+                    </div>
+                    <div>
+                      <small>{copy.draftRiskCommand}</small>
+                      <strong>{draftRiskSummary.commandLabel}</strong>
+                    </div>
+                  </div>
+                  {draftRiskSummary.actions.length > 0 && (
+                    <div className="ops-draft-locator-actions" data-ops-draft-locator-actions="true">
+                      {draftRiskSummary.actions.map((action) => (
+                        <button
+                          key={`${action.target}-${action.label}`}
+                          type="button"
+                          data-ops-draft-locator-action={action.target}
+                          onClick={() => focusOperationLocator(action.target)}
+                        >
+                          {action.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <div className="ops-draft-risk-grid">
-                  <div>
-                    <small>{copy.draftRiskTask}</small>
-                    <strong>{draftRiskSummary.taskLabel}</strong>
-                  </div>
-                  <div>
-                    <small>{copy.draftRiskTargetMode}</small>
-                    <strong>{draftRiskSummary.targetModeLabel}</strong>
-                  </div>
-                  <div>
-                    <small>{copy.draftRiskTargets}</small>
-                    <strong>{previewCount}</strong>
-                  </div>
-                  <div>
-                    <small>{copy.draftRiskCommand}</small>
-                    <strong>{draftRiskSummary.commandLabel}</strong>
-                  </div>
-                </div>
-                {draftRiskSummary.actions.length > 0 && (
-                  <div className="ops-draft-locator-actions" data-ops-draft-locator-actions="true">
-                    {draftRiskSummary.actions.map((action) => (
-                      <button
-                        key={`${action.target}-${action.label}`}
-                        type="button"
-                        data-ops-draft-locator-action={action.target}
-                        onClick={() => focusOperationLocator(action.target)}
-                      >
-                        {action.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
 
                 <div className="ops-runner-footer">
                   <div>
@@ -1161,90 +1282,98 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
                     <strong>{previewCount} {t('common.servers')}</strong>
                     <small>{copy.preflightOnlyHint}</small>
                   </div>
-                  <button
-                    type="button"
-                    className="tool-button"
-                    ref={preflightButtonRef}
-                    data-ops-draft-preflight-button="true"
-                    disabled={running || preflighting || previewCount === 0}
-                    onClick={executePreflightOnly}
-                  >
-                    <ShieldCheck size={16} />
-                    {preflighting ? preflightCopy.title : copy.runPreflight}
-                  </button>
-                  <button type="button" className="tool-button primary" disabled={running || preflighting || previewCount === 0} onClick={runTask}>
-                    <PlayCircle size={16} />
-                    {running ? copy.runningTask : preflighting ? preflightCopy.title : copy.run}
-                </button>
-              </div>
-
-              <div className={preflight ? `ops-preflight-card ${preflightTone(preflight)}` : 'ops-preflight-card'}>
-                <span><ShieldCheck size={15} /> {preflightCopy.title}</span>
-                <strong>{preflight ? preflightStatusText(preflight, preflightCopy) : preflightCopy.unavailable}</strong>
-                <small>
-                  {preflight
-                    ? formatPreflightSummaryLine(preflight, preflightCopy, copy.preview, previewCount)
-                    : preflightCopy.unavailable}
-                </small>
-                {preflight && preflight.issues.length > 0 && (
-                  <ul>
-                    {preflight.issues.map((issue) => (
-                      <li key={`${issue.code}-${issue.severity}`}>{formatPreflightIssueMessage(issue, preflightCopy, preflight.targetMode)}</li>
-                    ))}
-                  </ul>
-                )}
-                {preflight && (
-                  <div className="ops-preflight-plan" aria-label={preflightCopy.planTitle}>
-                    <span>{preflightCopy.planTitle}</span>
-                    <strong>{preflight.plan.title}</strong>
-                    <p>{formatPreflightPlanTargetSummary(preflight, previewCount)} / {preflight.plan.riskSummary}</p>
-                    <p>{preflight.plan.impact}</p>
-                    {preflight.maintenance.required && (
-                      <p className={`ops-preflight-maintenance ${preflight.maintenance.status}`} data-ops-maintenance-preflight="true">
-                        <CalendarClock size={13} />
-                        {formatMaintenancePreflightStatus(preflight.maintenance, language)}
-                      </p>
-                    )}
-                    {preflight.plan.commandPreview && (
-                      <code>{preflightCopy.commandPreview}: {preflight.plan.commandPreview}</code>
-                    )}
-                  </div>
-                )}
-                {preflight && preflight.targets.length > 0 && (
-                  <div className="ops-preflight-targets" aria-label={preflightCopy.detailTitle}>
-                    <span>{preflightCopy.detailTitle}</span>
-                    {preflight.targets.slice(0, 8).map((target) => (
-                      <div key={target.id} className={target.runnable ? 'ops-preflight-target runnable' : 'ops-preflight-target blocked'}>
-                        <div>
-                          <strong>{target.name}</strong>
-                          <small>{providerName(target.provider)} / {regionName(target.region)} / {statusLabel(target.status, language)}</small>
-                        </div>
-                        <em>{target.runnable ? preflightCopy.runnable : preflightCopy.blockedTarget}</em>
-                        {target.issues.length > 0 && (
-                          <p>{target.issues.map((issue) => formatPreflightIssueMessage(issue, preflightCopy, preflight.targetMode)).join(' / ')}</p>
-                        )}
-                      </div>
-                    ))}
-                    {preflight.targetsTruncated && (
-                      <div className="ops-preflight-truncated">
-                        {formatPreflightTruncation(preflight, language)}
-                      </div>
-                    )}
-                  </div>
-                )}
-                {preflightFixDraft && (
-                  <div className="ops-preflight-remediation" data-ops-preflight-remediation="true">
-                    <div>
-                      <span><Workflow size={15} /> {copy.preflightFixTitle}</span>
-                      <strong>{preflightFixDraft.title}</strong>
-                      <p>{preflightFixDraft.detail}</p>
-                    </div>
-                    <button type="button" className="tool-button" data-ops-preflight-remediation-action="true" onClick={applyPreflightFixDraft}>
-                      <Workflow size={16} />
-                      {preflightFixDraft.actionLabel}
+                  <div className="ops-runner-footer-actions" ref={runnerActionsRef} tabIndex={-1}>
+                    <button
+                      type="button"
+                      className="tool-button"
+                      ref={preflightButtonRef}
+                      data-ops-draft-preflight-button="true"
+                      disabled={running || preflighting || previewCount === 0}
+                      onClick={executePreflightOnly}
+                    >
+                      <ShieldCheck size={16} />
+                      {preflighting ? preflightCopy.title : copy.runPreflight}
+                    </button>
+                    <button type="button" className="tool-button primary" disabled={running || preflighting || previewCount === 0} onClick={runTask}>
+                      <PlayCircle size={16} />
+                      {running ? copy.runningTask : preflighting ? preflightCopy.title : copy.run}
                     </button>
                   </div>
-                )}
+                </div>
+
+                <div
+                  className={preflight ? `ops-preflight-card ${preflightTone(preflight)}` : 'ops-preflight-card'}
+                  data-ops-preflight-card="true"
+                  ref={preflightCardRef}
+                  tabIndex={-1}
+                >
+                  <span><ShieldCheck size={15} /> {preflightCopy.title}</span>
+                  <strong>{preflight ? preflightStatusText(preflight, preflightCopy) : preflightCopy.unavailable}</strong>
+                  <small>
+                    {preflight
+                      ? formatPreflightSummaryLine(preflight, preflightCopy, copy.preview, previewCount)
+                      : preflightCopy.unavailable}
+                  </small>
+                  {preflight && preflight.issues.length > 0 && (
+                    <ul>
+                      {preflight.issues.map((issue) => (
+                        <li key={`${issue.code}-${issue.severity}`}>{formatPreflightIssueMessage(issue, preflightCopy, preflight.targetMode)}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {preflight && (
+                    <div className="ops-preflight-plan" aria-label={preflightCopy.planTitle}>
+                      <span>{preflightCopy.planTitle}</span>
+                      <strong>{preflight.plan.title}</strong>
+                      <p>{formatPreflightPlanTargetSummary(preflight, previewCount)} / {preflight.plan.riskSummary}</p>
+                      <p>{preflight.plan.impact}</p>
+                      {preflight.maintenance.required && (
+                        <p className={`ops-preflight-maintenance ${preflight.maintenance.status}`} data-ops-maintenance-preflight="true">
+                          <CalendarClock size={13} />
+                          {formatMaintenancePreflightStatus(preflight.maintenance, language)}
+                        </p>
+                      )}
+                      {preflight.plan.commandPreview && (
+                        <code>{preflightCopy.commandPreview}: {preflight.plan.commandPreview}</code>
+                      )}
+                    </div>
+                  )}
+                  {preflight && preflight.targets.length > 0 && (
+                    <div className="ops-preflight-targets" aria-label={preflightCopy.detailTitle}>
+                      <span>{preflightCopy.detailTitle}</span>
+                      {preflight.targets.slice(0, 8).map((target) => (
+                        <div key={target.id} className={target.runnable ? 'ops-preflight-target runnable' : 'ops-preflight-target blocked'}>
+                          <div>
+                            <strong>{target.name}</strong>
+                            <small>{providerName(target.provider)} / {regionName(target.region)} / {statusLabel(target.status, language)}</small>
+                          </div>
+                          <em>{target.runnable ? preflightCopy.runnable : preflightCopy.blockedTarget}</em>
+                          {target.issues.length > 0 && (
+                            <p>{target.issues.map((issue) => formatPreflightIssueMessage(issue, preflightCopy, preflight.targetMode)).join(' / ')}</p>
+                          )}
+                        </div>
+                      ))}
+                      {preflight.targetsTruncated && (
+                        <div className="ops-preflight-truncated">
+                          {formatPreflightTruncation(preflight, language)}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {preflightFixDraft && (
+                    <div className="ops-preflight-remediation" data-ops-preflight-remediation="true">
+                      <div>
+                        <span><Workflow size={15} /> {copy.preflightFixTitle}</span>
+                        <strong>{preflightFixDraft.title}</strong>
+                        <p>{preflightFixDraft.detail}</p>
+                      </div>
+                      <button type="button" className="tool-button" data-ops-preflight-remediation-action="true" onClick={applyPreflightFixDraft}>
+                        <Workflow size={16} />
+                        {preflightFixDraft.actionLabel}
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -1604,6 +1733,7 @@ function buildPreflightFixDraft({
 
 type DraftRiskTone = 'ready' | 'warn' | 'blocked';
 type DraftRiskFocusTarget = 'scope' | 'servers' | 'command' | 'preflight';
+type OperationWorkflowStepId = 'task' | 'scope' | 'preflight' | 'execute';
 
 interface DraftRiskAction {
   label: string;

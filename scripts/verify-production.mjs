@@ -226,7 +226,7 @@ function writeFailureDiagnostics(error) {
   console.error(`verify-production diagnostic:\n${JSON.stringify(diagnostic, null, 2)}`);
 }
 
-try {
+async function runVerificationSuite() {
   server = startServer();
   await waitForHealth();
   await run(process.execPath, ['scripts/smoke.mjs'], {
@@ -274,6 +274,48 @@ try {
   });
   await assertLoginRejected('NextPassword123', 'old admin password was rejected after reset');
   await assertLoginAccepted('RecoveredPassword123', 'reset admin password accepted by login API');
+}
+
+async function runWithTransientServerRetry() {
+  const maxAttempts = 2;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    resetVerificationAttempt();
+    try {
+      await runVerificationSuite();
+      return;
+    } catch (error) {
+      const canRetry = attempt + 1 < maxAttempts && isTransientServerExit(error);
+      await stopServer(server);
+      if (!canRetry) {
+        throw error;
+      }
+
+      console.warn(
+        `Application server exited with transient Windows Node code ${transientWindowsNodeExitCode}; restarting the isolated grey test once.`,
+      );
+      server = undefined;
+      resetVerifyDataDir();
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }
+}
+
+function resetVerificationAttempt() {
+  verificationSteps.splice(0, verificationSteps.length);
+  serverLog.stdout = '';
+  serverLog.stderr = '';
+  currentStep = 'initializing';
+}
+
+function isTransientServerExit(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return server?.exitCode === transientWindowsNodeExitCode
+    || message.includes(`exit code ${transientWindowsNodeExitCode}`);
+}
+
+try {
+  await runWithTransientServerRetry();
 } catch (error) {
   keepVerifyDataOnFailure = true;
   writeFailureDiagnostics(error);
