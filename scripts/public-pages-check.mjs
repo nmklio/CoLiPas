@@ -175,11 +175,14 @@ function buildAdminCheck() {
       await page.locator('[data-login-health-strip="true"]').waitFor({ timeout: 15000 });
       await expectText(page.locator('h1').first(), /CoLiPas|管理后台|console|安全/i, 'admin login h1');
       await expectLink(page, /^GitHub$/i, 'https://github.com/nmklio/CoLiPas');
-      await expectText(page.locator('[data-login-health-strip="true"]'), /Deployment status|上线状态|デプロイ状態|Service|服务|サービス|Database|数据库|データベース|Release|发布版本|リリース/i, 'admin login deployment health strip');
+      await expectText(page.locator('[data-login-health-strip="true"]'), /Deployment status|上线状态|デプロイ状態|Service|服务|サービス|Access protection|访问保护|アクセス保護|Last check|最近检查|最終確認/i, 'admin login public status strip');
       await expectLocatorCount(page.locator('[data-login-health-card]'), 3, 'admin login health cards');
       const healthText = await page.locator('[data-login-health-strip="true"]').innerText();
       if (/\b(?:\d{1,3}\.){3}\d{1,3}\b|sk-[A-Za-z0-9_-]{12,}|BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY|password=|passphrase=/i.test(healthText)) {
         throw new Error('admin login health strip leaked a raw IP address or secret');
+      }
+      if (/\bcolipas\.sqlite\b|primary-systemd|secondary-docker|\b(?:systemd|docker)\b|\b[a-f0-9]{7,12}\b/i.test(healthText)) {
+        throw new Error('admin login public status strip leaked runtime or release internals');
       }
       const usernameValue = await page.locator('input[autocomplete="username"]').inputValue();
       if (usernameValue.trim()) {

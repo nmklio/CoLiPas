@@ -351,6 +351,7 @@ export function DocsPage({ onLogin }: DocsPageProps) {
                 <p><ShieldCheck size={16} /> 使用强随机 SESSION_SECRET 和 CREDENTIAL_ENCRYPTION_KEY。</p>
                 <p><ShieldCheck size={16} /> 配置 HTTPS、反向代理和防火墙。</p>
                 <p><ShieldCheck size={16} /> 限制 CUSTOM_API_ALLOWED_HOSTS，避免代理被滥用。</p>
+                <p><ShieldCheck size={16} /> 登录页只展示公开服务状态；数据库、部署目标和发布提交仅在登录后的审计工作区查看。</p>
                 <p><ShieldCheck size={16} /> 备份 .data/colipas.sqlite，不要提交 .env 或 .data。</p>
               </div>
             </div>

@@ -233,6 +233,7 @@ The reset script only updates the `admin-account` row. It does not delete server
 - The custom API proxy blocks localhost, private IPv4 ranges, link-local ranges, multicast ranges, unsafe headers, and redirect-following.
 - SSH command audit summaries are redacted and bounded.
 - Release verification, diagnostics export, and audit reports are sanitized before display.
+- The public login screen shows only service availability, access protection, and the latest check time; database, deployment target, and release identifiers remain in the authenticated audit workspace.
 
 Before internet exposure, replace all default secrets, restrict `CORS_ORIGIN`, put the service behind HTTPS, and limit SSH access to the minimum required hosts.
 

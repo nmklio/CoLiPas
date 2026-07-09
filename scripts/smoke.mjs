@@ -3863,12 +3863,12 @@ function assertAccountUiGuards() {
     "fetch('/api/health'",
     'data-login-health-strip="true"',
     'data-login-health-card={card.id}',
-    'sanitizeLoginCommit',
     'login.healthTitle',
-    'login.healthRelease',
+    'login.healthAccess',
+    'login.healthCheck',
     '.login-health-strip',
     '.login-health-card',
-    'admin login deployment health strip',
+    'admin login public status strip',
   ];
   const loginHealthSource = `${loginSource}\n${i18nSource}\n${globalCss}\n${publicPagesCheckSource}`;
   const missingLoginHealth = loginHealthFragments.filter((fragment) => !loginHealthSource.includes(fragment));

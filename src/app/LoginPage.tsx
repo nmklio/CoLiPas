@@ -11,25 +11,11 @@ interface LoginPageProps {
 
 interface LoginHealthState {
   status: 'loading' | 'ok' | 'degraded';
-  nodeEnv: string;
-  database: string;
-  deployment: string;
-  commit: string;
-  checkedAt: string;
+  checkedAt: string | null;
 }
 
 interface HealthApiResponse {
   status?: string;
-  nodeEnv?: string;
-  database?: {
-    driver?: string;
-    name?: string;
-  };
-  release?: {
-    targetName?: string;
-    deploymentMode?: string;
-    gitCommit?: string;
-  };
   time?: string;
 }
 
@@ -71,19 +57,19 @@ export function LoginPage({ loading, error, onLogin }: LoginPageProps) {
       id: 'service',
       label: t('login.healthService'),
       value: healthState.status === 'loading' ? t('login.healthChecking') : (healthState.status === 'ok' ? t('login.healthReady') : t('login.healthLimited')),
-      detail: healthState.nodeEnv || t('common.none'),
+      detail: t('login.healthServiceDetail'),
     },
     {
-      id: 'database',
-      label: t('login.healthDatabase'),
-      value: healthState.database,
-      detail: healthState.checkedAt,
+      id: 'access',
+      label: t('login.healthAccess'),
+      value: t('login.healthAccessReady'),
+      detail: t('login.healthAccessDetail'),
     },
     {
-      id: 'release',
-      label: t('login.healthRelease'),
-      value: healthState.commit,
-      detail: healthState.deployment,
+      id: 'check',
+      label: t('login.healthCheck'),
+      value: healthState.checkedAt ?? t('login.healthChecking'),
+      detail: t('login.healthCheckDetail'),
     },
   ]), [healthState, t]);
 
@@ -213,18 +199,8 @@ export function LoginPage({ loading, error, onLogin }: LoginPageProps) {
 
 
 function buildLoginHealthFromPayload(payload: HealthApiResponse): LoginHealthState {
-  const databaseName = sanitizeLoginHealthLabel(payload.database?.name, 'sqlite');
-  const databaseDriver = sanitizeLoginHealthLabel(payload.database?.driver, 'db');
-  const deploymentMode = sanitizeLoginHealthLabel(payload.release?.deploymentMode, 'node');
-  const targetName = sanitizeLoginHealthLabel(payload.release?.targetName, 'local');
-  const commit = sanitizeLoginCommit(payload.release?.gitCommit);
-
   return {
     status: payload.status === 'ok' ? 'ok' : 'degraded',
-    nodeEnv: sanitizeLoginHealthLabel(payload.nodeEnv, 'runtime'),
-    database: `${databaseDriver} / ${databaseName}`,
-    deployment: `${deploymentMode} / ${targetName}`,
-    commit,
     checkedAt: formatLoginHealthTime(payload.time),
   };
 }
@@ -232,37 +208,17 @@ function buildLoginHealthFromPayload(payload: HealthApiResponse): LoginHealthSta
 function buildLoginHealthFallback(status: LoginHealthState['status']): LoginHealthState {
   return {
     status,
-    nodeEnv: 'runtime',
-    database: 'sqlite / pending',
-    deployment: 'node / local',
-    commit: 'pending',
-    checkedAt: 'pending',
+    checkedAt: null,
   };
-}
-
-function sanitizeLoginHealthLabel(value: unknown, fallback: string) {
-  if (typeof value !== 'string') {
-    return fallback;
-  }
-  const safe = value.replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 32);
-  return safe || fallback;
-}
-
-function sanitizeLoginCommit(value: unknown) {
-  if (typeof value !== 'string') {
-    return 'local';
-  }
-  const safe = value.trim().match(/^[a-f0-9]{7,12}$/i)?.[0];
-  return safe || 'local';
 }
 
 function formatLoginHealthTime(value: unknown) {
   if (typeof value !== 'string') {
-    return 'pending';
+    return null;
   }
   const time = new Date(value);
   if (Number.isNaN(time.getTime())) {
-    return 'pending';
+    return null;
   }
   return time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
