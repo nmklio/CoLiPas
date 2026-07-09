@@ -344,6 +344,47 @@ async function assertReleaseEvidenceBrief(targetPage) {
   await targetPage.getByRole('button', { name: /copy cockpit/i }).waitFor({ timeout: 5000 });
   await targetPage.getByRole('button', { name: /copy handoff pack/i }).waitFor({ timeout: 5000 });
   await targetPage.getByRole('button', { name: /copy timeline/i }).waitFor({ timeout: 5000 });
+  const evidenceSharePanel = targetPage.locator('[data-release-evidence-share="true"]');
+  await evidenceSharePanel.waitFor({ timeout: 5000 });
+  await targetPage.evaluate(() => {
+    window.__colipasCopiedEvidenceShareLink = '';
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (text) => {
+          window.__colipasCopiedEvidenceShareLink = text;
+        },
+      },
+    });
+  });
+  await evidenceSharePanel.locator('[data-release-evidence-share-create="true"]').click();
+  await evidenceSharePanel.locator('[data-release-evidence-share-link="true"]').waitFor({ timeout: 10000 });
+  await evidenceSharePanel.getByRole('button', { name: /copy link/i }).click();
+  await targetPage.waitForFunction(() => /^https?:\/\/.+\/share\/release\/[A-Za-z0-9_-]{40,96}$/.test(window.__colipasCopiedEvidenceShareLink ?? ''), null, { timeout: 5000 });
+  const copiedEvidenceShareLink = await targetPage.evaluate(() => window.__colipasCopiedEvidenceShareLink);
+  const publicEvidencePage = await createE2ePage({ viewport: { width: 1440, height: 980 } });
+  try {
+    await publicEvidencePage.goto(copiedEvidenceShareLink, { waitUntil: 'networkidle' });
+    await publicEvidencePage.locator('[data-public-release-evidence="true"]').waitFor({ timeout: 10000 });
+    const publicEvidenceText = await publicEvidencePage.locator('[data-public-release-evidence="true"]').innerText();
+    if (!/Release evidence snapshot|Readiness score|Share boundary|Check overview/i.test(publicEvidenceText)) {
+      throw new Error(`Public release evidence page is incomplete: ${publicEvidenceText}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(publicEvidenceText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(publicEvidenceText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(publicEvidenceText) || /abcdef123456/i.test(publicEvidenceText)) {
+      throw new Error('Public release evidence page rendered sensitive or deployment-identifying material');
+    }
+    await assertNoHorizontalOverflow(publicEvidencePage, 'public release evidence layout');
+    await captureVisualEvidence(publicEvidencePage, 'public-release-evidence', ['[data-public-release-evidence="true"]']);
+  } finally {
+    await publicEvidencePage.close();
+  }
+  await evidenceSharePanel.locator('[data-release-evidence-share-revoke="true"]').first().click();
+  await targetPage.waitForFunction(async () => {
+    const response = await fetch('/api/audit/readiness/shares');
+    const body = await response.json();
+    return Array.isArray(body.items) && body.items.some((item) => item.state === 'revoked');
+  }, { timeout: 10000 });
+  await assertElementHorizontallyWithinViewport(targetPage, '[data-release-evidence-share="true"]', 'desktop evidence share card');
   const releaseTimelineText = await targetPage.locator('[data-release-evidence-timeline="true"]').innerText();
   if (!/Release evidence timeline|Version publish|Release readiness|Operations preflight|Audit result|SSH field state/i.test(releaseTimelineText)) {
     throw new Error(`Release evidence timeline did not render the full evidence chain: ${releaseTimelineText}`);

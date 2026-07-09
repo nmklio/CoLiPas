@@ -67,7 +67,7 @@ The runtime is intentionally simple. One Node.js process serves the Express API 
 | AI operations | OpenAI-compatible base URL support, model discovery, streaming chat, multi-turn context, cached answers, force refresh, and server-side key storage. |
 | Workflow automation | Asset sync, health checks, SSH commands, reboot/shutdown flows, persisted maintenance windows with quick-duration scheduling, target preflight, and high-impact command confirmation. |
 | Custom API lab | Allowlisted backend proxy for provider API testing without exposing browser-side secrets or private network targets. |
-| Security audit | Auth events, blocked calls, SSH actions, remediation flows, relation cards, diagnostics export, and release readiness evidence. |
+| Security audit | Auth events, blocked calls, SSH actions, remediation flows, relation cards, diagnostics export, release readiness evidence, and revocable public-safe evidence snapshots for external review. |
 | Operator account | Login, session protection, profile/avatar update, password change, and Chinese / English / Japanese UI language switching. |
 
 ## Quick Start
@@ -233,6 +233,7 @@ The reset script only updates the `admin-account` row. It does not delete server
 - The custom API proxy blocks localhost, private IPv4 ranges, link-local ranges, multicast ranges, unsafe headers, and redirect-following.
 - SSH command audit summaries are redacted and bounded.
 - Release verification, diagnostics export, and audit reports are sanitized before display.
+- Operators can create short-lived, revocable release-evidence links. Every link contains a fixed aggregate snapshot only; raw server addresses, deployment targets, commit IDs, commands, credentials, audit details, and user data are excluded. Creation, viewing, and revocation are audited.
 - The public login screen shows only service availability, access protection, and the latest check time; database, deployment target, and release identifiers remain in the authenticated audit workspace.
 
 Before internet exposure, replace all default secrets, restrict `CORS_ORIGIN`, put the service behind HTTPS, and limit SSH access to the minimum required hosts.

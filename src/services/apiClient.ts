@@ -16,6 +16,8 @@ import {
   ReleaseReadinessReportResponse,
   ReleaseReadinessResponse,
   ReleaseReadinessSnapshotResponse,
+  ReleaseEvidenceShareCreateResponse,
+  ReleaseEvidenceShareListResponse,
   ReleaseSyncHealthResponse,
   ReleaseGatePolicy,
   ServerNode,
@@ -780,6 +782,48 @@ export async function fetchReleaseReadinessReport(fetcher: typeof fetch = fetch)
   }
 
   return (await response.json()) as ReleaseReadinessReportResponse;
+}
+
+export async function fetchReleaseEvidenceShares(fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/audit/readiness/shares');
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as ReleaseEvidenceShareListResponse;
+}
+
+export async function createReleaseEvidenceShare(
+  payload: { expiresInHours: 1 | 24 | 72 },
+  fetcher: typeof fetch = fetch,
+) {
+  const response = await fetcher('/api/audit/readiness/shares', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as ReleaseEvidenceShareCreateResponse;
+}
+
+export async function revokeReleaseEvidenceShare(shareId: string, fetcher: typeof fetch = fetch) {
+  const response = await fetcher(`/api/audit/readiness/shares/${encodeURIComponent(shareId)}`, {
+    method: 'DELETE',
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as {
+    ok: true;
+    share: ReleaseEvidenceShareListResponse['items'][number];
+  };
 }
 
 export async function fetchDiagnosticExport(fetcher: typeof fetch = fetch) {

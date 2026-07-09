@@ -21,9 +21,9 @@ import {
 import { getLocale, useI18n } from '../../i18n';
 import { OperationEvent } from '../../types';
 import type { OverviewPreflightSnapshot } from '../overview/MonitoringOverview';
-import { claimSshProductionProbeScheduleRun, connectServer, connectServerShellSocket, deleteServer, fetchDiagnosticExport, fetchReleaseReadiness, fetchReleaseReadinessReport, fetchReleaseSyncHealth, fetchServerShellStatus, recordReleaseReadinessSnapshot, recordSshProductionProbe, recordSshSupportTicketCopy, remediateSecurityRisk, updateReleaseGatePolicy, updateSshProductionProbeSchedule } from '../../services/apiClient';
+import { claimSshProductionProbeScheduleRun, connectServer, connectServerShellSocket, createReleaseEvidenceShare, deleteServer, fetchDiagnosticExport, fetchReleaseEvidenceShares, fetchReleaseReadiness, fetchReleaseReadinessReport, fetchReleaseSyncHealth, fetchServerShellStatus, recordReleaseReadinessSnapshot, recordSshProductionProbe, recordSshSupportTicketCopy, remediateSecurityRisk, revokeReleaseEvidenceShare, updateReleaseGatePolicy, updateSshProductionProbeSchedule } from '../../services/apiClient';
 import type { SecurityRemediationResponse } from '../../services/apiClient';
-import type { DiagnosticExportResponse, ReleaseDeploymentEvidence, ReleaseReadinessResponse, ReleaseSyncHealthResponse } from '../../types';
+import type { DiagnosticExportResponse, ReleaseDeploymentEvidence, ReleaseEvidenceShareAdmin, ReleaseReadinessResponse, ReleaseSyncHealthResponse } from '../../types';
 import {
   normalizeSshTerminalSupportSnapshot,
   normalizeSshTerminalSupportSnapshotHistory,
@@ -607,6 +607,34 @@ interface SshSupportBundleSummary {
   ticketText: string;
 }
 
+interface ReleaseEvidenceShareCopy {
+  title: string;
+  lead: string;
+  expiry: string;
+  expiryHours: (hours: number) => string;
+  create: string;
+  creating: string;
+  createFailed: string;
+  created: (hours: number) => string;
+  createdCopied: (hours: number) => string;
+  linkReady: string;
+  linkOneTime: string;
+  copyLink: string;
+  linkCopied: string;
+  listTitle: string;
+  state: (state: ReleaseEvidenceShareAdmin['state']) => string;
+  summary: (score: number, passed: number, total: number) => string;
+  meta: (createdAt: string, expiresAt: string, accessCount: number) => string;
+  revoke: string;
+  revoking: string;
+  revoked: string;
+  revokeFailed: string;
+  revokedAt: string;
+  expired: string;
+  empty: string;
+  note: string;
+}
+
 const sshLagReportHistoryStorageKey = 'colipas.sshLagReportHistory.v1';
 const sshLagReportHistoryVisibleLimit = 5;
 const sshBottleneckRadarHistoryStorageKey = 'colipas.sshBottleneckRadarHistory.v1';
@@ -625,6 +653,7 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
   const diagnosticCopy = diagnosticCopyByLanguage[language] ?? diagnosticCopyByLanguage.zh;
   const sshPerformanceCopy = sshPerformanceCopyByLanguage[language] ?? sshPerformanceCopyByLanguage.zh;
   const sshProductionProbeCopy = useMemo(() => getSshProductionProbeCopy(language), [language]);
+  const evidenceShareCopy = getReleaseEvidenceShareCopy(language);
   const locale = getLocale(language);
   const [config, setConfig] = useState<ConfigSummary | null>(null);
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
@@ -654,6 +683,12 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
   const [recordingSnapshot, setRecordingSnapshot] = useState(false);
   const [exportingReadinessReport, setExportingReadinessReport] = useState(false);
   const [exportingDiagnostic, setExportingDiagnostic] = useState(false);
+  const [evidenceShares, setEvidenceShares] = useState<ReleaseEvidenceShareAdmin[]>([]);
+  const [evidenceShareExpiry, setEvidenceShareExpiry] = useState<1 | 24 | 72>(24);
+  const [creatingEvidenceShare, setCreatingEvidenceShare] = useState(false);
+  const [revokingEvidenceShareId, setRevokingEvidenceShareId] = useState('');
+  const [latestEvidenceShareUrl, setLatestEvidenceShareUrl] = useState('');
+  const [latestEvidenceShareId, setLatestEvidenceShareId] = useState('');
   const [runningSshProductionProbe, setRunningSshProductionProbe] = useState(false);
   const [savingSshProductionProbeSchedule, setSavingSshProductionProbeSchedule] = useState(false);
   const [sshProductionProbeScheduleDraft, setSshProductionProbeScheduleDraft] = useState<SshProductionProbeScheduleDraft>({
@@ -1017,15 +1052,17 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
       const readinessPromise = fetchReleaseReadiness();
       const diagnosticPromise = fetchDiagnosticExport().catch(() => null);
       const releaseSyncPromise = fetchReleaseSyncHealth().catch(() => null);
+      const evidenceSharesPromise = fetchReleaseEvidenceShares().catch(() => ({ items: [] as ReleaseEvidenceShareAdmin[] }));
       if (!configResponse.ok || !auditResponse.ok) {
         throw new Error(copy.loadFailed);
       }
-      const [configBody, auditBody, readinessBody, diagnosticBody, releaseSyncBody] = await Promise.all([
+      const [configBody, auditBody, readinessBody, diagnosticBody, releaseSyncBody, evidenceSharesBody] = await Promise.all([
         configResponse.json(),
         auditResponse.json(),
         readinessPromise,
         diagnosticPromise,
         releaseSyncPromise,
+        evidenceSharesPromise,
       ]);
       if (!Array.isArray(auditBody.items)) {
         throw new Error(copy.loadFailed);
@@ -1035,6 +1072,7 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
       setReadiness(readinessBody);
       setDiagnosticBundle(diagnosticBody);
       setReleaseSyncHealth(releaseSyncBody);
+      setEvidenceShares(evidenceSharesBody.items);
       setLastRefreshedAt(new Date());
     } catch {
       setLoadError(copy.loadFailed);
@@ -1043,6 +1081,7 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
       setReadiness(null);
       setDiagnosticBundle(null);
       setReleaseSyncHealth(null);
+      setEvidenceShares([]);
     } finally {
       setLoading(false);
     }
@@ -1752,6 +1791,68 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
     }
   }
 
+  async function createEvidenceShare() {
+    if (!readiness) {
+      return;
+    }
+
+    setCreatingEvidenceShare(true);
+    setRemediationMessage('');
+    setRemediationError(false);
+    try {
+      const result = await createReleaseEvidenceShare({ expiresInHours: evidenceShareExpiry });
+      const url = new URL(result.sharePath, window.location.origin).toString();
+      setLatestEvidenceShareUrl(url);
+      setLatestEvidenceShareId(result.share.id);
+      setEvidenceShares((current) => [result.share, ...current.filter((item) => item.id !== result.share.id)]);
+      try {
+        await navigator.clipboard?.writeText(url);
+        setRemediationMessage(evidenceShareCopy.createdCopied(evidenceShareExpiry));
+      } catch {
+        setRemediationMessage(evidenceShareCopy.created(evidenceShareExpiry));
+      }
+    } catch (error) {
+      setRemediationMessage(error instanceof Error ? error.message : evidenceShareCopy.createFailed);
+      setRemediationError(true);
+    } finally {
+      setCreatingEvidenceShare(false);
+    }
+  }
+
+  async function copyLatestEvidenceShare() {
+    if (!latestEvidenceShareUrl) {
+      return;
+    }
+    try {
+      await navigator.clipboard?.writeText(latestEvidenceShareUrl);
+      setRemediationMessage(evidenceShareCopy.linkCopied);
+      setRemediationError(false);
+    } catch {
+      setRemediationMessage(latestEvidenceShareUrl);
+      setRemediationError(false);
+    }
+  }
+
+  async function revokeEvidenceShare(shareId: string) {
+    setRevokingEvidenceShareId(shareId);
+    setRemediationMessage('');
+    setRemediationError(false);
+    try {
+      const result = await revokeReleaseEvidenceShare(shareId);
+      setEvidenceShares((current) => current.map((item) => item.id === result.share.id ? result.share : item));
+      if (latestEvidenceShareId === shareId) {
+        setLatestEvidenceShareUrl('');
+        setLatestEvidenceShareId('');
+      }
+      setRemediationMessage(evidenceShareCopy.revoked);
+    } catch (error) {
+      setRemediationMessage(error instanceof Error ? error.message : evidenceShareCopy.revokeFailed);
+      setRemediationError(true);
+    } finally {
+      setRevokingEvidenceShareId('');
+    }
+  }
+
   async function exportDiagnosticBundle() {
     setExportingDiagnostic(true);
     setRemediationMessage('');
@@ -1866,6 +1967,79 @@ export function SecurityPanel({ events, opsPreflightSnapshot, onNavigate, onReme
             </button>
           </div>
         </div>
+      </article>
+
+      <article className="security-evidence-share" data-release-evidence-share="true" aria-labelledby="security-evidence-share-title">
+        <div className="security-evidence-share-heading">
+          <div>
+            <h3 id="security-evidence-share-title"><LockKeyhole size={18} /> {evidenceShareCopy.title}</h3>
+            <p>{evidenceShareCopy.lead}</p>
+          </div>
+          <div className="security-evidence-share-controls">
+            <label className="security-evidence-share-select">
+              {evidenceShareCopy.expiry}
+              <select
+                value={evidenceShareExpiry}
+                onChange={(event) => setEvidenceShareExpiry(Number(event.target.value) as 1 | 24 | 72)}
+                aria-label={evidenceShareCopy.expiry}
+              >
+                <option value={1}>{evidenceShareCopy.expiryHours(1)}</option>
+                <option value={24}>{evidenceShareCopy.expiryHours(24)}</option>
+                <option value={72}>{evidenceShareCopy.expiryHours(72)}</option>
+              </select>
+            </label>
+            <button type="button" className="tool-button primary" onClick={createEvidenceShare} disabled={creatingEvidenceShare || !readiness} data-release-evidence-share-create="true">
+              <LockKeyhole size={15} />
+              {creatingEvidenceShare ? evidenceShareCopy.creating : evidenceShareCopy.create}
+            </button>
+          </div>
+        </div>
+        {latestEvidenceShareUrl ? (
+          <div className="security-evidence-share-latest" data-release-evidence-share-link="true">
+            <div>
+              <strong>{evidenceShareCopy.linkReady}</strong>
+              <p>{evidenceShareCopy.linkOneTime}</p>
+            </div>
+            <button type="button" className="tool-button" onClick={copyLatestEvidenceShare}>
+              <ClipboardCheck size={15} />
+              {evidenceShareCopy.copyLink}
+            </button>
+          </div>
+        ) : null}
+        {evidenceShares.length > 0 ? (
+          <div className="security-evidence-share-list" aria-label={evidenceShareCopy.listTitle}>
+            {evidenceShares.slice(0, 8).map((share) => (
+              <article key={share.id} className={`security-evidence-share-item ${share.state}`} data-release-evidence-share-item={share.state}>
+                <div className="security-evidence-share-item-main">
+                  <span className="security-evidence-share-state">{evidenceShareCopy.state(share.state)}</span>
+                  <div>
+                    <strong>{evidenceShareCopy.summary(share.snapshot.score, share.snapshot.summary.passed, share.snapshot.summary.totalChecks)}</strong>
+                    <small>{evidenceShareCopy.meta(formatEvidenceShareTime(share.createdAt, locale), formatEvidenceShareTime(share.expiresAt, locale), share.accessCount)}</small>
+                  </div>
+                </div>
+                <div className="security-evidence-share-item-meta">
+                  {share.state === 'active' ? (
+                    <button
+                      type="button"
+                      className="tool-button"
+                      onClick={() => revokeEvidenceShare(share.id)}
+                      disabled={revokingEvidenceShareId === share.id}
+                      data-release-evidence-share-revoke="true"
+                    >
+                      <XCircle size={14} />
+                      {revokingEvidenceShareId === share.id ? evidenceShareCopy.revoking : evidenceShareCopy.revoke}
+                    </button>
+                  ) : (
+                    <small>{share.state === 'revoked' ? evidenceShareCopy.revokedAt : evidenceShareCopy.expired}</small>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <small className="security-evidence-share-note">{evidenceShareCopy.empty}</small>
+        )}
+        <small className="security-evidence-share-note">{evidenceShareCopy.note}</small>
       </article>
 
       {readiness && releaseGatePolicy && (
@@ -3836,6 +4010,102 @@ function formatAuditTime(value: string, locale: string) {
     return value;
   }
   return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatEvidenceShareTime(value: string, locale: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function getReleaseEvidenceShareCopy(language: string): ReleaseEvidenceShareCopy {
+  if (language === 'en') {
+    return {
+      title: 'Shareable evidence snapshot',
+      lead: 'Create a revocable, read-only release summary for external review. It freezes only aggregate, sanitized evidence.',
+      expiry: 'Expiry',
+      expiryHours: (hours) => `${hours}h`,
+      create: 'Create secure link',
+      creating: 'Creating',
+      createFailed: 'Evidence share creation failed',
+      created: (hours) => `Secure evidence link created for ${hours}h.`,
+      createdCopied: (hours) => `Secure evidence link created for ${hours}h and copied.`,
+      linkReady: 'Secure review link is ready',
+      linkOneTime: 'For privacy, the raw link is only available in this browser immediately after creation.',
+      copyLink: 'Copy link',
+      linkCopied: 'Secure evidence link copied',
+      listTitle: 'Evidence share records',
+      state: (state) => ({ active: 'Active', expired: 'Expired', revoked: 'Revoked' })[state],
+      summary: (score, passed, total) => `Score ${score} · ${passed}/${total} checks passed`,
+      meta: (createdAt, expiresAt, accessCount) => `Created ${createdAt} · expires ${expiresAt} · viewed ${accessCount}×`,
+      revoke: 'Revoke',
+      revoking: 'Revoking',
+      revoked: 'Evidence share revoked',
+      revokeFailed: 'Evidence share revocation failed',
+      revokedAt: 'Revoked',
+      expired: 'Expired',
+      empty: 'No external evidence links have been created.',
+      note: 'Each link stores a fixed snapshot only. It excludes server addresses, deployment targets, commits, commands, credentials, audit details, and user data.',
+    };
+  }
+  if (language === 'ja') {
+    return {
+      title: '共有可能な証跡スナップショット',
+      lead: '外部レビュー向けに取り消し可能な閲覧専用リリース要約を作成します。固定されるのは集計済み・匿名化済みの証跡だけです。',
+      expiry: '有効期限',
+      expiryHours: (hours) => `${hours}時間`,
+      create: '安全なリンクを作成',
+      creating: '作成中',
+      createFailed: '証跡共有の作成に失敗しました',
+      created: (hours) => `${hours}時間有効の安全な証跡リンクを作成しました。`,
+      createdCopied: (hours) => `${hours}時間有効の安全な証跡リンクを作成し、コピーしました。`,
+      linkReady: '安全なレビューリンクを作成しました',
+      linkOneTime: 'プライバシー保護のため、元のリンクは作成直後にこのブラウザーでのみ表示されます。',
+      copyLink: 'リンクをコピー',
+      linkCopied: '安全な証跡リンクをコピーしました',
+      listTitle: '証跡共有の記録',
+      state: (state) => ({ active: '有効', expired: '期限切れ', revoked: '取り消し済み' })[state],
+      summary: (score, passed, total) => `スコア ${score} · ${passed}/${total} チェック合格`,
+      meta: (createdAt, expiresAt, accessCount) => `作成 ${createdAt} · 期限 ${expiresAt} · 閲覧 ${accessCount}回`,
+      revoke: '取り消す',
+      revoking: '取り消し中',
+      revoked: '証跡共有を取り消しました',
+      revokeFailed: '証跡共有の取り消しに失敗しました',
+      revokedAt: '取り消し済み',
+      expired: '期限切れ',
+      empty: '外部向け証跡リンクはまだ作成されていません。',
+      note: '各リンクには固定スナップショットのみ保存されます。サーバーアドレス、デプロイ先、コミット、コマンド、認証情報、監査詳細、ユーザーデータは除外されます。',
+    };
+  }
+  return {
+    title: '可分享证据快照',
+    lead: '为外部审阅创建可撤销、只读的上线摘要；只固化聚合后的脱敏证据。',
+    expiry: '有效期',
+    expiryHours: (hours) => `${hours} 小时`,
+    create: '创建安全链接',
+    creating: '创建中',
+    createFailed: '证据链接创建失败',
+    created: (hours) => `已创建 ${hours} 小时有效的安全证据链接。`,
+    createdCopied: (hours) => `已创建 ${hours} 小时有效的安全证据链接并复制。`,
+    linkReady: '安全审阅链接已生成',
+    linkOneTime: '为保护隐私，原始链接只会在创建后立即于当前浏览器中显示。',
+    copyLink: '复制链接',
+    linkCopied: '安全证据链接已复制',
+    listTitle: '证据分享记录',
+    state: (state) => ({ active: '有效', expired: '已过期', revoked: '已撤销' })[state],
+    summary: (score, passed, total) => `评分 ${score} · ${passed}/${total} 项检查通过`,
+    meta: (createdAt, expiresAt, accessCount) => `创建于 ${createdAt} · 到期 ${expiresAt} · 已查看 ${accessCount} 次`,
+    revoke: '撤销',
+    revoking: '撤销中',
+    revoked: '证据分享已撤销',
+    revokeFailed: '证据分享撤销失败',
+    revokedAt: '已撤销',
+    expired: '已过期',
+    empty: '暂未创建对外证据链接。',
+    note: '每条链接只保存固定快照，不含服务器地址、部署目标、提交号、命令、凭据、审计详情或用户数据。',
+  };
 }
 
 function buildReleaseEvidenceBrief(input: {

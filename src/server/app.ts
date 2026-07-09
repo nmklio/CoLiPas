@@ -18,6 +18,7 @@ import { getDatabasePath } from './services/database.js';
 import { buildDiagnosticExport } from './services/diagnosticService.js';
 import { createMaintenanceWindow, deleteMaintenanceWindow, listMaintenanceWindows } from './services/maintenanceWindowService.js';
 import { createOperationTask, preflightOperationTask } from './services/operationsService.js';
+import { createReleaseEvidenceShare, listReleaseEvidenceShares, readPublicReleaseEvidenceShare, revokeReleaseEvidenceShare } from './services/releaseEvidenceShareService.js';
 import { buildReleaseReadiness, buildReleaseReadinessReport, getReleaseGatePolicy, recordReleaseReadinessSnapshot, updateReleaseGatePolicy } from './services/releaseReadinessService.js';
 import { checkReleaseSyncHealth } from './services/releaseSyncHealthService.js';
 import { buildReleaseVerification, isReleaseVerificationAuthorized, isReleaseVerificationEnabled } from './services/releaseVerificationService.js';
@@ -110,6 +111,15 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
     response.json(buildReleaseVerification(config));
   });
 
+  app.get('/api/public/release-evidence/:token', (request, response, next) => {
+    try {
+      response.setHeader('Cache-Control', 'no-store, private');
+      response.json(readPublicReleaseEvidenceShare(request.params.token));
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.post('/api/auth/login', (request, response, next) => {
     try {
       const session = login(request.body, request, response, config);
@@ -155,7 +165,12 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
   });
 
   app.use('/api', (request, _response, next) => {
-    if (request.path === '/health' || request.path === '/release/verify' || request.path.startsWith('/auth/')) {
+    if (
+      request.path === '/health'
+      || request.path === '/release/verify'
+      || request.path.startsWith('/auth/')
+      || request.path.startsWith('/public/release-evidence/')
+    ) {
       next();
       return;
     }
@@ -844,6 +859,28 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
 
   app.get('/api/audit/readiness/report', (_request, response) => {
     response.json(buildReleaseReadinessReport(config));
+  });
+
+  app.get('/api/audit/readiness/shares', (_request, response) => {
+    response.json(listReleaseEvidenceShares());
+  });
+
+  app.post('/api/audit/readiness/shares', (request, response, next) => {
+    try {
+      const session = requireSession(request, config);
+      response.status(201).json(createReleaseEvidenceShare(config, request.body, session.user.username));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.delete('/api/audit/readiness/shares/:shareId', (request, response, next) => {
+    try {
+      const session = requireSession(request, config);
+      response.json(revokeReleaseEvidenceShare(request.params.shareId, session.user.username));
+    } catch (error) {
+      next(error);
+    }
   });
 
   app.get('/api/audit/diagnostics/export', (_request, response) => {

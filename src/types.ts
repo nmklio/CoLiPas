@@ -323,6 +323,60 @@ export interface ReleaseReadinessReportResponse {
   markdown: string;
 }
 
+export type ReleaseEvidenceShareState = 'active' | 'expired' | 'revoked';
+
+export interface ReleaseEvidenceShareSummary {
+  totalChecks: number;
+  passed: number;
+  warnings: number;
+  failures: number;
+}
+
+export interface ReleaseEvidenceShareHighlight {
+  id: string;
+  label: string;
+  severity: ReleaseReadinessSeverity;
+  passed: boolean;
+}
+
+export interface PublicReleaseEvidenceShare {
+  version: 1;
+  sharedAt: string;
+  expiresAt: string;
+  score: number;
+  status: ReleaseReadinessStatus;
+  summary: ReleaseEvidenceShareSummary;
+  gate: {
+    status: ReleaseGatePolicyStatus;
+    allowedToRelease: boolean;
+  };
+  highlights: ReleaseEvidenceShareHighlight[];
+  nextBestAction: string;
+  disclosure: string;
+}
+
+export interface ReleaseEvidenceShareAdmin {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+  createdBy: string;
+  revokedAt: string | null;
+  accessedAt: string | null;
+  accessCount: number;
+  state: ReleaseEvidenceShareState;
+  snapshot: Pick<PublicReleaseEvidenceShare, 'score' | 'status' | 'summary'>;
+}
+
+export interface ReleaseEvidenceShareCreateResponse {
+  ok: true;
+  share: ReleaseEvidenceShareAdmin;
+  sharePath: string;
+}
+
+export interface ReleaseEvidenceShareListResponse {
+  items: ReleaseEvidenceShareAdmin[];
+}
+
 export interface DiagnosticExportResponse {
   generatedAt: string;
   filename: string;

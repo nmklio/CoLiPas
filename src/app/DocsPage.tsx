@@ -352,6 +352,7 @@ export function DocsPage({ onLogin }: DocsPageProps) {
                 <p><ShieldCheck size={16} /> 配置 HTTPS、反向代理和防火墙。</p>
                 <p><ShieldCheck size={16} /> 限制 CUSTOM_API_ALLOWED_HOSTS，避免代理被滥用。</p>
                 <p><ShieldCheck size={16} /> 登录页只展示公开服务状态；数据库、部署目标和发布提交仅在登录后的审计工作区查看。</p>
+                <p><ShieldCheck size={16} /> 对外审阅时，在安全工作区创建限时、可撤销的证据链接；链接只包含固定脱敏汇总，不含服务器地址、命令、凭据、审计详情或用户数据。</p>
                 <p><ShieldCheck size={16} /> 备份 .data/colipas.sqlite，不要提交 .env 或 .data。</p>
               </div>
             </div>

@@ -81,6 +81,10 @@ const unauthenticatedMaintenanceWindowsResponse = await fetch(`${baseUrl}/api/op
 if (unauthenticatedMaintenanceWindowsResponse.status !== 401) {
   throw new Error(`/api/operations/maintenance-windows expected 401 before login, got ${unauthenticatedMaintenanceWindowsResponse.status}`);
 }
+const unauthenticatedEvidenceSharesResponse = await fetch(`${baseUrl}/api/audit/readiness/shares`);
+if (unauthenticatedEvidenceSharesResponse.status !== 401) {
+  throw new Error(`/api/audit/readiness/shares expected 401 before login, got ${unauthenticatedEvidenceSharesResponse.status}`);
+}
 const unauthenticatedTagPreflightResponse = await fetch(`${baseUrl}/api/operations/tasks/preflight`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
@@ -3464,6 +3468,102 @@ if (
   throw new Error('/api/audit/readiness/report leaked sensitive material');
 }
 console.log('ok /api/audit/readiness/report exports sanitized Markdown evidence');
+
+const createEvidenceShareResponse = await fetch(`${baseUrl}/api/audit/readiness/shares`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ expiresInHours: 1 }),
+});
+if (createEvidenceShareResponse.status !== 201) {
+  throw new Error(`/api/audit/readiness/shares create returned HTTP ${createEvidenceShareResponse.status}`);
+}
+const createEvidenceShareBody = await createEvidenceShareResponse.json();
+const shareToken = typeof createEvidenceShareBody.sharePath === 'string'
+  ? createEvidenceShareBody.sharePath.replace(/^\/share\/release\//, '')
+  : '';
+if (
+  createEvidenceShareBody.ok !== true
+  || !/^release-share-[a-f0-9-]{36}$/.test(createEvidenceShareBody.share?.id ?? '')
+  || !/^[A-Za-z0-9_-]{40,96}$/.test(shareToken)
+  || createEvidenceShareBody.share?.state !== 'active'
+  || createEvidenceShareBody.share?.snapshot?.score !== readinessBody.score
+  || !Number.isInteger(createEvidenceShareBody.share?.snapshot?.summary?.totalChecks)
+) {
+  throw new Error('/api/audit/readiness/shares create returned incomplete share metadata');
+}
+const createEvidenceSharePayload = JSON.stringify(createEvidenceShareBody);
+if (
+  createEvidenceSharePayload.includes(sensitiveAuditSecret)
+  || createEvidenceSharePayload.includes(sensitiveSshSecret)
+  || createEvidenceSharePayload.includes(smokePrivateKeyMarker)
+  || createEvidenceSharePayload.includes(smokePrivateKeyPassphrase)
+  || createEvidenceSharePayload.includes('"tokenHash"')
+) {
+  throw new Error('/api/audit/readiness/shares create leaked protected material');
+}
+
+const publicEvidenceShareResponse = await fetch(`${baseUrl}/api/public/release-evidence/${shareToken}`);
+if (!publicEvidenceShareResponse.ok || publicEvidenceShareResponse.headers.get('cache-control') !== 'no-store, private') {
+  throw new Error(`/api/public/release-evidence/:token returned unsafe HTTP ${publicEvidenceShareResponse.status}`);
+}
+const publicEvidenceShareBody = await publicEvidenceShareResponse.json();
+const publicEvidenceSharePayload = JSON.stringify(publicEvidenceShareBody);
+if (
+  publicEvidenceShareBody.version !== 1
+  || publicEvidenceShareBody.score !== readinessBody.score
+  || publicEvidenceShareBody.summary?.totalChecks !== readinessBody.summary?.totalChecks
+  || !Array.isArray(publicEvidenceShareBody.highlights)
+  || publicEvidenceSharePayload.includes(sensitiveAuditSecret)
+  || publicEvidenceSharePayload.includes(sensitiveSshSecret)
+  || publicEvidenceSharePayload.includes(smokePrivateKeyMarker)
+  || publicEvidenceSharePayload.includes(smokePrivateKeyPassphrase)
+  || publicEvidenceSharePayload.includes('"publicIp"')
+  || publicEvidenceSharePayload.includes('"privateIp"')
+  || publicEvidenceSharePayload.includes('"targetName"')
+  || publicEvidenceSharePayload.includes('"gitCommit"')
+  || publicEvidenceSharePayload.includes('"createdBy"')
+  || publicEvidenceSharePayload.includes('"tokenHash"')
+  || /\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(publicEvidenceSharePayload)
+  || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(publicEvidenceSharePayload)
+) {
+  throw new Error('/api/public/release-evidence/:token leaked sensitive or identifying material');
+}
+
+const evidenceShareListResponse = await fetch(`${baseUrl}/api/audit/readiness/shares`, { headers: authHeaders });
+if (!evidenceShareListResponse.ok) {
+  throw new Error(`/api/audit/readiness/shares list returned HTTP ${evidenceShareListResponse.status}`);
+}
+const evidenceShareListBody = await evidenceShareListResponse.json();
+if (
+  !Array.isArray(evidenceShareListBody.items)
+  || !evidenceShareListBody.items.some((item) => item.id === createEvidenceShareBody.share.id && item.accessCount >= 1)
+  || JSON.stringify(evidenceShareListBody).includes(shareToken)
+  || JSON.stringify(evidenceShareListBody).includes('tokenHash')
+) {
+  throw new Error('/api/audit/readiness/shares list did not preserve safe share metadata');
+}
+
+const revokeEvidenceShareResponse = await fetch(`${baseUrl}/api/audit/readiness/shares/${encodeURIComponent(createEvidenceShareBody.share.id)}`, {
+  method: 'DELETE',
+  headers: authHeaders,
+});
+if (!revokeEvidenceShareResponse.ok || (await revokeEvidenceShareResponse.json()).share?.state !== 'revoked') {
+  throw new Error('/api/audit/readiness/shares revoke returned unexpected payload');
+}
+const revokedPublicEvidenceShareResponse = await fetch(`${baseUrl}/api/public/release-evidence/${shareToken}`);
+if (revokedPublicEvidenceShareResponse.status !== 404) {
+  throw new Error(`/api/public/release-evidence/:token expected 404 after revocation, got ${revokedPublicEvidenceShareResponse.status}`);
+}
+const evidenceShareAuditsResponse = await fetch(`${baseUrl}/api/audit/events`, { headers: authHeaders });
+const evidenceShareAuditsBody = await evidenceShareAuditsResponse.json();
+if (
+  !evidenceShareAuditsBody.items?.some((item) => item.action === 'RELEASE_EVIDENCE_SHARE_CREATE')
+  || !evidenceShareAuditsBody.items?.some((item) => item.action === 'RELEASE_EVIDENCE_SHARE_READ')
+  || !evidenceShareAuditsBody.items?.some((item) => item.action === 'RELEASE_EVIDENCE_SHARE_REVOKE')
+) {
+  throw new Error('/api/audit/events did not retain release evidence share lifecycle audit records');
+}
+console.log('ok release evidence sharing is fixed, public-safe, audited, and revocable');
 
 const productionProbeRecordResponse = await fetch(`${baseUrl}/api/audit/ssh-production-probes`, {
   method: 'POST',
