@@ -96,7 +96,7 @@ export interface PreparedApiRequest {
 
 export type OperationTaskType = 'assetSync' | 'healthCheck' | 'sshCommand' | 'powerOn' | 'shutdown' | 'reboot';
 
-export type OperationTaskTargetMode = 'allServers' | 'allConnected' | 'selected';
+export type OperationTaskTargetMode = 'allServers' | 'allConnected' | 'selected' | 'tag';
 
 export type OperationTaskStatus = 'queued' | 'running' | 'completed' | 'partial' | 'failed';
 
@@ -123,6 +123,7 @@ export interface OperationTaskRequest {
   type: OperationTaskType;
   targetMode: OperationTaskTargetMode;
   serverIds?: string[];
+  tag?: string;
   command?: string;
   reason?: string;
   confirmed?: boolean;

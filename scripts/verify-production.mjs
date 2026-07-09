@@ -6,6 +6,7 @@ const port = process.env.PORT ?? '18080';
 const baseUrl = `http://127.0.0.1:${port}`;
 const verifyDataDir = path.resolve(process.cwd(), '.tmp-verify-data');
 const logTailLimit = 6000;
+const transientWindowsNodeExitCode = 3221226505;
 const verificationSteps = [];
 const serverLog = { stdout: '', stderr: '' };
 let currentStep = 'initializing';
@@ -58,6 +59,21 @@ function run(command, args, options = {}) {
       reject(new Error(`${label} failed with ${formatExit(code, signal)}`));
     });
   });
+}
+
+async function runWithTransientNodeRetry(command, args, options = {}) {
+  try {
+    await run(command, args, options);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes(`exit code ${transientWindowsNodeExitCode}`)) {
+      throw error;
+    }
+
+    console.warn(`${args[0] ?? command} exited with transient Windows Node code ${transientWindowsNodeExitCode}; retrying once.`);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await run(command, args, options);
+  }
 }
 
 async function waitForHealth(timeoutMs = 15000) {
@@ -242,7 +258,7 @@ try {
       PERF_ADMIN_PASSWORD: 'NextPassword123',
     },
   });
-  await run(process.execPath, ['scripts/concurrency-check.mjs'], {
+  await runWithTransientNodeRetry(process.execPath, ['scripts/concurrency-check.mjs'], {
     env: {
       ...process.env,
       SMOKE_BASE_URL: baseUrl,

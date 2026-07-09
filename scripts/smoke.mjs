@@ -12,6 +12,8 @@ const initialSmokePassword = process.env.SMOKE_ADMIN_PASSWORD ?? 'admin123456';
 const releaseVerifyToken = process.env.SMOKE_RELEASE_VERIFY_TOKEN ?? process.env.RELEASE_VERIFY_TOKEN ?? '';
 let currentSmokePassword = initialSmokePassword;
 let temporarySimulatedSshServerSequence = 1;
+const operationTagSmokeLabel = 'ops-smoke';
+const sensitiveOperationTagSmokeLabel = `token=ops-${Date.now().toString(36)}`;
 
 function assertFileContains(relativePath, requiredFragments, label) {
   const source = fs.readFileSync(new URL(`../${relativePath}`, import.meta.url), 'utf8');
@@ -78,6 +80,18 @@ if (unauthenticatedRunbookResponse.status !== 401) {
 const unauthenticatedMaintenanceWindowsResponse = await fetch(`${baseUrl}/api/operations/maintenance-windows`);
 if (unauthenticatedMaintenanceWindowsResponse.status !== 401) {
   throw new Error(`/api/operations/maintenance-windows expected 401 before login, got ${unauthenticatedMaintenanceWindowsResponse.status}`);
+}
+const unauthenticatedTagPreflightResponse = await fetch(`${baseUrl}/api/operations/tasks/preflight`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    type: 'healthCheck',
+    targetMode: 'tag',
+    tag: operationTagSmokeLabel,
+  }),
+});
+if (unauthenticatedTagPreflightResponse.status !== 401) {
+  throw new Error(`/api/operations/tasks/preflight expected 401 before login, got ${unauthenticatedTagPreflightResponse.status}`);
 }
 const unauthenticatedPasswordResponse = await fetch(`${baseUrl}/api/account/password`, {
   method: 'POST',
@@ -1841,7 +1855,7 @@ const inventoryOnlyResponse = await fetch(`${baseUrl}/api/servers`, {
     publicIp: '203.0.113.12',
     privateIp: '',
     os: 'Debian 12',
-    tags: ['inventory'],
+    tags: ['inventory', operationTagSmokeLabel],
     ssh: {
       port: 22,
       username: 'root',
@@ -1993,7 +2007,7 @@ const updateServerResponse = await fetch(`${baseUrl}/api/servers/${connectedServ
     publicIp: connectedServer.publicIp,
     privateIp: '10.0.0.11',
     os: 'Ubuntu 24.04 LTS',
-    tags: ['smoke', 'edited'],
+    tags: ['smoke', 'edited', operationTagSmokeLabel, sensitiveOperationTagSmokeLabel],
     ssh: {
       port: 22,
       username: 'root',
@@ -2559,6 +2573,56 @@ if (
 }
 console.log('ok /api/operations/tasks/preflight allows connected selected targets without leaking secrets');
 
+const operationTagPreflightResponse = await fetch(`${baseUrl}/api/operations/tasks/preflight`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    type: 'healthCheck',
+    targetMode: 'tag',
+    tag: operationTagSmokeLabel.toUpperCase(),
+  }),
+});
+if (!operationTagPreflightResponse.ok) {
+  throw new Error(`/api/operations/tasks/preflight tag scope returned HTTP ${operationTagPreflightResponse.status}`);
+}
+const operationTagPreflightBody = await operationTagPreflightResponse.json();
+if (
+  operationTagPreflightBody.ok !== false
+  || operationTagPreflightBody.targetMode !== 'tag'
+  || operationTagPreflightBody.summary?.totalTargets !== 2
+  || operationTagPreflightBody.summary?.runnableTargets !== 1
+  || operationTagPreflightBody.summary?.disconnectedTargets !== 1
+  || !operationTagPreflightBody.plan?.title?.includes('tagged servers')
+  || !operationTagPreflightBody.issues?.some((issue) => issue.code === 'OPERATIONS_TARGETS_UNCONNECTED' && issue.severity === 'block')
+  || !operationTagPreflightBody.targets?.some((target) => target.id === connectedServer.id && target.runnable === true)
+  || !operationTagPreflightBody.targets?.some((target) => target.id === inventoryOnlyServer.id && target.runnable === false)
+) {
+  throw new Error('/api/operations/tasks/preflight did not resolve a case-insensitive tag scope or block unconnected tagged targets');
+}
+console.log('ok /api/operations/tasks/preflight resolves tag scopes and blocks unconnected tagged targets');
+
+const operationSensitiveTagPreflightResponse = await fetch(`${baseUrl}/api/operations/tasks/preflight`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    type: 'healthCheck',
+    targetMode: 'tag',
+    tag: sensitiveOperationTagSmokeLabel,
+  }),
+});
+if (!operationSensitiveTagPreflightResponse.ok) {
+  throw new Error(`/api/operations/tasks/preflight sensitive tag scope returned HTTP ${operationSensitiveTagPreflightResponse.status}`);
+}
+const operationSensitiveTagPreflightBody = await operationSensitiveTagPreflightResponse.json();
+if (
+  operationSensitiveTagPreflightBody.ok !== true
+  || operationSensitiveTagPreflightBody.summary?.totalTargets !== 1
+  || operationSensitiveTagPreflightBody.targets?.[0]?.id !== connectedServer.id
+) {
+  throw new Error('/api/operations/tasks/preflight did not resolve the sensitive tag scope safely');
+}
+console.log('ok /api/operations/tasks/preflight keeps tag scope audit metadata sanitized');
+
 const operationPreflightUnconnectedResponse = await fetch(`${baseUrl}/api/operations/tasks/preflight`, {
   method: 'POST',
   headers: { ...authHeaders, 'Content-Type': 'application/json' },
@@ -2695,8 +2759,8 @@ const operationPreflightCoveredRebootResponse = await fetch(`${baseUrl}/api/oper
   headers: { ...authHeaders, 'Content-Type': 'application/json' },
   body: JSON.stringify({
     type: 'reboot',
-    targetMode: 'selected',
-    serverIds: [connectedServer.id],
+    targetMode: 'tag',
+    tag: 'EDITED',
     reason: 'maintenance coverage preflight',
     confirmed: true,
   }),
@@ -2805,6 +2869,52 @@ if (
   throw new Error('/api/operations/tasks healthCheck returned unexpected payload');
 }
 console.log('ok /api/operations/tasks healthCheck');
+
+const operationTaggedReadyResponse = await fetch(`${baseUrl}/api/operations/tasks/preflight`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    type: 'healthCheck',
+    targetMode: 'tag',
+    tag: 'edited',
+  }),
+});
+if (!operationTaggedReadyResponse.ok) {
+  throw new Error(`/api/operations/tasks/preflight runnable tag returned HTTP ${operationTaggedReadyResponse.status}`);
+}
+const operationTaggedReadyBody = await operationTaggedReadyResponse.json();
+if (
+  operationTaggedReadyBody.ok !== true
+  || operationTaggedReadyBody.summary?.totalTargets !== 1
+  || operationTaggedReadyBody.summary?.runnableTargets !== 1
+  || operationTaggedReadyBody.targets?.[0]?.id !== connectedServer.id
+) {
+  throw new Error('/api/operations/tasks/preflight did not prepare the runnable tag target');
+}
+const operationTaggedHealthResponse = await fetch(`${baseUrl}/api/operations/tasks`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    type: 'healthCheck',
+    targetMode: 'tag',
+    tag: 'edited',
+    correlationId: operationTaggedReadyBody.correlationId,
+  }),
+});
+if (operationTaggedHealthResponse.status !== 202) {
+  throw new Error(`/api/operations/tasks runnable tag healthCheck returned HTTP ${operationTaggedHealthResponse.status}`);
+}
+const operationTaggedHealthBody = await operationTaggedHealthResponse.json();
+if (
+  operationTaggedHealthBody.status !== 'completed'
+  || operationTaggedHealthBody.targetMode !== 'tag'
+  || operationTaggedHealthBody.summary?.total !== 1
+  || operationTaggedHealthBody.summary?.success !== 1
+  || !operationTaggedHealthBody.outputs?.[0]?.output?.includes('host=')
+) {
+  throw new Error('/api/operations/tasks did not execute the runnable tag scope');
+}
+console.log('ok /api/operations/tasks executes a case-insensitive tag scope');
 
 const operationCommandResponse = await fetch(`${baseUrl}/api/operations/tasks`, {
   method: 'POST',
@@ -3032,6 +3142,26 @@ const operationPreflightAudit = auditBody.items.find((item) => item.action === '
 const operationTaskAudit = auditBody.items.find((item) => item.action === 'OPERATIONS_TASK' && item.status === 'success' && item.target === connectedServer.id && item.detail?.includes('healthCheck completed'));
 if (!operationPreflightAudit || !operationTaskAudit) {
   throw new Error('/api/audit/events did not include linkable operations preflight and execution evidence');
+}
+const taggedOperationTaskAudit = auditBody.items.find((item) => (
+  item.action === 'OPERATIONS_TASK'
+  && item.status === 'success'
+  && item.target === 'tag:edited'
+  && item.correlationId === operationTaggedReadyBody.correlationId
+));
+if (!taggedOperationTaskAudit) {
+  throw new Error('/api/audit/events did not preserve tag-scoped operations execution evidence');
+}
+const sensitiveTagAuditEntry = auditBody.items.find((item) => (
+  item.action === 'OPERATIONS_PREFLIGHT'
+  && item.target === 'tag:token=[redacted]'
+));
+if (
+  !sensitiveTagAuditEntry
+  || sensitiveTagAuditEntry.target.includes(sensitiveOperationTagSmokeLabel)
+  || JSON.stringify(sensitiveTagAuditEntry).includes(sensitiveOperationTagSmokeLabel)
+) {
+  throw new Error('/api/audit/events leaked a sensitive tag value from operations preflight');
 }
 if (
   operationPreflightAudit.correlationId !== operationPreflightReadyBody.correlationId
@@ -3954,6 +4084,9 @@ function assertAccountUiGuards() {
     'Application server exited early during',
     'serverLog.stderr',
     'verify-production kept diagnostics',
+    'runWithTransientNodeRetry',
+    'transientWindowsNodeExitCode',
+    'retrying once',
   ];
   const missingLocalGreyDiagnosticGuard = localGreyDiagnosticGuardFragments.filter((fragment) => !verifyProductionSource.includes(fragment));
   if (missingLocalGreyDiagnosticGuard.length || !gitignoreSource.includes('.tmp-verify-data/')) {
@@ -7975,7 +8108,16 @@ function assertOperationsTargetSelectionGuards() {
     'visibleEligibleServers',
     'activeSelectedServerIdSet.has(server.id)',
     'ops-server-choice-window',
-    'resolvePreviewCount(targetMode, eligibleServers.length, activeSelectedServerIds.length)',
+    'availableOperationTags',
+    'buildOperationTagOptions(servers)',
+    'buildOperationTagScopeStats(servers, tag)',
+    'tagScopeStats.matchedServers.length',
+    'data-ops-tag-scope="true"',
+    'data-ops-tag-select="true"',
+    'data-ops-tag-summary="true"',
+    'formatPreflightIssueMessage',
+    'issueMessages',
+    'tag: targetMode === \'tag\' ? tag.trim() : undefined',
     'serverIds: targetMode === \'selected\' ? activeSelectedServerIds : []',
     'setSelectedServerIds((current) => current.filter((id) => eligibleServerIds.has(id)))',
     'preflightOperationTask(preflightPayload)',
@@ -8041,6 +8183,13 @@ function assertOperationsTargetSelectionGuards() {
     'All server targets must be SSH-connected for this operation',
     'selected servers are not SSH-connected',
     'Selected servers must be SSH-connected for this operation',
+    'tagged servers are not SSH-connected',
+    'Tagged servers must be SSH-connected for this operation',
+    "targetMode: z.enum(['allServers', 'allConnected', 'selected', 'tag'])",
+    "if (value.targetMode === 'tag' && !value.tag)",
+    "if (task.targetMode === 'tag')",
+    'normalizeOperationTag(task.tag)',
+    'tag:${redactSensitiveText(task.tag).slice(0, 64)}',
     'selected servers do not exist',
     'export function preflightOperationTask(input: unknown)',
     'requiresConfirmation',

@@ -17,6 +17,7 @@ import { executeServerAction } from './serverActions.js';
 import { resolveServerLifecycleStatus } from '../../shared/serverFilters.js';
 import { getSshCommandConfirmationReason } from '../../shared/sshCommandRisk.js';
 import { resolveMaintenanceWindowCoverage } from './maintenanceWindowService.js';
+import { redactSensitiveText } from './sensitiveRedaction.js';
 
 const operationOutputLimit = 200;
 const operationPreflightTargetLimit = 120;
@@ -25,8 +26,9 @@ const operationExecutionConcurrency = readBoundedIntegerEnv('COLIPAS_OPERATION_C
 const operationTaskSchema = z
   .object({
     type: z.enum(['assetSync', 'healthCheck', 'sshCommand', 'powerOn', 'shutdown', 'reboot']),
-    targetMode: z.enum(['allServers', 'allConnected', 'selected']).default('allConnected'),
+    targetMode: z.enum(['allServers', 'allConnected', 'selected', 'tag']).default('allConnected'),
     serverIds: z.array(z.string().min(1)).max(100).optional().default([]),
+    tag: z.string().trim().max(64).optional().default(''),
     command: z.string().trim().max(2000).optional().default(''),
     reason: z.string().trim().max(300).optional().default('operator requested operation task'),
     confirmed: z.boolean().optional().default(false),
@@ -46,6 +48,22 @@ const operationTaskSchema = z
         code: 'custom',
         path: ['serverIds'],
         message: 'Select at least one server',
+      });
+    }
+
+    if (value.targetMode === 'tag' && !value.tag) {
+      context.addIssue({
+        code: 'custom',
+        path: ['tag'],
+        message: 'Select a server tag',
+      });
+    }
+
+    if (value.targetMode !== 'tag' && value.tag) {
+      context.addIssue({
+        code: 'custom',
+        path: ['tag'],
+        message: 'A server tag can only be used with the tag target scope',
       });
     }
   });
@@ -118,12 +136,27 @@ export async function createOperationTask(input: unknown): Promise<OperationTask
     }
   }
 
+  if (parsed.type !== 'assetSync' && parsed.targetMode === 'tag') {
+    const disconnectedTargets = targets.filter((server) => resolveServerLifecycleStatus(server) === 'unconnected');
+    if (disconnectedTargets.length > 0) {
+      recordAudit({
+        action: 'OPERATIONS_TASK',
+        actor: 'operator',
+        target: formatAuditTarget(parsed),
+        status: 'blocked',
+        detail: `Blocked ${parsed.type}: tagged servers are not SSH-connected`,
+        correlationId,
+      });
+      throw new HttpError(409, 'Tagged servers must be SSH-connected for this operation', 'OPERATIONS_TARGETS_UNCONNECTED');
+    }
+  }
+
   const confirmationReason = requiredConfirmationReason(parsed);
   if (confirmationReason && !parsed.confirmed) {
     recordAudit({
       action: 'OPERATIONS_TASK',
       actor: 'operator',
-      target: parsed.targetMode === 'selected' ? parsed.serverIds.join(',') : parsed.targetMode,
+      target: formatAuditTarget(parsed),
       status: 'blocked',
       detail: `Blocked ${parsed.type}: missing operator confirmation for ${confirmationReason}`,
       correlationId,
@@ -162,7 +195,7 @@ export async function createOperationTask(input: unknown): Promise<OperationTask
   recordAudit({
     action: 'OPERATIONS_TASK',
     actor: 'operator',
-    target: parsed.targetMode === 'selected' ? parsed.serverIds.join(',') : parsed.targetMode,
+    target: formatAuditTarget(parsed),
     status: status === 'failed' ? 'failed' : 'success',
     detail: `${parsed.type} ${status}: ${summary.success} success, ${summary.failed} failed, ${summary.skipped} skipped; ${formatMaintenanceAuditDetail(maintenanceCoverage)}`,
     correlationId,
@@ -262,7 +295,9 @@ export function preflightOperationTask(input: unknown): OperationTaskPreflightRe
       severity: 'block',
       message: parsed.targetMode === 'selected'
         ? 'Selected servers must be SSH-connected for this operation'
-        : 'All server targets must be SSH-connected for this operation',
+        : parsed.targetMode === 'tag'
+          ? 'Tagged servers must be SSH-connected for this operation'
+          : 'All server targets must be SSH-connected for this operation',
       count: disconnectedTargetCount,
     });
   }
@@ -346,7 +381,7 @@ export function preflightOperationTask(input: unknown): OperationTaskPreflightRe
   recordAudit({
     action: 'OPERATIONS_PREFLIGHT',
     actor: 'operator',
-    target: parsed.targetMode === 'selected' ? summarizeAuditTargets(parsed.serverIds) : parsed.targetMode,
+    target: formatAuditTarget(parsed),
     status: response.ok ? 'success' : 'blocked',
     detail: buildPreflightAuditDetail(response),
     correlationId,
@@ -474,6 +509,7 @@ function formatTargetMode(targetMode: OperationTaskTargetMode) {
     allServers: 'all servers',
     allConnected: 'all SSH-connected servers',
     selected: 'selected servers',
+    tag: 'tagged servers',
   }[targetMode];
 }
 
@@ -578,7 +614,28 @@ function resolveTargets(task: ParsedOperationTask) {
     return servers;
   }
 
+  if (task.targetMode === 'tag') {
+    const selectedTag = normalizeOperationTag(task.tag);
+    return servers.filter((server) => server.tags.some((tag) => normalizeOperationTag(tag) === selectedTag));
+  }
+
   return servers.filter((server) => resolveServerLifecycleStatus(server) !== 'unconnected');
+}
+
+function formatAuditTarget(task: Pick<ParsedOperationTask, 'targetMode' | 'serverIds' | 'tag'>) {
+  if (task.targetMode === 'selected') {
+    return summarizeAuditTargets(task.serverIds);
+  }
+
+  if (task.targetMode === 'tag') {
+    return `tag:${redactSensitiveText(task.tag).slice(0, 64)}`;
+  }
+
+  return task.targetMode;
+}
+
+function normalizeOperationTag(value: string) {
+  return value.trim().toLocaleLowerCase();
 }
 
 async function executeTarget(taskId: string, task: ParsedOperationTask, server: ServerNode): Promise<OperationTaskTargetResult> {

@@ -1044,14 +1044,14 @@ async function assertAccountSettingsAndAiChat(targetPage) {
   }
 }
 
-async function createTemporaryAssetServer(targetPage, namePrefix = 'browser-e2e-asset') {
+async function createTemporaryAssetServer(targetPage, namePrefix = 'browser-e2e-asset', tags = ['browser-e2e', 'audit-trace']) {
   const payload = {
     provider: 'OpenStack Lab',
     region: 'US - Los Angeles',
     publicIp: `198.51.100.${Math.floor(Math.random() * 100) + 10}`,
     privateIp: '10.66.0.10',
     os: 'Ubuntu 24.04 LTS',
-    tags: ['browser-e2e', 'audit-trace'],
+    tags,
     ssh: {
       port: 22,
       username: 'root',
@@ -1119,7 +1119,7 @@ function isTransientApiRequestFailure(message) {
   return /socket hang up|ECONNRESET|ECONNREFUSED|UND_ERR_SOCKET|Target page, context or browser has been closed/i.test(message);
 }
 
-async function createTemporarySimulatedSshServer(targetPage, namePrefix = 'browser-e2e-ssh') {
+async function createTemporarySimulatedSshServer(targetPage, namePrefix = 'browser-e2e-ssh', tags = ['browser-e2e', 'ssh-panel']) {
   const response = await postJsonWithTransientRetry(targetPage, `${baseUrl}/api/servers`, () => ({
     name: `${namePrefix}-${Date.now()}`,
     provider: 'OpenStack Lab',
@@ -1127,7 +1127,7 @@ async function createTemporarySimulatedSshServer(targetPage, namePrefix = 'brows
     publicIp: `203.0.113.${Math.floor(Math.random() * 100) + 10}`,
     privateIp: '10.77.0.10',
     os: 'Debian 12',
-    tags: ['browser-e2e', 'ssh-panel'],
+    tags,
     ssh: {
       host: 'simulated-ssh.local',
       port: 22,
@@ -2384,6 +2384,41 @@ async function assertOperationsResultTraceRoundTrip(targetPage) {
   await targetPage.getByRole('button', { name: /new task/i }).click();
   await targetPage.locator('.ops-builder').waitFor({ timeout: 10000 });
 
+  const tagScopeLabel = `ops-${Date.now().toString(36)}`;
+  const tagScopeValue = tagScopeLabel.toLocaleLowerCase();
+  const tagConnectedServer = await createTemporarySimulatedSshServer(targetPage, 'browser-e2e-ops-tag-connected', [tagScopeLabel]);
+  const tagUnconnectedServer = await createTemporaryAssetServer(targetPage, 'browser-e2e-ops-tag-unconnected', [tagScopeLabel]);
+  try {
+    await targetPage.reload({ waitUntil: 'networkidle' });
+    await targetPage.getByRole('button', { name: /new task/i }).click();
+    await targetPage.locator('.ops-builder').waitFor({ timeout: 10000 });
+    await targetPage.getByRole('button', { name: /run command/i }).click();
+    await targetPage.locator('.ops-type-card.active').filter({ hasText: /run command/i }).waitFor({ timeout: 5000 });
+    await targetPage.locator('.ops-form-grid select').selectOption('tag');
+    const tagScope = targetPage.locator('[data-ops-tag-scope="true"]');
+    await tagScope.waitFor({ timeout: 5000 });
+    await tagScope.locator('[data-ops-tag-select="true"]').selectOption(tagScopeValue);
+    const tagSummary = await tagScope.locator('[data-ops-tag-summary="true"]').innerText();
+    if (!/2 server\(s\) matched; 1 SSH-connected/i.test(tagSummary)) {
+      throw new Error(`Tag scope did not show total and SSH-ready target counts: ${tagSummary}`);
+    }
+    await targetPage.locator('[data-ops-draft-preflight-button="true"]').click();
+    const tagPreflightCard = targetPage.locator('.ops-preflight-card').filter({ hasText: /Tagged servers must be SSH-connected/i });
+    await tagPreflightCard.waitFor({ timeout: 10000 });
+    const tagPreflightText = await tagPreflightCard.innerText();
+    if (!/Tagged servers must be SSH-connected/i.test(tagPreflightText)) {
+      throw new Error(`Tag scope preflight did not block the unconnected matched server: ${tagPreflightText}`);
+    }
+    await captureVisualEvidence(targetPage, 'desktop-operations-tag-preflight', ['.ops-builder', '[data-ops-tag-scope="true"]', '.ops-preflight-card']);
+  } finally {
+    await deleteTemporaryAssetServer(targetPage, tagConnectedServer.id).catch(() => undefined);
+    await deleteTemporaryAssetServer(targetPage, tagUnconnectedServer.id).catch(() => undefined);
+    await targetPage.reload({ waitUntil: 'networkidle' }).catch(() => undefined);
+  }
+
+  await targetPage.getByRole('button', { name: /new task/i }).click();
+  await targetPage.locator('.ops-builder').waitFor({ timeout: 10000 });
+
   const maintenancePanel = targetPage.locator('[data-ops-maintenance-panel="true"]');
   await maintenancePanel.waitFor({ timeout: 10000 });
   await maintenancePanel.locator('[data-ops-maintenance-open="true"]').click();
@@ -2839,6 +2874,9 @@ async function assertMobileModuleLayoutSweep() {
     await mobilePage.locator('.ops-builder').waitFor({ timeout: 5000 });
     await assertElementHorizontallyWithinViewport(mobilePage, '.ops-builder', 'mobile operations builder');
     await assertSingleColumnStack(mobilePage, '.ops-type-grid', 'mobile operations task cards');
+    await mobilePage.locator('.ops-form-grid select').selectOption('tag');
+    await mobilePage.locator('[data-ops-tag-scope="true"]').waitFor({ timeout: 5000 });
+    await assertElementHorizontallyWithinViewport(mobilePage, '[data-ops-tag-scope="true"]', 'mobile operations tag scope');
     await mobilePage.locator('[data-ops-maintenance-panel="true"]').waitFor({ timeout: 5000 });
     await assertElementHorizontallyWithinViewport(mobilePage, '[data-ops-maintenance-panel="true"]', 'mobile maintenance window panel');
     await mobilePage.locator('[data-ops-maintenance-open="true"]').click();

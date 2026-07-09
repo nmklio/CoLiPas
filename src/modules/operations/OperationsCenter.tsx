@@ -13,6 +13,7 @@ import {
   RotateCcw,
   Server,
   ShieldCheck,
+  Tags,
   Terminal,
   Workflow,
   XCircle,
@@ -24,6 +25,7 @@ import { getSshCommandConfirmationReason } from '../../shared/sshCommandRisk';
 import { MaintenanceWindowPanel } from './MaintenanceWindowPanel';
 import {
   OperationEvent,
+  OperationTaskPreflightIssue,
   OperationTaskPreflightResponse,
   OperationTaskRequest,
   OperationTaskResponse,
@@ -51,6 +53,7 @@ export interface OperationsDraft {
   type: OperationTaskType;
   targetMode: OperationTaskTargetMode;
   serverIds?: string[];
+  tag?: string;
   command?: string;
   reason?: string;
 }
@@ -60,6 +63,7 @@ interface PreflightHistoryEntry {
   type: OperationTaskType;
   targetMode: OperationTaskTargetMode;
   serverIds: string[];
+  tag: string;
   command: string;
   reason: string;
   targetCount: number;
@@ -72,6 +76,11 @@ interface TaskMeta {
   label: string;
   description: string;
   icon: LucideIcon;
+}
+
+interface OperationTagOption {
+  value: string;
+  label: string;
 }
 
 type Copy = {
@@ -89,6 +98,11 @@ type Copy = {
   allConnected: string;
   allServers: string;
   selected: string;
+  tag: string;
+  selectTag: string;
+  tagScopeSummary: string;
+  tagScopeSshHint: string;
+  noTags: string;
   selectServers: string;
   command: string;
   commandPlaceholder: string;
@@ -185,6 +199,11 @@ const copyByLanguage: Record<string, Copy> = {
     allConnected: '全部已接入 SSH',
     allServers: '全部服务器资产',
     selected: '指定服务器',
+    tag: '按服务器标签',
+    selectTag: '选择标签',
+    tagScopeSummary: '命中 {total} 台服务器，其中 {connected} 台已接入 SSH',
+    tagScopeSshHint: 'SSH 任务会预检全部命中资产；存在未接入 SSH 的目标时会阻断执行，不会静默跳过。',
+    noTags: '当前没有可用于编排的服务器标签，请先在服务器资产中添加标签。',
     selectServers: '选择服务器',
     command: 'SSH 命令',
     commandPlaceholder: '例如：hostname && uptime',
@@ -274,6 +293,11 @@ const copyByLanguage: Record<string, Copy> = {
     allConnected: 'All SSH-connected',
     allServers: 'All server assets',
     selected: 'Selected servers',
+    tag: 'By server tag',
+    selectTag: 'Select tag',
+    tagScopeSummary: '{total} server(s) matched; {connected} SSH-connected',
+    tagScopeSshHint: 'SSH tasks preflight every matched asset. Any server without SSH blocks execution instead of being skipped silently.',
+    noTags: 'No server tags are available yet. Add tags in Server assets first.',
     selectServers: 'Select servers',
     command: 'SSH command',
     commandPlaceholder: 'Example: hostname && uptime',
@@ -362,6 +386,11 @@ const copyByLanguage: Record<string, Copy> = {
     allConnected: 'SSH 接続済みすべて',
     allServers: 'すべてのサーバー資産',
     selected: '指定サーバー',
+    tag: 'サーバータグで指定',
+    selectTag: 'タグを選択',
+    tagScopeSummary: '{total} 台に一致、そのうち SSH 接続済みは {connected} 台',
+    tagScopeSshHint: 'SSH タスクは一致するすべての資産を事前確認します。SSH 未接続の対象が 1 台でもある場合、暗黙に除外せず実行をブロックします。',
+    noTags: '編成に使えるサーバータグがありません。先にサーバー資産へタグを追加してください。',
     selectServers: 'サーバーを選択',
     command: 'SSH コマンド',
     commandPlaceholder: '例: hostname && uptime',
@@ -437,7 +466,7 @@ const copyByLanguage: Record<string, Copy> = {
   },
 };
 
-const preflightCopyByLanguage: Record<string, {
+type PreflightCopy = {
   title: string;
   ready: string;
   blocked: string;
@@ -450,7 +479,11 @@ const preflightCopyByLanguage: Record<string, {
   detailTitle: string;
   planTitle: string;
   commandPreview: string;
-}> = {
+  tagSshUnconnected: string;
+  issueMessages: Record<OperationTaskPreflightIssue['code'], string>;
+};
+
+const preflightCopyByLanguage: Record<string, PreflightCopy> = {
   zh: {
     title: '执行预检',
     ready: '预检通过，可以执行',
@@ -464,6 +497,14 @@ const preflightCopyByLanguage: Record<string, {
     detailTitle: '目标明细',
     planTitle: '执行计划',
     commandPreview: '命令预览',
+    tagSshUnconnected: '标签范围内存在尚未接入 SSH 的目标，暂不可执行。',
+    issueMessages: {
+      OPERATIONS_CONFIRMATION_REQUIRED: '此操作需要确认后才能执行。',
+      OPERATIONS_MAINTENANCE_WINDOW_MISSING: '目标尚未被维护窗口覆盖，请先安排维护时间。',
+      OPERATIONS_NO_TARGETS: '没有符合当前范围的服务器目标。',
+      OPERATIONS_TARGETS_NOT_FOUND: '部分指定服务器已不存在，请刷新资产后重试。',
+      OPERATIONS_TARGETS_UNCONNECTED: '存在尚未接入 SSH 的目标，暂不可执行。',
+    },
   },
   en: {
     title: 'Preflight',
@@ -478,6 +519,14 @@ const preflightCopyByLanguage: Record<string, {
     detailTitle: 'Target details',
     planTitle: 'Execution plan',
     commandPreview: 'Command preview',
+    tagSshUnconnected: 'Tagged servers must be SSH-connected for this operation.',
+    issueMessages: {
+      OPERATIONS_CONFIRMATION_REQUIRED: 'This operation requires confirmation before it can run.',
+      OPERATIONS_MAINTENANCE_WINDOW_MISSING: 'The targets are not covered by a maintenance window. Schedule one before continuing.',
+      OPERATIONS_NO_TARGETS: 'No server targets match the current scope.',
+      OPERATIONS_TARGETS_NOT_FOUND: 'Some selected servers no longer exist. Refresh assets and try again.',
+      OPERATIONS_TARGETS_UNCONNECTED: 'Some targets are not SSH-connected and cannot be run yet.',
+    },
   },
   ja: {
     title: '実行前プリフライト',
@@ -492,6 +541,14 @@ const preflightCopyByLanguage: Record<string, {
     detailTitle: '対象詳細',
     planTitle: '実行計画',
     commandPreview: 'コマンドプレビュー',
+    tagSshUnconnected: 'タグ範囲に SSH 未接続の対象が含まれているため、まだ実行できません。',
+    issueMessages: {
+      OPERATIONS_CONFIRMATION_REQUIRED: 'この操作は実行前に確認が必要です。',
+      OPERATIONS_MAINTENANCE_WINDOW_MISSING: '対象がメンテナンス時間帯に含まれていません。先に時間帯を設定してください。',
+      OPERATIONS_NO_TARGETS: '現在の範囲に一致するサーバーがありません。',
+      OPERATIONS_TARGETS_NOT_FOUND: '指定した一部のサーバーは存在しません。資産を更新して再試行してください。',
+      OPERATIONS_TARGETS_UNCONNECTED: 'SSH 未接続の対象が含まれているため、まだ実行できません。',
+    },
   },
 };
 
@@ -507,6 +564,7 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
   const [taskType, setTaskType] = useState<OperationTaskType>('healthCheck');
   const [targetMode, setTargetMode] = useState<OperationTaskTargetMode>('allConnected');
   const [selectedServerIds, setSelectedServerIds] = useState<string[]>([]);
+  const [tag, setTag] = useState('');
   const [visibleServerChoiceLimit, setVisibleServerChoiceLimit] = useState(opsServerChoiceBatchSize);
   const [command, setCommand] = useState('hostname && uptime');
   const [reason, setReason] = useState('');
@@ -520,6 +578,7 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
   const [appliedDraftId, setAppliedDraftId] = useState('');
   const [draftNotice, setDraftNotice] = useState<OperationsDraft | null>(null);
   const targetScopeRef = useRef<HTMLSelectElement>(null);
+  const tagScopeRef = useRef<HTMLSelectElement>(null);
   const serverPickerRef = useRef<HTMLDivElement>(null);
   const commandInputRef = useRef<HTMLTextAreaElement>(null);
   const preflightButtonRef = useRef<HTMLButtonElement>(null);
@@ -528,7 +587,13 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
   const taskMeta = useMemo(() => buildTaskMeta(language), [language]);
   const activeTask = tasks.find((task) => task.id === activeTaskId) ?? tasks[0] ?? null;
   const activeTaskLabel = taskMeta[taskType]?.label ?? taskType;
-  const activeTargetModeLabel = targetMode === 'selected' ? copy.selected : targetMode === 'allServers' ? copy.allServers : copy.allConnected;
+  const activeTargetModeLabel = targetMode === 'selected'
+    ? copy.selected
+    : targetMode === 'allServers'
+      ? copy.allServers
+      : targetMode === 'tag'
+        ? copy.tag
+        : copy.allConnected;
   const canOpenActiveTaskTrace = Boolean(
     activeTask
       && activeTask.status !== 'queued'
@@ -537,6 +602,12 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
   );
   const sshRequiredTask = taskType !== 'assetSync';
   const eligibleServers = sshRequiredTask ? connectedServers : servers;
+  const availableOperationTags = useMemo(() => buildOperationTagOptions(servers), [servers]);
+  const tagScopeStats = useMemo(() => buildOperationTagScopeStats(servers, tag), [servers, tag]);
+  const selectedOperationTag = useMemo(
+    () => availableOperationTags.find((option) => option.value === normalizeOperationTag(tag)) ?? null,
+    [availableOperationTags, tag],
+  );
   const eligibleServerIds = useMemo(() => new Set(eligibleServers.map((server) => server.id)), [eligibleServers]);
   const activeSelectedServerIds = useMemo(
     () => selectedServerIds.filter((id) => eligibleServerIds.has(id)),
@@ -548,7 +619,12 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
     [eligibleServers, visibleServerChoiceLimit],
   );
   const hiddenServerChoiceCount = Math.max(eligibleServers.length - visibleEligibleServers.length, 0);
-  const previewCount = resolvePreviewCount(targetMode, eligibleServers.length, activeSelectedServerIds.length);
+  const previewCount = resolvePreviewCount(
+    targetMode,
+    eligibleServers.length,
+    activeSelectedServerIds.length,
+    tagScopeStats.matchedServers.length,
+  );
   const draftRiskSummary = useMemo(() => buildDraftRiskSummary({
     command,
     copy,
@@ -564,9 +640,10 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
     preflight,
     reason,
     selectedServerIds: activeSelectedServerIds,
+    tag,
     targetMode,
     taskType,
-  }) : null, [activeSelectedServerIds, command, copy, preflight, reason, targetMode, taskType]);
+  }) : null, [activeSelectedServerIds, command, copy, preflight, reason, tag, targetMode, taskType]);
   const preflightAdvisorEntries = useMemo(
     () => buildPreflightAdvisorEntries(preflightHistory),
     [preflightHistory],
@@ -594,6 +671,17 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
   }, [eligibleServers.length, targetMode, taskType]);
 
   useEffect(() => {
+    if (targetMode !== 'tag') {
+      return;
+    }
+
+    const selectedTagStillExists = availableOperationTags.some((option) => option.value === normalizeOperationTag(tag));
+    if (!selectedTagStillExists) {
+      setTag(availableOperationTags[0]?.value ?? '');
+    }
+  }, [availableOperationTags, tag, targetMode]);
+
+  useEffect(() => {
     if (targetMode !== 'selected' || activeSelectedServerIds.length > 0 || eligibleServers.length === 0) {
       return;
     }
@@ -602,7 +690,7 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
 
   useEffect(() => {
     setPreflight(null);
-  }, [activeSelectedServerIds, command, reason, targetMode, taskType]);
+  }, [activeSelectedServerIds, command, reason, tag, targetMode, taskType]);
 
   useEffect(() => {
     if (!draft || draft.id === appliedDraftId) {
@@ -613,6 +701,7 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
     setTaskType(draft.type);
     setTargetMode(draft.targetMode);
     setSelectedServerIds(draft.serverIds ?? []);
+    setTag(draft.tag ?? '');
     setCommand(draft.command ?? 'hostname && uptime');
     setReason(draft.reason ?? '');
     setPreflight(null);
@@ -638,6 +727,7 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
         type: taskType,
         targetMode,
         serverIds: activeSelectedServerIds,
+        tag,
         command,
         reason,
         targetCount: previewCount,
@@ -646,7 +736,9 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
         historyEntry,
         ...current.filter((entry) => entry.id !== historyEntry.id),
       ].slice(0, 5));
-      setMessage(preflightResult.ok ? preflightStatusText(preflightResult, preflightCopy) : preflightResult.issues[0]?.message ?? preflightCopy.blocked);
+      setMessage(preflightResult.ok
+        ? preflightStatusText(preflightResult, preflightCopy)
+        : formatPreflightIssueMessage(preflightResult.issues[0], preflightCopy, targetMode));
       if (draftNotice) {
         onDraftPreflight?.(draftNotice, preflightResult);
       }
@@ -666,7 +758,7 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
     }
 
     if (!preflightResult.ok) {
-      setMessage(preflightResult.issues[0]?.message ?? preflightCopy.blocked);
+      setMessage(formatPreflightIssueMessage(preflightResult.issues[0], preflightCopy, targetMode));
       return;
     }
 
@@ -703,6 +795,7 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
       type: taskType,
       targetMode,
       serverIds: targetMode === 'selected' ? activeSelectedServerIds : [],
+      tag: targetMode === 'tag' ? tag.trim() : undefined,
       command: taskType === 'sshCommand' ? command.trim() : undefined,
       reason: reason.trim() || `operator requested ${taskType}`,
       confirmed,
@@ -717,6 +810,10 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
 
     if (targetMode === 'selected' && activeSelectedServerIds.length === 0) {
       return copy.selectAtLeastOne;
+    }
+
+    if (targetMode === 'tag' && tagScopeStats.matchedServers.length === 0) {
+      return availableOperationTags.length === 0 ? copy.noTags : copy.selectTag;
     }
 
     if (taskType !== 'assetSync' && previewCount === 0) {
@@ -752,6 +849,10 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
       return;
     }
     if (target === 'servers') {
+      if (targetMode === 'tag') {
+        window.setTimeout(() => focusElement(tagScopeRef.current ?? targetScopeRef.current), 0);
+        return;
+      }
       setTargetMode('selected');
       window.setTimeout(() => focusElement(serverPickerRef.current ?? targetScopeRef.current), 0);
       return;
@@ -769,6 +870,7 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
     setTaskType(fixDraft.type);
     setTargetMode(fixDraft.targetMode);
     setSelectedServerIds(fixDraft.serverIds);
+    setTag(fixDraft.tag);
     setCommand(fixDraft.command || 'hostname && uptime');
     setReason(fixDraft.reason);
     setPreflight(null);
@@ -780,6 +882,7 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
       type: fixDraft.type,
       targetMode: fixDraft.targetMode,
       serverIds: fixDraft.serverIds,
+      tag: fixDraft.tag || undefined,
       command: fixDraft.command,
       reason: fixDraft.reason,
     });
@@ -799,6 +902,7 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
       preflight: entry.preflight,
       reason: entry.reason,
       selectedServerIds: entry.serverIds,
+      tag: entry.tag,
       targetMode: entry.targetMode,
       taskType: entry.type,
     });
@@ -816,6 +920,7 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
     setTaskType(entry.type);
     setTargetMode(entry.targetMode);
     setSelectedServerIds(entry.serverIds);
+    setTag(entry.tag);
     setCommand(entry.command || 'hostname && uptime');
     setReason(entry.reason);
     setPreflight(entry.preflight);
@@ -907,6 +1012,7 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
                   <select ref={targetScopeRef} value={targetMode} onChange={(event) => setTargetMode(event.target.value as OperationTaskTargetMode)}>
                     <option value="allConnected">{copy.allConnected}</option>
                     <option value="selected">{copy.selected}</option>
+                    <option value="tag" disabled={availableOperationTags.length === 0}>{copy.tag}</option>
                     <option value="allServers" disabled={sshRequiredTask}>{copy.allServers}</option>
                   </select>
                 </label>
@@ -925,6 +1031,43 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
                   </label>
                 )}
               </div>
+
+              {targetMode === 'tag' && (
+                <div className="ops-tag-scope" data-ops-tag-scope="true">
+                  <div className="ops-tag-scope-heading">
+                    <div>
+                      <span><Tags size={15} /> {copy.tag}</span>
+                      <strong>{selectedOperationTag?.label ?? copy.selectTag}</strong>
+                    </div>
+                    <em>{tagScopeStats.matchedServers.length}</em>
+                  </div>
+                  <label className="field-block">
+                    {copy.selectTag}
+                    <select
+                      ref={tagScopeRef}
+                      data-ops-tag-select="true"
+                      value={normalizeOperationTag(tag)}
+                      disabled={availableOperationTags.length === 0}
+                      onChange={(event) => setTag(event.target.value)}
+                    >
+                      {availableOperationTags.length === 0 ? (
+                        <option value="">{copy.noTags}</option>
+                      ) : (
+                        availableOperationTags.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))
+                      )}
+                    </select>
+                  </label>
+                  <p data-ops-tag-summary="true">
+                    {interpolateCopy(copy.tagScopeSummary, {
+                      total: tagScopeStats.matchedServers.length,
+                      connected: tagScopeStats.sshConnectedCount,
+                    })}
+                  </p>
+                  {sshRequiredTask && <small>{copy.tagScopeSshHint}</small>}
+                </div>
+              )}
 
               {targetMode === 'selected' && (
                 <div className="ops-server-picker" ref={serverPickerRef} tabIndex={-1}>
@@ -1046,7 +1189,7 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
                 {preflight && preflight.issues.length > 0 && (
                   <ul>
                     {preflight.issues.map((issue) => (
-                      <li key={`${issue.code}-${issue.severity}`}>{issue.message}</li>
+                      <li key={`${issue.code}-${issue.severity}`}>{formatPreflightIssueMessage(issue, preflightCopy, preflight.targetMode)}</li>
                     ))}
                   </ul>
                 )}
@@ -1078,7 +1221,7 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
                         </div>
                         <em>{target.runnable ? preflightCopy.runnable : preflightCopy.blockedTarget}</em>
                         {target.issues.length > 0 && (
-                          <p>{target.issues.map((issue) => issue.message).join(' / ')}</p>
+                          <p>{target.issues.map((issue) => formatPreflightIssueMessage(issue, preflightCopy, preflight.targetMode)).join(' / ')}</p>
                         )}
                       </div>
                     ))}
@@ -1205,6 +1348,7 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
                     preflight: entry.preflight,
                     reason: entry.reason,
                     selectedServerIds: entry.serverIds,
+                    tag: entry.tag,
                     targetMode: entry.targetMode,
                     taskType: entry.type,
                   });
@@ -1391,6 +1535,7 @@ interface PreflightFixDraft {
   type: OperationTaskType;
   targetMode: OperationTaskTargetMode;
   serverIds: string[];
+  tag: string;
   command?: string;
   reason: string;
 }
@@ -1407,6 +1552,7 @@ function buildPreflightFixDraft({
   preflight,
   reason,
   selectedServerIds,
+  tag,
   targetMode,
   taskType,
 }: {
@@ -1415,6 +1561,7 @@ function buildPreflightFixDraft({
   preflight: OperationTaskPreflightResponse;
   reason: string;
   selectedServerIds: string[];
+  tag: string;
   targetMode: OperationTaskTargetMode;
   taskType: OperationTaskType;
 }): PreflightFixDraft | null {
@@ -1437,6 +1584,7 @@ function buildPreflightFixDraft({
       type: 'assetSync',
       targetMode: affectedServerIds.length > 0 ? 'selected' : 'allServers',
       serverIds: affectedServerIds,
+      tag: '',
       reason: copy.preflightFixReasonBlocked,
     };
   }
@@ -1448,6 +1596,7 @@ function buildPreflightFixDraft({
     type: taskType,
     targetMode,
     serverIds: targetMode === 'selected' ? selectedServerIds.slice(0, 50) : [],
+    tag: targetMode === 'tag' ? tag : '',
     command: taskType === 'sshCommand' ? command : undefined,
     reason: reason.trim() || copy.preflightFixReasonWarn,
   };
@@ -1574,9 +1723,60 @@ function buildOperationServerGroups(servers: ServerNode[]) {
   return { connectedServers, warningServers };
 }
 
-function resolvePreviewCount(targetMode: OperationTaskTargetMode, eligibleServerCount: number, selectedServerCount: number) {
+function buildOperationTagOptions(servers: ServerNode[]): OperationTagOption[] {
+  const labelsByValue = new Map<string, string>();
+  for (const server of servers) {
+    for (const tag of server.tags) {
+      const value = normalizeOperationTag(tag);
+      if (value && !labelsByValue.has(value)) {
+        labelsByValue.set(value, tag.trim());
+      }
+    }
+  }
+
+  return [...labelsByValue.entries()]
+    .map(([value, label]) => ({ value, label }))
+    .sort((left, right) => left.label.localeCompare(right.label));
+}
+
+function buildOperationTagScopeStats(servers: ServerNode[], tag: string) {
+  const normalizedTag = normalizeOperationTag(tag);
+  const matchedServers: ServerNode[] = [];
+  let sshConnectedCount = 0;
+
+  if (!normalizedTag) {
+    return { matchedServers, sshConnectedCount };
+  }
+
+  for (const server of servers) {
+    if (!server.tags.some((candidate) => normalizeOperationTag(candidate) === normalizedTag)) {
+      continue;
+    }
+    matchedServers.push(server);
+    if (server.ssh?.connected) {
+      sshConnectedCount += 1;
+    }
+  }
+
+  return { matchedServers, sshConnectedCount };
+}
+
+function normalizeOperationTag(value: string) {
+  return value.trim().toLocaleLowerCase();
+}
+
+function resolvePreviewCount(
+  targetMode: OperationTaskTargetMode,
+  eligibleServerCount: number,
+  selectedServerCount: number,
+  taggedServerCount: number,
+) {
   if (targetMode === 'selected') {
     return selectedServerCount;
+  }
+
+  if (targetMode === 'tag') {
+    return taggedServerCount;
   }
 
   return eligibleServerCount;
@@ -1615,6 +1815,7 @@ function createPreflightHistoryEntry(
     type: OperationTaskType;
     targetMode: OperationTaskTargetMode;
     serverIds: string[];
+    tag: string;
     command: string;
     reason: string;
     targetCount: number;
@@ -1625,6 +1826,7 @@ function createPreflightHistoryEntry(
     type: form.type,
     targetMode: form.targetMode,
     serverIds: [...form.serverIds],
+    tag: form.tag,
     command: form.command,
     reason: form.reason,
     targetCount: form.targetCount,
@@ -1725,7 +1927,7 @@ function buildOperationConfirmMessage(type: OperationTaskType, count: number, na
 
 function preflightStatusText(
   preflight: OperationTaskPreflightResponse,
-  copy: (typeof preflightCopyByLanguage)[string],
+  copy: PreflightCopy,
 ) {
   if (!preflight.ok) {
     return copy.blocked;
@@ -1738,7 +1940,7 @@ function preflightStatusText(
 
 function formatPreflightSummaryLine(
   preflight: OperationTaskPreflightResponse,
-  copy: (typeof preflightCopyByLanguage)[string],
+  copy: PreflightCopy,
   nonSshTargetLabel: string,
   fallbackTargetCount = 0,
 ) {
@@ -1748,6 +1950,22 @@ function formatPreflightSummaryLine(
   }
 
   return `${copy.targets}: ${totalTargets}/${preflight.summary.runnableTargets} / ${copy.issues}: ${preflight.issues.length}`;
+}
+
+function formatPreflightIssueMessage(
+  issue: Pick<OperationTaskPreflightIssue, 'code' | 'message'> | undefined,
+  copy: PreflightCopy,
+  targetMode?: OperationTaskTargetMode,
+) {
+  if (!issue) {
+    return copy.blocked;
+  }
+
+  if (issue.code === 'OPERATIONS_TARGETS_UNCONNECTED' && targetMode === 'tag') {
+    return copy.tagSshUnconnected;
+  }
+
+  return copy.issueMessages[issue.code] ?? issue.message;
 }
 
 function formatPreflightPlanTargetSummary(preflight: OperationTaskPreflightResponse, fallbackTargetCount = 0) {
