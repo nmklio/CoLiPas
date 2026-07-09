@@ -118,7 +118,9 @@ function buildLandingCheck() {
       await expectLink(page, /文档|Docs/i, '/docs.html');
       await expectLink(page, /后台|登录|Admin|进入/i, '/admin/');
       await expectLocatorCountAtLeast(page.locator('section, article, .feature-card, .position-card, .deploy-card'), 6, 'landing content sections');
-      await expectLocatorCountAtLeast(page.locator('.feature-card .feature-icon svg'), 6, 'landing feature SVG icons');
+      await expectLocatorCount(page.locator('[data-colipas-feature="contextual-launch-summary"]'), 1, 'landing contextual launch guide feature card');
+      await expectText(page.locator('[data-colipas-feature="contextual-launch-summary"]'), /上线检查|release checklist|workspace summary/i, 'landing contextual launch guide copy');
+      await expectLocatorCountAtLeast(page.locator('.feature-card .feature-icon svg'), 7, 'landing feature SVG icons');
       await expectLocatorCountAtLeast(page.locator('.position-card.position-flow-card'), 4, 'landing redesigned flow position cards');
       await expectLocatorCount(page.locator('.position-card .position-step'), 4, 'landing position flow step numbers');
       await expectLocatorCount(page.locator('.position-card .position-state'), 4, 'landing position flow state pills');
@@ -151,6 +153,8 @@ function buildDocsCheck() {
       await expectText(page.locator('body'), /受保护的环境变量注入公网地址和初始密码|不会在结束时回显已提供的密码/, 'docs unattended deployment wording');
       await expectText(page.locator('body'), /未验证的服务器不会显示已接入|不要将 Vite 5173 作为生产入口/, 'docs polished operational wording');
       await expectTextAbsent(page, /不要把真实密码写进公开仓库或截图|公开仓库或截图|ChangeThisStrongPassword123|NewStrongPassword123|admin123456|乱填|类 VNC|\u4e91\u7ef4|截图里的真实资产|当作正式服务|开发者改代码后再上线|演示后台|演示登录|默认演示密码|是不是固定/, 'docs awkward wording');
+      await expectLocatorCount(page.locator('#launch-checklist'), 1, 'docs contextual launch guide section');
+      await expectText(page.locator('#launch-checklist'), /上线检查|workspace summary|release checklist/i, 'docs contextual launch guide copy');
       await assertSensitiveTextAbsent(page, 'docs');
     },
   };

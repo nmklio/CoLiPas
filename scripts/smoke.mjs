@@ -3635,10 +3635,16 @@ function assertAccountUiGuards() {
   const launchGuideFragments = [
     'interface LaunchChecklistItem',
     'launchGuideStorageKey',
+    'launchGuideViewStorageKey',
+    'type LaunchGuideViewPreference',
+    'readLaunchGuideViewPreference',
     'buildLaunchChecklist',
     'data-launch-guide="true"',
+    'data-launch-guide-compact={launchGuideCompact ? \'true\' : undefined}',
     'data-launch-guide-item={item.id}',
     'data-launch-guide-open="true"',
+    'data-launch-guide-view-toggle={launchGuideCompact ? \'expand\' : \'compact\'}',
+    'data-launch-guide-compact-next="true"',
     'data-launch-guide-copy-report="true"',
     'data-launch-guide-recheck="true"',
     'data-launch-guide-start-top-fix="true"',
@@ -3655,12 +3661,14 @@ function assertAccountUiGuards() {
     'getLaunchRemediationReason',
     'fetchConfigSummary',
     '.launch-guide-radar',
+    '.launch-guide.compact',
+    '.launch-guide-compact-next',
     '.launch-guide-grid',
     '.launch-guide-actions',
     '.launch-guide-fix-queue',
     '.launch-guide-fix-step',
     'async function assertLaunchGuide',
-    'first-run launch checklist routing, recheck, and sanitization',
+    'contextual launch guide compaction, detail routing, recheck, and sanitization',
     'Launch guide copied report leaked a raw IP address or secret',
     'Launch guide priority remediation queue is incomplete',
   ];
@@ -3669,7 +3677,7 @@ function assertAccountUiGuards() {
   if (missingLaunchGuide.length) {
     throw new Error(`First-run launch guide is incomplete: ${missingLaunchGuide.join(', ')}`);
   }
-  for (const key of ['launchGuide.title', 'launchGuide.runtimeTitle', 'launchGuide.assetsTitle', 'launchGuide.sshTitle', 'launchGuide.aiTitle', 'launchGuide.preflightTitle', 'launchGuide.auditTitle', 'launchGuide.copyReport', 'launchGuide.recheck', 'launchGuide.rechecked', 'launchGuide.reportSanitizedNote', 'launchGuide.fixQueueTitle', 'launchGuide.fixReasonRuntime', 'launchGuide.startTopFix']) {
+  for (const key of ['launchGuide.title', 'launchGuide.compactEyebrow', 'launchGuide.compactTitle', 'launchGuide.compactDetail', 'launchGuide.compactMode', 'launchGuide.compactExpand', 'launchGuide.runtimeTitle', 'launchGuide.assetsTitle', 'launchGuide.sshTitle', 'launchGuide.aiTitle', 'launchGuide.preflightTitle', 'launchGuide.auditTitle', 'launchGuide.copyReport', 'launchGuide.recheck', 'launchGuide.rechecked', 'launchGuide.reportSanitizedNote', 'launchGuide.fixQueueTitle', 'launchGuide.fixReasonRuntime', 'launchGuide.startTopFix']) {
     const count = (i18nSource.match(new RegExp(key.replace('.', '\\.'), 'g')) ?? []).length;
     if (count < 3) {
       throw new Error(`Launch guide i18n key is missing languages: ${key}`);
@@ -5034,6 +5042,9 @@ function assertInteractiveDeployDocsAndScriptGuards() {
   const readmeSource = fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8');
   const cnReadmeSource = fs.readFileSync(new URL('../README_CN.md', import.meta.url), 'utf8');
   const jpReadmeSource = fs.readFileSync(new URL('../README_JP.md', import.meta.url), 'utf8');
+  const marketingSource = fs.readFileSync(new URL('../src/app/MarketingPage.tsx', import.meta.url), 'utf8');
+  const docsPageSource = fs.readFileSync(new URL('../src/app/DocsPage.tsx', import.meta.url), 'utf8');
+  const serverUpdateSource = fs.readFileSync(new URL('../deploy/server-update.sh', import.meta.url), 'utf8');
   const installerRequired = [
     'CoLiPas cloud server management panel interactive deployment',
     'COLIPAS_DRY_RUN',
@@ -5082,6 +5093,21 @@ function assertInteractiveDeployDocsAndScriptGuards() {
   for (const [name, source, phrase] of docsMustExplainPasswordOutput) {
     if (!source.includes(phrase)) {
       throw new Error(`${name} must explain that provided installer passwords are not printed again`);
+    }
+  }
+
+  const contextualLaunchGuideSources = [
+    ['README.md', readmeSource, 'Contextual launch guide'],
+    ['README_CN.md', cnReadmeSource, '上下文上线检查'],
+    ['README_JP.md', jpReadmeSource, 'コンテキスト公開チェック'],
+    ['MarketingPage.tsx', marketingSource, '上下文上线检查'],
+    ['DocsPage.tsx', docsPageSource, '使用上下文上线检查'],
+    ['server-update.sh landing card', serverUpdateSource, 'data-colipas-feature="contextual-launch-summary"'],
+    ['server-update.sh docs', serverUpdateSource, 'id="launch-checklist"'],
+  ];
+  for (const [name, source, phrase] of contextualLaunchGuideSources) {
+    if (!source.includes(phrase)) {
+      throw new Error(`${name} must document the contextual launch guide`);
     }
   }
 

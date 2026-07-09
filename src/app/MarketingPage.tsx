@@ -12,6 +12,7 @@ import {
   Globe2,
   KeyRound,
   Layers3,
+  ListChecks,
   LockKeyhole,
   MapPinned,
   Network,
@@ -44,6 +45,12 @@ const featureCards = [
     title: '全球小地图监控',
     desc: '按服务器地域聚合展示，支持悬停详情、缩放、地区跳转和移动端适配。',
     tags: ['地域识别', '可交互'],
+  },
+  {
+    icon: ListChecks,
+    title: '上下文上线检查',
+    desc: '总览保留完整上线清单；进入服务器、AI、运维、API 和安全工作区后自动压缩为摘要，需要证据时再一键展开。',
+    tags: ['渐进披露', '性能模式联动'],
   },
   {
     icon: TerminalSquare,

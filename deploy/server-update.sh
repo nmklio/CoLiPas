@@ -170,6 +170,7 @@ function landingIcon(kind, className) {
     map: '<path d="M12 21s6-5.1 6-10.2A6 6 0 0 0 6 10.8C6 15.9 12 21 12 21Z"/><circle cx="12" cy="10.8" r="2.2"/>',
     terminal: '<rect x="4.2" y="5" width="15.6" height="14" rx="2.7"/><path d="M4.2 8.6h15.6"/><path d="m8 12 2.5 2L8 16"/><path d="M13.4 16h4.1"/><circle cx="7" cy="6.9" r=".45"/><circle cx="8.8" cy="6.9" r=".45"/>',
     ai: '<rect x="7.1" y="7.1" width="9.8" height="9.8" rx="2.2"/><path d="M12 3.8v3.3M12 16.9v3.3M3.8 12h3.3M16.9 12h3.3M8.5 4.6l1.2 2.8M15.5 4.6l-1.2 2.8M8.5 19.4l1.2-2.8M15.5 19.4l-1.2-2.8"/><circle cx="10.3" cy="11.7" r=".55"/><circle cx="13.7" cy="11.7" r=".55"/><path d="M10.5 14h3"/>',
+    checklist: '<rect x="5" y="4.3" width="14" height="15.4" rx="2.4"/><path d="M8.2 9h7.2M8.2 13h7.2M8.2 17h4.2"/><path d="M6.5 9.1 l0.8 0.8 1.4 -1.6M6.5 13.1 l0.8 0.8 1.4 -1.6M6.5 17.1 l0.8 0.8 1.4 -1.6"/>',
     flow: '<circle cx="6.5" cy="7" r="2.2"/><circle cx="17.5" cy="7" r="2.2"/><circle cx="12" cy="17" r="2.2"/><path d="M8.6 7h6.8M7.8 9l3.1 5.7M16.2 9l-3.1 5.7"/>',
     shield: '<path d="M12 3.8 18.3 6v5.3c0 4.1-2.5 7.2-6.3 8.9-3.8-1.7-6.3-4.8-6.3-8.9V6L12 3.8Z"/><path d="M9.2 12.1 11.1 14l3.9-4.3"/><path d="M8.6 17.3h6.8"/>',
     code: '<path d="m9 8-4 4 4 4M15 8l4 4-4 4"/><path d="m13.2 6.8-2.4 10.4"/>',
@@ -262,6 +263,11 @@ replaceAll(/<span class="icon">03<\/span>/g, landingIcon('terminal', 'icon featu
 replaceAll(/<span class="icon">04<\/span>/g, landingIcon('ai', 'icon feature-icon'));
 replaceAll(/<span class="icon">05<\/span>/g, landingIcon('flow', 'icon feature-icon'));
 replaceAll(/<span class="icon">06<\/span>/g, landingIcon('shield', 'icon feature-icon'));
+
+if (!html.includes('data-colipas-feature="contextual-launch-summary"')) {
+  replaceOnce(/(<div class="feature-grid">)/, `$1
+      <article class="feature-card" data-colipas-feature="contextual-launch-summary">${landingIcon('checklist', 'icon feature-icon')}<h3>上下文上线检查</h3><p>总览保留完整上线清单；进入服务器、AI、运维、API 和安全工作区后自动压缩为摘要，需要证据时再一键展开。</p><div class="tags"><span>渐进披露</span><span>性能模式联动</span></div></article>`);
+}
 
 replaceAll(/<article class="deploy-card"><h3>Linux systemd<\/h3>/g, `<article class="deploy-card">${landingIcon('terminal', 'deploy-icon')}<h3>Linux systemd</h3>`);
 replaceAll(/<article class="deploy-card"><h3>Node 20\+<\/h3>/g, `<article class="deploy-card">${landingIcon('code', 'deploy-icon')}<h3>Node 20+</h3>`);
@@ -1087,10 +1093,12 @@ SVG
     .content {
       display: grid;
       gap: 18px;
+      min-width: 0;
     }
     .section {
       scroll-margin-top: 96px;
       padding: clamp(22px, 4vw, 34px);
+      min-width: 0;
     }
     .section h2 {
       margin: 0;
@@ -1152,6 +1160,7 @@ SVG
       box-shadow: none;
       display: grid;
       gap: 10px;
+      min-width: 0;
     }
     .doc-card h3 {
       gap: 10px;
@@ -1238,6 +1247,7 @@ SVG
       display: grid;
       gap: 12px;
       box-shadow: none;
+      min-width: 0;
     }
     details {
       border: 1px solid #e1ebf7;
@@ -1261,7 +1271,7 @@ SVG
       .hero,
       .layout,
       .split {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
       }
       .hero-steps {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1278,6 +1288,7 @@ SVG
       .sidebar {
         position: static;
         grid-template-columns: repeat(2, minmax(0, 1fr));
+        min-width: 0;
       }
     }
     @media (max-width: 640px) {
@@ -1316,7 +1327,7 @@ SVG
       .hero-steps,
       .table div,
       .sidebar {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
       }
       .section {
         padding: 18px;
@@ -1383,6 +1394,7 @@ SVG
       <a href="#install">安装部署 <span>→</span></a>
       <a href="#config">环境变量 <span>→</span></a>
       <a href="#first-run">首次使用 <span>→</span></a>
+      <a href="#launch-checklist">上线检查 <span>→</span></a>
       <a href="#server-access">服务器接入 <span>→</span></a>
       <a href="#ssh">SSH 终端 <span>→</span></a>
       <a href="#ai">AI 设置 <span>→</span></a>
@@ -1395,6 +1407,7 @@ SVG
       <a href="#install">安装部署</a>
       <a href="#config">环境变量</a>
       <a href="#first-run">首次使用</a>
+      <a href="#launch-checklist">上线检查</a>
       <a href="#server-access">服务器接入</a>
       <a href="#ai">AI 助手</a>
       <a href="#ssh">SSH 与编排</a>
@@ -1456,6 +1469,26 @@ SVG
           <div class="flow-step"><b>4</b><div><h3>验证 SSH、AI 与编排联动</h3><p>打开终端执行只读诊断命令，再配置 AI Provider、加载模型、测试自定义 API 白名单，最后执行一条低风险编排任务。</p></div></div>
         </div>
         <p class="section-note">忘记管理员密码时只能重置，不能找回明文密码。Docker 部署可在 `/opt/colipas` 执行 `docker compose exec -e COLIPAS_RESET_PASSWORD='replace-with-new-strong-password' colipas npm run reset:admin` 后重启容器；systemd 部署可执行 `sudo -u colipas env COLIPAS_RESET_PASSWORD='replace-with-new-strong-password' npm run reset:admin` 后重启服务。</p>
+      </section>
+
+      <section id="launch-checklist" class="section split">
+        <div>
+          <p class="kicker">上下文上线检查</p>
+          <h2>总览看完整证据，工作区只保留当前需要的摘要</h2>
+          <p>总览页默认展示运行安全、资产接入、SSH、AI、运维预检和审计六项完整检查，以及按优先级排序的修复队列。进入服务器、AI、运维、API 或安全工作区后，面板会自动收敛为进度、整体状态和下一步修复，避免重复占用操作空间。</p>
+          <div class="check-list">
+            <p class="check-line"><span>✓</span> 摘要状态仍会显示当前完成度和最高优先级操作。</p>
+            <p class="check-line"><span>✓</span> 需要排障或上线留证时，可一键展开完整检查、修复队列和脱敏报告。</p>
+            <p class="check-line"><span>✓</span> 展开或摘要偏好仅保存在当前浏览器，切换页面后仍会保持。</p>
+          </div>
+        </div>
+        <aside class="terminal-card">
+          <strong>推荐使用顺序</strong>
+          <pre>总览：确认六项完整检查
+工作区：按摘要处理下一步
+性能模式：保持摘要，减少首屏负担
+上线前：展开完整证据并复检</pre>
+        </aside>
       </section>
 
       <section id="server-access" class="section">
