@@ -102,6 +102,23 @@ export type OperationTaskStatus = 'queued' | 'running' | 'completed' | 'partial'
 
 export type AuditCorrelationId = string;
 
+export type MaintenanceWindowScope = 'all' | 'allConnected' | 'selected';
+
+export type MaintenanceWindowPhase = 'upcoming' | 'active' | 'ended';
+
+export interface MaintenanceWindow {
+  id: string;
+  title: string;
+  note: string;
+  scope: MaintenanceWindowScope;
+  serverIds: string[];
+  startsAt: string;
+  endsAt: string;
+  createdAt: string;
+  updatedAt: string;
+  phase: MaintenanceWindowPhase;
+}
+
 export interface OperationTaskRequest {
   type: OperationTaskType;
   targetMode: OperationTaskTargetMode;
@@ -115,6 +132,7 @@ export interface OperationTaskRequest {
 export interface OperationTaskPreflightIssue {
   code:
     | 'OPERATIONS_CONFIRMATION_REQUIRED'
+    | 'OPERATIONS_MAINTENANCE_WINDOW_MISSING'
     | 'OPERATIONS_NO_TARGETS'
     | 'OPERATIONS_TARGETS_NOT_FOUND'
     | 'OPERATIONS_TARGETS_UNCONNECTED';
@@ -167,6 +185,13 @@ export interface OperationTaskPreflightResponse {
   targetLimit?: number;
   omittedTargets?: number;
   generatedAt: string;
+  maintenance: {
+    required: boolean;
+    status: 'notRequired' | 'covered' | 'partial' | 'missing';
+    activeWindowIds: string[];
+    coveredTargets: number;
+    uncoveredTargets: number;
+  };
 }
 
 export interface OperationTaskTargetResult {

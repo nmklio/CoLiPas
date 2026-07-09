@@ -16,6 +16,7 @@ import { buildAccountPayload, changeAdminPassword, getCurrentSession, getLoginTh
 import { executeCustomApiProxy } from './services/customApiProxy.js';
 import { getDatabasePath } from './services/database.js';
 import { buildDiagnosticExport } from './services/diagnosticService.js';
+import { createMaintenanceWindow, deleteMaintenanceWindow, listMaintenanceWindows } from './services/maintenanceWindowService.js';
 import { createOperationTask, preflightOperationTask } from './services/operationsService.js';
 import { buildReleaseReadiness, buildReleaseReadinessReport, getReleaseGatePolicy, recordReleaseReadinessSnapshot, updateReleaseGatePolicy } from './services/releaseReadinessService.js';
 import { checkReleaseSyncHealth } from './services/releaseSyncHealthService.js';
@@ -323,6 +324,44 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
 
   app.get('/api/operations/events', (_request, response) => {
     response.json({ items: listOperationEvents() });
+  });
+
+  app.get('/api/operations/maintenance-windows', (_request, response) => {
+    response.json({ items: listMaintenanceWindows() });
+  });
+
+  app.post('/api/operations/maintenance-windows', (request, response, next) => {
+    try {
+      const session = requireSession(request, config);
+      const result = createMaintenanceWindow(request.body, servers);
+      recordAudit({
+        action: 'MAINTENANCE_WINDOW_CREATE',
+        actor: session.user.username,
+        target: 'operations-maintenance-window',
+        status: 'success',
+        detail: `Maintenance window created: ${result.window.title} (${result.window.scope})`,
+      });
+      response.status(201).json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.delete('/api/operations/maintenance-windows/:windowId', (request, response, next) => {
+    try {
+      const session = requireSession(request, config);
+      const result = deleteMaintenanceWindow(request.params.windowId);
+      recordAudit({
+        action: 'MAINTENANCE_WINDOW_DELETE',
+        actor: session.user.username,
+        target: 'operations-maintenance-window',
+        status: 'success',
+        detail: 'Maintenance window deleted',
+      });
+      response.json(result);
+    } catch (error) {
+      next(error);
+    }
   });
 
   app.post('/api/operations/tasks', async (request, response, next) => {

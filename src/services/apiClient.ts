@@ -10,6 +10,8 @@ import {
   OperationTaskPreflightResponse,
   OperationTaskRequest,
   OperationTaskResponse,
+  MaintenanceWindow,
+  MaintenanceWindowScope,
   DiagnosticExportResponse,
   ReleaseReadinessReportResponse,
   ReleaseReadinessResponse,
@@ -193,6 +195,30 @@ export interface SshRunbookPinResponse extends SshRunbookResponse {
 
 export interface SshRunbookUseResponse extends SshRunbookResponse {
   command: SshRunbookCommand;
+}
+
+export interface MaintenanceWindowsResponse {
+  items: MaintenanceWindow[];
+}
+
+export interface MaintenanceWindowMutationResponse {
+  window: MaintenanceWindow;
+  windows: MaintenanceWindow[];
+}
+
+export interface MaintenanceWindowDeleteResponse {
+  ok: boolean;
+  id: string;
+  windows: MaintenanceWindow[];
+}
+
+export interface MaintenanceWindowPayload {
+  title: string;
+  note?: string;
+  scope: MaintenanceWindowScope;
+  serverIds?: string[];
+  startsAt: string;
+  endsAt: string;
 }
 
 export interface ServerShellStreamEvent {
@@ -1500,6 +1526,42 @@ export async function createOperationTask(payload: OperationTaskRequest, fetcher
   }
 
   return (await response.json()) as OperationTaskResponse;
+}
+
+export async function fetchMaintenanceWindows(fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/operations/maintenance-windows');
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as MaintenanceWindowsResponse;
+}
+
+export async function createMaintenanceWindow(payload: MaintenanceWindowPayload, fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/operations/maintenance-windows', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as MaintenanceWindowMutationResponse;
+}
+
+export async function deleteMaintenanceWindow(windowId: string, fetcher: typeof fetch = fetch) {
+  const response = await fetcher(`/api/operations/maintenance-windows/${encodeURIComponent(windowId)}`, {
+    method: 'DELETE',
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as MaintenanceWindowDeleteResponse;
 }
 
 export async function preflightOperationTask(payload: OperationTaskRequest, fetcher: typeof fetch = fetch) {

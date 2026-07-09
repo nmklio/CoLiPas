@@ -43,6 +43,7 @@ assertSshKeyAuthenticationGuards();
 assertMobileTopbarKeepsCoreActions();
 assertSecurityAuditRelationsAreSpecific();
 assertOperationsTargetSelectionGuards();
+assertMaintenanceWindowGuards();
 assertInventorySnapshotCacheGuards();
 assertLocalizedFormatCacheGuards();
 assertCustomApiProxySecurityGuards();
@@ -73,6 +74,10 @@ if (unauthenticatedShellStatusResponse.status !== 401) {
 const unauthenticatedRunbookResponse = await fetch(`${baseUrl}/api/servers/ssh-runbook`);
 if (unauthenticatedRunbookResponse.status !== 401) {
   throw new Error(`/api/servers/ssh-runbook expected 401 before login, got ${unauthenticatedRunbookResponse.status}`);
+}
+const unauthenticatedMaintenanceWindowsResponse = await fetch(`${baseUrl}/api/operations/maintenance-windows`);
+if (unauthenticatedMaintenanceWindowsResponse.status !== 401) {
+  throw new Error(`/api/operations/maintenance-windows expected 401 before login, got ${unauthenticatedMaintenanceWindowsResponse.status}`);
 }
 const unauthenticatedPasswordResponse = await fetch(`${baseUrl}/api/account/password`, {
   method: 'POST',
@@ -2622,13 +2627,93 @@ const operationPreflightRebootWarnBody = await operationPreflightRebootWarnRespo
 if (
   operationPreflightRebootWarnBody.ok !== true
   || operationPreflightRebootWarnBody.requiresConfirmation !== true
+  || operationPreflightRebootWarnBody.maintenance?.required !== true
+  || operationPreflightRebootWarnBody.maintenance?.status !== 'missing'
   || operationPreflightRebootWarnBody.targets?.[0]?.runnable !== true
   || !operationPreflightRebootWarnBody.targets?.[0]?.issues?.some((issue) => issue.code === 'OPERATIONS_CONFIRMATION_REQUIRED' && issue.severity === 'warn')
   || !operationPreflightRebootWarnBody.issues?.some((issue) => issue.code === 'OPERATIONS_CONFIRMATION_REQUIRED' && issue.severity === 'warn')
+  || !operationPreflightRebootWarnBody.issues?.some((issue) => issue.code === 'OPERATIONS_MAINTENANCE_WINDOW_MISSING' && issue.severity === 'warn')
 ) {
   throw new Error('/api/operations/tasks/preflight did not warn for unconfirmed reboot');
 }
 console.log('ok /api/operations/tasks/preflight warns before destructive actions');
+
+const maintenanceWindowInvalidResponse = await fetch(`${baseUrl}/api/operations/maintenance-windows`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    title: 'Invalid maintenance window',
+    scope: 'allConnected',
+    startsAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+    endsAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+  }),
+});
+if (maintenanceWindowInvalidResponse.status !== 400) {
+  throw new Error(`/api/operations/maintenance-windows expected 400 for invalid time range, got ${maintenanceWindowInvalidResponse.status}`);
+}
+
+const maintenanceWindowCreateResponse = await fetch(`${baseUrl}/api/operations/maintenance-windows`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    title: `Smoke maintenance ${Date.now()}`,
+    note: 'Release smoke coverage',
+    scope: 'selected',
+    serverIds: [connectedServer.id],
+    startsAt: new Date(Date.now() - 60_000).toISOString(),
+    endsAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+  }),
+});
+if (maintenanceWindowCreateResponse.status !== 201) {
+  throw new Error(`/api/operations/maintenance-windows expected 201 on create, got ${maintenanceWindowCreateResponse.status}: ${await maintenanceWindowCreateResponse.text()}`);
+}
+const maintenanceWindowCreateBody = await maintenanceWindowCreateResponse.json();
+const maintenanceWindowId = maintenanceWindowCreateBody.window?.id;
+if (
+  !maintenanceWindowId
+  || maintenanceWindowCreateBody.window?.phase !== 'active'
+  || maintenanceWindowCreateBody.window?.scope !== 'selected'
+  || maintenanceWindowCreateBody.window?.serverIds?.join(',') !== connectedServer.id
+  || !maintenanceWindowCreateBody.windows?.some((window) => window.id === maintenanceWindowId)
+  || JSON.stringify(maintenanceWindowCreateBody).includes(connectedServer.publicIp)
+  || JSON.stringify(maintenanceWindowCreateBody).includes(connectedServer.privateIp)
+) {
+  throw new Error('/api/operations/maintenance-windows create returned unexpected or sensitive payload');
+}
+
+const maintenanceWindowsReadResponse = await fetch(`${baseUrl}/api/operations/maintenance-windows`, { headers: authHeaders });
+if (!maintenanceWindowsReadResponse.ok) {
+  throw new Error(`/api/operations/maintenance-windows returned HTTP ${maintenanceWindowsReadResponse.status}`);
+}
+const maintenanceWindowsReadBody = await maintenanceWindowsReadResponse.json();
+if (!maintenanceWindowsReadBody.items?.some((window) => window.id === maintenanceWindowId && window.phase === 'active')) {
+  throw new Error('/api/operations/maintenance-windows did not persist the active maintenance window');
+}
+
+const operationPreflightCoveredRebootResponse = await fetch(`${baseUrl}/api/operations/tasks/preflight`, {
+  method: 'POST',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    type: 'reboot',
+    targetMode: 'selected',
+    serverIds: [connectedServer.id],
+    reason: 'maintenance coverage preflight',
+    confirmed: true,
+  }),
+});
+if (!operationPreflightCoveredRebootResponse.ok) {
+  throw new Error(`/api/operations/tasks/preflight covered reboot returned HTTP ${operationPreflightCoveredRebootResponse.status}`);
+}
+const operationPreflightCoveredRebootBody = await operationPreflightCoveredRebootResponse.json();
+if (
+  operationPreflightCoveredRebootBody.maintenance?.status !== 'covered'
+  || operationPreflightCoveredRebootBody.maintenance?.coveredTargets !== 1
+  || operationPreflightCoveredRebootBody.maintenance?.uncoveredTargets !== 0
+  || operationPreflightCoveredRebootBody.issues?.some((issue) => issue.code === 'OPERATIONS_MAINTENANCE_WINDOW_MISSING')
+) {
+  throw new Error('/api/operations/tasks/preflight did not recognize active maintenance window coverage');
+}
+console.log('ok maintenance windows persist and cover high-impact operations in preflight');
 
 const operationPreflightCommandSecret = `sk-smoke-preflight-${Date.now()}`;
 const operationPreflightCommandResponse = await fetch(`${baseUrl}/api/operations/tasks/preflight`, {
@@ -2822,6 +2907,22 @@ if (operationUnconfirmedRebootResponse.status !== 409) {
 }
 console.log('ok /api/operations/tasks requires confirmation for reboot');
 
+const maintenanceWindowDeleteResponse = await fetch(`${baseUrl}/api/operations/maintenance-windows/${encodeURIComponent(maintenanceWindowId)}`, {
+  method: 'DELETE',
+  headers: authHeaders,
+});
+if (!maintenanceWindowDeleteResponse.ok) {
+  throw new Error(`/api/operations/maintenance-windows/:id DELETE returned HTTP ${maintenanceWindowDeleteResponse.status}`);
+}
+const maintenanceWindowDeleteBody = await maintenanceWindowDeleteResponse.json();
+if (
+  maintenanceWindowDeleteBody.id !== maintenanceWindowId
+  || maintenanceWindowDeleteBody.windows?.some((window) => window.id === maintenanceWindowId)
+) {
+  throw new Error('/api/operations/maintenance-windows/:id DELETE did not remove the window');
+}
+console.log('ok /api/operations/maintenance-windows deletes temporary maintenance windows');
+
 const operationUnconnectedSelectedResponse = await fetch(`${baseUrl}/api/operations/tasks`, {
   method: 'POST',
   headers: { ...authHeaders, 'Content-Type': 'application/json' },
@@ -2920,6 +3021,12 @@ if (!auditBody.items.some((item) => item.action === 'OPERATIONS_PREFLIGHT' && it
 }
 if (!auditBody.items.some((item) => item.action === 'OPERATIONS_PREFLIGHT' && item.status === 'blocked' && item.detail?.includes('blocking issue'))) {
   throw new Error('/api/audit/events did not include blocked operations preflight evidence');
+}
+if (
+  !auditBody.items.some((item) => item.action === 'MAINTENANCE_WINDOW_CREATE' && item.target === 'operations-maintenance-window')
+  || !auditBody.items.some((item) => item.action === 'MAINTENANCE_WINDOW_DELETE' && item.target === 'operations-maintenance-window')
+) {
+  throw new Error('/api/audit/events did not include maintenance window lifecycle evidence');
 }
 const operationPreflightAudit = auditBody.items.find((item) => item.action === 'OPERATIONS_PREFLIGHT' && item.status === 'success' && item.target === connectedServer.id && item.detail?.includes('Health check'));
 const operationTaskAudit = auditBody.items.find((item) => item.action === 'OPERATIONS_TASK' && item.status === 'success' && item.target === connectedServer.id && item.detail?.includes('healthCheck completed'));
@@ -7946,7 +8053,7 @@ function assertOperationsTargetSelectionGuards() {
     'sshConnected: Boolean(server.ssh?.connected)',
     'const disconnected = requiresSsh && status === \'unconnected\'',
     'const runnable = !disconnected',
-    'buildTargetPreflightIssues(parsed, server, requiresConfirmation)',
+    'buildTargetPreflightIssues(parsed, server, requiresConfirmation, maintenanceCoverage.required',
     'buildPreflightPlan(parsed',
     'sanitizeCommandPreview(task.command)',
     'riskSummary',
@@ -8017,6 +8124,96 @@ function assertOperationsTargetSelectionGuards() {
   }
 
   console.log('ok operations target selection guards stale and unconnected targets');
+}
+
+function assertMaintenanceWindowGuards() {
+  const maintenanceSource = fs.readFileSync(new URL('../src/server/services/maintenanceWindowService.ts', import.meta.url), 'utf8');
+  const operationsSource = fs.readFileSync(new URL('../src/server/services/operationsService.ts', import.meta.url), 'utf8');
+  const operationsUiSource = fs.readFileSync(new URL('../src/modules/operations/OperationsCenter.tsx', import.meta.url), 'utf8');
+  const maintenanceUiSource = fs.readFileSync(new URL('../src/modules/operations/MaintenanceWindowPanel.tsx', import.meta.url), 'utf8');
+  const appSource = fs.readFileSync(new URL('../src/server/app.ts', import.meta.url), 'utf8');
+  const apiClientSource = fs.readFileSync(new URL('../src/services/apiClient.ts', import.meta.url), 'utf8');
+  const typesSource = fs.readFileSync(new URL('../src/types.ts', import.meta.url), 'utf8');
+  const auditSource = fs.readFileSync(new URL('../src/server/services/auditService.ts', import.meta.url), 'utf8');
+
+  const maintenanceRequired = [
+    "const settingId = 'operations-maintenance-windows.v1'",
+    'const maxMaintenanceWindows = 12',
+    'minimumWindowDurationMs',
+    'maximumWindowDurationMs',
+    'redactSensitiveText',
+    'listMaintenanceWindows(referenceTime = new Date())',
+    'createMaintenanceWindow(input: unknown',
+    'deleteMaintenanceWindow(windowId: string',
+    'resolveMaintenanceWindowCoverage(',
+    'requiresMaintenanceWindow(task',
+    "task.type === 'shutdown'",
+    "task.type === 'reboot'",
+    "task.type === 'sshCommand'",
+    "scope === 'selected'",
+    'MAINTENANCE_WINDOW_TARGETS_REQUIRED',
+    'MAINTENANCE_WINDOW_SENSITIVE',
+  ];
+  const missingMaintenance = maintenanceRequired.filter((fragment) => !maintenanceSource.includes(fragment));
+  if (missingMaintenance.length) {
+    throw new Error(`Maintenance window service guard is incomplete: ${missingMaintenance.join(', ')}`);
+  }
+
+  const operationsRequired = [
+    'resolveMaintenanceWindowCoverage(parsed, targets)',
+    'OPERATIONS_MAINTENANCE_WINDOW_MISSING',
+    'maintenanceCoverage.uncoveredServerIds.length > 0',
+    'maintenance: {',
+    'formatMaintenanceAuditDetail',
+    'buildMaintenanceWindowWarning',
+  ];
+  const missingOperations = operationsRequired.filter((fragment) => !operationsSource.includes(fragment));
+  if (missingOperations.length) {
+    throw new Error(`Maintenance window preflight guard is incomplete: ${missingOperations.join(', ')}`);
+  }
+
+  const uiRequired = [
+    'MaintenanceWindowPanel',
+    'data-ops-maintenance-preflight="true"',
+    'formatMaintenancePreflightStatus',
+    'data-ops-maintenance-panel="true"',
+    'data-ops-maintenance-form="true"',
+    'data-ops-maintenance-create="true"',
+    'fetchMaintenanceWindows()',
+    'createMaintenanceWindow(payload)',
+    'deleteMaintenanceWindow(windowId)',
+    'content-visibility: auto',
+  ];
+  const uiSource = `${operationsUiSource}\n${maintenanceUiSource}\n${fs.readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8')}`;
+  const missingUi = uiRequired.filter((fragment) => !uiSource.includes(fragment));
+  if (missingUi.length) {
+    throw new Error(`Maintenance window UI guard is incomplete: ${missingUi.join(', ')}`);
+  }
+
+  const apiRequired = [
+    "app.get('/api/operations/maintenance-windows'",
+    "app.post('/api/operations/maintenance-windows'",
+    "app.delete('/api/operations/maintenance-windows/:windowId'",
+    "fetcher('/api/operations/maintenance-windows')",
+    "fetcher('/api/operations/maintenance-windows', {",
+    'MaintenanceWindowMutationResponse',
+  ];
+  const routeSource = `${appSource}\n${apiClientSource}`;
+  const missingApi = apiRequired.filter((fragment) => !routeSource.includes(fragment));
+  if (missingApi.length) {
+    throw new Error(`Maintenance window API guard is incomplete: ${missingApi.join(', ')}`);
+  }
+
+  if (
+    !typesSource.includes("export type MaintenanceWindowScope = 'all' | 'allConnected' | 'selected'")
+    || !typesSource.includes('OPERATIONS_MAINTENANCE_WINDOW_MISSING')
+    || !auditSource.includes("| 'MAINTENANCE_WINDOW_CREATE'")
+    || !auditSource.includes("| 'MAINTENANCE_WINDOW_DELETE'")
+  ) {
+    throw new Error('Maintenance window contracts or audit actions are incomplete');
+  }
+
+  console.log('ok maintenance windows persist safely and feed operations preflight coverage');
 }
 
 function assertInventorySnapshotCacheGuards() {

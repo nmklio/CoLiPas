@@ -16,6 +16,7 @@ import { getServerById, runServerCommand, runServerDiagnostic } from './inventor
 import { executeServerAction } from './serverActions.js';
 import { resolveServerLifecycleStatus } from '../../shared/serverFilters.js';
 import { getSshCommandConfirmationReason } from '../../shared/sshCommandRisk.js';
+import { resolveMaintenanceWindowCoverage } from './maintenanceWindowService.js';
 
 const operationOutputLimit = 200;
 const operationPreflightTargetLimit = 120;
@@ -57,6 +58,7 @@ export async function createOperationTask(input: unknown): Promise<OperationTask
   const targets = resolveTargets(parsed);
   const taskId = `ops-${crypto.randomUUID()}`;
   const correlationId = parsed.correlationId || buildOperationCorrelationId();
+  const maintenanceCoverage = resolveMaintenanceWindowCoverage(parsed, targets);
 
   if (parsed.targetMode === 'selected') {
     const foundIds = new Set(targets.map((server) => server.id));
@@ -162,7 +164,7 @@ export async function createOperationTask(input: unknown): Promise<OperationTask
     actor: 'operator',
     target: parsed.targetMode === 'selected' ? parsed.serverIds.join(',') : parsed.targetMode,
     status: status === 'failed' ? 'failed' : 'success',
-    detail: `${parsed.type} ${status}: ${summary.success} success, ${summary.failed} failed, ${summary.skipped} skipped`,
+    detail: `${parsed.type} ${status}: ${summary.success} success, ${summary.failed} failed, ${summary.skipped} skipped; ${formatMaintenanceAuditDetail(maintenanceCoverage)}`,
     correlationId,
   });
 
@@ -198,6 +200,8 @@ export function preflightOperationTask(input: unknown): OperationTaskPreflightRe
   const confirmationReason = requiredConfirmationReason(parsed);
   const requiresConfirmation = Boolean(confirmationReason);
   const requiresSsh = parsed.type !== 'assetSync';
+  const maintenanceCoverage = resolveMaintenanceWindowCoverage(parsed, targets);
+  const maintenanceCoveredServerIds = new Set(maintenanceCoverage.coveredServerIds);
   let disconnectedTargetCount = 0;
   let runnableTargetCount = 0;
   const existingPreflightTargets: OperationTaskPreflightResponse['targets'] = [];
@@ -227,7 +231,7 @@ export function preflightOperationTask(input: unknown): OperationTaskPreflightRe
         status,
         sshConnected: Boolean(server.ssh?.connected),
         runnable,
-        issues: buildTargetPreflightIssues(parsed, server, requiresConfirmation),
+        issues: buildTargetPreflightIssues(parsed, server, requiresConfirmation, maintenanceCoverage.required, maintenanceCoveredServerIds.has(server.id)),
       });
     }
   }
@@ -269,6 +273,15 @@ export function preflightOperationTask(input: unknown): OperationTaskPreflightRe
       severity: 'warn',
       message: `Operator confirmation is required before ${confirmationReason}`,
       count: runnableTargetCount,
+    });
+  }
+
+  if (maintenanceCoverage.required && maintenanceCoverage.uncoveredServerIds.length > 0) {
+    issues.push({
+      code: 'OPERATIONS_MAINTENANCE_WINDOW_MISSING',
+      severity: 'warn',
+      message: buildMaintenanceWindowWarning(maintenanceCoverage),
+      count: maintenanceCoverage.uncoveredServerIds.length,
     });
   }
 
@@ -321,6 +334,13 @@ export function preflightOperationTask(input: unknown): OperationTaskPreflightRe
     targetLimit: omittedPreflightTargets > 0 ? operationPreflightTargetLimit : undefined,
     omittedTargets: omittedPreflightTargets > 0 ? omittedPreflightTargets : undefined,
     generatedAt: new Date().toISOString(),
+    maintenance: {
+      required: maintenanceCoverage.required,
+      status: maintenanceCoverage.status,
+      activeWindowIds: maintenanceCoverage.activeWindowIds,
+      coveredTargets: maintenanceCoverage.coveredServerIds.length,
+      uncoveredTargets: maintenanceCoverage.uncoveredServerIds.length,
+    },
   };
 
   recordAudit({
@@ -370,6 +390,8 @@ function buildPreflightAuditDetail(response: OperationTaskPreflightResponse) {
   if (response.plan.commandPreview) {
     parts.push(`Command: ${response.plan.commandPreview}`);
   }
+
+  parts.push(formatMaintenanceAuditDetail(response.maintenance));
 
   return parts.join(' | ').slice(0, 900);
 }
@@ -479,6 +501,8 @@ function buildTargetPreflightIssues(
   task: ParsedOperationTask,
   server: ServerNode,
   requiresConfirmation: boolean,
+  maintenanceWindowRequired: boolean,
+  maintenanceWindowCovered: boolean,
 ): OperationTaskPreflightResponse['targets'][number]['issues'] {
   const targetIssues: OperationTaskPreflightResponse['targets'][number]['issues'] = [];
 
@@ -498,7 +522,43 @@ function buildTargetPreflightIssues(
     });
   }
 
+  if (maintenanceWindowRequired && !maintenanceWindowCovered && targetIssues.every((issue) => issue.severity !== 'block')) {
+    targetIssues.push({
+      code: 'OPERATIONS_MAINTENANCE_WINDOW_MISSING',
+      severity: 'warn',
+      message: 'No active maintenance window covers this high-impact operation',
+    });
+  }
+
   return targetIssues;
+}
+
+function buildMaintenanceWindowWarning(coverage: {
+  coveredServerIds: string[];
+  uncoveredServerIds: string[];
+}) {
+  if (coverage.coveredServerIds.length > 0) {
+    return `Active maintenance coverage is partial: ${coverage.uncoveredServerIds.length} target(s) are outside a maintenance window`;
+  }
+  return `No active maintenance window covers ${coverage.uncoveredServerIds.length} high-impact target(s)`;
+}
+
+function formatMaintenanceAuditDetail(coverage: {
+  required: boolean;
+  status: 'notRequired' | 'covered' | 'partial' | 'missing';
+  activeWindowIds: string[];
+  coveredServerIds?: string[];
+  uncoveredServerIds?: string[];
+  coveredTargets?: number;
+  uncoveredTargets?: number;
+}) {
+  if (!coverage.required) {
+    return 'maintenance window not required';
+  }
+
+  const covered = coverage.coveredServerIds?.length ?? coverage.coveredTargets ?? 0;
+  const uncovered = coverage.uncoveredServerIds?.length ?? coverage.uncoveredTargets ?? 0;
+  return `maintenance ${coverage.status}: ${covered} covered, ${uncovered} uncovered, ${coverage.activeWindowIds.length} active window(s)`;
 }
 
 function resolveTargets(task: ParsedOperationTask) {

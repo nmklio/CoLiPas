@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   ClipboardList,
+  CalendarClock,
   Clock3,
   PlayCircle,
   Plus,
@@ -20,6 +21,7 @@ import {
 import { useI18n } from '../../i18n';
 import { createOperationTask, preflightOperationTask } from '../../services/apiClient';
 import { getSshCommandConfirmationReason } from '../../shared/sshCommandRisk';
+import { MaintenanceWindowPanel } from './MaintenanceWindowPanel';
 import {
   OperationEvent,
   OperationTaskPreflightResponse,
@@ -1054,6 +1056,12 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
                     <strong>{preflight.plan.title}</strong>
                     <p>{formatPreflightPlanTargetSummary(preflight, previewCount)} / {preflight.plan.riskSummary}</p>
                     <p>{preflight.plan.impact}</p>
+                    {preflight.maintenance.required && (
+                      <p className={`ops-preflight-maintenance ${preflight.maintenance.status}`} data-ops-maintenance-preflight="true">
+                        <CalendarClock size={13} />
+                        {formatMaintenancePreflightStatus(preflight.maintenance, language)}
+                      </p>
+                    )}
                     {preflight.plan.commandPreview && (
                       <code>{preflightCopy.commandPreview}: {preflight.plan.commandPreview}</code>
                     )}
@@ -1145,6 +1153,8 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
         </div>
 
         <div className="event-panel ops-queue-panel">
+          <MaintenanceWindowPanel servers={servers} />
+
           <div className="ops-panel-title">
             <h3>{copy.queue}</h3>
             <span>{tasks.length}</span>
@@ -1763,6 +1773,32 @@ function preflightTone(preflight: OperationTaskPreflightResponse) {
     return 'warn';
   }
   return 'ready';
+}
+
+function formatMaintenancePreflightStatus(
+  maintenance: OperationTaskPreflightResponse['maintenance'],
+  language: string,
+) {
+  const coverage = `${maintenance.coveredTargets}/${maintenance.coveredTargets + maintenance.uncoveredTargets}`;
+  if (maintenance.status === 'covered') {
+    return language === 'zh'
+      ? `维护窗口已覆盖 ${coverage} 个高影响目标`
+      : language === 'ja'
+        ? `メンテナンス時間枠が高影響対象 ${coverage} 台をカバー`
+        : `Maintenance window covers ${coverage} high-impact target(s)`;
+  }
+  if (maintenance.status === 'partial') {
+    return language === 'zh'
+      ? `维护窗口仅覆盖 ${coverage} 个高影响目标，未覆盖目标已在预检中提示`
+      : language === 'ja'
+        ? `メンテナンス時間枠は高影響対象 ${coverage} 台を一部のみカバーしています`
+        : `Maintenance window covers ${coverage} high-impact target(s) only; uncovered targets remain visible in preflight`;
+  }
+  return language === 'zh'
+    ? `当前没有维护窗口覆盖这 ${maintenance.uncoveredTargets} 个高影响目标`
+    : language === 'ja'
+      ? `現在、この ${maintenance.uncoveredTargets} 台の高影響対象をカバーするメンテナンス時間枠はありません`
+      : `No active maintenance window covers ${maintenance.uncoveredTargets} high-impact target(s)`;
 }
 
 function interpolateCopy(template: string, vars: Record<string, string | number>) {

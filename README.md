@@ -50,9 +50,10 @@ The runtime is intentionally simple. One Node.js process serves the Express API 
 1. Create a private `.env` from `.env.example` and replace every default secret.
 2. Sign in to the protected console.
 3. Add servers as inventory-only assets, simulated SSH assets, or real SSH-connected machines.
-4. Use the contextual launch guide: keep the full release checklist on Overview, then use the compact workspace summary in Servers, AI, Operations, API, and Security until you need to expand the evidence.
-5. Use the overview map, server table, live browser terminal, operations center, AI assistant, custom API lab, and security audit as one linked workflow.
-6. Run `npm test` or the release script before shipping changes so build, API, browser, performance, concurrency, reset-password, and secret-scan checks run together.
+4. Schedule a maintenance window before reboots, shutdowns, or high-impact SSH changes; Operations preflight shows whether each target is covered without bypassing operator confirmation.
+5. Use the contextual launch guide: keep the full release checklist on Overview, then use the compact workspace summary in Servers, AI, Operations, API, and Security until you need to expand the evidence.
+6. Use the overview map, server table, live browser terminal, operations center, AI assistant, custom API lab, and security audit as one linked workflow.
+7. Run `npm test` or the release script before shipping changes so build, API, browser, performance, concurrency, reset-password, and secret-scan checks run together.
 
 ## Core Modules
 
@@ -64,7 +65,7 @@ The runtime is intentionally simple. One Node.js process serves the Express API 
 | Fleet views | Save common inventory filters as up to eight browser-only views, then restore a focused operational scope without sending filter or asset data anywhere. |
 | Contextual launch guide | Full six-step release checklist on Overview; a compact, persistent workspace summary elsewhere or in Performance mode, with a one-click path back to complete evidence and the next remediation. |
 | AI operations | OpenAI-compatible base URL support, model discovery, streaming chat, multi-turn context, cached answers, force refresh, and server-side key storage. |
-| Workflow automation | Asset sync, health checks, SSH commands, reboot/shutdown flows, target preflight, and high-impact command confirmation. |
+| Workflow automation | Asset sync, health checks, SSH commands, reboot/shutdown flows, persisted maintenance windows, target preflight, and high-impact command confirmation. |
 | Custom API lab | Allowlisted backend proxy for provider API testing without exposing browser-side secrets or private network targets. |
 | Security audit | Auth events, blocked calls, SSH actions, remediation flows, relation cards, diagnostics export, and release readiness evidence. |
 | Operator account | Login, session protection, profile/avatar update, password change, and Chinese / English / Japanese UI language switching. |

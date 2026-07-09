@@ -2384,6 +2384,21 @@ async function assertOperationsResultTraceRoundTrip(targetPage) {
   await targetPage.getByRole('button', { name: /new task/i }).click();
   await targetPage.locator('.ops-builder').waitFor({ timeout: 10000 });
 
+  const maintenancePanel = targetPage.locator('[data-ops-maintenance-panel="true"]');
+  await maintenancePanel.waitFor({ timeout: 10000 });
+  await maintenancePanel.locator('[data-ops-maintenance-open="true"]').click();
+  const maintenanceForm = maintenancePanel.locator('[data-ops-maintenance-form="true"]');
+  await maintenanceForm.waitFor({ timeout: 10000 });
+  await maintenanceForm.locator('[data-ops-maintenance-title="true"]').fill(`Browser maintenance ${Date.now()}`);
+  await maintenanceForm.locator('[data-ops-maintenance-scope="true"]').selectOption('allConnected');
+  await maintenanceForm.locator('[data-ops-maintenance-create="true"]').click();
+  const activeMaintenanceWindow = maintenancePanel.locator('[data-ops-maintenance-item="active"]').first();
+  await activeMaintenanceWindow.waitFor({ timeout: 10000 });
+  const activeMaintenanceText = await maintenancePanel.innerText();
+  if (!/Protection active|active window/i.test(activeMaintenanceText)) {
+    throw new Error(`Maintenance window panel did not show active protection: ${activeMaintenanceText}`);
+  }
+
   const remediationServer = await createTemporarySimulatedSshServer(targetPage, 'browser-e2e-ops-fix');
   try {
     await targetPage.getByRole('button', { name: /run command/i }).click();
@@ -2398,6 +2413,12 @@ async function assertOperationsResultTraceRoundTrip(targetPage) {
     if (!/Fix draft suggestion|high-impact action|Create fix draft/i.test(remediationText)) {
       throw new Error(`Operations preflight remediation panel is incomplete: ${remediationText}`);
     }
+    const maintenancePreflight = targetPage.locator('[data-ops-maintenance-preflight="true"]');
+    await maintenancePreflight.waitFor({ timeout: 10000 });
+    const maintenancePreflightText = await maintenancePreflight.innerText();
+    if (!/Maintenance window covers 1(?:\/1)? high-impact target/i.test(maintenancePreflightText)) {
+      throw new Error(`Operations preflight did not surface active maintenance coverage: ${maintenancePreflightText}`);
+    }
     const advisorPanel = targetPage.locator('[data-ops-preflight-advisor="true"]');
     await advisorPanel.waitFor({ timeout: 10000 });
     const advisorText = await advisorPanel.innerText();
@@ -2411,6 +2432,12 @@ async function assertOperationsResultTraceRoundTrip(targetPage) {
     if (!/Preflight fix draft|high-impact action|confirmation/i.test(remediationDraftText)) {
       throw new Error(`Operations preflight remediation did not create a draft banner: ${remediationDraftText}`);
     }
+    await activeMaintenanceWindow.locator('button').click();
+    await targetPage.waitForFunction(
+      () => !document.querySelector('[data-ops-maintenance-item="active"]'),
+      null,
+      { timeout: 10000 },
+    );
   } finally {
     await deleteTemporaryAssetServer(targetPage, remediationServer.id).catch(() => undefined);
   }
@@ -2802,6 +2829,13 @@ async function assertMobileModuleLayoutSweep() {
     await mobilePage.locator('.ops-builder').waitFor({ timeout: 5000 });
     await assertElementHorizontallyWithinViewport(mobilePage, '.ops-builder', 'mobile operations builder');
     await assertSingleColumnStack(mobilePage, '.ops-type-grid', 'mobile operations task cards');
+    await mobilePage.locator('[data-ops-maintenance-panel="true"]').waitFor({ timeout: 5000 });
+    await assertElementHorizontallyWithinViewport(mobilePage, '[data-ops-maintenance-panel="true"]', 'mobile maintenance window panel');
+    await mobilePage.locator('[data-ops-maintenance-open="true"]').click();
+    await mobilePage.locator('[data-ops-maintenance-form="true"]').waitFor({ timeout: 5000 });
+    await assertElementHorizontallyWithinViewport(mobilePage, '[data-ops-maintenance-form="true"]', 'mobile maintenance window form');
+    await assertSingleColumnStack(mobilePage, '.ops-maintenance-form-grid', 'mobile maintenance window fields');
+    await mobilePage.getByRole('button', { name: /^Cancel$/i }).click();
 
     await assertMobileSection(mobilePage, /^Custom API$/i, /#api$/, [
       '.api-status-strip',
