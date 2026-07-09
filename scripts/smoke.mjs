@@ -6107,7 +6107,10 @@ function assertServerStatusLifecycleGuards() {
     'className="server-mobile-action-strip"',
     'className="server-mobile-primary-action"',
     'disabled={!canOpenTerminal}',
-    "onClick={() => openSshConsole(server)}",
+    "onClick={() => dispatch('ssh')}",
+    'const ServerWorkspaceRow = memo',
+    'const handleServerWorkspaceRowAction = useCallback',
+    'serverWorkspaceRowHandlersRef.current?.onAction(action, server)',
   ];
   const missingMobileOps = mobileOpsFragments.filter((fragment) => !inventorySource.includes(fragment));
   if (missingMobileOps.length) {

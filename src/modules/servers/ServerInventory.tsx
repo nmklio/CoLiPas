@@ -1,4 +1,4 @@
-import { FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Terminal as XTerm, IDisposable } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
 import { BookmarkCheck, BookmarkPlus, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Cpu, Database, Edit3, Eraser, FileKey2, FileText, Globe2, KeyRound, Network, Plus, Power, PowerOff, RotateCcw, Search, Server, ShieldCheck, Sparkles, Star, Terminal, Trash2, X } from 'lucide-react';
@@ -70,6 +70,18 @@ interface ServerInventoryProps {
   onServerConnected: () => Promise<void> | void;
   onAuditTraceOpen?: (correlationId: string) => void;
   releaseFocusAnchor?: string;
+}
+
+type ServerWorkspaceRowAction = 'powerOn' | 'shutdown' | 'reboot' | 'edit' | 'ssh' | 'diagnose' | 'delete';
+
+interface ServerWorkspaceRowProps {
+  server: ServerNode;
+  diagnosing: boolean;
+  onAction: (action: ServerWorkspaceRowAction, server: ServerNode) => void;
+}
+
+interface ServerWorkspaceRowHandlers {
+  onAction: (action: ServerWorkspaceRowAction, server: ServerNode) => void;
 }
 
 const statuses: Array<Extract<ServerStatus, 'running' | 'stopped' | 'unconnected'> | 'all'> = ['all', 'running', 'stopped', 'unconnected'];
@@ -578,6 +590,114 @@ const initialForm: ConnectServerPayload = {
   },
 };
 
+const ServerWorkspaceRow = memo(function ServerWorkspaceRow({ server, diagnosing, onAction }: ServerWorkspaceRowProps) {
+  const { language, t } = useI18n();
+  const renderCountRef = useRef(0);
+  renderCountRef.current += 1;
+  const sshAccess = server.ssh;
+  const connected = Boolean(sshAccess?.connected);
+  const canOpenTerminal = connected;
+  const lifecycleStatus = resolveServerLifecycleStatus(server);
+  const dispatch = (action: ServerWorkspaceRowAction) => onAction(action, server);
+
+  return (
+    <article
+      className={`server-workspace-row ${lifecycleStatus}`}
+      data-server-workspace-row-render-count={renderCountRef.current}
+    >
+      <div className="server-row-main">
+        <span className="server-row-icon">
+          <Server size={18} />
+        </span>
+        <div>
+          <div className="server-row-title">
+            <strong>{server.name}</strong>
+            <span className={`status-pill ${lifecycleStatus}`}>{serverStatusText(server, language)}</span>
+          </div>
+          <span className="muted">{server.id} / {server.os}</span>
+          <div className="server-row-network">
+            <span>{server.publicIp}</span>
+            <small>{server.privateIp}</small>
+          </div>
+          <div className="tag-list">
+            {server.tags.map((tag) => (
+              <span key={tag}>{tag}</span>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="server-row-provider">
+        <strong>{formatProviderName(server.provider, t)}</strong>
+        <span>{formatRegionName(server.region, language)}</span>
+      </div>
+      <div className="server-row-metrics">
+        <ResourceMeter label="CPU" value={server.cpu} />
+        <ResourceMeter label="MEM" value={server.memory} />
+        <ResourceMeter label="DISK" value={server.disk} />
+      </div>
+      <div className="server-row-ssh">
+        {connected ? (
+          <>
+            <span className="status-pill running">
+              {sshAccess?.verifyMode === 'simulate' ? t('servers.simulatedVerified') : t('servers.verified')}
+            </span>
+            <strong>{sshAccess?.username}@{sshAccess?.host}:{sshAccess?.port}</strong>
+            <small>{sshAccess?.authType === 'password' ? t('servers.passwordAuth') : t('servers.keyAuth')}</small>
+          </>
+        ) : (
+          <>
+            <span className="status-pill stopped">{t('servers.unconnected')}</span>
+            <small>{t('servers.verifyFirst')}</small>
+          </>
+        )}
+      </div>
+      <div className="server-mobile-ops" data-mobile-server-ops="true">
+        <div className="server-mobile-status-strip" aria-label={`${server.name} ${t('servers.tableResource')}`}>
+          <span>
+            <small>{t('common.region')}</small>
+            <strong>{formatRegionName(server.region, language)}</strong>
+          </span>
+          <span>
+            <small>CPU</small>
+            <strong>{server.cpu}%</strong>
+          </span>
+          <span>
+            <small>SSH</small>
+            <strong>{connected ? (sshAccess?.authType === 'password' ? t('servers.passwordAuth') : t('servers.keyAuth')) : t('servers.unconnected')}</strong>
+          </span>
+        </div>
+        <div className="server-mobile-action-strip" aria-label={`${server.name} ${t('common.actions')}`}>
+          <button type="button" className="server-mobile-primary-action" disabled={!canOpenTerminal} onClick={() => dispatch('ssh')}>
+            <Terminal size={15} />
+            {t('servers.ssh')}
+          </button>
+          <button type="button" disabled={diagnosing} onClick={() => dispatch('diagnose')}>
+            <ShieldCheck size={15} />
+            {diagnosing ? t('servers.sshDoctorRunningShort') : t('servers.diagnostic')}
+          </button>
+          <button type="button" onClick={() => dispatch('edit')}>
+            <Edit3 size={15} />
+            {t('common.edit')}
+          </button>
+          <button type="button" disabled={!connected} onClick={() => dispatch('reboot')}>
+            <RotateCcw size={15} />
+            {t('servers.reboot')}
+          </button>
+        </div>
+      </div>
+      <div className="icon-actions server-row-actions compact" aria-label={`${server.name} ${t('common.actions')}`}>
+        <ActionButton label={t('servers.powerOn')} disabled={!connected} onClick={() => dispatch('powerOn')} icon={<Power size={15} />} />
+        <ActionButton label={t('servers.shutdown')} disabled={!connected} onClick={() => dispatch('shutdown')} icon={<PowerOff size={15} />} />
+        <ActionButton label={t('servers.reboot')} disabled={!connected} onClick={() => dispatch('reboot')} icon={<RotateCcw size={15} />} />
+        <ActionButton label={t('common.edit')} onClick={() => dispatch('edit')} icon={<Edit3 size={15} />} />
+        <ActionButton label={t('servers.ssh')} disabled={!canOpenTerminal} onClick={() => dispatch('ssh')} icon={<Terminal size={15} />} />
+        <ActionButton label={diagnosing ? t('servers.sshDoctorRunning') : t('servers.diagnostic')} disabled={diagnosing} onClick={() => dispatch('diagnose')} icon={<ShieldCheck size={15} />} />
+        <ActionButton label={t('common.delete')} onClick={() => dispatch('delete')} icon={<Trash2 size={15} />} />
+      </div>
+    </article>
+  );
+});
+
 export function ServerInventory({ allServers, servers, filters, performanceMode = false, onFiltersChange, onTriageDraftOpen, onServerConnected, onAuditTraceOpen, releaseFocusAnchor }: ServerInventoryProps) {
   const { language, t } = useI18n();
   const regions = useMemo(() => buildSortedRegions(allServers), [allServers]);
@@ -685,6 +805,10 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
   const identityInFlightRef = useRef<{ key: string; promise: Promise<ServerIdentityResponse> } | null>(null);
   const identityCacheRef = useRef<Map<string, ServerIdentityResponse>>(new Map());
   const lastAppliedIdentityRef = useRef<{ region: string; os: string } | null>(null);
+  const serverWorkspaceRowHandlersRef = useRef<ServerWorkspaceRowHandlers | null>(null);
+  const handleServerWorkspaceRowAction = useCallback((action: ServerWorkspaceRowAction, server: ServerNode) => {
+    serverWorkspaceRowHandlersRef.current?.onAction(action, server);
+  }, []);
   const visibleConnectedServerCount = useMemo(() => countConnectedServers(servers), [servers]);
   const fleetTriageCards = useMemo(() => buildServerFleetTriageCards(allServers, t), [allServers, t]);
   const visibleServerRows = useMemo(() => servers.slice(0, visibleServerLimit), [servers, visibleServerLimit]);
@@ -1268,6 +1392,28 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
     writeFleetViews(nextViews);
     setFleetViewMessage(t('servers.viewsRemoved', { name: view.name }));
   }
+
+  serverWorkspaceRowHandlersRef.current = {
+    onAction(action, server) {
+      if (action === 'powerOn' || action === 'shutdown' || action === 'reboot') {
+        runAction(server, action);
+        return;
+      }
+      if (action === 'edit') {
+        startEdit(server);
+        return;
+      }
+      if (action === 'ssh') {
+        openSshConsole(server);
+        return;
+      }
+      if (action === 'diagnose') {
+        runSshConnectionDoctor(server);
+        return;
+      }
+      handleDelete(server);
+    },
+  };
 
   return (
     <section className="module-section" aria-labelledby="servers-title">
@@ -1874,105 +2020,14 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
               <div>{t('servers.tableSsh')}</div>
               <div>{t('servers.tableActions')}</div>
             </div>
-            {visibleServerRows.map((server) => {
-              const sshAccess = server.ssh;
-              const connected = Boolean(sshAccess?.connected);
-              const canOpenTerminal = connected;
-              const lifecycleStatus = resolveServerLifecycleStatus(server);
-              return (
-              <article key={server.id} className={`server-workspace-row ${lifecycleStatus}`}>
-                <div className="server-row-main">
-                  <span className="server-row-icon">
-                    <Server size={18} />
-                  </span>
-                  <div>
-                    <div className="server-row-title">
-                      <strong>{server.name}</strong>
-                      <span className={`status-pill ${lifecycleStatus}`}>{serverStatusText(server, language)}</span>
-                    </div>
-                    <span className="muted">{server.id} / {server.os}</span>
-                    <div className="server-row-network">
-                      <span>{server.publicIp}</span>
-                      <small>{server.privateIp}</small>
-                    </div>
-                    <div className="tag-list">
-                      {server.tags.map((tag) => (
-                        <span key={tag}>{tag}</span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <div className="server-row-provider">
-                  <strong>{providerDisplayName(server.provider)}</strong>
-                  <span>{regionDisplayName(server.region)}</span>
-                </div>
-                <div className="server-row-metrics">
-                  <ResourceMeter label="CPU" value={server.cpu} />
-                  <ResourceMeter label="MEM" value={server.memory} />
-                  <ResourceMeter label="DISK" value={server.disk} />
-                </div>
-                <div className="server-row-ssh">
-                  {connected ? (
-                    <>
-                      <span className="status-pill running">
-                        {sshAccess?.verifyMode === 'simulate' ? t('servers.simulatedVerified') : t('servers.verified')}
-                      </span>
-                      <strong>{sshAccess?.username}@{sshAccess?.host}:{sshAccess?.port}</strong>
-                      <small>{sshAccess?.authType === 'password' ? t('servers.passwordAuth') : t('servers.keyAuth')}</small>
-                    </>
-                  ) : (
-                    <>
-                      <span className="status-pill stopped">{t('servers.unconnected')}</span>
-                      <small>{t('servers.verifyFirst')}</small>
-                    </>
-                  )}
-                </div>
-                <div className="server-mobile-ops" data-mobile-server-ops="true">
-                  <div className="server-mobile-status-strip" aria-label={`${server.name} ${t('servers.tableResource')}`}>
-                    <span>
-                      <small>{t('common.region')}</small>
-                      <strong>{regionDisplayName(server.region)}</strong>
-                    </span>
-                    <span>
-                      <small>CPU</small>
-                      <strong>{server.cpu}%</strong>
-                    </span>
-                    <span>
-                      <small>SSH</small>
-                      <strong>{connected ? (sshAccess?.authType === 'password' ? t('servers.passwordAuth') : t('servers.keyAuth')) : t('servers.unconnected')}</strong>
-                    </span>
-                  </div>
-                  <div className="server-mobile-action-strip" aria-label={`${server.name} ${t('common.actions')}`}>
-                    <button type="button" className="server-mobile-primary-action" disabled={!canOpenTerminal} onClick={() => openSshConsole(server)}>
-                      <Terminal size={15} />
-                      {t('servers.ssh')}
-                    </button>
-                    <button type="button" disabled={diagnosingServerId === server.id} onClick={() => runSshConnectionDoctor(server)}>
-                      <ShieldCheck size={15} />
-                      {diagnosingServerId === server.id ? t('servers.sshDoctorRunningShort') : t('servers.diagnostic')}
-                    </button>
-                    <button type="button" onClick={() => startEdit(server)}>
-                      <Edit3 size={15} />
-                      {t('common.edit')}
-                    </button>
-                    <button type="button" disabled={!connected} onClick={() => runAction(server, 'reboot')}>
-                      <RotateCcw size={15} />
-                      {t('servers.reboot')}
-                    </button>
-                  </div>
-                </div>
-                <div className="icon-actions server-row-actions compact" aria-label={`${server.name} ${t('common.actions')}`}>
-                  <ActionButton label={t('servers.powerOn')} disabled={!connected} onClick={() => runAction(server, 'powerOn')} icon={<Power size={15} />} />
-                  <ActionButton label={t('servers.shutdown')} disabled={!connected} onClick={() => runAction(server, 'shutdown')} icon={<PowerOff size={15} />} />
-                  <ActionButton label={t('servers.reboot')} disabled={!connected} onClick={() => runAction(server, 'reboot')} icon={<RotateCcw size={15} />} />
-                  <ActionButton label={t('common.edit')} onClick={() => startEdit(server)} icon={<Edit3 size={15} />} />
-                  <ActionButton label={t('servers.ssh')} disabled={!canOpenTerminal} onClick={() => openSshConsole(server)} icon={<Terminal size={15} />} />
-                  <ActionButton label={diagnosingServerId === server.id ? t('servers.sshDoctorRunning') : t('servers.diagnostic')} disabled={diagnosingServerId === server.id} onClick={() => runSshConnectionDoctor(server)} icon={<ShieldCheck size={15} />} />
-                  <ActionButton label={t('common.delete')} onClick={() => handleDelete(server)} icon={<Trash2 size={15} />} />
-                </div>
-              </article>
-              );
-            })}
+            {visibleServerRows.map((server) => (
+              <ServerWorkspaceRow
+                key={server.id}
+                server={server}
+                diagnosing={diagnosingServerId === server.id}
+                onAction={handleServerWorkspaceRowAction}
+              />
+            ))}
             {hiddenServerCount > 0 && (
               <div className="server-render-window" aria-live="polite">
                 <span>

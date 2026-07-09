@@ -1888,6 +1888,12 @@ async function assertSshTerminalPanel(targetPage) {
         && !('sessionId' in diagnostic.sshTerminal.lastSelfTest);
     }, undefined, { timeout: 5000 });
     console.log(`ok browser e2e SSH safe speed test rendered in ${selfTestDurationMs}ms`);
+    const serverRowRenderCountsBeforeLiveOutput = await targetPage.locator('.server-workspace-row').evaluateAll((rows) => (
+      rows.map((row) => row.getAttribute('data-server-workspace-row-render-count') ?? '')
+    ));
+    if (serverRowRenderCountsBeforeLiveOutput.length === 0 || serverRowRenderCountsBeforeLiveOutput.some((count) => !/^\d+$/.test(count))) {
+      throw new Error(`Server rows did not expose render counters for SSH telemetry regression coverage: ${JSON.stringify(serverRowRenderCountsBeforeLiveOutput)}`);
+    }
     const longOutputStartedAt = Date.now();
     await targetPage.evaluate(() => {
       window.__colipasSshLongTasks = [];
@@ -1931,6 +1937,14 @@ async function assertSshTerminalPanel(targetPage) {
     if (burstOutputDurationMs > 12000 || maxBurstLongTaskMs > 300) {
       throw new Error(`SSH burst output rendered too slowly: ${burstOutputDurationMs}ms, max long task ${maxBurstLongTaskMs}ms`);
     }
+    await targetPage.waitForTimeout(1100);
+    const serverRowRenderCountsAfterLiveOutput = await targetPage.locator('.server-workspace-row').evaluateAll((rows) => (
+      rows.map((row) => row.getAttribute('data-server-workspace-row-render-count') ?? '')
+    ));
+    if (JSON.stringify(serverRowRenderCountsAfterLiveOutput) !== JSON.stringify(serverRowRenderCountsBeforeLiveOutput)) {
+      throw new Error(`SSH telemetry rerendered inventory rows during streamed output: before ${JSON.stringify(serverRowRenderCountsBeforeLiveOutput)}, after ${JSON.stringify(serverRowRenderCountsAfterLiveOutput)}`);
+    }
+    console.log(`ok browser e2e SSH telemetry kept ${serverRowRenderCountsAfterLiveOutput.length} inventory rows render-stable during streamed output`);
     const terminalNetworkText = await targetPage.locator('.ssh-terminal-network').innerText();
     if (!/RTT\s+\d+ms\s+\/\s+(?:\d+\s+KB\/s|\d+(?:\.\d)?\s+MB\/s)/i.test(terminalNetworkText)) {
       throw new Error(`SSH terminal network diagnostics did not render latency and throughput: ${terminalNetworkText}`);
