@@ -65,7 +65,7 @@ The runtime is intentionally simple. One Node.js process serves the Express API 
 | Fleet views | Save common inventory filters as up to eight browser-only views, then restore a focused operational scope without sending filter or asset data anywhere. |
 | Contextual launch guide | Full six-step release checklist on Overview; a compact, persistent workspace summary elsewhere or in Performance mode, with a one-click path back to complete evidence and the next remediation. |
 | AI operations | OpenAI-compatible base URL support, model discovery, streaming chat, multi-turn context, cached answers, force refresh, and server-side key storage. |
-| Workflow automation | Asset sync, health checks, SSH commands, reboot/shutdown flows, persisted maintenance windows, target preflight, and high-impact command confirmation. |
+| Workflow automation | Asset sync, health checks, SSH commands, reboot/shutdown flows, persisted maintenance windows with quick-duration scheduling, target preflight, and high-impact command confirmation. |
 | Custom API lab | Allowlisted backend proxy for provider API testing without exposing browser-side secrets or private network targets. |
 | Security audit | Auth events, blocked calls, SSH actions, remediation flows, relation cards, diagnostics export, and release readiness evidence. |
 | Operator account | Login, session protection, profile/avatar update, password change, and Chinese / English / Japanese UI language switching. |

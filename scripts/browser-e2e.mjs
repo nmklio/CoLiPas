@@ -2389,6 +2389,12 @@ async function assertOperationsResultTraceRoundTrip(targetPage) {
   await maintenancePanel.locator('[data-ops-maintenance-open="true"]').click();
   const maintenanceForm = maintenancePanel.locator('[data-ops-maintenance-form="true"]');
   await maintenanceForm.waitFor({ timeout: 10000 });
+  const maintenanceStart = await maintenanceForm.locator('[data-ops-maintenance-start="true"]').inputValue();
+  await maintenanceForm.locator('[data-ops-maintenance-duration="120"]').click();
+  const maintenanceEnd = await maintenanceForm.locator('[data-ops-maintenance-end="true"]').inputValue();
+  if (Math.abs(new Date(maintenanceEnd).getTime() - new Date(maintenanceStart).getTime() - 120 * 60_000) > 1_000) {
+    throw new Error(`Maintenance duration shortcut did not set a two-hour window: ${maintenanceStart} -> ${maintenanceEnd}`);
+  }
   await maintenanceForm.locator('[data-ops-maintenance-title="true"]').fill(`Browser maintenance ${Date.now()}`);
   await maintenanceForm.locator('[data-ops-maintenance-scope="true"]').selectOption('allConnected');
   await maintenanceForm.locator('[data-ops-maintenance-create="true"]').click();
@@ -2397,6 +2403,10 @@ async function assertOperationsResultTraceRoundTrip(targetPage) {
   const activeMaintenanceText = await maintenancePanel.innerText();
   if (!/Protection active|active window/i.test(activeMaintenanceText)) {
     throw new Error(`Maintenance window panel did not show active protection: ${activeMaintenanceText}`);
+  }
+  const maintenanceBadge = await maintenancePanel.locator('[data-ops-maintenance-status-count="true"]').innerText();
+  if (!/1 active window/i.test(maintenanceBadge) || /\d+\s*\/\s*\d+/.test(maintenanceBadge)) {
+    throw new Error(`Maintenance window status badge is ambiguous: ${maintenanceBadge}`);
   }
 
   const remediationServer = await createTemporarySimulatedSshServer(targetPage, 'browser-e2e-ops-fix');
@@ -2835,6 +2845,7 @@ async function assertMobileModuleLayoutSweep() {
     await mobilePage.locator('[data-ops-maintenance-form="true"]').waitFor({ timeout: 5000 });
     await assertElementHorizontallyWithinViewport(mobilePage, '[data-ops-maintenance-form="true"]', 'mobile maintenance window form');
     await assertSingleColumnStack(mobilePage, '.ops-maintenance-form-grid', 'mobile maintenance window fields');
+    await assertElementHorizontallyWithinViewport(mobilePage, '.ops-maintenance-duration', 'mobile maintenance duration presets');
     await mobilePage.getByRole('button', { name: /^Cancel$/i }).click();
 
     await assertMobileSection(mobilePage, /^Custom API$/i, /#api$/, [

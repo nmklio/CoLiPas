@@ -10289,13 +10289,15 @@ td span,
 }
 
 .ops-maintenance-rail b {
-  min-width: 42px;
+  max-width: 124px;
   border: 1px solid rgba(15, 118, 110, 0.15);
   border-radius: 999px;
   padding: 4px 7px;
   background: rgba(255, 255, 255, 0.78);
   color: #17665e;
   font-size: 11px;
+  font-weight: 850;
+  line-height: 1.25;
   text-align: center;
 }
 
@@ -10316,6 +10318,58 @@ td span,
 
 .ops-maintenance-note {
   grid-column: 1 / -1;
+}
+
+.ops-maintenance-duration {
+  min-width: 0;
+  border: 1px solid rgba(15, 118, 110, 0.14);
+  border-radius: 10px;
+  padding: 8px;
+  background: linear-gradient(135deg, rgba(247, 253, 252, 0.92), rgba(255, 255, 255, 0.86));
+  display: grid;
+  gap: 6px;
+}
+
+.ops-maintenance-duration > span {
+  color: #245d59;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.ops-maintenance-duration > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ops-maintenance-duration button {
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: #ffffff;
+  color: #17665e;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.2;
+  transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+
+.ops-maintenance-duration button:hover,
+.ops-maintenance-duration button:focus-visible {
+  border-color: rgba(15, 118, 110, 0.44);
+  background: #e8f6f3;
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.ops-maintenance-duration small {
+  color: #5b7276;
+  font-size: 10px;
+  line-height: 1.35;
 }
 
 .ops-maintenance-note textarea {

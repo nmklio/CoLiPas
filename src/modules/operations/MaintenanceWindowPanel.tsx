@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import {
   CalendarClock,
   CheckCircle2,
@@ -59,6 +59,11 @@ type Copy = {
   delete: string;
   selectedSummary: string;
   formHint: string;
+  durationLabel: string;
+  durationHint: string;
+  activeBadge: string;
+  upcomingBadge: string;
+  emptyBadge: string;
 };
 
 const maintenanceCopyByLanguage: Record<string, Copy> = {
@@ -98,6 +103,11 @@ const maintenanceCopyByLanguage: Record<string, Copy> = {
     delete: '删除',
     selectedSummary: '已选择 {count} 台服务器',
     formHint: '窗口至少 5 分钟、最长 7 天；仅保存标题、说明、范围和时间，不保存 SSH 凭据或命令。',
+    durationLabel: '预设时长',
+    durationHint: '以当前开始时间自动计算结束时间',
+    activeBadge: '{count} 个活动窗口',
+    upcomingBadge: '{count} 个待开始窗口',
+    emptyBadge: '暂无活动窗口',
   },
   en: {
     title: 'Maintenance windows',
@@ -135,6 +145,11 @@ const maintenanceCopyByLanguage: Record<string, Copy> = {
     delete: 'Delete',
     selectedSummary: '{count} server(s) selected',
     formHint: 'Windows run from 5 minutes to 7 days. Only title, note, scope, and time are stored—never SSH credentials or commands.',
+    durationLabel: 'Quick duration',
+    durationHint: 'Updates the end time from the selected start',
+    activeBadge: '{count} active window(s)',
+    upcomingBadge: '{count} upcoming window(s)',
+    emptyBadge: 'No active window',
   },
   ja: {
     title: 'メンテナンス時間枠',
@@ -172,11 +187,17 @@ const maintenanceCopyByLanguage: Record<string, Copy> = {
     delete: '削除',
     selectedSummary: '{count} 台のサーバーを選択',
     formHint: '時間枠は 5 分以上 7 日以内です。保存されるのは名前、メモ、範囲、時刻だけで、SSH 認証情報やコマンドは保存されません。',
+    durationLabel: '時間プリセット',
+    durationHint: '開始時刻を基準に終了時刻を更新します',
+    activeBadge: '有効な時間枠 {count} 件',
+    upcomingBadge: '開始待ちの時間枠 {count} 件',
+    emptyBadge: '有効な時間枠はありません',
   },
 };
 
 const initialVisibleServerLimit = 24;
 const visibleServerStep = 24;
+const durationPresets = [30, 60, 120, 240] as const;
 
 export const MaintenanceWindowPanel = memo(function MaintenanceWindowPanel({ servers }: MaintenanceWindowPanelProps) {
   const { language } = useI18n();
@@ -194,6 +215,7 @@ export const MaintenanceWindowPanel = memo(function MaintenanceWindowPanel({ ser
   const [selectedServerIds, setSelectedServerIds] = useState<string[]>([]);
   const [search, setSearch] = useState('');
   const [visibleServerLimit, setVisibleServerLimit] = useState(initialVisibleServerLimit);
+  const deferredSearch = useDeferredValue(search);
   const availableServerIds = useMemo(() => new Set(servers.map((server) => server.id)), [servers]);
 
   useEffect(() => {
@@ -231,11 +253,11 @@ export const MaintenanceWindowPanel = memo(function MaintenanceWindowPanel({ ser
   const upcomingWindows = useMemo(() => windows.filter((window) => window.phase === 'upcoming'), [windows]);
   const endedWindows = useMemo(() => windows.filter((window) => window.phase === 'ended'), [windows]);
   const matchingCandidates = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
+    const normalizedSearch = deferredSearch.trim().toLowerCase();
     return normalizedSearch.length === 0
       ? servers
       : servers.filter((server) => `${server.name} ${server.provider} ${server.region}`.toLowerCase().includes(normalizedSearch));
-  }, [search, servers]);
+  }, [deferredSearch, servers]);
   const visibleCandidates = useMemo(
     () => matchingCandidates.slice(0, visibleServerLimit),
     [matchingCandidates, visibleServerLimit],
@@ -250,6 +272,11 @@ export const MaintenanceWindowPanel = memo(function MaintenanceWindowPanel({ ser
       : endedWindows.length > 0
         ? copy.endedSummary
         : copy.noWindows;
+  const railBadge = activeWindows.length > 0
+    ? interpolate(copy.activeBadge, { count: activeWindows.length })
+    : upcomingWindows.length > 0
+      ? interpolate(copy.upcomingBadge, { count: upcomingWindows.length })
+      : copy.emptyBadge;
 
   function resetForm() {
     setTitle('');
@@ -272,6 +299,13 @@ export const MaintenanceWindowPanel = memo(function MaintenanceWindowPanel({ ser
     setSelectedServerIds((current) => current.includes(serverId)
       ? current.filter((id) => id !== serverId)
       : [...current, serverId]);
+  }
+
+  function applyDuration(durationMinutes: number) {
+    const startTimestamp = new Date(startsAt).getTime();
+    const normalizedStart = Number.isFinite(startTimestamp) ? startTimestamp : Date.now();
+    setStartsAt(toDateTimeInputValue(normalizedStart));
+    setEndsAt(toDateTimeInputValue(normalizedStart + durationMinutes * 60_000));
   }
 
   async function submitWindow() {
@@ -352,7 +386,7 @@ export const MaintenanceWindowPanel = memo(function MaintenanceWindowPanel({ ser
           <strong>{activeWindows.length > 0 ? copy.protected : copy.exposed}</strong>
           <p>{phaseSummary}</p>
         </div>
-        <b>{activeWindows.length}/{windows.length}</b>
+        <b data-ops-maintenance-status-count="true">{railBadge}</b>
       </div>
 
       {formOpen && (
@@ -378,6 +412,22 @@ export const MaintenanceWindowPanel = memo(function MaintenanceWindowPanel({ ser
               {copy.endsAt}
               <input data-ops-maintenance-end="true" type="datetime-local" value={endsAt} onChange={(event) => setEndsAt(event.target.value)} />
             </label>
+            <div className="ops-maintenance-duration" aria-label={copy.durationLabel}>
+              <span>{copy.durationLabel}</span>
+              <div>
+                {durationPresets.map((durationMinutes) => (
+                  <button
+                    key={durationMinutes}
+                    type="button"
+                    data-ops-maintenance-duration={durationMinutes}
+                    onClick={() => applyDuration(durationMinutes)}
+                  >
+                    {formatDurationPreset(durationMinutes, language)}
+                  </button>
+                ))}
+              </div>
+              <small>{copy.durationHint}</small>
+            </div>
             <label className="field-block ops-maintenance-note">
               {copy.noteLabel}
               <textarea value={note} maxLength={240} placeholder={copy.notePlaceholder} onChange={(event) => setNote(event.target.value)} />
@@ -392,6 +442,7 @@ export const MaintenanceWindowPanel = memo(function MaintenanceWindowPanel({ ser
               </div>
               <input
                 className="ops-maintenance-search"
+                data-ops-maintenance-search="true"
                 value={search}
                 placeholder={copy.searchServers}
                 onChange={(event) => setSearch(event.target.value)}
@@ -509,6 +560,19 @@ function toDateTimeInputValue(timestamp: number) {
   const date = new Date(timestamp);
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 16);
+}
+
+function formatDurationPreset(durationMinutes: number, language: string) {
+  if (durationMinutes < 60) {
+    return language === 'ja' ? `${durationMinutes}分` : `${durationMinutes}m`;
+  }
+  if (language === 'zh') {
+    return `${durationMinutes / 60} 小时`;
+  }
+  if (language === 'ja') {
+    return `${durationMinutes / 60}時間`;
+  }
+  return `${durationMinutes / 60}h`;
 }
 
 function interpolate(template: string, values: Record<string, string | number>) {
