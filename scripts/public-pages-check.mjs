@@ -165,6 +165,8 @@ function buildDocsCheck() {
       await expectText(page.locator('[data-colipas-docs-mobile-controls="true"]'), /移动端快捷控制|quick controls|モバイル/i, 'docs mobile quick controls copy');
       await expectLocatorCount(page.locator('[data-colipas-docs-command-palette="true"]'), 1, 'docs contextual command palette section');
       await expectText(page.locator('[data-colipas-docs-command-palette="true"]'), /上下文命令面板|command palette|最近使用/i, 'docs contextual command palette copy');
+      await expectLocatorCount(page.locator('[data-colipas-docs-ai-starters="true"]'), 1, 'docs safe AI starter section');
+      await expectText(page.locator('[data-colipas-docs-ai-starters="true"]'), /三个安全起步入口|只会填充输入框|不会自动发送或执行/i, 'docs safe AI starter copy');
       await assertSensitiveTextAbsent(page, 'docs');
     },
   };

@@ -1525,15 +1525,16 @@ SVG
         </div>
       </section>
 
-      <section id="ai" class="section split">
+      <section id="ai" class="section split" data-colipas-docs-ai-starters="true">
         <div>
           <p class="kicker">AI 助手</p>
           <h2>真实流式对话、模型读取和本地缓存</h2>
-          <p>AI 面板支持 OpenAI 兼容接口，后端使用 stream:true，并把多轮上下文传给上游。相同问题会在本地缓存窗口内复用结果，也可以强制刷新重新生成。</p>
+          <p>AI 面板支持 OpenAI 兼容接口，后端使用 stream:true，并把多轮上下文传给上游。相同问题会在本地缓存窗口内复用结果，也可以强制刷新重新生成。新会话提供风险、SSH 健康检查和今日优先级三个安全起步入口；它们只会填充输入框，发送与远程执行始终需要操作员明确确认。</p>
           <div class="check-list">
             <p class="check-line"><span>✓</span> 模型列表从上游 /v1/models 获取。</p>
             <p class="check-line"><span>✓</span> API Key 可加密保存到数据库，也可以由服务器环境变量托管。</p>
             <p class="check-line"><span>✓</span> 上游错误会脱敏后再展示。</p>
+            <p class="check-line"><span>✓</span> 起步入口不会自动发送或执行。</p>
           </div>
         </div>
         <aside class="terminal-card">

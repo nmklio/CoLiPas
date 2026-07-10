@@ -5503,6 +5503,20 @@ function assertInteractiveDeployDocsAndScriptGuards() {
     }
   }
 
+  const safeAiStarterSources = [
+    ['README.md', readmeSource, 'three safe starter paths'],
+    ['README_CN.md', cnReadmeSource, '三个安全入口'],
+    ['README_JP.md', jpReadmeSource, '3 つの安全な入口'],
+    ['DocsPage.tsx', docsPageSource, '起步入口不会自动发送或执行'],
+    ['server-update.sh docs', serverUpdateSource, 'data-colipas-docs-ai-starters="true"'],
+    ['server-update.sh docs', serverUpdateSource, '起步入口不会自动发送或执行'],
+  ];
+  for (const [name, source, phrase] of safeAiStarterSources) {
+    if (!source.includes(phrase)) {
+      throw new Error(`${name} must document that AI starter prompts never auto-send or execute`);
+    }
+  }
+
   const forbiddenVisibleCopy = [
     'ChangeThisStrongPassword123',
     'NewStrongPassword123',
