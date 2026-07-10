@@ -73,7 +73,7 @@ The runtime is intentionally simple. One Node.js process serves the Express API 
 | Workflow automation | Asset sync, health checks, SSH commands, reboot/shutdown flows, persisted maintenance windows with quick-duration scheduling, target preflight, and high-impact command confirmation. |
 | Custom API lab | Allowlisted backend proxy for provider API testing without exposing browser-side secrets or private network targets. |
 | Security audit | Auth events, blocked calls, SSH actions, remediation flows, relation cards, diagnostics export, release readiness evidence, and revocable public-safe evidence snapshots for external review. |
-| Operator account | Login, active-session inventory with 15-second foreground sync, configurable active-session capacity with oldest-session retirement, individual or bulk revocation of other signed-in devices, privacy-minimized device labels, profile/avatar update with decoded-image validation and automatic brand fallback, password change, and Chinese / English / Japanese UI language switching. |
+| Operator account | Login, restart-safe SQLite session storage using token hashes instead of raw Cookies, 15-second foreground sync, configurable active-session capacity with oldest-session retirement, individual or bulk revocation of other signed-in devices, privacy-minimized device labels without raw IP or User-Agent values, profile/avatar update with decoded-image validation and automatic brand fallback, password change, and Chinese / English / Japanese UI language switching. |
 
 ## Quick Start
 
@@ -211,7 +211,6 @@ Docker one-command / Docker Compose deployment:
 ```bash
 cd /opt/colipas
 docker compose exec -e COLIPAS_RESET_PASSWORD='replace-with-new-strong-password' colipas npm run reset:admin
-docker compose restart colipas
 ```
 
 Native Linux + systemd deployment:
@@ -219,7 +218,6 @@ Native Linux + systemd deployment:
 ```bash
 cd /opt/colipas
 sudo -u colipas env COLIPAS_RESET_PASSWORD='replace-with-new-strong-password' npm run reset:admin
-sudo systemctl restart colipas
 ```
 
 Optional flags are available for non-default accounts or database paths:
@@ -228,12 +226,12 @@ Optional flags are available for non-default accounts or database paths:
 node scripts/reset-admin-password.mjs --username admin --db /opt/colipas/.data/colipas.sqlite --password 'replace-with-new-strong-password'
 ```
 
-The reset script only updates the `admin-account` row. It does not delete servers, SSH credentials, audit entries, AI cache, custom API settings, or other runtime data.
+The reset script updates the administrator password and immediately revokes that account's persisted login sessions. It does not delete servers, SSH credentials, audit entries, AI cache, custom API settings, or other runtime data.
 
 ## Security Model
 
 - All operational APIs except health and auth require an authenticated session.
-- Session cookies are HTTP-only. Account settings refresh active sign-ins every 15 seconds while visible, enforce the configured active-session capacity, omit raw IP and User-Agent values, allow individual or bulk revocation of other sessions, and password changes still revoke every other session.
+- Session cookies are HTTP-only. Only SHA-256 token hashes and sanitized device/time metadata are stored in SQLite, so valid sessions survive service restarts without persisting raw Cookie, IP, or User-Agent values. Account settings refresh every 15 seconds, enforce the configured capacity, and support individual or bulk revocation.
 - Stored SSH credentials are encrypted with `CREDENTIAL_ENCRYPTION_KEY`.
 - AI provider keys are stored server-side or accepted as one-time request payloads; smoke checks guard against leakage.
 - The custom API proxy blocks localhost, private IPv4 ranges, link-local ranges, multicast ranges, unsafe headers, and redirect-following.

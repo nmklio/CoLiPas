@@ -35,7 +35,7 @@ CoLiPas云服务器管理面板是一个面向实际上线环境的服务器运�
 | 运维编排 | 资产巡检、健康检查、SSH 命令、重启/关机等任务；维护窗口会持久化保存，支持快捷时长，并在高影响操作执行前标记目标覆盖范围。 |
 | 自定义 API | 后端安全代理测试云厂商 API，阻止私网地址、危险请求头、跳转和审计泄漏。 |
 | 安全审计 | 登录、API、SSH、任务、修复动作和发布证据都会写入审计链路；可创建短时、可撤销的对外脱敏证据快照。 |
-| 操作员账户 | 登录与会话保护、每 15 秒前台自动同步活跃设备、可配置会话容量并自动退出最旧会话、逐个或一键撤销其他会话、密码修改、三语切换和头像设置；会话列表不返回原始 IP 或 User-Agent，头像保存前会验证图片可正常解码，历史坏图会自动回退到 CoLiPas 品牌图标。 |
+| 操作员账户 | 登录会话使用令牌哈希安全写入 SQLite，服务重启后仍保持且可撤销；支持每 15 秒前台同步、可配置容量、最旧会话自动退出、逐个或一键撤销、密码修改、三语切换和头像设置，不保存原始 Cookie、IP 或 User-Agent；头像保存前会验证图片可正常解码，历史坏图会自动回退到 CoLiPas 品牌图标。 |
 
 ## 快速开始
 
@@ -154,7 +154,6 @@ Docker 一键部署 / Docker Compose：
 ```bash
 cd /opt/colipas
 docker compose exec -e COLIPAS_RESET_PASSWORD='replace-with-new-strong-password' colipas npm run reset:admin
-docker compose restart colipas
 ```
 
 原生 Linux + systemd：
@@ -162,15 +161,14 @@ docker compose restart colipas
 ```bash
 cd /opt/colipas
 sudo -u colipas env COLIPAS_RESET_PASSWORD='replace-with-new-strong-password' npm run reset:admin
-sudo systemctl restart colipas
 ```
 
-重置脚本只更新管理员账号，不会删除服务器、SSH 凭据、审计记录、AI 缓存、自定义 API 设置或其他运行数据。
+重置脚本会更新管理员密码并立即撤销该账号的持久化登录会话，不需要重启服务；不会删除服务器、SSH 凭据、审计记录、AI 缓存、自定义 API 设置或其他运行数据。
 
 ## 安全模型
 
 - 除健康检查和登录接口外，所有运维 API 都需要登录会话。
-- 会话 Cookie 使用 HTTP-only；账户设置在页面可见时每 15 秒同步脱敏后的活跃登录设备，按配置限制会话容量，可逐个或一键撤销其他会话，且修改密码仍会撤销全部其他会话。
+- 会话 Cookie 使用 HTTP-only；SQLite 只保存 SHA-256 令牌哈希和脱敏设备/时间信息，不保存原始 Cookie，因此服务重启后会话仍有效且可撤销。账户设置每 15 秒同步，并按配置限制容量。
 - SSH 命令摘要会脱敏并限制长度。
 - SSH 凭据用 `CREDENTIAL_ENCRYPTION_KEY` 加密保存。
 - 自定义 API 代理会阻止私网地址、链路本地地址、危险请求头和敏感跳转。

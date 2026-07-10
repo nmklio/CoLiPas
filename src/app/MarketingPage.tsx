@@ -133,8 +133,8 @@ const operationsInboxFeature = {
 const accountSessionFeature = {
   icon: MonitorSmartphone,
   title: '登录会话控制',
-  desc: '账户设置每 15 秒同步当前与其他登录设备，可逐个或批量撤销；活跃会话默认最多保留 12 个，超限时自动退出最旧会话，且不返回原始 IP 或 User-Agent。',
-  tags: ['15 秒自动同步', '容量边界'],
+  desc: '只把令牌哈希和脱敏设备信息写入 SQLite，不保存原始 Cookie、IP 或 User-Agent；服务重启后会话仍保持且可撤销，并支持容量边界和最旧会话自动退出。',
+  tags: ['重启后保持', '令牌哈希入库'],
   featureId: 'account-session-control',
 };
 

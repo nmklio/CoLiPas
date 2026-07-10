@@ -3315,7 +3315,7 @@ button:disabled {
 
 .account-session-capacity {
   display: grid;
-  grid-template-columns: minmax(150px, auto) minmax(120px, 1fr) minmax(190px, auto);
+  grid-template-columns: minmax(150px, auto) minmax(120px, 1fr) minmax(230px, auto);
   align-items: center;
   gap: 12px;
   border: 1px solid rgba(15, 118, 110, 0.14);
@@ -3332,7 +3332,8 @@ button:disabled {
 }
 
 .account-session-capacity-copy span,
-.account-session-capacity p {
+.account-session-capacity p,
+.account-session-capacity-meta span {
   color: #5d7479;
   font-size: 10px;
 }
@@ -3358,9 +3359,23 @@ button:disabled {
   transition: width 180ms ease;
 }
 
+.account-session-capacity-meta {
+  display: grid;
+  justify-items: end;
+  gap: 3px;
+}
+
 .account-session-capacity p {
   margin: 0;
   text-align: right;
+}
+
+.account-session-capacity-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #16766e;
+  font-weight: 700;
 }
 
 .account-session-capacity.is-full {
@@ -21665,6 +21680,10 @@ pre {
   .account-session-capacity {
     grid-template-columns: 1fr;
     gap: 7px;
+  }
+
+  .account-session-capacity-meta {
+    justify-items: start;
   }
 
   .account-session-capacity p {

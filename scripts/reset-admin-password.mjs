@@ -25,7 +25,9 @@ if (!fs.existsSync(databasePath)) {
 
 const db = new DatabaseSync(databasePath);
 try {
+  db.exec('PRAGMA busy_timeout = 5000;');
   ensureAppSettingsTable(db);
+  ensureAuthSessionsTable(db);
   const account = {
     username,
     password: hashPassword(password),
@@ -37,9 +39,12 @@ try {
     VALUES (?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at
   `).run(accountSettingId, JSON.stringify(account), account.passwordChangedAt);
+  const revokedSessions = Number(
+    db.prepare('DELETE FROM auth_sessions WHERE username = ?').run(username).changes,
+  );
   db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
   console.log(`ok reset CoLiPas cloud server management panel admin password for ${username} in ${databasePath}`);
-  console.log('ok restart the CoLiPas cloud server management panel service before signing in with the new password');
+  console.log(`ok revoked ${revokedSessions} persisted login session(s); the new password is effective immediately`);
 } finally {
   db.close();
 }
@@ -82,6 +87,19 @@ function ensureAppSettingsTable(db) {
       id TEXT PRIMARY KEY,
       payload TEXT NOT NULL,
       updated_at TEXT NOT NULL
+    );
+  `);
+}
+
+function ensureAuthSessionsTable(db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS auth_sessions (
+      token_hash TEXT PRIMARY KEY,
+      username TEXT NOT NULL,
+      device_label TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      last_seen_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL
     );
   `);
 }

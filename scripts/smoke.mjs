@@ -484,6 +484,7 @@ if (
   || accountSessionsBody.summary?.maxActive !== 12
   || accountSessionsBody.summary?.available !== 10
   || accountSessionsBody.summary?.atCapacity !== false
+  || accountSessionsBody.summary?.persistent !== true
   || !currentManagedSession
   || !otherManagedSession
   || !/Chrome · Windows/.test(currentManagedSession.deviceLabel)
@@ -4308,18 +4309,23 @@ function assertAccountUiGuards() {
     "app.delete('/api/account/sessions/:sessionId'",
     "app.post('/api/account/sessions/revoke-others'",
     'buildSessionManagementId',
+    'hashSessionId',
     'describeSessionDevice',
     'retireOldestSessions',
+    'sessionLastSeenWriteIntervalMs = 30_000',
+    'persistent: true',
     'SESSION_MAX_ACTIVE',
     'data-account-session-control="true"',
     'data-account-session-current',
     'data-account-session-revoke-others="true"',
     'data-account-session-auto-refresh="true"',
     'data-account-session-capacity="true"',
+    'data-account-session-persistence="true"',
     'fetchAccountSessions',
     'revokeOtherAccountSessions',
     'accountSessionRefreshMs = 15_000',
     'assertConcurrentSessionCapacity',
+    'session-persistence-check.mjs',
     'SESSION_MAX_ACTIVE: String(sessionCapacity)',
     '.account-session-list::before',
     '.account-session-row.is-current',
@@ -4327,12 +4333,12 @@ function assertAccountUiGuards() {
     'desktop-account-session-control',
     'mobile-account-session-control',
   ];
-  const accountSessionCombinedSource = `${authSource}\n${serverAppSource}\n${accountSessionControlSource}\n${i18nSource}\n${globalCss}\n${fs.readFileSync(new URL('../src/server/config.ts', import.meta.url), 'utf8')}\n${fs.readFileSync(new URL('../src/services/apiClient.ts', import.meta.url), 'utf8')}\n${fs.readFileSync(new URL('../scripts/browser-e2e.mjs', import.meta.url), 'utf8')}\n${fs.readFileSync(new URL('../scripts/concurrency-check.mjs', import.meta.url), 'utf8')}\n${fs.readFileSync(new URL('../scripts/large-user-simulation.mjs', import.meta.url), 'utf8')}`;
+  const accountSessionCombinedSource = `${authSource}\n${serverAppSource}\n${accountSessionControlSource}\n${i18nSource}\n${globalCss}\n${fs.readFileSync(new URL('../src/server/config.ts', import.meta.url), 'utf8')}\n${fs.readFileSync(new URL('../src/server/services/database.ts', import.meta.url), 'utf8')}\n${fs.readFileSync(new URL('../src/services/apiClient.ts', import.meta.url), 'utf8')}\n${fs.readFileSync(new URL('../scripts/browser-e2e.mjs', import.meta.url), 'utf8')}\n${fs.readFileSync(new URL('../scripts/concurrency-check.mjs', import.meta.url), 'utf8')}\n${fs.readFileSync(new URL('../scripts/large-user-simulation.mjs', import.meta.url), 'utf8')}\n${fs.readFileSync(new URL('../scripts/session-persistence-check.mjs', import.meta.url), 'utf8')}\n${fs.readFileSync(new URL('../scripts/verify-production.mjs', import.meta.url), 'utf8')}`;
   const missingAccountSessions = accountSessionFragments.filter((fragment) => !accountSessionCombinedSource.includes(fragment));
   if (missingAccountSessions.length) {
     throw new Error(`Account session control is incomplete: ${missingAccountSessions.join(', ')}`);
   }
-  for (const key of ['account.sessionsTitle', 'account.sessionsDesc', 'account.sessionsCurrent', 'account.sessionsRevoke', 'account.sessionsRevokeOthers', 'account.sessionsPrivacy', 'account.sessionsAutoRefresh', 'account.sessionsSyncing', 'account.sessionsCapacity', 'account.sessionsCapacityAvailable', 'account.sessionsCapacityFull', 'account.sessionsCapacityPolicy']) {
+  for (const key of ['account.sessionsTitle', 'account.sessionsDesc', 'account.sessionsCurrent', 'account.sessionsRevoke', 'account.sessionsRevokeOthers', 'account.sessionsPrivacy', 'account.sessionsAutoRefresh', 'account.sessionsSyncing', 'account.sessionsCapacity', 'account.sessionsCapacityAvailable', 'account.sessionsCapacityFull', 'account.sessionsCapacityPolicy', 'account.sessionsPersistence']) {
     const count = (i18nSource.match(new RegExp(key.replace('.', '\\.'), 'g')) ?? []).length;
     if (count < 3) {
       throw new Error(`Account session control i18n key is missing languages: ${key}`);
@@ -5220,7 +5226,18 @@ function assertSqlitePersistenceGuards() {
   const browserE2eSource = fs.readFileSync(new URL('../scripts/browser-e2e.mjs', import.meta.url), 'utf8');
   const diagnosticServiceSource = fs.readFileSync(new URL('../src/server/services/diagnosticService.ts', import.meta.url), 'utf8');
   const releaseVerificationSource = fs.readFileSync(new URL('../src/server/services/releaseVerificationService.ts', import.meta.url), 'utf8');
-  const combined = [databaseSource, inventoryServiceSource, auditServiceSource, appSource].join('\n');
+  const authSource = fs.readFileSync(new URL('../src/server/services/authService.ts', import.meta.url), 'utf8');
+  const resetPasswordSource = fs.readFileSync(new URL('../scripts/reset-admin-password.mjs', import.meta.url), 'utf8');
+  const sessionPersistenceCheckSource = fs.readFileSync(new URL('../scripts/session-persistence-check.mjs', import.meta.url), 'utf8');
+  const combined = [
+    databaseSource,
+    inventoryServiceSource,
+    auditServiceSource,
+    appSource,
+    authSource,
+    resetPasswordSource,
+    sessionPersistenceCheckSource,
+  ].join('\n');
   const requiredFragments = [
     "import { DatabaseSync } from 'node:sqlite'",
     "path.join(dataDir, 'colipas.sqlite')",
@@ -5236,6 +5253,17 @@ function assertSqlitePersistenceGuards() {
     'CREATE TABLE IF NOT EXISTS servers',
     'CREATE TABLE IF NOT EXISTS credentials',
     'CREATE TABLE IF NOT EXISTS audit_entries',
+    'CREATE TABLE IF NOT EXISTS auth_sessions',
+    'token_hash TEXT PRIMARY KEY',
+    'export function readAuthSessionRow',
+    'export function insertAuthSessionRow',
+    'export function updateAuthSessionLastSeen',
+    'export function deleteOtherAuthSessionRows',
+    'export function retireOldestAuthSessionRows',
+    'hashSessionId(sessionId)',
+    'sessionLastSeenWriteIntervalMs = 30_000',
+    "DELETE FROM auth_sessions WHERE username = ?",
+    'rawSessionIdsStored: false',
     'replaceServerRows(servers)',
     'replaceCredentialRows(Object.fromEntries(persistedCredentials))',
     'export function upsertServerRow',
@@ -5253,6 +5281,14 @@ function assertSqlitePersistenceGuards() {
   const missing = requiredFragments.filter((fragment) => !combined.includes(fragment));
   if (missing.length) {
     throw new Error(`SQLite persistence guard is incomplete: ${missing.join(', ')}`);
+  }
+  if (
+    /session_id\s+TEXT/i.test(databaseSource)
+    || /cookie\s+TEXT/i.test(databaseSource)
+    || /\btoken\s+TEXT/i.test(databaseSource)
+    || authSource.includes('insertAuthSessionRow({ id:')
+  ) {
+    throw new Error('SQLite authentication sessions must store only token hashes, never raw session IDs or Cookies');
   }
 
   const refreshServerMetricsBody = inventoryServiceSource.match(/export async function refreshServerMetrics\(\) \{[\s\S]*?\n\}/)?.[0] ?? '';
@@ -5798,13 +5834,13 @@ function assertInteractiveDeployDocsAndScriptGuards() {
   }
 
   const accountSessionControlSources = [
-    ['README.md', readmeSource, ['active-session inventory', '15-second foreground sync', 'SESSION_MAX_ACTIVE', 'oldest session']],
-    ['README_CN.md', cnReadmeSource, ['每 15 秒前台自动同步活跃设备', 'SESSION_MAX_ACTIVE', '最旧会话']],
-    ['README_JP.md', jpReadmeSource, ['15 秒ごとのアクティブ端末同期', 'SESSION_MAX_ACTIVE', '最古セッション']],
-    ['MarketingPage.tsx', marketingSource, ['登录会话控制', '15 秒同步', '默认最多保留 12 个']],
-    ['DocsPage.tsx', docsPageSource, ['管理登录会话', '每 15 秒自动同步', 'SESSION_MAX_ACTIVE']],
-    ['server-update.sh landing card', serverUpdateSource, ['data-colipas-feature="account-session-control"', '15 秒同步', '默认最多保留 12 个']],
-    ['server-update.sh docs section', serverUpdateSource, ['data-colipas-docs-feature="account-session-control"', 'SESSION_MAX_ACTIVE', '最旧会话']],
+    ['README.md', readmeSource, ['restart-safe SQLite session storage', 'token hashes instead of raw Cookies', 'SESSION_MAX_ACTIVE']],
+    ['README_CN.md', cnReadmeSource, ['令牌哈希安全写入 SQLite', '服务重启后仍保持且可撤销', '原始 Cookie']],
+    ['README_JP.md', jpReadmeSource, ['トークンハッシュを SQLite', 'サービス再起動後', '生の Cookie']],
+    ['MarketingPage.tsx', marketingSource, ['登录会话控制', '令牌哈希', '不保存原始 Cookie', '服务重启后会话仍保持']],
+    ['DocsPage.tsx', docsPageSource, ['管理登录会话', 'SHA-256 令牌哈希', '服务重启后仍保持且可撤销']],
+    ['server-update.sh landing card', serverUpdateSource, ['data-colipas-feature="account-session-control"', '令牌哈希入库', '服务重启后会话仍保持']],
+    ['server-update.sh docs section', serverUpdateSource, ['data-colipas-docs-feature="account-session-control"', 'SHA-256 令牌哈希', '不保存原始 Cookie']],
     ['server-update.sh docs navigation', serverUpdateSource, ['href="#account-sessions"']],
   ];
   for (const [name, source, phrases] of accountSessionControlSources) {

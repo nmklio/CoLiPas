@@ -265,6 +265,7 @@ async function runVerificationSuite() {
       SMOKE_ADMIN_PASSWORD: 'NextPassword123',
     },
   });
+  await run(process.execPath, ['scripts/session-persistence-check.mjs']);
   await run(process.execPath, ['scripts/reset-admin-password.mjs'], {
     env: {
       ...process.env,

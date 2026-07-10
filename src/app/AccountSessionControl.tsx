@@ -3,6 +3,7 @@ import {
   CalendarClock,
   CheckCircle2,
   Clock3,
+  DatabaseZap,
   MonitorSmartphone,
   RefreshCw,
   ShieldCheck,
@@ -169,7 +170,15 @@ export function AccountSessionControl() {
         <span className="account-session-capacity-track" aria-hidden="true">
           <i style={{ width: `${capacityPercent}%` }} />
         </span>
-        <p>{t('account.sessionsCapacityPolicy', { max: sessions?.summary.maxActive ?? '—' })}</p>
+        <div className="account-session-capacity-meta">
+          <p>{t('account.sessionsCapacityPolicy', { max: sessions?.summary.maxActive ?? '—' })}</p>
+          {sessions?.summary.persistent ? (
+            <span data-account-session-persistence="true">
+              <DatabaseZap size={12} aria-hidden="true" />
+              {t('account.sessionsPersistence')}
+            </span>
+          ) : null}
+        </div>
       </div>
 
       {loading && !sessions ? (

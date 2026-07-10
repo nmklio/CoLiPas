@@ -294,7 +294,7 @@ if (!html.includes('data-colipas-feature="operations-inbox"')) {
       <article class="feature-card" data-colipas-feature="operations-inbox">${landingIcon('inbox', 'icon feature-icon')}<h3>全局运维收件箱</h3><p>汇总上线阻塞、SSH 与资产覆盖缺口和开放事件，按优先级直接跳转处理模块；本机只保存安全事项 ID 与审阅时间。</p><div class="tags"><span>跨模块聚合</span><span>本机审阅</span></div></article>`);
 }
 
-const accountSessionFeatureCard = `<article class="feature-card" data-colipas-feature="account-session-control">${landingIcon('shield', 'icon feature-icon')}<h3>登录会话控制</h3><p>每 15 秒同步当前与其他登录设备，可逐个或批量撤销；默认最多保留 12 个活跃会话，超限时自动退出最旧会话，且不暴露原始 IP 或 User-Agent。</p><div class="tags"><span>15 秒自动同步</span><span>容量边界</span></div></article>`;
+const accountSessionFeatureCard = `<article class="feature-card" data-colipas-feature="account-session-control">${landingIcon('shield', 'icon feature-icon')}<h3>登录会话控制</h3><p>只把令牌哈希与脱敏设备信息写入 SQLite，不保存原始 Cookie、IP 或 User-Agent；服务重启后会话仍保持且可撤销，并支持容量边界和最旧会话自动退出。</p><div class="tags"><span>重启后保持</span><span>令牌哈希入库</span></div></article>`;
 if (!html.includes('data-colipas-feature="account-session-control"')) {
   replaceOnce(/(<div class="feature-grid">)/, `$1
       ${accountSessionFeatureCard}`);
@@ -1506,7 +1506,7 @@ SVG
           <div class="flow-step"><b>3</b><div><h3>添加第一台服务器</h3><p>先填写名称、IP、地区、系统和标签；需要远程操作时必须选择 SSH 验证模式并通过密码或私钥握手。</p></div></div>
           <div class="flow-step"><b>4</b><div><h3>验证 SSH、AI 与编排联动</h3><p>打开终端执行只读诊断命令，再配置 AI Provider、加载模型、测试自定义 API 白名单，最后执行一条低风险编排任务。</p></div></div>
         </div>
-        <p class="section-note">忘记管理员密码时只能重置，不能找回明文密码。Docker 部署可在 `/opt/colipas` 执行 `docker compose exec -e COLIPAS_RESET_PASSWORD='replace-with-new-strong-password' colipas npm run reset:admin` 后重启容器；systemd 部署可执行 `sudo -u colipas env COLIPAS_RESET_PASSWORD='replace-with-new-strong-password' npm run reset:admin` 后重启服务。</p>
+        <p class="section-note">忘记管理员密码时只能重置，不能找回明文密码。Docker 部署可在 `/opt/colipas` 执行 `docker compose exec -e COLIPAS_RESET_PASSWORD='replace-with-new-strong-password' colipas npm run reset:admin`；systemd 部署可执行 `sudo -u colipas env COLIPAS_RESET_PASSWORD='replace-with-new-strong-password' npm run reset:admin`。脚本会立即撤销该账号的持久化登录会话，不需要重启服务，也不会删除服务器或其他用户数据。</p>
       </section>
 
       <section id="launch-checklist" class="section split">
@@ -1639,7 +1639,7 @@ systemctl status ssh --no-pager
         <div class="grid">
           <article class="doc-card">
             <h3>识别当前设备</h3>
-            <p>账户设置会突出显示当前浏览器，并列出其他活跃登录设备的登录时间、最近活动和到期时间；页面可见时每 15 秒自动同步。</p>
+            <p>账户设置会突出显示当前浏览器，并列出其他活跃登录设备的登录时间、最近活动和到期时间；页面可见时每 15 秒自动同步，服务重启后有效会话仍会恢复。</p>
           </article>
           <article class="doc-card">
             <h3>主动撤销访问</h3>
@@ -1647,7 +1647,7 @@ systemctl status ssh --no-pager
           </article>
           <article class="doc-card">
             <h3>容量与隐私边界</h3>
-            <p>默认最多保留 12 个活跃会话，可用 SESSION_MAX_ACTIVE 调整；达到上限后自动退出最旧会话。接口不会返回原始 IP、User-Agent、Cookie 或内部会话令牌。</p>
+            <p>默认最多保留 12 个活跃会话，可用 SESSION_MAX_ACTIVE 调整。SQLite 只保存 SHA-256 令牌哈希和脱敏元数据，不保存原始 Cookie、IP 或 User-Agent；达到上限后自动退出最旧会话。</p>
           </article>
         </div>
       </section>
@@ -1658,7 +1658,7 @@ systemctl status ssh --no-pager
         <div class="table">
           <div><code>GET /api/health</code><p>公开健康检查，返回运行状态、SQLite 驱动名称和短发布标识，不暴露路径或密钥。</p></div>
           <div><code>POST /api/auth/login</code><p>管理员登录，失败次数会限速并返回 Retry-After。</p></div>
-          <div><code>GET /api/account/sessions</code><p>读取脱敏后的活跃登录设备、最近活动、到期时间，以及容量上限、剩余名额和满载状态。</p></div>
+          <div><code>GET /api/account/sessions</code><p>读取重启安全的活跃登录设备、最近活动、到期时间、容量与持久化状态。</p></div>
           <div><code>DELETE /api/account/sessions/:id</code><p>撤销指定的其他登录会话，不允许误删当前会话。</p></div>
           <div><code>POST /api/account/sessions/revoke-others</code><p>保留当前浏览器并撤销其他全部登录会话。</p></div>
           <div><code>GET /api/overview</code><p>登录后读取账号、服务器、事件和总览指标。</p></div>
@@ -1700,7 +1700,7 @@ curl -fsS http://127.0.0.1:8080/api/health</pre>
           <details><summary>为什么未验证的服务器不会显示已接入？</summary><p>真实接入必须通过 SSH 握手。资产模式只登记信息，不会显示已接入，也不会允许执行远程命令。</p></details>
           <details><summary>AI 回答是否固定？</summary><p>未配置有效 API Key 时会返回本地规则分析；配置 OpenAI 兼容 API 并测试成功后，会使用真实流式模型。</p></details>
           <details><summary>SSH 终端关闭后为什么命令不能继续发？</summary><p>这是正常保护。终端窗口关闭会销毁后端 shell，会话失效后继续输入会被拒绝，避免服务器上残留交互进程。</p></details>
-          <details><summary>数据存在哪里？</summary><p>默认保存在 .data/colipas.sqlite。SSH 凭据会加密后存储，请保护 .env 和 .data。</p></details>
+          <details><summary>数据存在哪里？</summary><p>默认保存在 .data/colipas.sqlite。SSH 凭据会加密存储，登录会话只保存令牌哈希与脱敏元数据；请保护 .env 和 .data。</p></details>
         </div>
       </section>
     </main>

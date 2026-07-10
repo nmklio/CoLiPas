@@ -1307,8 +1307,12 @@ async function assertAccountSettingsAndAiChat(targetPage) {
     || !/Raw IP addresses and User-Agent values are not stored or returned/i.test(accountSessionText)
     || !/Syncs every 15s/i.test(accountSessionText)
     || !/Keeps up to 12/i.test(accountSessionText)
+    || !/remain revocable after restart/i.test(accountSessionText)
   ) {
     throw new Error(`Account session control is missing status or privacy guidance: ${accountSessionText}`);
+  }
+  if (await accountSessionControl.locator('[data-account-session-persistence="true"]').count() !== 1) {
+    throw new Error('Account session control must expose restart-safe server persistence');
   }
   const activeSessionSummary = accountSessionControl.locator('[data-account-session-active-count="true"] strong');
   const otherSessionSummary = accountSessionControl.locator('[data-account-session-other-count="true"] strong');

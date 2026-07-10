@@ -23,6 +23,15 @@ export interface StoredJsonRow {
   created_at?: string;
 }
 
+export interface StoredAuthSessionRow {
+  token_hash: string;
+  username: string;
+  device_label: string;
+  created_at: number;
+  last_seen_at: number;
+  expires_at: number;
+}
+
 export function getDatabasePath() {
   ensureDatabase();
   return databasePath;
@@ -51,6 +60,106 @@ export function writeAppSetting(id: string, payload: unknown) {
 export function deleteAppSetting(id: string) {
   prepareStatement('DELETE FROM app_settings WHERE id = ?').run(id);
   checkpointDatabaseIfNeeded();
+}
+
+export function readAuthSessionRow(tokenHash: string) {
+  const row = prepareStatement('SELECT * FROM auth_sessions WHERE token_hash = ?').get(tokenHash) as StoredAuthSessionRow | undefined;
+  return row ?? null;
+}
+
+export function loadAuthSessionRows(username: string) {
+  return prepareStatement(`
+    SELECT * FROM auth_sessions
+    WHERE username = ?
+    ORDER BY created_at ASC, token_hash ASC
+  `).all(username) as unknown as StoredAuthSessionRow[];
+}
+
+export function insertAuthSessionRow(session: StoredAuthSessionRow) {
+  prepareStatement(`
+    INSERT INTO auth_sessions (
+      token_hash,
+      username,
+      device_label,
+      created_at,
+      last_seen_at,
+      expires_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(
+    session.token_hash,
+    session.username,
+    session.device_label,
+    session.created_at,
+    session.last_seen_at,
+    session.expires_at,
+  );
+  checkpointDatabaseIfNeeded();
+}
+
+export function updateAuthSessionLastSeen(tokenHash: string, lastSeenAt: number) {
+  const result = prepareStatement(`
+    UPDATE auth_sessions
+    SET last_seen_at = ?
+    WHERE token_hash = ? AND last_seen_at < ?
+  `).run(lastSeenAt, tokenHash, lastSeenAt);
+  if (Number(result.changes) > 0) {
+    checkpointDatabaseIfNeeded();
+  }
+}
+
+export function deleteAuthSessionRow(tokenHash: string) {
+  const result = prepareStatement('DELETE FROM auth_sessions WHERE token_hash = ?').run(tokenHash);
+  if (Number(result.changes) > 0) {
+    checkpointDatabaseIfNeeded();
+  }
+  return Number(result.changes);
+}
+
+export function deleteExpiredAuthSessionRows(now: number) {
+  const result = prepareStatement('DELETE FROM auth_sessions WHERE expires_at <= ?').run(now);
+  if (Number(result.changes) > 0) {
+    checkpointDatabaseIfNeeded();
+  }
+  return Number(result.changes);
+}
+
+export function deleteOtherAuthSessionRows(username: string, currentTokenHash: string) {
+  const result = prepareStatement(`
+    DELETE FROM auth_sessions
+    WHERE username = ? AND token_hash <> ?
+  `).run(username, currentTokenHash);
+  if (Number(result.changes) > 0) {
+    checkpointDatabaseIfNeeded();
+  }
+  return Number(result.changes);
+}
+
+export function retireOldestAuthSessionRows(username: string, slotsToKeep: number) {
+  const countRow = prepareStatement(`
+    SELECT COUNT(*) AS count
+    FROM auth_sessions
+    WHERE username = ?
+  `).get(username) as { count: number };
+  const retireCount = Math.max(0, Number(countRow.count) - Math.max(0, slotsToKeep));
+  if (retireCount === 0) {
+    return 0;
+  }
+
+  const result = prepareStatement(`
+    DELETE FROM auth_sessions
+    WHERE token_hash IN (
+      SELECT token_hash
+      FROM auth_sessions
+      WHERE username = ?
+      ORDER BY created_at ASC, token_hash ASC
+      LIMIT ?
+    )
+  `).run(username, retireCount);
+  if (Number(result.changes) > 0) {
+    checkpointDatabaseIfNeeded();
+  }
+  return Number(result.changes);
 }
 
 export function replaceServerRows(items: Array<{ id: string }>) {
@@ -257,7 +366,18 @@ function ensureDatabase() {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS auth_sessions (
+      token_hash TEXT PRIMARY KEY,
+      username TEXT NOT NULL,
+      device_label TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      last_seen_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_audit_entries_created_at ON audit_entries(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_auth_sessions_username_created_at ON auth_sessions(username, created_at ASC);
+    CREATE INDEX IF NOT EXISTS idx_auth_sessions_expires_at ON auth_sessions(expires_at);
   `);
 
   return database;

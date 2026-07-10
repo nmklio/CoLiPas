@@ -401,6 +401,7 @@ export interface AccountSessionsResponse {
     maxActive: number;
     available: number;
     atCapacity: boolean;
+    persistent: boolean;
   };
 }
 

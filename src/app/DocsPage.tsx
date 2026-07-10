@@ -175,10 +175,11 @@ const accountAppearanceUsageBlock = {
 const accountSessionUsageBlock = {
   icon: MonitorSmartphone,
   title: '管理登录会话',
-  body: '账户设置会列出当前浏览器和同一管理员账号的其他活跃登录设备，页面可见时每 15 秒自动同步。发现不熟悉的设备时，可单独撤销，也可保留当前浏览器并一键撤销其他全部会话。',
+  body: '登录会话以 SHA-256 令牌哈希和脱敏设备/时间信息保存到 SQLite，不保存原始 Cookie，因此服务重启后仍保持且可撤销；账户设置在页面可见时每 15 秒自动同步。',
   points: [
     '当前会话始终受保护，需要退出登录才能关闭',
     '默认最多保留 12 个活跃会话，可通过 SESSION_MAX_ACTIVE 调整；达到上限后自动退出最旧会话',
+    '重启服务不会丢失有效会话；远程撤销、退出登录和密码重置的失效状态也会持久化',
     '列表只返回解析后的浏览器和系统标签，不保存或展示原始 IP 与 User-Agent',
     '单个撤销、一键撤销其他会话和修改密码清理会话都会进入安全审计',
   ],
@@ -189,7 +190,7 @@ const accountSessionUsageBlock = {
 const apiRows = [
   ['GET /api/health', '服务健康状态、SQLite 驱动和运行时间。'],
   ['POST /api/auth/login', '管理员登录并写入会话 cookie。'],
-  ['GET /api/account/sessions', '读取活跃登录会话、脱敏设备标签、时间以及容量上限、剩余名额和满载状态。'],
+  ['GET /api/account/sessions', '读取重启安全的活跃登录会话、脱敏设备标签、时间、容量和持久化状态。'],
   ['DELETE /api/account/sessions/:id', '撤销指定的其他登录会话；当前会话需要通过退出登录关闭。'],
   ['POST /api/account/sessions/revoke-others', '保留当前会话并撤销同一管理员账号的其他全部登录。'],
   ['GET /api/overview', '云账号、服务器、事件和总览指标。'],
@@ -206,7 +207,7 @@ const faqItems = [
   ['后台地址在哪里？', '生产环境统一访问 http://127.0.0.1:8080/，反代后访问你自己的域名。不要将 Vite 5173 作为生产入口。'],
   ['为什么未验证的服务器不会显示已接入？', '真实接入必须通过 SSH 握手。资产模式只登记资产，不会显示为已接入。'],
   ['AI 回答是否固定？', '未配置有效 API key 时会走本地规则分析；配置 OpenAI 兼容 API 并通过测试后，会使用真实流式模型。'],
-  ['数据存在哪里？', '默认保存在 .data/colipas.sqlite，SSH 凭据加密后存储。部署时要备份 .data，并保护 .env。'],
+  ['数据存在哪里？', '默认保存在 .data/colipas.sqlite；SSH 凭据加密存储，登录会话只保存令牌哈希与脱敏元数据。部署时要备份 .data，并保护 .env。'],
   ['可以直接暴露公网吗？', '可以，但必须先改管理员密码、SESSION_SECRET、CREDENTIAL_ENCRYPTION_KEY、CORS_ORIGIN，并启用 HTTPS 和防火墙。'],
 ];
 

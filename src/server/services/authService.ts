@@ -3,7 +3,19 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import type { RuntimeConfig } from '../config.js';
 import { HttpError } from '../httpErrors.js';
-import { readAppSetting, writeAppSetting } from './database.js';
+import {
+  deleteAuthSessionRow,
+  deleteExpiredAuthSessionRows,
+  deleteOtherAuthSessionRows,
+  insertAuthSessionRow,
+  loadAuthSessionRows,
+  readAppSetting,
+  readAuthSessionRow,
+  retireOldestAuthSessionRows,
+  updateAuthSessionLastSeen,
+  writeAppSetting,
+  type StoredAuthSessionRow,
+} from './database.js';
 
 const avatarMaxBytes = 2 * 1024 * 1024;
 const avatarMaxDimension = 4096;
@@ -38,6 +50,7 @@ const accountSettingId = 'admin-account';
 const profileSettingId = 'console-profile';
 const loginFailureWindowMs = 10 * 60 * 1000;
 const maxLoginFailuresPerWindow = 8;
+const sessionLastSeenWriteIntervalMs = 30_000;
 
 interface StoredPassword {
   algorithm: 'scrypt';
@@ -58,12 +71,17 @@ export interface ConsoleProfile {
 }
 
 interface SessionRecord {
-  id: string;
+  tokenHash: string;
   username: string;
   createdAt: number;
   lastSeenAt: number;
   expiresAt: number;
   deviceLabel: string;
+}
+
+interface SessionContext {
+  tokenHash: string;
+  session: SessionRecord;
 }
 
 interface LoginFailureRecord {
@@ -72,7 +90,6 @@ interface LoginFailureRecord {
   lockedUntil: number;
 }
 
-const sessions = new Map<string, SessionRecord>();
 const loginFailures = new Map<string, LoginFailureRecord>();
 const sessionManagementIdSchema = z.string().regex(/^[a-f0-9]{24}$/);
 const fallbackProfile: ConsoleProfile = {
@@ -102,8 +119,9 @@ export function login(input: unknown, request: Request, response: Response, conf
   const now = Date.now();
   pruneExpiredSessions(now);
   retireOldestSessions(parsed.username, config.auth.maxActiveSessions - 1);
+  const sessionId = crypto.randomBytes(32).toString('hex');
   const session: SessionRecord = {
-    id: crypto.randomBytes(32).toString('hex'),
+    tokenHash: hashSessionId(sessionId),
     username: parsed.username,
     createdAt: now,
     lastSeenAt: now,
@@ -111,9 +129,9 @@ export function login(input: unknown, request: Request, response: Response, conf
     deviceLabel: describeSessionDevice(request),
   };
 
-  sessions.set(session.id, session);
+  insertAuthSessionRow(toStoredAuthSession(session));
   clearLoginFailures(limiterKey);
-  setSessionCookie(response, session, config);
+  setSessionCookie(response, sessionId, config);
 
   return buildSessionPayload(session, now);
 }
@@ -137,28 +155,15 @@ export function logout(request: Request, response: Response, config: RuntimeConf
   const token = readCookie(request, cookieName);
   const sessionId = token ? verifyToken(token, config.auth.sessionSecret) : null;
   if (sessionId) {
-    sessions.delete(sessionId);
+    deleteAuthSessionRow(hashSessionId(sessionId));
   }
   clearSessionCookie(response);
   return { authenticated: false };
 }
 
 export function getCurrentSession(request: Request, config: RuntimeConfig) {
-  const token = readCookie(request, cookieName);
-  const sessionId = token ? verifyToken(token, config.auth.sessionSecret) : null;
-  if (!sessionId) {
-    return null;
-  }
-
-  const session = sessions.get(sessionId);
-  const now = Date.now();
-  if (!session || session.expiresAt <= now) {
-    sessions.delete(sessionId);
-    return null;
-  }
-
-  session.lastSeenAt = now;
-  return buildSessionPayload(session, now);
+  const context = resolveSessionContext(request, config);
+  return context ? buildSessionPayload(context.session) : null;
 }
 
 export function getConsoleProfile() {
@@ -198,8 +203,7 @@ function isDefaultLikeProfile(profile: Partial<ConsoleProfile>) {
 }
 
 export function changeAdminPassword(input: unknown, request: Request, config: RuntimeConfig) {
-  const session = requireSession(request, config);
-  const sessionId = requireSessionId(request, config);
+  const sessionContext = requireSessionContext(request, config);
   const parsed = passwordChangeSchema.parse(input);
   const account = getStoredAccount(config);
 
@@ -217,7 +221,7 @@ export function changeAdminPassword(input: unknown, request: Request, config: Ru
     passwordChangedAt: new Date().toISOString(),
   };
   writeAppSetting(accountSettingId, nextAccount);
-  clearOtherSessions(sessionId);
+  clearOtherSessions(sessionContext.session.username, sessionContext.tokenHash);
   return {
     ok: true,
     changedAt: nextAccount.passwordChangedAt,
@@ -225,11 +229,8 @@ export function changeAdminPassword(input: unknown, request: Request, config: Ru
 }
 
 export function requireSession(request: Request, config: RuntimeConfig) {
-  const session = getCurrentSession(request, config);
-  if (!session) {
-    throw new HttpError(401, '登录已失效，请重新登录', 'AUTH_REQUIRED');
-  }
-  return session;
+  const context = requireSessionContext(request, config);
+  return buildSessionPayload(context.session);
 }
 
 export function buildAccountPayload(request: Request, config: RuntimeConfig) {
@@ -241,50 +242,45 @@ export function buildAccountPayload(request: Request, config: RuntimeConfig) {
 }
 
 export function listAccountSessions(request: Request, config: RuntimeConfig) {
-  const currentSessionId = requireSessionId(request, config);
-  return buildAccountSessionsPayload(currentSessionId, config.auth.maxActiveSessions);
+  const context = requireSessionContext(request, config);
+  return buildAccountSessionsPayload(context, config.auth.maxActiveSessions);
 }
 
 export function revokeAccountSession(sessionManagementId: unknown, request: Request, config: RuntimeConfig) {
-  const currentSessionId = requireSessionId(request, config);
+  const context = requireSessionContext(request, config);
   const parsedId = sessionManagementIdSchema.parse(sessionManagementId);
   pruneExpiredSessions();
-  const target = Array.from(sessions.values()).find((session) => buildSessionManagementId(session.id) === parsedId);
+  const target = loadSessionRecords(context.session.username)
+    .find((session) => buildSessionManagementId(session.tokenHash) === parsedId);
 
   if (!target) {
     throw new HttpError(404, 'Session not found or already expired', 'AUTH_SESSION_NOT_FOUND');
   }
-  if (target.id === currentSessionId) {
+  if (target.tokenHash === context.tokenHash) {
     throw new HttpError(400, 'Sign out to close the current session', 'AUTH_SESSION_CURRENT');
   }
 
-  sessions.delete(target.id);
+  deleteAuthSessionRow(target.tokenHash);
   return {
     ok: true as const,
     revoked: 1,
-    sessions: buildAccountSessionsPayload(currentSessionId, config.auth.maxActiveSessions),
+    sessions: buildAccountSessionsPayload(context, config.auth.maxActiveSessions),
   };
 }
 
 export function revokeOtherAccountSessions(request: Request, config: RuntimeConfig) {
-  const currentSessionId = requireSessionId(request, config);
+  const context = requireSessionContext(request, config);
   pruneExpiredSessions();
-  let revoked = 0;
-  for (const sessionId of sessions.keys()) {
-    if (sessionId !== currentSessionId) {
-      sessions.delete(sessionId);
-      revoked += 1;
-    }
-  }
+  const revoked = deleteOtherAuthSessionRows(context.session.username, context.tokenHash);
   return {
     ok: true as const,
     revoked,
-    sessions: buildAccountSessionsPayload(currentSessionId, config.auth.maxActiveSessions),
+    sessions: buildAccountSessionsPayload(context, config.auth.maxActiveSessions),
   };
 }
 
-function setSessionCookie(response: Response, session: SessionRecord, config: RuntimeConfig) {
-  const token = signToken(session.id, config.auth.sessionSecret);
+function setSessionCookie(response: Response, sessionId: string, config: RuntimeConfig) {
+  const token = signToken(sessionId, config.auth.sessionSecret);
   response.cookie(cookieName, token, {
     httpOnly: true,
     sameSite: 'lax',
@@ -315,13 +311,35 @@ function buildSessionPayload(session: SessionRecord, now = Date.now()) {
   };
 }
 
-function requireSessionId(request: Request, config: RuntimeConfig) {
+function resolveSessionContext(request: Request, config: RuntimeConfig): SessionContext | null {
   const token = readCookie(request, cookieName);
   const sessionId = token ? verifyToken(token, config.auth.sessionSecret) : null;
-  if (!sessionId || !sessions.has(sessionId)) {
+  if (!sessionId) {
+    return null;
+  }
+
+  const tokenHash = hashSessionId(sessionId);
+  const session = fromStoredAuthSession(readAuthSessionRow(tokenHash));
+  const now = Date.now();
+  const account = getStoredAccount(config);
+  if (!session || session.expiresAt <= now || session.username !== account.username) {
+    deleteAuthSessionRow(tokenHash);
+    return null;
+  }
+
+  if (now - session.lastSeenAt >= sessionLastSeenWriteIntervalMs) {
+    updateAuthSessionLastSeen(tokenHash, now);
+    session.lastSeenAt = now;
+  }
+  return { tokenHash, session };
+}
+
+function requireSessionContext(request: Request, config: RuntimeConfig) {
+  const context = resolveSessionContext(request, config);
+  if (!context) {
     throw new HttpError(401, '登录已失效，请重新登录', 'AUTH_REQUIRED');
   }
-  return sessionId;
+  return context;
 }
 
 function getStoredAccount(config: RuntimeConfig): StoredAccountSetting {
@@ -339,34 +357,29 @@ function getStoredAccount(config: RuntimeConfig): StoredAccountSetting {
   return seeded;
 }
 
-function clearOtherSessions(sessionId: string) {
-  for (const id of sessions.keys()) {
-    if (id !== sessionId) {
-      sessions.delete(id);
-    }
-  }
+function clearOtherSessions(username: string, currentTokenHash: string) {
+  deleteOtherAuthSessionRows(username, currentTokenHash);
 }
 
-function buildAccountSessionsPayload(currentSessionId: string, maxActiveSessions: number) {
+function buildAccountSessionsPayload(context: SessionContext, maxActiveSessions: number) {
   pruneExpiredSessions();
-  const currentSession = sessions.get(currentSessionId);
-  if (!currentSession) {
+  const currentSession = fromStoredAuthSession(readAuthSessionRow(context.tokenHash));
+  if (!currentSession || currentSession.username !== context.session.username) {
     throw new HttpError(401, '登录已失效，请重新登录', 'AUTH_REQUIRED');
   }
-  const items = Array.from(sessions.values())
-    .filter((session) => session.username === currentSession.username)
+  const items = loadSessionRecords(currentSession.username)
     .sort((left, right) => {
-      if (left.id === currentSessionId) {
+      if (left.tokenHash === context.tokenHash) {
         return -1;
       }
-      if (right.id === currentSessionId) {
+      if (right.tokenHash === context.tokenHash) {
         return 1;
       }
       return right.lastSeenAt - left.lastSeenAt;
     })
     .map((session) => ({
-      id: buildSessionManagementId(session.id),
-      current: session.id === currentSessionId,
+      id: buildSessionManagementId(session.tokenHash),
+      current: session.tokenHash === context.tokenHash,
       deviceLabel: session.deviceLabel,
       createdAt: new Date(session.createdAt).toISOString(),
       lastSeenAt: new Date(session.lastSeenAt).toISOString(),
@@ -381,30 +394,64 @@ function buildAccountSessionsPayload(currentSessionId: string, maxActiveSessions
       maxActive: maxActiveSessions,
       available: Math.max(0, maxActiveSessions - items.length),
       atCapacity: items.length >= maxActiveSessions,
+      persistent: true,
     },
   };
 }
 
 function retireOldestSessions(username: string, slotsToKeep: number) {
-  const orderedSessions = Array.from(sessions.values())
-    .filter((session) => session.username === username)
-    .sort((left, right) => left.createdAt - right.createdAt);
-  const retireCount = Math.max(0, orderedSessions.length - Math.max(0, slotsToKeep));
-  for (let index = 0; index < retireCount; index += 1) {
-    sessions.delete(orderedSessions[index].id);
-  }
+  retireOldestAuthSessionRows(username, slotsToKeep);
 }
 
 function pruneExpiredSessions(now = Date.now()) {
-  for (const [sessionId, session] of sessions) {
-    if (session.expiresAt <= now) {
-      sessions.delete(sessionId);
-    }
-  }
+  deleteExpiredAuthSessionRows(now);
 }
 
-function buildSessionManagementId(sessionId: string) {
-  return crypto.createHash('sha256').update(`colipas-session:${sessionId}`).digest('hex').slice(0, 24);
+function buildSessionManagementId(tokenHash: string) {
+  return crypto.createHash('sha256').update(`colipas-session-management:${tokenHash}`).digest('hex').slice(0, 24);
+}
+
+function hashSessionId(sessionId: string) {
+  return crypto.createHash('sha256').update(`colipas-auth-session:${sessionId}`).digest('hex');
+}
+
+function loadSessionRecords(username: string) {
+  return loadAuthSessionRows(username)
+    .map((row) => fromStoredAuthSession(row))
+    .filter((session): session is SessionRecord => Boolean(session));
+}
+
+function toStoredAuthSession(session: SessionRecord): StoredAuthSessionRow {
+  return {
+    token_hash: session.tokenHash,
+    username: session.username,
+    device_label: session.deviceLabel,
+    created_at: session.createdAt,
+    last_seen_at: session.lastSeenAt,
+    expires_at: session.expiresAt,
+  };
+}
+
+function fromStoredAuthSession(row: StoredAuthSessionRow | null): SessionRecord | null {
+  if (
+    !row
+    || !/^[a-f0-9]{64}$/.test(row.token_hash)
+    || !row.username
+    || !row.device_label
+    || !Number.isFinite(row.created_at)
+    || !Number.isFinite(row.last_seen_at)
+    || !Number.isFinite(row.expires_at)
+  ) {
+    return null;
+  }
+  return {
+    tokenHash: row.token_hash,
+    username: row.username,
+    deviceLabel: row.device_label,
+    createdAt: Number(row.created_at),
+    lastSeenAt: Number(row.last_seen_at),
+    expiresAt: Number(row.expires_at),
+  };
 }
 
 function describeSessionDevice(request: Request) {
