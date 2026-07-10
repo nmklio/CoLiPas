@@ -2845,7 +2845,37 @@ async function assertMobileConsoleAndMap() {
     await assertNoHorizontalOverflow(mobilePage, 'mobile console after login');
     await assertElementHorizontallyWithinViewport(mobilePage, '[data-launch-guide="true"]', 'mobile compact launch guide');
 
-    await mobilePage.locator('.account-settings-trigger').click();
+    const compactTopbarMetrics = await mobilePage.locator('.topbar').evaluate((element) => ({
+      height: element.getBoundingClientRect().height,
+      scrollWidth: element.scrollWidth,
+      clientWidth: element.clientWidth,
+    }));
+    if (compactTopbarMetrics.height > 76 || compactTopbarMetrics.scrollWidth > compactTopbarMetrics.clientWidth + 1) {
+      throw new Error(`Mobile topbar should keep primary controls to one compact row: ${JSON.stringify(compactTopbarMetrics)}`);
+    }
+
+    const mobileUtilityTrigger = mobilePage.locator('[data-mobile-utility-trigger="true"]');
+    await mobileUtilityTrigger.click();
+    const mobileUtilityMenu = mobilePage.locator('[data-mobile-utility-menu="true"]');
+    await mobileUtilityMenu.waitFor({ timeout: 5000 });
+    if (await mobileUtilityMenu.locator('.language-switcher-option').count() !== 3) {
+      throw new Error('Mobile quick controls should expose all three language options');
+    }
+    if (await mobileUtilityMenu.locator('[data-mobile-utility-performance="true"]').getAttribute('aria-pressed') !== 'false') {
+      throw new Error('Mobile quick controls should reflect the standard performance mode');
+    }
+    await mobileUtilityMenu.locator('[data-mobile-utility-performance="true"]').click();
+    if ((await mobilePage.locator('.shell').getAttribute('data-performance-mode')) !== 'true') {
+      throw new Error('Mobile quick controls did not enable performance mode');
+    }
+    await mobileUtilityMenu.locator('[data-mobile-utility-performance="true"]').click();
+    if ((await mobilePage.locator('.shell').getAttribute('data-performance-mode')) !== 'false') {
+      throw new Error('Mobile quick controls did not restore standard performance mode');
+    }
+    await assertNoHorizontalOverflow(mobilePage, 'mobile quick controls');
+    await captureVisualEvidence(mobilePage, 'mobile-quick-controls', ['.topbar', '[data-mobile-utility-menu="true"]']);
+
+    await mobileUtilityMenu.locator('[data-mobile-utility-account="true"]').click();
     await mobilePage.locator('.account-modal').waitFor({ timeout: 5000 });
     await assertElementWithinViewport(mobilePage, '.account-modal', 'mobile account settings modal');
     await mobilePage.getByRole('button', { name: /close settings/i }).click();

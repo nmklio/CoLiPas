@@ -15,6 +15,7 @@ import {
   MessageSquareText,
   Menu,
   Minimize2,
+  MoreHorizontal,
   PlugZap,
   RefreshCw,
   Rocket,
@@ -331,6 +332,7 @@ export function App() {
   const [operationDraft, setOperationDraft] = useState<OperationsDraft | null>(null);
   const [overviewPreflightSnapshot, setOverviewPreflightSnapshot] = useState<OverviewPreflightSnapshot | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [mobileUtilityOpen, setMobileUtilityOpen] = useState(false);
   const [aiCollapsed, setAiCollapsed] = useState(true);
   const [performanceMode, setPerformanceMode] = useState(readStoredPerformanceMode);
   const [aiSeedQuestion, setAiSeedQuestion] = useState('');
@@ -549,6 +551,7 @@ export function App() {
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'auto' });
+    setMobileUtilityOpen(false);
   }, [activeSection]);
 
   useEffect(() => {
@@ -1338,7 +1341,115 @@ export function App() {
             <button type="button" className="icon-button topbar-logout" aria-label={t('login.logout')} title={t('login.logout')} onClick={handleLogout}>
               <LogOut size={16} />
             </button>
+            <button
+              type="button"
+              className="icon-button mobile-utility-trigger"
+              data-mobile-utility-trigger="true"
+              aria-label={t('app.mobileControls')}
+              aria-expanded={mobileUtilityOpen}
+              aria-controls="mobile-utility-menu"
+              title={t('app.mobileControls')}
+              onClick={() => setMobileUtilityOpen((value) => !value)}
+            >
+              <MoreHorizontal size={19} />
+            </button>
           </div>
+          {mobileUtilityOpen && (
+            <>
+              <button
+                type="button"
+                className="mobile-utility-scrim"
+                aria-label={t('app.closeMobileControls')}
+                onClick={() => setMobileUtilityOpen(false)}
+              />
+              <section id="mobile-utility-menu" className="mobile-utility-menu" data-mobile-utility-menu="true" aria-label={t('app.mobileControls')}>
+                <div className="mobile-utility-menu-head">
+                  <div>
+                    <span>{t('app.currentFocus')}</span>
+                    <strong>{t('app.mobileControls')}</strong>
+                  </div>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label={t('app.closeMobileControls')}
+                    title={t('app.closeMobileControls')}
+                    onClick={() => setMobileUtilityOpen(false)}
+                  >
+                    <X size={17} />
+                  </button>
+                </div>
+                <div className="mobile-utility-menu-grid">
+                  <button
+                    type="button"
+                    className={performanceMode ? 'mobile-utility-action active' : 'mobile-utility-action'}
+                    data-mobile-utility-performance="true"
+                    aria-pressed={performanceMode}
+                    onClick={() => setPerformanceMode((value) => !value)}
+                  >
+                    <Gauge size={17} aria-hidden="true" />
+                    <span>{t('app.performanceMode')}</span>
+                    <b>{performanceMode ? t('app.performanceModeOn') : t('app.performanceModeOff')}</b>
+                  </button>
+                  <button
+                    type="button"
+                    className="mobile-utility-action"
+                    data-mobile-utility-refresh="true"
+                    onClick={() => {
+                      void refreshOverview();
+                      void refreshConfigSummary();
+                    }}
+                  >
+                    <RefreshCw size={17} aria-hidden="true" />
+                    <span>{dataSource === 'api' ? t('app.refresh') : t('app.retryApi')}</span>
+                    <b>{lastRefreshedAt ? t('app.resourceAt', { time: lastRefreshedAt.toLocaleTimeString(timeLocale) }) : t('app.resourcePending')}</b>
+                  </button>
+                  <div className="language-switcher mobile-utility-language" role="group" aria-label={t('language.label')}>
+                    <span className="language-switcher-label">{t('language.label')}</span>
+                    <div className="language-switcher-options">
+                      {languageOptions.map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          className={language === option.id ? 'language-switcher-option active' : 'language-switcher-option'}
+                          aria-pressed={language === option.id}
+                          title={option.label}
+                          onClick={() => setLanguage(option.id)}
+                        >
+                          {option.shortLabel}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="mobile-utility-action"
+                    data-mobile-utility-account="true"
+                    onClick={() => {
+                      setMobileUtilityOpen(false);
+                      openSettings();
+                    }}
+                  >
+                    <UserCog size={17} aria-hidden="true" />
+                    <span>{t('app.accountControls')}</span>
+                    <b>{accountDisplayLabel}</b>
+                  </button>
+                  <button
+                    type="button"
+                    className="mobile-utility-action danger"
+                    data-mobile-utility-logout="true"
+                    onClick={() => {
+                      setMobileUtilityOpen(false);
+                      void handleLogout();
+                    }}
+                  >
+                    <LogOut size={17} aria-hidden="true" />
+                    <span>{t('login.logout')}</span>
+                    <b>{accountDisplayLabel}</b>
+                  </button>
+                </div>
+              </section>
+            </>
+          )}
         </header>
 
         <main>

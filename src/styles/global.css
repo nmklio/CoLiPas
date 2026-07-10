@@ -2255,6 +2255,12 @@ button:disabled {
   display: none;
 }
 
+.mobile-utility-trigger,
+.mobile-utility-scrim,
+.mobile-utility-menu {
+  display: none;
+}
+
 .command-palette-backdrop {
   position: fixed;
   inset: 0;
@@ -19446,19 +19452,22 @@ pre {
   }
 
   .topbar {
-    padding: 12px 14px;
+    position: sticky;
+    min-height: 60px;
+    padding: 9px 14px;
     align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
+    gap: 7px;
+    flex-wrap: nowrap;
   }
 
   .topbar-context {
-    flex: 1 1 calc(100% - 50px);
+    flex: 1 1 auto;
     min-width: 0;
   }
 
   .topbar-current {
     min-width: 0;
+    min-height: 36px;
   }
 
   .topbar-metrics {
@@ -19466,59 +19475,191 @@ pre {
   }
 
   .topbar-actions {
-    width: 100%;
+    width: auto;
+    flex: 0 0 auto;
     display: flex;
-    justify-content: flex-start;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 5px;
+    overflow: visible;
+    padding: 0;
+    flex-wrap: nowrap;
+  }
+
+  .topbar-actions .refresh-stamp,
+  .topbar-actions > .performance-mode-toggle,
+  .topbar-actions > .topbar-language-switcher,
+  .topbar-actions > .topbar-refresh,
+  .topbar-actions > .account-settings-trigger,
+  .topbar-actions > .topbar-logout {
+    display: none;
+  }
+
+  .topbar-actions .launch-guide-open,
+  .topbar-actions .command-trigger,
+  .mobile-utility-trigger {
+    flex: 0 0 auto;
+    min-width: 36px;
+    min-height: 36px;
+    padding: 0 8px;
+  }
+
+  .topbar-actions .launch-guide-open span,
+  .topbar-actions .command-trigger span {
+    display: none;
+  }
+
+  .topbar-actions .command-trigger kbd {
+    display: none;
+  }
+
+  .mobile-utility-trigger {
+    display: inline-flex;
+  }
+
+  .mobile-utility-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 4;
+    display: block;
+    border: 0;
+    padding: 0;
+    background: rgba(10, 34, 40, 0.16);
+    backdrop-filter: blur(2px);
+  }
+
+  .mobile-utility-menu {
+    position: absolute;
+    top: calc(100% + 7px);
+    left: 10px;
+    right: 10px;
+    z-index: 6;
+    max-height: min(70vh, 490px);
+    overflow: auto;
+    border: 1px solid rgba(113, 176, 177, 0.44);
+    border-radius: 14px;
+    padding: 10px;
+    background:
+      radial-gradient(circle at 92% 0%, rgba(38, 185, 167, 0.17), transparent 34%),
+      linear-gradient(148deg, rgba(250, 254, 254, 0.99), rgba(236, 248, 247, 0.99));
+    box-shadow: 0 22px 54px rgba(10, 43, 48, 0.24);
+    display: grid;
+    gap: 10px;
+  }
+
+  .mobile-utility-menu-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .mobile-utility-menu-head > div {
+    min-width: 0;
+  }
+
+  .mobile-utility-menu-head span,
+  .mobile-utility-menu-head strong {
+    display: block;
+  }
+
+  .mobile-utility-menu-head span {
+    color: #5a757b;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .mobile-utility-menu-head strong {
+    margin-top: 2px;
+    color: #15343a;
+    font-size: 15px;
+  }
+
+  .mobile-utility-menu-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 7px;
-    overflow-x: auto;
-    padding-bottom: 2px;
-    scrollbar-width: none;
   }
 
-  .topbar-actions::-webkit-scrollbar {
-    display: none;
+  .mobile-utility-action,
+  .mobile-utility-language {
+    min-width: 0;
+    min-height: 66px;
+    border: 1px solid #cfe3e4;
+    border-radius: 10px;
+    padding: 9px;
+    background: rgba(255, 255, 255, 0.82);
+    color: #16343a;
+    text-align: left;
   }
 
-  .topbar-actions .refresh-stamp {
-    display: none;
+  .mobile-utility-action {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 8px;
+    align-items: center;
+    cursor: pointer;
   }
 
-  .language-switcher,
-  .session-chip,
-  .topbar-refresh,
-  .topbar-logout,
-  .account-settings-trigger {
-    flex: 0 0 auto;
+  .mobile-utility-action svg {
+    grid-row: 1 / 3;
+    color: var(--brand-strong);
   }
 
-  .language-switcher {
-    min-width: 88px;
-    max-width: 108px;
+  .mobile-utility-action span,
+  .mobile-utility-action b {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .topbar-language-switcher {
-    min-width: 146px;
+  .mobile-utility-action span {
+    font-size: 12px;
+    font-weight: 850;
+  }
+
+  .mobile-utility-action b {
+    margin-top: 2px;
+    color: #668087;
+    font-size: 10px;
+    font-weight: 750;
+  }
+
+  .mobile-utility-action.active {
+    border-color: rgba(15, 118, 110, 0.4);
+    background: linear-gradient(135deg, #e8faf6, #ffffff);
+  }
+
+  .mobile-utility-action.danger {
+    border-color: rgba(220, 38, 38, 0.22);
+  }
+
+  .mobile-utility-action.danger svg,
+  .mobile-utility-action.danger span {
+    color: #b91c1c;
+  }
+
+  .mobile-utility-action:hover,
+  .mobile-utility-action:focus-visible {
+    border-color: var(--brand-line);
+    outline: none;
+    box-shadow: 0 10px 22px rgba(12, 55, 58, 0.1);
+  }
+
+  .mobile-utility-language {
+    grid-column: 1 / -1;
     max-width: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
   }
 
-  .command-trigger {
+  .mobile-utility-language .language-switcher-options {
     flex: 0 0 auto;
-  }
-
-  .launch-guide-open {
-    flex: 0 0 auto;
-  }
-
-  .launch-guide-open span {
-    display: none;
-  }
-
-  .command-trigger span {
-    display: none;
-  }
-
-  .command-trigger kbd {
-    min-width: 38px;
   }
 
   .command-palette-backdrop {

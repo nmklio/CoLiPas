@@ -121,6 +121,13 @@ const fleetViewUsageBlock = {
   points: ['最多保存 8 个常用视图', '只保存在当前浏览器，不上传筛选或资产信息', '删除视图不会删除服务器或任何运行数据'],
 };
 
+const mobileControlsUsageBlock = {
+  icon: Layers3,
+  title: '移动端快捷控制',
+  body: '手机端顶部优先保留导航、上线检查和命令面板；性能模式、语言、刷新、账户设置与退出登录集中在快捷控制抽屉中，减少顶栏占用。',
+  points: ['点击顶部“…”打开，三种语言切换始终可用', '账户设置和退出登录不会挤占主工作区', '点击遮罩或关闭按钮即可回到当前模块'],
+};
+
 const apiRows = [
   ['GET /api/health', '服务健康状态、SQLite 驱动和运行时间。'],
   ['POST /api/auth/login', '管理员登录并写入会话 cookie。'],
@@ -265,7 +272,7 @@ export function DocsPage({ onLogin }: DocsPageProps) {
               <p>建议按以下顺序使用。每个模块都会与资产、事件、审计和 AI 上下文联动。</p>
             </div>
             <div className="docs-usage-grid">
-              {[...usageBlocks, fleetViewUsageBlock].map((block) => {
+              {[...usageBlocks, fleetViewUsageBlock, mobileControlsUsageBlock].map((block) => {
                 const Icon = block.icon;
                 return (
                   <article key={block.title} className="docs-usage-card">

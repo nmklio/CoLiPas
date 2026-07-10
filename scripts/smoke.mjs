@@ -5457,6 +5457,19 @@ function assertInteractiveDeployDocsAndScriptGuards() {
     }
   }
 
+  const mobileQuickControlSources = [
+    ['README.md', readmeSource, 'Mobile quick controls'],
+    ['README_CN.md', cnReadmeSource, '移动端快捷控制'],
+    ['README_JP.md', jpReadmeSource, 'モバイル クイック操作'],
+    ['DocsPage.tsx', docsPageSource, '移动端快捷控制'],
+    ['server-update.sh docs', serverUpdateSource, 'data-colipas-docs-mobile-controls="true"'],
+  ];
+  for (const [name, source, phrase] of mobileQuickControlSources) {
+    if (!source.includes(phrase)) {
+      throw new Error(`${name} must document mobile quick controls`);
+    }
+  }
+
   const forbiddenVisibleCopy = [
     'ChangeThisStrongPassword123',
     'NewStrongPassword123',
@@ -7576,25 +7589,28 @@ function assertSshKeyAuthenticationGuards() {
 function assertMobileTopbarKeepsCoreActions() {
   const globalCss = fs.readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
   const appSource = fs.readFileSync(new URL('../src/app/App.tsx', import.meta.url), 'utf8');
+  const i18nSource = fs.readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
+  const browserE2eSource = fs.readFileSync(new URL('../scripts/browser-e2e.mjs', import.meta.url), 'utf8');
   const mobileSection = globalCss.slice(globalCss.indexOf('@media (max-width: 820px)'));
   if (/\.topbar-actions\s*\{[^}]*display:\s*none/i.test(mobileSection)) {
-    throw new Error('Mobile topbar must keep language, refresh, session, and logout actions visible');
+    throw new Error('Mobile topbar must keep its primary controls visible');
   }
 
   const requiredFragments = [
     '.topbar-actions {',
-    'overflow-x: auto',
-    '.language-switcher',
-    '.topbar-language-switcher',
-    '.language-switcher-options',
-    '.language-switcher-option',
-    '.session-chip',
-    '.topbar-refresh',
-    '.topbar-logout',
-    'visibility: hidden',
-    'pointer-events: none',
-    'visibility: visible',
-    'pointer-events: auto',
+    'min-height: 60px',
+    'flex-wrap: nowrap',
+    '.topbar-actions > .performance-mode-toggle',
+    '.topbar-actions > .topbar-language-switcher',
+    '.topbar-actions > .topbar-refresh',
+    '.topbar-actions > .account-settings-trigger',
+    '.topbar-actions > .topbar-logout',
+    '.mobile-utility-trigger',
+    '.mobile-utility-scrim',
+    '.mobile-utility-menu',
+    '.mobile-utility-menu-grid',
+    'grid-template-columns: repeat(2, minmax(0, 1fr))',
+    '.mobile-utility-language',
     '.ai-dock',
     'position: fixed',
     'top: auto',
@@ -7614,6 +7630,15 @@ function assertMobileTopbarKeepsCoreActions() {
   }
 
   const appRequiredFragments = [
+    'const [mobileUtilityOpen, setMobileUtilityOpen] = useState(false);',
+    'data-mobile-utility-trigger="true"',
+    'data-mobile-utility-menu="true"',
+    'data-mobile-utility-performance="true"',
+    'data-mobile-utility-refresh="true"',
+    'data-mobile-utility-account="true"',
+    'data-mobile-utility-logout="true"',
+    'aria-expanded={mobileUtilityOpen}',
+    'setMobileUtilityOpen(false);',
     'role="group"',
     'aria-pressed={language === option.id}',
     'onClick={() => setLanguage(option.id)}',
@@ -7621,10 +7646,28 @@ function assertMobileTopbarKeepsCoreActions() {
   ];
   const missingAppFragments = appRequiredFragments.filter((fragment) => !appSource.includes(fragment));
   if (missingAppFragments.length) {
-    throw new Error(`Topbar language switcher behavior is incomplete: ${missingAppFragments.join(', ')}`);
+    throw new Error(`Mobile quick controls behavior is incomplete: ${missingAppFragments.join(', ')}`);
   }
 
-  console.log('ok mobile topbar keeps language and session actions');
+  for (const key of ['app.mobileControls', 'app.closeMobileControls', 'app.accountControls']) {
+    const count = (i18nSource.match(new RegExp(key.replaceAll('.', '\\.'), 'g')) ?? []).length;
+    if (count < 3) {
+      throw new Error(`Mobile quick controls i18n key is missing language coverage: ${key}`);
+    }
+  }
+
+  const browserE2eFragments = [
+    'Mobile topbar should keep primary controls to one compact row',
+    'data-mobile-utility-trigger="true"',
+    'data-mobile-utility-menu="true"',
+    'mobile-quick-controls',
+  ];
+  const missingBrowserE2e = browserE2eFragments.filter((fragment) => !browserE2eSource.includes(fragment));
+  if (missingBrowserE2e.length) {
+    throw new Error(`Mobile quick controls browser regression coverage is incomplete: ${missingBrowserE2e.join(', ')}`);
+  }
+
+  console.log('ok mobile topbar keeps primary actions compact and moves secondary controls into an accessible drawer');
 }
 
 function assertSecurityAuditRelationsAreSpecific() {

@@ -159,6 +159,8 @@ function buildDocsCheck() {
       await expectText(page.locator('#launch-checklist'), /上线检查|workspace summary|release checklist/i, 'docs contextual launch guide copy');
       await expectLocatorCount(page.locator('[data-colipas-docs-fleet-views="true"]'), 1, 'docs fleet views section');
       await expectText(page.locator('[data-colipas-docs-fleet-views="true"]'), /资产视图|fleet views|browser/i, 'docs fleet views copy');
+      await expectLocatorCount(page.locator('[data-colipas-docs-mobile-controls="true"]'), 1, 'docs mobile quick controls section');
+      await expectText(page.locator('[data-colipas-docs-mobile-controls="true"]'), /移动端快捷控制|quick controls|モバイル/i, 'docs mobile quick controls copy');
       await assertSensitiveTextAbsent(page, 'docs');
     },
   };

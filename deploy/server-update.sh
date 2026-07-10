@@ -1642,6 +1642,27 @@ if (!html.includes('data-colipas-docs-fleet-views="true"')) {
           </article>`,
   );
 }
+if (!html.includes('data-colipas-docs-mobile-controls="true"')) {
+  html = html.replace(
+    /(<section id="server-access")/,
+    `      <section class="section" data-colipas-docs-mobile-controls="true">
+        <p class="kicker">移动端快捷控制</p>
+        <h2>主操作保持在首行，其余控制集中在快捷抽屉</h2>
+        <div class="grid">
+          <article class="doc-card">
+            <h3>更紧凑的工作区</h3>
+            <p>手机端首行保留导航、上线检查和命令面板，避免多行工具栏持续挤占服务器、SSH 和 AI 的操作空间。</p>
+          </article>
+          <article class="doc-card">
+            <h3>快捷控制</h3>
+            <p>点击顶部“…”可打开性能模式、三种语言、资产刷新、账户设置和退出登录；点击遮罩或关闭按钮即可返回当前模块。</p>
+          </article>
+        </div>
+      </section>
+
+$1`,
+  );
+}
 fs.writeFileSync(file, html);
 NODE
   echo "CoLiPas cloud server management panel docs page ready: $LANDING_ROOT/docs.html"

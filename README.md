@@ -64,6 +64,7 @@ The runtime is intentionally simple. One Node.js process serves the Express API 
 | Live SSH terminal | xterm-style browser terminal, WebSocket streaming, copy/clear tools, `Ctrl+C`, large-output guards, and backend shell cleanup when the panel closes. |
 | Fleet views | Save common inventory filters as up to eight browser-only views, then restore a focused operational scope without sending filter or asset data anywhere. |
 | Contextual launch guide | Full six-step release checklist on Overview; a compact, persistent workspace summary elsewhere or in Performance mode, with a one-click path back to complete evidence and the next remediation. |
+| Mobile quick controls | Keeps navigation, launch readiness, and the command palette on the first mobile row; performance mode, language, refresh, account settings, and sign-out move into an accessible compact drawer. |
 | AI operations | OpenAI-compatible base URL support, model discovery, streaming chat, multi-turn context, cached answers, force refresh, and server-side key storage. |
 | Workflow automation | Asset sync, health checks, SSH commands, reboot/shutdown flows, persisted maintenance windows with quick-duration scheduling, target preflight, and high-impact command confirmation. |
 | Custom API lab | Allowlisted backend proxy for provider API testing without exposing browser-side secrets or private network targets. |
