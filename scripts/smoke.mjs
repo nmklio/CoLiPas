@@ -129,6 +129,16 @@ const unauthenticatedPasswordResponse = await fetch(`${baseUrl}/api/account/pass
 if (unauthenticatedPasswordResponse.status !== 401) {
   throw new Error(`/api/account/password expected 401 before login, got ${unauthenticatedPasswordResponse.status}`);
 }
+const unauthenticatedSessionsResponse = await fetch(`${baseUrl}/api/account/sessions`);
+if (unauthenticatedSessionsResponse.status !== 401) {
+  throw new Error(`/api/account/sessions expected 401 before login, got ${unauthenticatedSessionsResponse.status}`);
+}
+const unauthenticatedSessionRevokeResponse = await fetch(`${baseUrl}/api/account/sessions/revoke-others`, {
+  method: 'POST',
+});
+if (unauthenticatedSessionRevokeResponse.status !== 401) {
+  throw new Error(`/api/account/sessions/revoke-others expected 401 before login, got ${unauthenticatedSessionRevokeResponse.status}`);
+}
 console.log('ok account settings require login');
 
 const releaseVerifyResponse = await fetch(`${baseUrl}/api/release/verify`, {
@@ -145,6 +155,7 @@ if (releaseVerifyToken) {
     || releaseVerifyBody.frontend?.featureMarkers?.['security-evidence-brief'] !== true
     || releaseVerifyBody.frontend?.featureMarkers?.['release-sync-radar'] !== true
     || releaseVerifyBody.frontend?.featureMarkers?.['cloud-map'] !== true
+    || releaseVerifyBody.frontend?.featureMarkers?.['account-session-control'] !== true
     || !Number.isInteger(releaseVerifyBody.readiness?.score)
     || !releaseVerifyBody.readiness?.gatePolicy
     || !['disabled', 'pass', 'blocked'].includes(releaseVerifyBody.readiness?.gatePolicy?.status)
@@ -216,7 +227,10 @@ console.log('ok /api/auth/login rejects malformed JSON without 500');
 
 const loginResponse = await fetch(`${baseUrl}/api/auth/login`, {
   method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
+  headers: {
+    'Content-Type': 'application/json',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.6099.110 Safari/537.36',
+  },
   body: JSON.stringify({
     username: smokeUsername,
     password: currentSmokePassword,
@@ -256,6 +270,21 @@ if (JSON.stringify(sessionBody).match(/sessionId|scrypt|salt|passwordChangedAt/)
 }
 console.log('ok /api/auth/session');
 
+const tamperedSessionCookie = sessionCookie.replace(/\.[^.]+$/, '.invalid-signature');
+const tamperedLogoutResponse = await fetch(`${baseUrl}/api/auth/logout`, {
+  method: 'POST',
+  headers: { Cookie: tamperedSessionCookie },
+});
+if (!tamperedLogoutResponse.ok) {
+  throw new Error(`/api/auth/logout tampered-cookie probe returned HTTP ${tamperedLogoutResponse.status}`);
+}
+const postTamperedLogoutSessionResponse = await fetch(`${baseUrl}/api/auth/session`, { headers: authHeaders });
+const postTamperedLogoutSessionBody = await postTamperedLogoutSessionResponse.json();
+if (!postTamperedLogoutSessionBody.authenticated) {
+  throw new Error('/api/auth/logout accepted a tampered cookie signature and deleted the valid server session');
+}
+console.log('ok /api/auth/logout ignores tampered cookie signatures');
+
 const accountResponse = await fetch(`${baseUrl}/api/account`, { headers: authHeaders });
 if (!accountResponse.ok) {
   throw new Error(`/api/account returned HTTP ${accountResponse.status}`);
@@ -286,7 +315,10 @@ if (!defaultProfileLogoutResponse.ok) {
 }
 const defaultProfileReloginResponse = await fetch(`${baseUrl}/api/auth/login`, {
   method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
+  headers: {
+    'Content-Type': 'application/json',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.6099.110 Safari/537.36',
+  },
   body: JSON.stringify({
     username: smokeUsername,
     password: currentSmokePassword,
@@ -425,7 +457,10 @@ if (wrongCurrentPasswordResponse.status !== 403) {
 
 const secondLoginResponse = await fetch(`${baseUrl}/api/auth/login`, {
   method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
+  headers: {
+    'Content-Type': 'application/json',
+    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:137.0) Gecko/20100101 Firefox/137.0',
+  },
   body: JSON.stringify({
     username: smokeUsername,
     password: currentSmokePassword,
@@ -436,6 +471,113 @@ if (!secondSessionCookie) {
   throw new Error('/api/auth/login second session did not set a session cookie');
 }
 const secondAuthHeaders = { Cookie: secondSessionCookie };
+const accountSessionsResponse = await fetch(`${baseUrl}/api/account/sessions`, { headers: authHeaders });
+if (!accountSessionsResponse.ok) {
+  throw new Error(`/api/account/sessions returned HTTP ${accountSessionsResponse.status}`);
+}
+const accountSessionsBody = await accountSessionsResponse.json();
+const currentManagedSession = accountSessionsBody.items?.find((item) => item.current);
+const otherManagedSession = accountSessionsBody.items?.find((item) => !item.current);
+if (
+  accountSessionsBody.summary?.active !== 2
+  || accountSessionsBody.summary?.otherSessions !== 1
+  || !currentManagedSession
+  || !otherManagedSession
+  || !/Chrome · Windows/.test(currentManagedSession.deviceLabel)
+  || !/Firefox · Linux/.test(otherManagedSession.deviceLabel)
+  || !/^[a-f0-9]{24}$/.test(otherManagedSession.id)
+  || !accountSessionsBody.items.every((item) => item.createdAt && item.lastSeenAt && item.expiresAt)
+) {
+  throw new Error(`/api/account/sessions returned unexpected sanitized session payload: ${JSON.stringify(accountSessionsBody)}`);
+}
+if (/Mozilla|Windows NT|x86_64|remoteAddress|x-forwarded-for|sessionId|cookie/i.test(JSON.stringify(accountSessionsBody))) {
+  throw new Error('/api/account/sessions leaked raw browser, network, cookie, or internal session material');
+}
+const currentSessionRevokeResponse = await fetch(`${baseUrl}/api/account/sessions/${currentManagedSession.id}`, {
+  method: 'DELETE',
+  headers: authHeaders,
+});
+if (currentSessionRevokeResponse.status !== 400) {
+  throw new Error(`/api/account/sessions/:id should protect the current session, got HTTP ${currentSessionRevokeResponse.status}`);
+}
+const revokeOtherSessionResponse = await fetch(`${baseUrl}/api/account/sessions/${otherManagedSession.id}`, {
+  method: 'DELETE',
+  headers: authHeaders,
+});
+if (!revokeOtherSessionResponse.ok) {
+  throw new Error(`/api/account/sessions/:id returned HTTP ${revokeOtherSessionResponse.status}`);
+}
+const revokeOtherSessionBody = await revokeOtherSessionResponse.json();
+if (
+  revokeOtherSessionBody.revoked !== 1
+  || revokeOtherSessionBody.sessions?.summary?.active !== 1
+  || revokeOtherSessionBody.sessions?.summary?.otherSessions !== 0
+) {
+  throw new Error(`/api/account/sessions/:id returned unexpected revoke result: ${JSON.stringify(revokeOtherSessionBody)}`);
+}
+const individuallyRevokedSessionResponse = await fetch(`${baseUrl}/api/account`, { headers: secondAuthHeaders });
+if (individuallyRevokedSessionResponse.status !== 401) {
+  throw new Error(`/api/account expected 401 after individual session revoke, got ${individuallyRevokedSessionResponse.status}`);
+}
+
+const otherSessionResponses = await Promise.all([
+  fetch(`${baseUrl}/api/auth/login`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 Version/17.5 Safari/605.1.15',
+    },
+    body: JSON.stringify({ username: smokeUsername, password: currentSmokePassword }),
+  }),
+  fetch(`${baseUrl}/api/auth/login`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'User-Agent': 'Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/120.0.6099.110 Mobile Safari/537.36',
+    },
+    body: JSON.stringify({ username: smokeUsername, password: currentSmokePassword }),
+  }),
+]);
+const otherSessionCookies = otherSessionResponses.map((response) => response.headers.get('set-cookie')?.split(';')[0] ?? '');
+if (otherSessionCookies.some((cookie) => !cookie)) {
+  throw new Error('/api/auth/login did not create both sessions for revoke-others coverage');
+}
+const revokeOtherSessionsResponse = await fetch(`${baseUrl}/api/account/sessions/revoke-others`, {
+  method: 'POST',
+  headers: authHeaders,
+});
+if (!revokeOtherSessionsResponse.ok) {
+  throw new Error(`/api/account/sessions/revoke-others returned HTTP ${revokeOtherSessionsResponse.status}`);
+}
+const revokeOtherSessionsBody = await revokeOtherSessionsResponse.json();
+if (
+  revokeOtherSessionsBody.revoked !== 2
+  || revokeOtherSessionsBody.sessions?.summary?.active !== 1
+  || revokeOtherSessionsBody.sessions?.summary?.otherSessions !== 0
+) {
+  throw new Error(`/api/account/sessions/revoke-others returned unexpected result: ${JSON.stringify(revokeOtherSessionsBody)}`);
+}
+for (const cookie of otherSessionCookies) {
+  const revokedAccountResponse = await fetch(`${baseUrl}/api/account`, { headers: { Cookie: cookie } });
+  if (revokedAccountResponse.status !== 401) {
+    throw new Error(`/api/account expected 401 after revoke-others, got ${revokedAccountResponse.status}`);
+  }
+}
+console.log('ok account session control lists sanitized devices and revokes individual or all other sessions');
+
+const passwordRevokeLoginResponse = await fetch(`${baseUrl}/api/auth/login`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    username: smokeUsername,
+    password: currentSmokePassword,
+  }),
+});
+const passwordRevokeSessionCookie = passwordRevokeLoginResponse.headers.get('set-cookie')?.split(';')[0];
+if (!passwordRevokeSessionCookie) {
+  throw new Error('/api/auth/login password-change session did not set a cookie');
+}
+const passwordRevokeAuthHeaders = { Cookie: passwordRevokeSessionCookie };
 const nextPassword = 'NextPassword123';
 const passwordChangeResponse = await fetch(`${baseUrl}/api/account/password`, {
   method: 'POST',
@@ -466,7 +608,7 @@ const oldPasswordLoginResponse = await fetch(`${baseUrl}/api/auth/login`, {
 if (oldPasswordLoginResponse.status !== 401) {
   throw new Error(`/api/auth/login expected 401 with old password after change, got ${oldPasswordLoginResponse.status}`);
 }
-const revokedSessionResponse = await fetch(`${baseUrl}/api/account`, { headers: secondAuthHeaders });
+const revokedSessionResponse = await fetch(`${baseUrl}/api/account`, { headers: passwordRevokeAuthHeaders });
 if (revokedSessionResponse.status !== 401) {
   throw new Error(`/api/account expected 401 for revoked session, got ${revokedSessionResponse.status}`);
 }
@@ -3302,6 +3444,12 @@ if (!auditBody.items.some((item) => item.action === 'AUTH_LOGIN' && item.status 
 if (!auditBody.items.some((item) => item.action === 'PROFILE_UPDATE' && item.status === 'success' && item.actor === 'admin')) {
   throw new Error('/api/audit/events did not include profile update evidence');
 }
+if (!auditBody.items.some((item) => item.action === 'AUTH_SESSION_REVOKE' && item.status === 'success' && item.actor === 'admin')) {
+  throw new Error('/api/audit/events did not include individual account session revoke evidence');
+}
+if (!auditBody.items.some((item) => item.action === 'AUTH_SESSION_REVOKE_OTHERS' && item.status === 'success' && item.actor === 'admin')) {
+  throw new Error('/api/audit/events did not include revoke-other-sessions evidence');
+}
 if (!auditBody.items.some((item) => item.action === 'AUTH_PASSWORD_CHANGE' && item.status === 'success' && item.actor === 'admin')) {
   throw new Error('/api/audit/events did not include password change evidence');
 }
@@ -3916,6 +4064,13 @@ const logoutAuditBody = await logoutAuditResponse.json();
 if (!logoutAuditBody.items?.some((item) => item.action === 'AUTH_LOGOUT' && item.status === 'success' && item.actor === 'admin')) {
   throw new Error('/api/audit/events did not include logout evidence');
 }
+const reloginCleanupResponse = await fetch(`${baseUrl}/api/auth/logout`, {
+  method: 'POST',
+  headers: reloginAuthHeaders,
+});
+if (!reloginCleanupResponse.ok) {
+  throw new Error(`/api/auth/logout smoke cleanup returned HTTP ${reloginCleanupResponse.status}`);
+}
 console.log('ok /api/audit/events includes logout evidence');
 
 const frontendResponse = await fetch(`${baseUrl}/`);
@@ -3988,6 +4143,7 @@ function assertAccountUiGuards() {
   const loginSource = fs.readFileSync(new URL('../src/app/LoginPage.tsx', import.meta.url), 'utf8');
   const marketingSource = fs.readFileSync(new URL('../src/app/MarketingPage.tsx', import.meta.url), 'utf8');
   const appSource = fs.readFileSync(new URL('../src/app/App.tsx', import.meta.url), 'utf8');
+  const accountSessionControlSource = fs.readFileSync(new URL('../src/app/AccountSessionControl.tsx', import.meta.url), 'utf8');
   const operationsInboxSource = fs.readFileSync(new URL('../src/app/OperationsInbox.tsx', import.meta.url), 'utf8');
   const brandIconSource = fs.readFileSync(new URL('../src/app/BrandIcon.tsx', import.meta.url), 'utf8');
   const indexSource = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
@@ -4138,6 +4294,44 @@ function assertAccountUiGuards() {
   }
   if (globalCss.includes('.session-chip .brand-mark.mini') || globalCss.includes('.session-chip svg')) {
     throw new Error('Topbar account chip must not reserve image or SVG styling; it is text-only');
+  }
+  const accountSessionFragments = [
+    'listAccountSessions',
+    'revokeAccountSession',
+    'revokeOtherAccountSessions',
+    "app.get('/api/account/sessions'",
+    "app.delete('/api/account/sessions/:sessionId'",
+    "app.post('/api/account/sessions/revoke-others'",
+    'buildSessionManagementId',
+    'describeSessionDevice',
+    'data-account-session-control="true"',
+    'data-account-session-current',
+    'data-account-session-revoke-others="true"',
+    'fetchAccountSessions',
+    'revokeOtherAccountSessions',
+    '.account-session-list::before',
+    '.account-session-row.is-current',
+    'desktop-account-session-control',
+    'mobile-account-session-control',
+  ];
+  const accountSessionCombinedSource = `${authSource}\n${serverAppSource}\n${accountSessionControlSource}\n${i18nSource}\n${globalCss}\n${fs.readFileSync(new URL('../src/services/apiClient.ts', import.meta.url), 'utf8')}\n${fs.readFileSync(new URL('../scripts/browser-e2e.mjs', import.meta.url), 'utf8')}`;
+  const missingAccountSessions = accountSessionFragments.filter((fragment) => !accountSessionCombinedSource.includes(fragment));
+  if (missingAccountSessions.length) {
+    throw new Error(`Account session control is incomplete: ${missingAccountSessions.join(', ')}`);
+  }
+  for (const key of ['account.sessionsTitle', 'account.sessionsDesc', 'account.sessionsCurrent', 'account.sessionsRevoke', 'account.sessionsRevokeOthers', 'account.sessionsPrivacy']) {
+    const count = (i18nSource.match(new RegExp(key.replace('.', '\\.'), 'g')) ?? []).length;
+    if (count < 3) {
+      throw new Error(`Account session control i18n key is missing languages: ${key}`);
+    }
+  }
+  if (
+    accountSessionControlSource.includes('publicIp')
+    || accountSessionControlSource.includes('remoteAddress')
+    || accountSessionControlSource.includes('userAgent')
+    || authSource.includes('rawUserAgent,')
+  ) {
+    throw new Error('Account session UI or payload must not expose raw network or User-Agent data');
   }
 
   const brandIconFragments = [
@@ -5588,6 +5782,34 @@ function assertInteractiveDeployDocsAndScriptGuards() {
     || operationsInboxSource.includes('apiKey:')
   ) {
     throw new Error('Operations inbox review persistence must remain limited to safe stable IDs and timestamps');
+  }
+
+  const accountSessionControlSources = [
+    ['README.md', readmeSource, 'active-session inventory'],
+    ['README_CN.md', cnReadmeSource, '活跃设备查看'],
+    ['README_JP.md', jpReadmeSource, 'アクティブ端末'],
+    ['MarketingPage.tsx', marketingSource, '登录会话控制'],
+    ['DocsPage.tsx', docsPageSource, '管理登录会话'],
+    ['server-update.sh landing card', serverUpdateSource, 'data-colipas-feature="account-session-control"'],
+    ['server-update.sh docs section', serverUpdateSource, 'data-colipas-docs-feature="account-session-control"'],
+    ['server-update.sh docs navigation', serverUpdateSource, 'href="#account-sessions"'],
+  ];
+  for (const [name, source, phrase] of accountSessionControlSources) {
+    if (!source.includes(phrase)) {
+      throw new Error(`${name} must document account session control`);
+    }
+  }
+  for (const [name, source] of [
+    ['README.md', readmeSource],
+    ['README_CN.md', cnReadmeSource],
+    ['README_JP.md', jpReadmeSource],
+    ['MarketingPage.tsx', marketingSource],
+    ['DocsPage.tsx', docsPageSource],
+    ['server-update.sh', serverUpdateSource],
+  ]) {
+    if (!source.includes('User-Agent') || !source.includes('撤销') && name !== 'README.md' && name !== 'README_JP.md') {
+      throw new Error(`${name} must explain session revocation and raw User-Agent minimization`);
+    }
   }
 
   const mobileQuickControlSources = [

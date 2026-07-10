@@ -1294,6 +1294,29 @@ async function assertAccountSettingsAndAiChat(targetPage) {
   let aiSshServerId = '';
   await targetPage.locator('.account-settings-trigger').click();
   await targetPage.locator('.account-modal').waitFor({ timeout: 5000 });
+  const accountSessionControl = targetPage.locator('[data-account-session-control="true"]');
+  await accountSessionControl.waitFor({ timeout: 10000 });
+  const currentAccountSession = accountSessionControl.locator('[data-account-session-current="true"]');
+  await currentAccountSession.waitFor({ timeout: 10000 });
+  const accountSessionText = await accountSessionControl.innerText();
+  if (
+    !/Login session control/i.test(accountSessionText)
+    || !/Current session/i.test(accountSessionText)
+    || !/Last active/i.test(accountSessionText)
+    || !/Expires/i.test(accountSessionText)
+    || !/Raw IP addresses and User-Agent values are not stored or returned/i.test(accountSessionText)
+  ) {
+    throw new Error(`Account session control is missing status or privacy guidance: ${accountSessionText}`);
+  }
+  if (
+    await currentAccountSession.getByRole('button', { name: /^Revoke$/i }).count()
+    || !(await accountSessionControl.locator('[data-account-session-revoke-others="true"]').isDisabled())
+  ) {
+    throw new Error('Account session control must protect the current session and disable revoke-others when no other session exists');
+  }
+  await accountSessionControl.scrollIntoViewIfNeeded();
+  await assertElementHorizontallyWithinViewport(targetPage, '[data-account-session-control="true"]', 'desktop account session control');
+  await captureVisualEvidence(targetPage, 'desktop-account-session-control', ['.account-modal', '[data-account-session-control="true"]']);
   if (await targetPage.getByLabel(/avatar text|fallback text|备用文字|代替文字/i).count()) {
     throw new Error('Account appearance modal must not expose fallback avatar text');
   }
@@ -1407,7 +1430,7 @@ async function assertAccountSettingsAndAiChat(targetPage) {
 
     await assertDesktopAiDockLayout(targetPage);
 
-    console.log('ok browser e2e covers account profile save, AI executable SSH plan, cached chat, and AI dock layout');
+    console.log('ok browser e2e covers account session control, profile save, AI executable SSH plan, cached chat, and AI dock layout');
   } finally {
     if (aiSshServerId) {
       await deleteTemporaryAssetServer(targetPage, aiSshServerId).catch(() => undefined);
@@ -3375,6 +3398,15 @@ async function assertMobileConsoleAndMap() {
     await mobileUtilityMenu.locator('[data-mobile-utility-account="true"]').click();
     await mobilePage.locator('.account-modal').waitFor({ timeout: 5000 });
     await assertElementWithinViewport(mobilePage, '.account-modal', 'mobile account settings modal');
+    const mobileSessionControl = mobilePage.locator('[data-account-session-control="true"]');
+    await mobileSessionControl.waitFor({ timeout: 10000 });
+    await mobileSessionControl.scrollIntoViewIfNeeded();
+    await assertElementHorizontallyWithinViewport(mobilePage, '[data-account-session-control="true"]', 'mobile account session control');
+    await assertNoHorizontalOverflow(mobilePage, 'mobile account session control');
+    if (await mobileSessionControl.locator('[data-account-session-current="true"]').count() !== 1) {
+      throw new Error('Mobile account session control must identify exactly one current session');
+    }
+    await captureVisualEvidence(mobilePage, 'mobile-account-session-control', ['.account-modal', '[data-account-session-control="true"]']);
     await mobilePage.getByRole('button', { name: /close settings/i }).click();
     await mobilePage.locator('.account-modal').waitFor({ state: 'hidden', timeout: 5000 });
 

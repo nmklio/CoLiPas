@@ -61,7 +61,9 @@ interface SessionRecord {
   id: string;
   username: string;
   createdAt: number;
+  lastSeenAt: number;
   expiresAt: number;
+  deviceLabel: string;
 }
 
 interface LoginFailureRecord {
@@ -72,6 +74,7 @@ interface LoginFailureRecord {
 
 const sessions = new Map<string, SessionRecord>();
 const loginFailures = new Map<string, LoginFailureRecord>();
+const sessionManagementIdSchema = z.string().regex(/^[a-f0-9]{24}$/);
 const fallbackProfile: ConsoleProfile = {
   displayName: defaultDisplayName,
   avatarText: defaultAvatarText,
@@ -101,7 +104,9 @@ export function login(input: unknown, request: Request, response: Response, conf
     id: crypto.randomBytes(32).toString('hex'),
     username: parsed.username,
     createdAt: now,
+    lastSeenAt: now,
     expiresAt: now + config.auth.sessionTtlMs,
+    deviceLabel: describeSessionDevice(request),
   };
 
   sessions.set(session.id, session);
@@ -126,9 +131,9 @@ export function getLoginThrottleStatus(input: unknown, request: Request) {
   };
 }
 
-export function logout(request: Request, response: Response) {
+export function logout(request: Request, response: Response, config: RuntimeConfig) {
   const token = readCookie(request, cookieName);
-  const sessionId = token ? readSessionId(token) : null;
+  const sessionId = token ? verifyToken(token, config.auth.sessionSecret) : null;
   if (sessionId) {
     sessions.delete(sessionId);
   }
@@ -150,6 +155,7 @@ export function getCurrentSession(request: Request, config: RuntimeConfig) {
     return null;
   }
 
+  session.lastSeenAt = now;
   return buildSessionPayload(session, now);
 }
 
@@ -232,6 +238,49 @@ export function buildAccountPayload(request: Request, config: RuntimeConfig) {
   };
 }
 
+export function listAccountSessions(request: Request, config: RuntimeConfig) {
+  const currentSessionId = requireSessionId(request, config);
+  return buildAccountSessionsPayload(currentSessionId);
+}
+
+export function revokeAccountSession(sessionManagementId: unknown, request: Request, config: RuntimeConfig) {
+  const currentSessionId = requireSessionId(request, config);
+  const parsedId = sessionManagementIdSchema.parse(sessionManagementId);
+  pruneExpiredSessions();
+  const target = Array.from(sessions.values()).find((session) => buildSessionManagementId(session.id) === parsedId);
+
+  if (!target) {
+    throw new HttpError(404, 'Session not found or already expired', 'AUTH_SESSION_NOT_FOUND');
+  }
+  if (target.id === currentSessionId) {
+    throw new HttpError(400, 'Sign out to close the current session', 'AUTH_SESSION_CURRENT');
+  }
+
+  sessions.delete(target.id);
+  return {
+    ok: true as const,
+    revoked: 1,
+    sessions: buildAccountSessionsPayload(currentSessionId),
+  };
+}
+
+export function revokeOtherAccountSessions(request: Request, config: RuntimeConfig) {
+  const currentSessionId = requireSessionId(request, config);
+  pruneExpiredSessions();
+  let revoked = 0;
+  for (const sessionId of sessions.keys()) {
+    if (sessionId !== currentSessionId) {
+      sessions.delete(sessionId);
+      revoked += 1;
+    }
+  }
+  return {
+    ok: true as const,
+    revoked,
+    sessions: buildAccountSessionsPayload(currentSessionId),
+  };
+}
+
 function setSessionCookie(response: Response, session: SessionRecord, config: RuntimeConfig) {
   const token = signToken(session.id, config.auth.sessionSecret);
   response.cookie(cookieName, token, {
@@ -294,6 +343,77 @@ function clearOtherSessions(sessionId: string) {
       sessions.delete(id);
     }
   }
+}
+
+function buildAccountSessionsPayload(currentSessionId: string) {
+  pruneExpiredSessions();
+  const items = Array.from(sessions.values())
+    .sort((left, right) => {
+      if (left.id === currentSessionId) {
+        return -1;
+      }
+      if (right.id === currentSessionId) {
+        return 1;
+      }
+      return right.lastSeenAt - left.lastSeenAt;
+    })
+    .map((session) => ({
+      id: buildSessionManagementId(session.id),
+      current: session.id === currentSessionId,
+      deviceLabel: session.deviceLabel,
+      createdAt: new Date(session.createdAt).toISOString(),
+      lastSeenAt: new Date(session.lastSeenAt).toISOString(),
+      expiresAt: new Date(session.expiresAt).toISOString(),
+    }));
+
+  return {
+    items,
+    summary: {
+      active: items.length,
+      otherSessions: items.filter((item) => !item.current).length,
+    },
+  };
+}
+
+function pruneExpiredSessions(now = Date.now()) {
+  for (const [sessionId, session] of sessions) {
+    if (session.expiresAt <= now) {
+      sessions.delete(sessionId);
+    }
+  }
+}
+
+function buildSessionManagementId(sessionId: string) {
+  return crypto.createHash('sha256').update(`colipas-session:${sessionId}`).digest('hex').slice(0, 24);
+}
+
+function describeSessionDevice(request: Request) {
+  const rawUserAgent = Array.isArray(request.headers['user-agent'])
+    ? request.headers['user-agent'][0]
+    : request.headers['user-agent'] || '';
+  const browser = /\bEdg\//i.test(rawUserAgent)
+    ? 'Edge'
+    : /\bFirefox\//i.test(rawUserAgent)
+      ? 'Firefox'
+      : /\b(?:Chrome|CriOS)\//i.test(rawUserAgent)
+        ? 'Chrome'
+        : /\bSafari\//i.test(rawUserAgent)
+          ? 'Safari'
+          : /\b(?:curl|Wget)\//i.test(rawUserAgent)
+            ? 'API client'
+            : 'Browser';
+  const platform = /\bAndroid\b/i.test(rawUserAgent)
+    ? 'Android'
+    : /\b(?:iPhone|iPad|iPod)\b/i.test(rawUserAgent)
+      ? 'iOS'
+      : /\bWindows\b/i.test(rawUserAgent)
+        ? 'Windows'
+        : /\bMacintosh\b|\bMac OS X\b/i.test(rawUserAgent)
+          ? 'macOS'
+          : /\bLinux\b/i.test(rawUserAgent)
+            ? 'Linux'
+            : 'Device';
+  return `${browser} · ${platform}`;
 }
 
 function buildLoginLimiterKey(username: string, request: Request) {
@@ -503,10 +623,6 @@ function verifyToken(token: string, secret: string) {
 
   const expected = crypto.createHmac('sha256', secret).update(sessionId).digest('base64url');
   return safeEqual(signature, expected) ? sessionId : null;
-}
-
-function readSessionId(token: string) {
-  return token.split('.')[0] || null;
 }
 
 function readCookie(request: Request, name: string) {

@@ -384,6 +384,23 @@ export interface AccountPayload {
   profile: AccountProfile;
 }
 
+export interface AccountSessionSummary {
+  id: string;
+  current: boolean;
+  deviceLabel: string;
+  createdAt: string;
+  lastSeenAt: string;
+  expiresAt: string;
+}
+
+export interface AccountSessionsResponse {
+  items: AccountSessionSummary[];
+  summary: {
+    active: number;
+    otherSessions: number;
+  };
+}
+
 export class AuthRequiredError extends Error {
   constructor(message = 'AUTH_REQUIRED') {
     super(message);
@@ -484,6 +501,53 @@ export async function updateAccountProfile(profile: AccountProfile, fetcher: typ
   }
 
   return (await response.json()) as { profile: AccountProfile };
+}
+
+export async function fetchAccountSessions(fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/account/sessions', {
+    credentials: 'include',
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as AccountSessionsResponse;
+}
+
+export async function revokeAccountSession(sessionId: string, fetcher: typeof fetch = fetch) {
+  const response = await fetcher(`/api/account/sessions/${encodeURIComponent(sessionId)}`, {
+    method: 'DELETE',
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as {
+    ok: true;
+    revoked: number;
+    sessions: AccountSessionsResponse;
+  };
+}
+
+export async function revokeOtherAccountSessions(fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/account/sessions/revoke-others', {
+    method: 'POST',
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as {
+    ok: true;
+    revoked: number;
+    sessions: AccountSessionsResponse;
+  };
 }
 
 export async function changeAccountPassword(

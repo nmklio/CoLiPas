@@ -73,7 +73,7 @@ The runtime is intentionally simple. One Node.js process serves the Express API 
 | Workflow automation | Asset sync, health checks, SSH commands, reboot/shutdown flows, persisted maintenance windows with quick-duration scheduling, target preflight, and high-impact command confirmation. |
 | Custom API lab | Allowlisted backend proxy for provider API testing without exposing browser-side secrets or private network targets. |
 | Security audit | Auth events, blocked calls, SSH actions, remediation flows, relation cards, diagnostics export, release readiness evidence, and revocable public-safe evidence snapshots for external review. |
-| Operator account | Login, session protection, profile/avatar update with decoded-image validation and automatic brand fallback, password change, and Chinese / English / Japanese UI language switching. |
+| Operator account | Login, active-session inventory, individual or bulk revocation of other signed-in devices, privacy-minimized device labels, profile/avatar update with decoded-image validation and automatic brand fallback, password change, and Chinese / English / Japanese UI language switching. |
 
 ## Quick Start
 
@@ -232,7 +232,7 @@ The reset script only updates the `admin-account` row. It does not delete server
 ## Security Model
 
 - All operational APIs except health and auth require an authenticated session.
-- Session cookies are HTTP-only, and password changes revoke other sessions.
+- Session cookies are HTTP-only. Account settings list active sign-ins without returning raw IP or User-Agent values, allow individual or bulk revocation of other sessions, and password changes still revoke every other session.
 - Stored SSH credentials are encrypted with `CREDENTIAL_ENCRYPTION_KEY`.
 - AI provider keys are stored server-side or accepted as one-time request payloads; smoke checks guard against leakage.
 - The custom API proxy blocks localhost, private IPv4 ranges, link-local ranges, multicast ranges, unsafe headers, and redirect-following.

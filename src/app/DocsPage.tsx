@@ -17,6 +17,7 @@ import {
   LifeBuoy,
   LockKeyhole,
   MapPinned,
+  MonitorSmartphone,
   PlayCircle,
   Server,
   ShieldCheck,
@@ -35,6 +36,7 @@ const quickNav = [
   { href: '#install', label: '安装部署' },
   { href: '#server-access', label: '接入服务器' },
   { href: '#bulk-import', label: '批量导入' },
+  { href: '#sessions', label: '会话管理' },
   { href: '#ai', label: 'AI 设置' },
   { href: '#ssh', label: 'SSH 终端' },
   { href: '#security', label: '安全审计' },
@@ -169,9 +171,25 @@ const accountAppearanceUsageBlock = {
   points: ['浏览器先解码验证，服务器端再检查格式签名和基础结构', '头像加载失败不会在侧栏留下破图', '删除头像只恢复品牌图标，不影响账号或用户数据'],
 };
 
+const accountSessionUsageBlock = {
+  icon: MonitorSmartphone,
+  title: '管理登录会话',
+  body: '账户设置会列出当前浏览器和同一管理员账号的其他活跃登录设备。发现不熟悉的设备时，可单独撤销，也可保留当前浏览器并一键撤销其他全部会话。',
+  points: [
+    '当前会话始终受保护，需要退出登录才能关闭',
+    '列表只返回解析后的浏览器和系统标签，不保存或展示原始 IP 与 User-Agent',
+    '单个撤销、一键撤销其他会话和修改密码清理会话都会进入安全审计',
+  ],
+  sectionId: 'sessions',
+  featureId: 'account-session-control',
+};
+
 const apiRows = [
   ['GET /api/health', '服务健康状态、SQLite 驱动和运行时间。'],
   ['POST /api/auth/login', '管理员登录并写入会话 cookie。'],
+  ['GET /api/account/sessions', '读取当前进程中的活跃登录会话，仅返回脱敏设备标签和时间。'],
+  ['DELETE /api/account/sessions/:id', '撤销指定的其他登录会话；当前会话需要通过退出登录关闭。'],
+  ['POST /api/account/sessions/revoke-others', '保留当前会话并撤销同一管理员账号的其他全部登录。'],
   ['GET /api/overview', '云账号、服务器、事件和总览指标。'],
   ['POST /api/servers', '新增资产或执行真实 SSH 验证接入。'],
   ['POST /api/servers/import', '批量导入最多 500 台无凭据资产，重复项自动跳过。'],
@@ -315,7 +333,7 @@ export function DocsPage({ onLogin }: DocsPageProps) {
               <p>建议按以下顺序使用。每个模块都会与资产、事件、审计和 AI 上下文联动。</p>
             </div>
             <div className="docs-usage-grid">
-              {[...usageBlocks, bulkImportUsageBlock, fleetViewUsageBlock, operationsInboxUsageBlock, mobileControlsUsageBlock, commandPaletteUsageBlock, accountAppearanceUsageBlock].map((block) => {
+              {[...usageBlocks, bulkImportUsageBlock, fleetViewUsageBlock, operationsInboxUsageBlock, mobileControlsUsageBlock, commandPaletteUsageBlock, accountAppearanceUsageBlock, accountSessionUsageBlock].map((block) => {
                 const Icon = block.icon;
                 const sectionId = 'sectionId' in block && typeof block.sectionId === 'string'
                   ? block.sectionId

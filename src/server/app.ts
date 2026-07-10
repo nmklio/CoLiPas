@@ -12,7 +12,19 @@ import { analyzeOperations, listAiModels, streamAiAnalysis, testAiConnection } f
 import { loadAiProviderSettings, saveAiProviderSettings } from './services/aiSettingsService.js';
 import { buildConfigSummary } from './services/configSummary.js';
 import { listAuditEntries, recordAudit, remediateSecurityRisk } from './services/auditService.js';
-import { buildAccountPayload, changeAdminPassword, getCurrentSession, getLoginThrottleStatus, login, logout, requireSession, updateConsoleProfile } from './services/authService.js';
+import {
+  buildAccountPayload,
+  changeAdminPassword,
+  getCurrentSession,
+  getLoginThrottleStatus,
+  listAccountSessions,
+  login,
+  logout,
+  requireSession,
+  revokeAccountSession,
+  revokeOtherAccountSessions,
+  updateConsoleProfile,
+} from './services/authService.js';
 import { executeCustomApiProxy } from './services/customApiProxy.js';
 import { getDatabasePath } from './services/database.js';
 import { buildDiagnosticExport } from './services/diagnosticService.js';
@@ -157,7 +169,7 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
       status: 'success',
       detail: 'Operator signed out',
     });
-    response.json(logout(request, response));
+    response.json(logout(request, response, config));
   });
 
   app.get('/api/auth/session', (request, response) => {
@@ -213,6 +225,49 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
         detail: 'Console profile updated',
       });
       response.json({ profile });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get('/api/account/sessions', (request, response, next) => {
+    try {
+      response.setHeader('Cache-Control', 'no-store');
+      response.json(listAccountSessions(request, config));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.delete('/api/account/sessions/:sessionId', (request, response, next) => {
+    try {
+      const session = requireSession(request, config);
+      const result = revokeAccountSession(request.params.sessionId, request, config);
+      recordAudit({
+        action: 'AUTH_SESSION_REVOKE',
+        actor: session.user.username,
+        target: 'account-session',
+        status: 'success',
+        detail: 'Administrator revoked one other login session',
+      });
+      response.json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post('/api/account/sessions/revoke-others', (request, response, next) => {
+    try {
+      const session = requireSession(request, config);
+      const result = revokeOtherAccountSessions(request, config);
+      recordAudit({
+        action: 'AUTH_SESSION_REVOKE_OTHERS',
+        actor: session.user.username,
+        target: 'account-sessions',
+        status: 'success',
+        detail: `Administrator revoked ${result.revoked} other login session(s)`,
+      });
+      response.json(result);
     } catch (error) {
       next(error);
     }

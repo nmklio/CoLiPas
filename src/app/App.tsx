@@ -28,6 +28,7 @@ import {
   X,
 } from 'lucide-react';
 import { getLocale, languageOptions, useI18n } from '../i18n';
+import { AccountSessionControl } from './AccountSessionControl';
 import { LoginPage } from './LoginPage';
 import type { OperationsDraft } from '../modules/operations/OperationsCenter';
 import type { OverviewPreflightSnapshot } from '../modules/overview/MonitoringOverview';
@@ -2163,6 +2164,8 @@ export function App() {
                     {t('account.changePassword')}
                   </button>
                 </article>
+
+                <AccountSessionControl />
               </div>
 
               {settingsError && <div className="login-error" role="alert">{settingsError}</div>}

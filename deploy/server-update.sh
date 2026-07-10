@@ -294,6 +294,14 @@ if (!html.includes('data-colipas-feature="operations-inbox"')) {
       <article class="feature-card" data-colipas-feature="operations-inbox">${landingIcon('inbox', 'icon feature-icon')}<h3>全局运维收件箱</h3><p>汇总上线阻塞、SSH 与资产覆盖缺口和开放事件，按优先级直接跳转处理模块；本机只保存安全事项 ID 与审阅时间。</p><div class="tags"><span>跨模块聚合</span><span>本机审阅</span></div></article>`);
 }
 
+const accountSessionFeatureCard = `<article class="feature-card" data-colipas-feature="account-session-control">${landingIcon('shield', 'icon feature-icon')}<h3>登录会话控制</h3><p>查看当前与其他登录设备，可逐个撤销或一键撤销其他会话；仅返回解析后的浏览器和系统标签，不暴露原始 IP 或 User-Agent。</p><div class="tags"><span>异常访问清理</span><span>隐私最小化</span></div></article>`;
+if (!html.includes('data-colipas-feature="account-session-control"')) {
+  replaceOnce(/(<div class="feature-grid">)/, `$1
+      ${accountSessionFeatureCard}`);
+} else {
+  replaceOnce(/<article class="feature-card" data-colipas-feature="account-session-control">[\s\S]*?<\/article>/, accountSessionFeatureCard);
+}
+
 replaceAll(/<article class="deploy-card"><h3>Linux systemd<\/h3>/g, `<article class="deploy-card">${landingIcon('terminal', 'deploy-icon')}<h3>Linux systemd</h3>`);
 replaceAll(/<article class="deploy-card"><h3>Node 20\+<\/h3>/g, `<article class="deploy-card">${landingIcon('code', 'deploy-icon')}<h3>Node 20+</h3>`);
 replaceAll(/<article class="deploy-card"><h3>Docker Compose<\/h3>/g, `<article class="deploy-card">${landingIcon('database', 'deploy-icon')}<h3>Docker Compose</h3>`);
@@ -1421,6 +1429,7 @@ SVG
       <a href="#first-run">首次使用 <span>→</span></a>
       <a href="#launch-checklist">上线检查 <span>→</span></a>
       <a href="#operations-inbox">运维收件箱 <span>→</span></a>
+      <a href="#account-sessions">会话管理 <span>→</span></a>
       <a href="#server-access">服务器接入 <span>→</span></a>
       <a href="#ssh">SSH 终端 <span>→</span></a>
       <a href="#ai">AI 设置 <span>→</span></a>
@@ -1435,6 +1444,7 @@ SVG
       <a href="#first-run">首次使用</a>
       <a href="#launch-checklist">上线检查</a>
       <a href="#operations-inbox">运维收件箱</a>
+      <a href="#account-sessions">会话管理</a>
       <a href="#server-access">服务器接入</a>
       <a href="#ai">AI 助手</a>
       <a href="#ssh">SSH 与编排</a>
@@ -1490,7 +1500,7 @@ SVG
         <p class="kicker">首次使用</p>
         <h2>部署完成后按这个顺序检查</h2>
         <div class="flow">
-          <div class="flow-step" data-colipas-docs-avatar-guard="true"><b>1</b><div><h3>打开后台并登录</h3><p>访问你的域名 `/admin/`，使用部署脚本里设置的管理员账号和初始密码登录。首次进入后优先在账号设置中修改密码；头像保存前会验证图片可正常解码，历史坏图会自动回退到 CoLiPas 品牌图标。</p></div></div>
+          <div class="flow-step" data-colipas-docs-avatar-guard="true"><b>1</b><div><h3>打开后台并登录</h3><p>访问你的域名 `/admin/`，使用部署脚本里设置的管理员账号和初始密码登录。首次进入后优先修改密码并检查登录会话；头像保存前会验证图片可正常解码，历史坏图会自动回退到 CoLiPas 品牌图标。</p></div></div>
           <div class="flow-step"><b>2</b><div><h3>确认系统状态</h3><p>在安全审计和总览页确认健康检查、SQLite、发布信息、会话状态和基础指标正常，再继续接入真实服务器。</p></div></div>
           <div class="flow-step"><b>3</b><div><h3>添加第一台服务器</h3><p>先填写名称、IP、地区、系统和标签；需要远程操作时必须选择 SSH 验证模式并通过密码或私钥握手。</p></div></div>
           <div class="flow-step"><b>4</b><div><h3>验证 SSH、AI 与编排联动</h3><p>打开终端执行只读诊断命令，再配置 AI Provider、加载模型、测试自定义 API 白名单，最后执行一条低风险编排任务。</p></div></div>
@@ -1622,12 +1632,34 @@ systemctl status ssh --no-pager
         </aside>
       </section>
 
+      <section id="account-sessions" class="section" data-colipas-docs-feature="account-session-control">
+        <p class="kicker">账户安全</p>
+        <h2>识别并撤销不再需要的登录会话</h2>
+        <div class="grid">
+          <article class="doc-card">
+            <h3>识别当前设备</h3>
+            <p>账户设置会突出显示当前浏览器，并列出其他活跃登录设备的登录时间、最近活动和到期时间。</p>
+          </article>
+          <article class="doc-card">
+            <h3>主动撤销访问</h3>
+            <p>可逐个撤销其他会话，也可保留当前浏览器并一键撤销其他全部会话；当前会话需要通过退出登录关闭。</p>
+          </article>
+          <article class="doc-card">
+            <h3>最小化设备信息</h3>
+            <p>服务端只保留解析后的浏览器与系统标签，接口不会返回原始 IP、User-Agent、Cookie 或内部会话令牌。</p>
+          </article>
+        </div>
+      </section>
+
       <section id="api" class="section">
         <p class="kicker">API 与自定义代理</p>
         <h2>业务 API 需要登录，自定义代理需要白名单</h2>
         <div class="table">
           <div><code>GET /api/health</code><p>公开健康检查，返回运行状态、SQLite 驱动名称和短发布标识，不暴露路径或密钥。</p></div>
           <div><code>POST /api/auth/login</code><p>管理员登录，失败次数会限速并返回 Retry-After。</p></div>
+          <div><code>GET /api/account/sessions</code><p>读取脱敏后的活跃登录设备、最近活动和到期时间。</p></div>
+          <div><code>DELETE /api/account/sessions/:id</code><p>撤销指定的其他登录会话，不允许误删当前会话。</p></div>
+          <div><code>POST /api/account/sessions/revoke-others</code><p>保留当前浏览器并撤销其他全部登录会话。</p></div>
           <div><code>GET /api/overview</code><p>登录后读取账号、服务器、事件和总览指标。</p></div>
           <div><code>GET / PUT /api/ai/provider</code><p>读取和保存 AI Provider 设置；API Key 只返回是否已托管，不回显明文。</p></div>
           <div><code>POST /api/custom-apis/test</code><p>通过后端代理测试外部接口，阻止内网地址、敏感 Header 和重定向 SSRF。</p></div>
@@ -1643,6 +1675,7 @@ systemctl status ssh --no-pager
           <h2>公网部署前逐项确认</h2>
           <div class="check-list">
             <p class="check-line"><span>✓</span> 修改管理员密码，不使用默认初始密码。</p>
+            <p class="check-line"><span>✓</span> 在账户设置中检查活跃登录设备并撤销不再需要的会话。</p>
             <p class="check-line"><span>✓</span> 使用强随机 SESSION_SECRET 和 CREDENTIAL_ENCRYPTION_KEY。</p>
             <p class="check-line"><span>✓</span> 限制 CUSTOM_API_ALLOWED_HOSTS，避免代理被滥用。</p>
             <p class="check-line"><span>✓</span> 反向代理关闭 AI/SSH 流式接口缓冲，并把头像上传限制保持为 2m。</p>

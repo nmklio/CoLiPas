@@ -3106,8 +3106,8 @@ button:disabled {
 }
 
 .account-modal {
-  width: min(880px, 100%);
-  max-height: min(720px, calc(100vh - 48px));
+  width: min(960px, 100%);
+  max-height: min(780px, calc(100vh - 48px));
   overflow: auto;
   border: 1px solid #cddfe3;
   border-radius: 12px;
@@ -3202,6 +3202,273 @@ button:disabled {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.45;
+}
+
+.account-session-control {
+  grid-column: 1 / -1;
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(224, 248, 244, 0.72), transparent 42%),
+    #ffffff;
+}
+
+.account-session-control::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: linear-gradient(180deg, #18b5a6, #256f7b);
+}
+
+.account-session-heading,
+.account-session-identity,
+.account-session-footer,
+.account-session-state,
+.account-session-message {
+  display: flex;
+  align-items: center;
+}
+
+.account-session-heading,
+.account-session-footer {
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.account-session-title-icon {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(15, 118, 110, 0.2);
+  border-radius: 12px;
+  background: #e8f8f5;
+  color: #126b64;
+  display: grid;
+  place-items: center;
+}
+
+.account-session-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid #d6e6e7;
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(248, 252, 252, 0.88);
+}
+
+.account-session-summary > div {
+  min-width: 0;
+  padding: 10px 12px;
+}
+
+.account-session-summary > div + div {
+  border-left: 1px solid #d6e6e7;
+}
+
+.account-session-summary span,
+.account-session-summary strong {
+  display: block;
+}
+
+.account-session-summary span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.account-session-summary strong {
+  margin-top: 4px;
+  color: var(--text);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.account-session-list {
+  position: relative;
+  display: grid;
+  gap: 9px;
+}
+
+.account-session-list::before {
+  content: "";
+  position: absolute;
+  top: 22px;
+  bottom: 22px;
+  left: 17px;
+  width: 1px;
+  background: #c8dddf;
+}
+
+.account-session-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 10px;
+  border: 1px solid #d9e6e8;
+  border-radius: 10px;
+  padding: 11px 12px 11px 8px;
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.account-session-row.is-current {
+  border-color: rgba(15, 118, 110, 0.3);
+  background: #f2fbf9;
+  box-shadow: inset 3px 0 0 #1aa899;
+}
+
+.account-session-node {
+  position: relative;
+  z-index: 1;
+  width: 22px;
+  height: 22px;
+  align-self: start;
+  margin: 1px auto 0;
+  border: 1px solid #c7dcde;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #5d7479;
+  display: grid;
+  place-items: center;
+}
+
+.account-session-row.is-current .account-session-node {
+  border-color: rgba(15, 118, 110, 0.32);
+  background: #dff7f1;
+  color: #0f766e;
+}
+
+.account-session-body {
+  min-width: 0;
+  display: grid;
+  gap: 9px;
+}
+
+.account-session-identity {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.account-session-identity > div {
+  min-width: 0;
+}
+
+.account-session-identity strong,
+.account-session-identity span {
+  display: block;
+}
+
+.account-session-identity strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-session-identity > div > span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.account-session-current-badge {
+  flex: 0 0 auto;
+  border: 1px solid rgba(15, 118, 110, 0.2);
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: #e2f7f2;
+  color: #0f766e;
+  font-size: 10px;
+  font-weight: 900;
+  display: inline-flex !important;
+  align-items: center;
+  gap: 5px;
+}
+
+.account-session-revoke {
+  min-height: 30px;
+  flex: 0 0 auto;
+  border-color: rgba(205, 60, 60, 0.2);
+  color: #a63434;
+}
+
+.account-session-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.account-session-meta span {
+  min-width: 0;
+  color: #60777c;
+  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.account-session-footer {
+  border-top: 1px solid #dce8e9;
+  padding-top: 12px;
+}
+
+.account-session-footer p {
+  max-width: 560px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.account-session-footer p svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: #0f766e;
+}
+
+.account-session-revoke-others {
+  min-height: 34px;
+  flex: 0 0 auto;
+  border-color: rgba(205, 60, 60, 0.2);
+  color: #9b3434;
+}
+
+.account-session-state,
+.account-session-message {
+  min-height: 44px;
+  justify-content: center;
+  gap: 8px;
+  border: 1px dashed #cadde0;
+  border-radius: 9px;
+  background: rgba(248, 252, 252, 0.82);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.account-session-message {
+  min-height: auto;
+  justify-content: flex-start;
+  padding: 9px 11px;
+  border-style: solid;
+}
+
+.account-session-message.success {
+  border-color: #b9dfcd;
+  background: #f0fbf5;
+  color: var(--green);
+}
+
+.account-session-message.error {
+  border-color: #f0c0c0;
+  background: #fff4f4;
+  color: #a63434;
 }
 
 .secondary-action {
@@ -21288,6 +21555,34 @@ pre {
 
   .account-settings-grid {
     grid-template-columns: 1fr;
+  }
+
+  .account-session-heading,
+  .account-session-footer {
+    align-items: stretch;
+  }
+
+  .account-session-footer {
+    flex-direction: column;
+  }
+
+  .account-session-revoke-others {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .account-session-identity {
+    align-items: flex-start;
+  }
+
+  .account-session-current-badge {
+    max-width: 116px;
+    white-space: normal;
+  }
+
+  .account-session-meta {
+    display: grid;
+    gap: 5px;
   }
 
   main {

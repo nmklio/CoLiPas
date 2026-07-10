@@ -100,6 +100,7 @@ function inspectFrontendBundle(): ReleaseVerificationResponse['frontend'] {
     'ai-dock',
     'ssh-console',
     'api-workbench',
+    'account-session-control',
   ];
 
   return {

@@ -19,6 +19,7 @@ import {
   ListChecks,
   LockKeyhole,
   MapPinned,
+  MonitorSmartphone,
   Network,
   PlayCircle,
   PlugZap,
@@ -127,6 +128,14 @@ const operationsInboxFeature = {
   title: '全局运维收件箱',
   desc: '把上线阻塞、SSH 覆盖缺口和开放事件汇总到同一个值班入口，按优先级跳转对应模块；审阅状态只保存安全的本机事项 ID 与时间。',
   tags: ['跨模块聚合', '本机审阅'],
+};
+
+const accountSessionFeature = {
+  icon: MonitorSmartphone,
+  title: '登录会话控制',
+  desc: '在账户设置中查看当前与其他登录设备，可逐个撤销或一键撤销其他会话；仅保留解析后的浏览器与系统标签，不返回原始 IP 或 User-Agent。',
+  tags: ['异常访问清理', '隐私最小化'],
+  featureId: 'account-session-control',
 };
 
 const securityItems = ['登录会话保护', 'SSH 命令边界', 'AI Base URL 校验', '自定义 API 白名单', '敏感信息脱敏'];
@@ -249,7 +258,7 @@ export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
           <h2>围绕“服务器接入到修复”构建的完整后台</h2>
         </div>
         <div className="marketing-feature-grid">
-          {[...featureCards, fleetViewFeature, bulkImportFeature, commandPaletteFeature, operationsInboxFeature].map((feature) => {
+          {[...featureCards, fleetViewFeature, bulkImportFeature, commandPaletteFeature, operationsInboxFeature, accountSessionFeature].map((feature) => {
             const Icon = feature.icon;
             const featureId = 'featureId' in feature && typeof feature.featureId === 'string'
               ? feature.featureId
