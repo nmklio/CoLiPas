@@ -12683,6 +12683,101 @@ pre {
   color: var(--brand);
 }
 
+.ai-empty-panel.ai-empty-guidance {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: center;
+  align-items: stretch;
+  justify-content: stretch;
+  gap: 14px;
+  padding: 16px;
+  text-align: left;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(53, 168, 154, 0.12), transparent 43%),
+    linear-gradient(145deg, #ffffff, #f5fbfa);
+}
+
+.ai-empty-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.ai-empty-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--brand-strong);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ai-empty-copy strong {
+  color: #143239;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.ai-empty-copy p {
+  margin: 0;
+  color: #5a6f76;
+  font-size: 12px;
+  line-height: 1.48;
+}
+
+.ai-starter-actions {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ai-starter-actions button {
+  min-width: 0;
+  min-height: 48px;
+  border: 1px solid #cfe1e2;
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #173b42;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  text-align: left;
+  transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.ai-starter-actions button:last-child {
+  grid-column: 1 / -1;
+}
+
+.ai-starter-actions button svg {
+  flex: 0 0 auto;
+  color: var(--brand-strong);
+}
+
+.ai-starter-actions button span {
+  min-width: 0;
+  color: #16353c;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.ai-starter-actions button:hover {
+  border-color: var(--brand-line);
+  background: #edfaf7;
+  box-shadow: 0 9px 18px rgba(21, 104, 96, 0.1);
+  transform: translateY(-1px);
+}
+
+.ai-starter-actions button:focus-visible {
+  outline: 3px solid rgba(15, 118, 110, 0.22);
+  outline-offset: 2px;
+}
+
 .ai-execution-card {
   grid-row: 4;
   grid-column: 1 / -1;

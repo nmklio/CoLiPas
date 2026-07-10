@@ -98,8 +98,8 @@ const usageBlocks = [
   {
     icon: Bot,
     title: '5. 使用 AI 运维助手',
-    body: '填写 OpenAI 兼容 API 地址和密钥，加载模型后先点连通性测试，再开始流式对话。',
-    points: ['后端使用 stream:true', '支持上下文和缓存读取', '可强制重新生成'],
+    body: '填写 OpenAI 兼容 API 地址和密钥，加载模型后先点连通性测试，再开始流式对话。新会话内的风险、SSH 健康检查和今日优先级入口只会填充问题，仍需由操作员复核后发送。',
+    points: ['后端使用 stream:true', '支持上下文和缓存读取', '可强制重新生成', '起步入口不会自动发送或执行'],
   },
   {
     icon: Workflow,
@@ -303,7 +303,7 @@ export function DocsPage({ onLogin }: DocsPageProps) {
               <div className="docs-section-heading">
                 <span><Bot size={18} /> AI 助手</span>
                 <h2>配置 OpenAI 兼容 API 后使用真实流式对话</h2>
-                <p>AI 面板会先读取模型列表，再通过测试接口确认上游支持流式响应。未配置密钥时，只会返回本地规则分析。</p>
+                <p>AI 面板会先读取模型列表，再通过测试接口确认上游支持流式响应。未配置密钥时，只会返回本地规则分析。新会话提供风险、SSH 健康检查和今日优先级三个起步入口；它们只会填充输入框，发送与远程执行始终需要操作员明确确认。</p>
               </div>
               <ol className="docs-ordered">
                 <li>填写 API Base URL，例如 https://api.example.com/v1。</li>

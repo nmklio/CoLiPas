@@ -764,6 +764,11 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
     }
   }
 
+  function handleStarterPrompt(question: string) {
+    handleSessionQuestionChange(question);
+    window.requestAnimationFrame(() => questionRef.current?.focus());
+  }
+
   if (collapsed) {
     return (
       <button type="button" className="ai-launcher" aria-label={t('ai.launch')} title={t('ai.launch')} onClick={onExpand}>
@@ -946,9 +951,41 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
 
             <div className="ai-chat-thread" aria-live="polite" ref={chatThreadRef}>
               {activeSession.messages.length === 0 ? (
-                <div className="ai-empty-panel">
-                  <Sparkles size={17} />
-                  <span>{t('ai.emptyHint')}</span>
+                <div className="ai-empty-panel ai-empty-guidance" data-ai-starter-prompts="true">
+                  <div className="ai-empty-copy">
+                    <span className="ai-empty-eyebrow"><Sparkles size={15} /> {t('ai.starterEyebrow')}</span>
+                    <strong>{t('ai.starterTitle')}</strong>
+                    <p>{t('ai.emptyHint')}</p>
+                  </div>
+                  <div className="ai-starter-actions" aria-label={t('ai.starterTitle')}>
+                    <button
+                      type="button"
+                      data-ai-starter-prompt="risk"
+                      onClick={() => handleStarterPrompt(t('ai.starterRiskPrompt'))}
+                      title={t('ai.starterRiskDetail')}
+                    >
+                      <ShieldCheck size={16} />
+                      <span>{t('ai.starterRisk')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      data-ai-starter-prompt="ssh"
+                      onClick={() => handleStarterPrompt(t('ai.starterSshPrompt'))}
+                      title={t('ai.starterSshDetail')}
+                    >
+                      <Terminal size={16} />
+                      <span>{t('ai.starterSsh')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      data-ai-starter-prompt="priority"
+                      onClick={() => handleStarterPrompt(t('ai.starterPriorityPrompt'))}
+                      title={t('ai.starterPriorityDetail')}
+                    >
+                      <Sparkles size={16} />
+                      <span>{t('ai.starterPriority')}</span>
+                    </button>
+                  </div>
                 </div>
               ) : (
                 activeSession.messages.map((message) => (

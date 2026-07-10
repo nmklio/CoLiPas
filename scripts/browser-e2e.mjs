@@ -1087,6 +1087,21 @@ async function assertAccountSettingsAndAiChat(targetPage) {
     await targetPage.waitForURL(/#ai$/, { timeout: 10000 });
     await targetPage.getByRole('button', { name: /open ai chat/i }).click();
     await targetPage.locator('.ai-dock').waitFor({ timeout: 10000 });
+    const starterPrompts = targetPage.locator('[data-ai-starter-prompts="true"]');
+    await starterPrompts.waitFor({ timeout: 5000 });
+    if (await starterPrompts.locator('[data-ai-starter-prompt]').count() !== 3) {
+      throw new Error('AI first-run guidance must expose three safe starter prompts');
+    }
+    await assertElementHorizontallyWithinViewport(targetPage, '[data-ai-starter-prompts="true"]', 'desktop AI starter prompts');
+    await captureVisualEvidence(targetPage, 'desktop-ai-dock-first-run', ['.ai-dock', '[data-ai-starter-prompts="true"]']);
+    await starterPrompts.locator('[data-ai-starter-prompt="risk"]').click();
+    const starterQuestion = await targetPage.getByRole('textbox', { name: /question/i }).inputValue();
+    if (!/analyze.+risk|风险/i.test(starterQuestion)) {
+      throw new Error(`AI starter prompt did not populate a reviewable risk question: ${starterQuestion}`);
+    }
+    if (await targetPage.locator('.ai-message.user').count() !== 0) {
+      throw new Error('AI starter prompt must not auto-send or execute a request');
+    }
     await targetPage.locator('#ai-server-select').selectOption(aiSshServer.id);
     await targetPage.getByRole('textbox', { name: /question/i }).fill('Run a safe SSH uptime check');
     await targetPage.getByRole('button', { name: /^send$/i }).click();
@@ -3106,6 +3121,16 @@ async function assertMobileConsoleAndMap() {
     await mobilePage.getByRole('button', { name: /open ai chat/i }).click();
     await mobilePage.locator('.ai-dock').waitFor({ timeout: 10000 });
     await assertElementWithinViewport(mobilePage, '.ai-dock', 'mobile AI dock');
+    const mobileStarterPrompts = mobilePage.locator('[data-ai-starter-prompts="true"]');
+    await mobileStarterPrompts.waitFor({ timeout: 5000 });
+    await mobileStarterPrompts.locator('[data-ai-starter-prompt="priority"]').click();
+    if (await mobilePage.locator('.ai-message.user').count() !== 0) {
+      throw new Error('Mobile AI starter prompt must not auto-send or execute a request');
+    }
+    const mobileStarterQuestion = await mobilePage.getByRole('textbox', { name: /question/i }).inputValue();
+    if (!/priorit|优先|優先/i.test(mobileStarterQuestion)) {
+      throw new Error(`Mobile AI starter prompt did not populate a reviewable question: ${mobileStarterQuestion}`);
+    }
     await mobilePage.getByRole('textbox', { name: /question/i }).fill('Check server memory usage');
     await mobilePage.getByRole('button', { name: /^send$/i }).click();
     await mobilePage.locator('.ai-message.user').first().waitFor({ timeout: 10000 });
