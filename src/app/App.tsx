@@ -199,6 +199,12 @@ interface CommandPaletteAction {
   run: () => void;
 }
 
+interface CommandPaletteGroup {
+  id: 'continue' | 'recent' | 'all' | 'results';
+  title: string;
+  actions: CommandPaletteAction[];
+}
+
 interface HashRoute {
   section: SectionId;
   traceId: string;
@@ -227,6 +233,9 @@ const settingsMessageTtlMs = 2800;
 const launchGuideStorageKey = 'colipas.launchGuide.dismissed.v1';
 const launchGuideViewStorageKey = 'colipas.launchGuide.view.v1';
 const performanceModeStorageKey = 'colipas.performanceMode.v1';
+const commandPaletteHistoryStorageKey = 'colipas.commandPaletteHistory.v1';
+const commandPaletteHistoryLimit = 5;
+const commandPaletteHistoryIdPattern = /^(?:section-(?:overview|servers|operations|ai|api|security)|next-remediation|launch-guide|open-ai|refresh-assets|account-settings)$/;
 
 function isSectionId(value: string): value is SectionId {
   return sections.some((section) => section.id === value);
@@ -271,6 +280,41 @@ function readLaunchGuideViewPreference(): LaunchGuideViewPreference {
 
   const stored = window.localStorage.getItem(launchGuideViewStorageKey);
   return stored === 'compact' || stored === 'expanded' ? stored : 'auto';
+}
+
+function normalizeCommandPaletteHistory(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return Array.from(new Set(value.filter((item): item is string => (
+    typeof item === 'string' && commandPaletteHistoryIdPattern.test(item)
+  )))).slice(0, commandPaletteHistoryLimit);
+}
+
+function readCommandPaletteHistory() {
+  if (typeof window === 'undefined') {
+    return [];
+  }
+
+  try {
+    return normalizeCommandPaletteHistory(JSON.parse(window.localStorage.getItem(commandPaletteHistoryStorageKey) ?? '[]'));
+  } catch {
+    return [];
+  }
+}
+
+function writeCommandPaletteHistory(history: string[]) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const normalizedHistory = normalizeCommandPaletteHistory(history);
+  if (normalizedHistory.length === 0) {
+    window.localStorage.removeItem(commandPaletteHistoryStorageKey);
+    return;
+  }
+  window.localStorage.setItem(commandPaletteHistoryStorageKey, JSON.stringify(normalizedHistory));
 }
 
 function writeHashRoute(section: SectionId, traceId = '') {
@@ -321,6 +365,7 @@ export function App() {
   const [settingsSuccess, setSettingsSuccess] = useState('');
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [commandPaletteQuery, setCommandPaletteQuery] = useState('');
+  const [commandPaletteHistory, setCommandPaletteHistory] = useState(readCommandPaletteHistory);
   const [profileDraft, setProfileDraft] = useState<AccountProfile>(fallbackProfile);
   const [passwordDraft, setPasswordDraft] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const avatarUploadRef = useRef<HTMLInputElement | null>(null);
@@ -652,7 +697,17 @@ export function App() {
   }), [configSummary, connectedCount, dataSource, onlineCount, openEventCount, overview.servers.length, overviewPreflightSnapshot, t]);
   const launchGuideCompact = launchGuideViewPreference === 'compact'
     || (launchGuideViewPreference === 'auto' && (performanceMode || activeSection !== 'overview'));
+  const nextRemediation = launchChecklist.remediationSteps[0]?.item;
   const commandPaletteActions: CommandPaletteAction[] = [
+    ...(nextRemediation ? [{
+      id: 'next-remediation',
+      title: t('app.commandContinueNext'),
+      description: nextRemediation.action,
+      category: t('app.commandContinue'),
+      icon: Rocket,
+      keywords: `next priority remediation ${nextRemediation.title} ${nextRemediation.action} ${t('app.commandContinue')}`,
+      run: () => openLaunchChecklistItem(nextRemediation),
+    }] : []),
     ...sections.map((section) => ({
       id: `section-${section.id}`,
       title: t(section.labelKey),
@@ -710,6 +765,41 @@ export function App() {
       `${action.title} ${action.description} ${action.category} ${action.keywords}`.toLowerCase().includes(normalizedCommandPaletteQuery)
     ))
     : commandPaletteActions;
+  const commandPaletteActionById = new Map(commandPaletteActions.map((action) => [action.id, action] as const));
+  const recentCommandPaletteActions = commandPaletteHistory
+    .map((actionId) => commandPaletteActionById.get(actionId))
+    .filter((action): action is CommandPaletteAction => Boolean(action));
+  const continueCommandPaletteActions = normalizedCommandPaletteQuery
+    ? []
+    : commandPaletteActions.filter((action) => action.id === 'next-remediation');
+  const contextualCommandPaletteActionIds = new Set(continueCommandPaletteActions.map((action) => action.id));
+  const recentCommandPaletteActionIds = new Set(recentCommandPaletteActions.map((action) => action.id));
+  const commandPaletteGroups: CommandPaletteGroup[] = normalizedCommandPaletteQuery
+    ? [{
+      id: 'results',
+      title: t('app.commandResults'),
+      actions: filteredCommandPaletteActions,
+    }]
+    : [
+      ...(continueCommandPaletteActions.length > 0 ? [{
+        id: 'continue' as const,
+        title: t('app.commandContinue'),
+        actions: continueCommandPaletteActions,
+      }] : []),
+      ...(recentCommandPaletteActions.length > 0 ? [{
+        id: 'recent' as const,
+        title: t('app.commandRecent'),
+        actions: recentCommandPaletteActions.filter((action) => !contextualCommandPaletteActionIds.has(action.id)),
+      }] : []),
+      {
+        id: 'all' as const,
+        title: t('app.commandAllActions'),
+        actions: commandPaletteActions.filter((action) => (
+          !contextualCommandPaletteActionIds.has(action.id) && !recentCommandPaletteActionIds.has(action.id)
+        )),
+      },
+    ].filter((group) => group.actions.length > 0);
+  const visibleCommandPaletteActions = commandPaletteGroups.flatMap((group) => group.actions);
   const activeReleaseFixFocus = releaseFixFocus?.targetSection === activeSection ? releaseFixFocus : null;
   const activeReleaseFixAnchor = activeReleaseFixFocus?.anchor ?? '';
   const shouldRenderAiConsole = !aiCollapsed || Boolean(aiSeedQuestion) || releaseFixFocus?.targetSection === 'ai';
@@ -1072,15 +1162,25 @@ export function App() {
   }
 
   function runCommandPaletteAction(action: CommandPaletteAction) {
+    setCommandPaletteHistory((current) => {
+      const next = [action.id, ...current.filter((actionId) => actionId !== action.id)].slice(0, commandPaletteHistoryLimit);
+      writeCommandPaletteHistory(next);
+      return next;
+    });
     closeCommandPalette();
     action.run();
   }
 
   function runFirstCommandPaletteAction() {
-    const [firstAction] = filteredCommandPaletteActions;
+    const [firstAction] = visibleCommandPaletteActions;
     if (firstAction) {
       runCommandPaletteAction(firstAction);
     }
+  }
+
+  function clearCommandPaletteHistory() {
+    setCommandPaletteHistory([]);
+    writeCommandPaletteHistory([]);
   }
 
   async function handleSaveProfile() {
@@ -1838,35 +1938,60 @@ export function App() {
                     <span>{t('app.commandPalette')}</span>
                     <h2 id="command-palette-title">{t('app.openCommandPalette')}</h2>
                   </div>
-                  <button type="button" className="icon-button" aria-label={t('common.cancel')} onClick={closeCommandPalette}>
-                    <X size={18} />
-                  </button>
+                  <div className="command-palette-heading-actions">
+                    {!normalizedCommandPaletteQuery && recentCommandPaletteActions.length > 0 && (
+                      <button
+                        type="button"
+                        className="command-palette-clear"
+                        data-command-palette-clear-history="true"
+                        onClick={clearCommandPaletteHistory}
+                      >
+                        {t('app.commandClearRecent')}
+                      </button>
+                    )}
+                    <button type="button" className="icon-button" aria-label={t('common.cancel')} onClick={closeCommandPalette}>
+                      <X size={18} />
+                    </button>
+                  </div>
                 </div>
               </header>
 
               <div className="command-palette-list" role="listbox" aria-label={t('app.commandPalette')}>
-                {filteredCommandPaletteActions.map((action) => {
-                  const Icon = action.icon;
-                  return (
-                    <button
-                      key={action.id}
-                      type="button"
-                      className="command-palette-item"
-                      role="option"
-                      onClick={() => runCommandPaletteAction(action)}
-                    >
-                      <span className="command-palette-item-icon" aria-hidden="true">
-                        <Icon size={18} />
-                      </span>
-                      <span>
-                        <strong>{action.title}</strong>
-                        <small>{action.description}</small>
-                      </span>
-                      <em>{action.category}</em>
-                    </button>
-                  );
-                })}
-                {filteredCommandPaletteActions.length === 0 && (
+                {commandPaletteGroups.map((group) => (
+                  <section
+                    key={group.id}
+                    className="command-palette-group"
+                    data-command-palette-group={group.id}
+                    data-command-palette-recent={group.id === 'recent' ? 'true' : undefined}
+                    data-command-palette-continue={group.id === 'continue' ? 'true' : undefined}
+                    role="group"
+                    aria-label={group.title}
+                  >
+                    <div className="command-palette-group-heading">{group.title}</div>
+                    {group.actions.map((action) => {
+                      const Icon = action.icon;
+                      return (
+                        <button
+                          key={action.id}
+                          type="button"
+                          className="command-palette-item"
+                          role="option"
+                          onClick={() => runCommandPaletteAction(action)}
+                        >
+                          <span className="command-palette-item-icon" aria-hidden="true">
+                            <Icon size={18} />
+                          </span>
+                          <span>
+                            <strong>{action.title}</strong>
+                            <small>{action.description}</small>
+                          </span>
+                          <em>{action.category}</em>
+                        </button>
+                      );
+                    })}
+                  </section>
+                ))}
+                {visibleCommandPaletteActions.length === 0 && (
                   <div className="command-palette-empty" role="status">
                     {t('app.commandEmpty')}
                   </div>

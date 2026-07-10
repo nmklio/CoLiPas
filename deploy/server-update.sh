@@ -173,6 +173,7 @@ function landingIcon(kind, className) {
     checklist: '<rect x="5" y="4.3" width="14" height="15.4" rx="2.4"/><path d="M8.2 9h7.2M8.2 13h7.2M8.2 17h4.2"/><path d="M6.5 9.1 l0.8 0.8 1.4 -1.6M6.5 13.1 l0.8 0.8 1.4 -1.6M6.5 17.1 l0.8 0.8 1.4 -1.6"/>',
     flow: '<circle cx="6.5" cy="7" r="2.2"/><circle cx="17.5" cy="7" r="2.2"/><circle cx="12" cy="17" r="2.2"/><path d="M8.6 7h6.8M7.8 9l3.1 5.7M16.2 9l-3.1 5.7"/>',
     shield: '<path d="M12 3.8 18.3 6v5.3c0 4.1-2.5 7.2-6.3 8.9-3.8-1.7-6.3-4.8-6.3-8.9V6L12 3.8Z"/><path d="M9.2 12.1 11.1 14l3.9-4.3"/><path d="M8.6 17.3h6.8"/>',
+    command: '<rect x="4.2" y="5" width="15.6" height="14" rx="2.7"/><path d="M4.2 9.1h15.6"/><path d="m8 12.2 2.5 1.8L8 15.8"/><path d="M13.3 15.7h3.6"/><circle cx="7" cy="7.1" r=".55"/><circle cx="8.9" cy="7.1" r=".55"/>',
     code: '<path d="m9 8-4 4 4 4M15 8l4 4-4 4"/><path d="m13.2 6.8-2.4 10.4"/>',
     database: '<ellipse cx="12" cy="6.4" rx="6.8" ry="2.8"/><path d="M5.2 6.4v7.2c0 1.6 3 2.8 6.8 2.8s6.8-1.2 6.8-2.8V6.4"/><path d="M5.2 10c0 1.6 3 2.8 6.8 2.8s6.8-1.2 6.8-2.8"/>',
   };
@@ -272,6 +273,11 @@ if (!html.includes('data-colipas-feature="contextual-launch-summary"')) {
 if (!html.includes('data-colipas-feature="fleet-views"')) {
   replaceOnce(/(<div class="feature-grid">)/, `$1
       <article class="feature-card" data-colipas-feature="fleet-views">${landingIcon('checklist', 'icon feature-icon')}<h3>资产视图</h3><p>把关键词、厂商、状态、地域和健康筛选保存为浏览器本机视图，排障时可一键恢复工作范围。</p><div class="tags"><span>本机保存</span><span>一键恢复</span></div></article>`);
+}
+
+if (!html.includes('data-colipas-feature="command-palette-context"')) {
+  replaceOnce(/(<div class="feature-grid">)/, `$1
+      <article class="feature-card" data-colipas-feature="command-palette-context">${landingIcon('command', 'icon feature-icon')}<h3>上下文命令面板</h3><p>按当前最高优先级事项、最近使用和全部操作分层展示跨模块入口；最近历史只保存在浏览器中，可随时清除。</p><div class="tags"><span>当前优先级</span><span>本机历史</span></div></article>`);
 }
 
 replaceAll(/<article class="deploy-card"><h3>Linux systemd<\/h3>/g, `<article class="deploy-card">${landingIcon('terminal', 'deploy-icon')}<h3>Linux systemd</h3>`);
@@ -1656,6 +1662,27 @@ if (!html.includes('data-colipas-docs-mobile-controls="true"')) {
           <article class="doc-card">
             <h3>快捷控制</h3>
             <p>点击顶部“…”可打开性能模式、三种语言、资产刷新、账户设置和退出登录；点击遮罩或关闭按钮即可返回当前模块。</p>
+          </article>
+        </div>
+      </section>
+
+$1`,
+  );
+}
+if (!html.includes('data-colipas-docs-command-palette="true"')) {
+  html = html.replace(
+    /(<section id="ai")/,
+    `      <section class="section" data-colipas-docs-command-palette="true">
+        <p class="kicker">上下文命令面板</p>
+        <h2>按优先级、最近使用和全部操作继续处理</h2>
+        <div class="grid">
+          <article class="doc-card">
+            <h3>当前最高优先级</h3>
+            <p>使用 Ctrl/⌘ + K 打开命令面板；“继续处理”会定位当前最高优先级的上线修复事项，减少在模块间反复查找。</p>
+          </article>
+          <article class="doc-card">
+            <h3>可清除的本机历史</h3>
+            <p>最近使用最多保留 5 条浏览器本地操作 ID，不保存密码、密钥、IP、API Key 或任何服务器内容；可在面板内一键清除。</p>
           </article>
         </div>
       </section>

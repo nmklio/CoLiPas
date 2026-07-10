@@ -122,6 +122,8 @@ function buildLandingCheck() {
       await expectText(page.locator('[data-colipas-feature="contextual-launch-summary"]'), /上线检查|release checklist|workspace summary/i, 'landing contextual launch guide copy');
       await expectLocatorCount(page.locator('[data-colipas-feature="fleet-views"]'), 1, 'landing fleet views feature card');
       await expectText(page.locator('[data-colipas-feature="fleet-views"]'), /资产视图|fleet views|browser/i, 'landing fleet views copy');
+      await expectLocatorCount(page.locator('[data-colipas-feature="command-palette-context"]'), 1, 'landing contextual command palette feature card');
+      await expectText(page.locator('[data-colipas-feature="command-palette-context"]'), /上下文命令面板|command palette|最近使用/i, 'landing contextual command palette copy');
       await expectLocatorCountAtLeast(page.locator('.feature-card .feature-icon svg'), 7, 'landing feature SVG icons');
       await expectLocatorCountAtLeast(page.locator('.position-card.position-flow-card'), 4, 'landing redesigned flow position cards');
       await expectLocatorCount(page.locator('.position-card .position-step'), 4, 'landing position flow step numbers');
@@ -161,6 +163,8 @@ function buildDocsCheck() {
       await expectText(page.locator('[data-colipas-docs-fleet-views="true"]'), /资产视图|fleet views|browser/i, 'docs fleet views copy');
       await expectLocatorCount(page.locator('[data-colipas-docs-mobile-controls="true"]'), 1, 'docs mobile quick controls section');
       await expectText(page.locator('[data-colipas-docs-mobile-controls="true"]'), /移动端快捷控制|quick controls|モバイル/i, 'docs mobile quick controls copy');
+      await expectLocatorCount(page.locator('[data-colipas-docs-command-palette="true"]'), 1, 'docs contextual command palette section');
+      await expectText(page.locator('[data-colipas-docs-command-palette="true"]'), /上下文命令面板|command palette|最近使用/i, 'docs contextual command palette copy');
       await assertSensitiveTextAbsent(page, 'docs');
     },
   };

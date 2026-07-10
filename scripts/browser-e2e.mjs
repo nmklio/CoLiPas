@@ -980,7 +980,29 @@ async function assertCommandPalette(targetPage) {
   await targetPage.locator('.account-modal .icon-button').first().click();
   await targetPage.locator('.account-modal').waitFor({ state: 'hidden', timeout: 5000 });
 
-  console.log('ok browser e2e covers command palette keyboard and mouse actions');
+  await targetPage.keyboard.press('Control+K');
+  await targetPage.getByRole('dialog', { name: /open command palette/i }).waitFor({ timeout: 5000 });
+  const recentCommands = targetPage.locator('[data-command-palette-recent="true"]');
+  await recentCommands.waitFor({ timeout: 5000 });
+  if (await recentCommands.getByRole('option').count() < 2) {
+    throw new Error('Command palette should retain the two most recently used safe action IDs');
+  }
+  const storedHistory = await targetPage.evaluate(() => window.localStorage.getItem('colipas.commandPaletteHistory.v1') ?? '');
+  if (!storedHistory.includes('section-servers') || !storedHistory.includes('account-settings') || /(?:password|privateKey|publicIp|apiKey)/i.test(storedHistory)) {
+    throw new Error(`Command palette history must be browser-only safe action IDs: ${storedHistory}`);
+  }
+  await captureVisualEvidence(targetPage, 'desktop-command-palette-context', ['.command-palette']);
+  await targetPage.locator('[data-command-palette-clear-history="true"]').click();
+  if (await targetPage.locator('[data-command-palette-recent="true"]').count() !== 0) {
+    throw new Error('Command palette recent group should disappear after clearing local history');
+  }
+  const clearedHistory = await targetPage.evaluate(() => window.localStorage.getItem('colipas.commandPaletteHistory.v1'));
+  if (clearedHistory !== null) {
+    throw new Error('Command palette clear history must remove browser storage');
+  }
+  await targetPage.keyboard.press('Escape');
+
+  console.log('ok browser e2e covers command palette keyboard, mouse, contextual next-step, and browser-only recent actions');
 }
 
 async function assertAccountSettingsAndAiChat(targetPage) {

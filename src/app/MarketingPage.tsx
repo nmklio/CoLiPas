@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   ChevronRight,
   CloudCog,
+  Command,
   Eye,
   EyeOff,
   Github,
@@ -102,6 +103,13 @@ const fleetViewFeature = {
   title: '资产视图',
   desc: '把地域、厂商、状态和健康筛选保存为浏览器本地视图，排障时一键恢复常用工作范围。',
   tags: ['本机保存', '一键恢复'],
+};
+
+const commandPaletteFeature = {
+  icon: Command,
+  title: '上下文命令面板',
+  desc: '以当前最高优先级事项、最近使用和全部操作分层展示跨模块入口，减少重复搜索与页面跳转；最近操作只保存无敏感信息的操作 ID。',
+  tags: ['当前优先级', '本机历史'],
 };
 
 const securityItems = ['登录会话保护', 'SSH 命令边界', 'AI Base URL 校验', '自定义 API 白名单', '敏感信息脱敏'];
@@ -224,7 +232,7 @@ export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
           <h2>围绕“服务器接入到修复”构建的完整后台</h2>
         </div>
         <div className="marketing-feature-grid">
-          {[...featureCards, fleetViewFeature].map((feature) => {
+          {[...featureCards, fleetViewFeature, commandPaletteFeature].map((feature) => {
             const Icon = feature.icon;
             return (
               <article key={feature.title} className="marketing-feature-card">

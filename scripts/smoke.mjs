@@ -4422,6 +4422,14 @@ function assertCommandPaletteGuards() {
     'setCommandPaletteOpen(true)',
     'function openCommandPalette()',
     'function runFirstCommandPaletteAction()',
+    'commandPaletteHistoryStorageKey',
+    'readCommandPaletteHistory',
+    'writeCommandPaletteHistory',
+    'normalizeCommandPaletteHistory',
+    'clearCommandPaletteHistory',
+    'data-command-palette-recent',
+    'data-command-palette-clear-history',
+    'commandPaletteGroups',
     'className="command-trigger"',
     'className="command-palette-backdrop"',
     'role="dialog"',
@@ -4439,6 +4447,8 @@ function assertCommandPaletteGuards() {
     '.command-palette-backdrop',
     '.command-palette-search',
     '.command-palette-item',
+    '.command-palette-group',
+    '.command-palette-clear',
     '@media (max-width: 820px)',
   ];
   const missingCss = cssFragments.filter((fragment) => !globalCss.includes(fragment));
@@ -4448,12 +4458,18 @@ function assertCommandPaletteGuards() {
 
   const i18nKeys = [
     'app.commandAccount',
+    'app.commandAllActions',
+    'app.commandClearRecent',
+    'app.commandContinue',
+    'app.commandContinueNext',
     'app.commandEmpty',
     'app.commandGoSection',
     'app.commandNavigation',
     'app.commandOpenAi',
     'app.commandPalette',
     'app.commandRefresh',
+    'app.commandRecent',
+    'app.commandResults',
     'app.commandSearchPlaceholder',
     'app.commandTools',
     'app.openCommandPalette',
@@ -4468,12 +4484,13 @@ function assertCommandPaletteGuards() {
   if (
     !browserE2eSource.includes('async function assertCommandPalette')
     || !browserE2eSource.includes("keyboard.press('Control+K')")
-    || !browserE2eSource.includes('ok browser e2e covers command palette keyboard and mouse actions')
+    || !browserE2eSource.includes('browser-only recent actions')
+    || !browserE2eSource.includes("colipas.commandPaletteHistory.v1")
   ) {
     throw new Error('Command palette must be covered by browser keyboard and mouse regression checks');
   }
 
-  console.log('ok command palette provides keyboard navigation, responsive UI, and i18n coverage');
+  console.log('ok command palette provides contextual next steps, browser-only recent actions, responsive UI, and i18n coverage');
 }
 
 function assertAiStreamingCompatibility() {
@@ -5467,6 +5484,21 @@ function assertInteractiveDeployDocsAndScriptGuards() {
   for (const [name, source, phrase] of mobileQuickControlSources) {
     if (!source.includes(phrase)) {
       throw new Error(`${name} must document mobile quick controls`);
+    }
+  }
+
+  const contextualCommandPaletteSources = [
+    ['README.md', readmeSource, 'Contextual command palette'],
+    ['README_CN.md', cnReadmeSource, '上下文命令面板'],
+    ['README_JP.md', jpReadmeSource, 'コンテキスト コマンドパレット'],
+    ['MarketingPage.tsx', marketingSource, '上下文命令面板'],
+    ['DocsPage.tsx', docsPageSource, '上下文命令面板'],
+    ['server-update.sh landing card', serverUpdateSource, 'data-colipas-feature="command-palette-context"'],
+    ['server-update.sh docs', serverUpdateSource, 'data-colipas-docs-command-palette="true"'],
+  ];
+  for (const [name, source, phrase] of contextualCommandPaletteSources) {
+    if (!source.includes(phrase)) {
+      throw new Error(`${name} must document the contextual command palette`);
     }
   }
 

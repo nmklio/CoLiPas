@@ -4,6 +4,7 @@ import {
   Bot,
   CheckCircle2,
   CloudCog,
+  Command,
   Code2,
   Database,
   FileText,
@@ -126,6 +127,13 @@ const mobileControlsUsageBlock = {
   title: '移动端快捷控制',
   body: '手机端顶部优先保留导航、上线检查和命令面板；性能模式、语言、刷新、账户设置与退出登录集中在快捷控制抽屉中，减少顶栏占用。',
   points: ['点击顶部“…”打开，三种语言切换始终可用', '账户设置和退出登录不会挤占主工作区', '点击遮罩或关闭按钮即可回到当前模块'],
+};
+
+const commandPaletteUsageBlock = {
+  icon: Command,
+  title: '上下文命令面板',
+  body: '使用 Ctrl/⌘ + K 打开命令面板。无搜索时会按“继续处理、最近使用、全部操作”分层展示；搜索时只保留匹配结果。',
+  points: ['“继续处理”会跳转当前最高优先级的上线修复事项', '最近使用仅保存操作 ID，最多保留 5 条，不保存密码、密钥、IP 或 API Key', '可在面板内一键清除本机历史，不影响任何服务器或审计数据'],
 };
 
 const apiRows = [
@@ -272,7 +280,7 @@ export function DocsPage({ onLogin }: DocsPageProps) {
               <p>建议按以下顺序使用。每个模块都会与资产、事件、审计和 AI 上下文联动。</p>
             </div>
             <div className="docs-usage-grid">
-              {[...usageBlocks, fleetViewUsageBlock, mobileControlsUsageBlock].map((block) => {
+              {[...usageBlocks, fleetViewUsageBlock, mobileControlsUsageBlock, commandPaletteUsageBlock].map((block) => {
                 const Icon = block.icon;
                 return (
                   <article key={block.title} className="docs-usage-card">
