@@ -135,6 +135,7 @@ const bulkImportUsageBlock = {
     '只接受名称、厂商、公网/内网 IP、地域、系统和标签',
     '密码、私钥、Passphrase、API Key、Token 与 SSH 凭据字段会被拒绝',
     '名称或公网 IP 重复时自动跳过，不覆盖已有资产和用户数据',
+    '可下载本地 CSV 校验报告，导出值会防护表格公式注入且不会额外上传数据',
   ],
   sectionId: 'bulk-import',
   featureId: 'server-bulk-import',

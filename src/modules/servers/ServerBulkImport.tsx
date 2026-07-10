@@ -1,14 +1,16 @@
 import { useMemo, useRef, useState } from 'react';
-import { CheckCircle2, Download, FileJson2, FileUp, ShieldCheck, Table2, TriangleAlert, X } from 'lucide-react';
+import { CheckCircle2, Download, FileCheck2, FileJson2, FileUp, ShieldCheck, Table2, TriangleAlert, X } from 'lucide-react';
 import { useI18n } from '../../i18n';
 import { bulkImportServers, type BulkImportServersResponse } from '../../services/apiClient';
 import type { ServerNode } from '../../types';
 import {
   buildServerBulkImportPreview,
   buildServerBulkImportTemplate,
+  buildServerBulkImportValidationReport,
   serverBulkImportLimit,
   serverBulkImportMaxBytes,
   type ServerBulkImportGlobalIssue,
+  type ServerBulkImportPreview,
   type ServerBulkImportRowIssue,
 } from './serverBulkImportParser';
 
@@ -29,10 +31,12 @@ export function ServerBulkImport({ open, existingServers, onClose, onImported }:
   const [fileName, setFileName] = useState('');
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<BulkImportServersResponse | null>(null);
+  const [submittedPreview, setSubmittedPreview] = useState<ServerBulkImportPreview | null>(null);
   const [message, setMessage] = useState('');
   const preview = useMemo(() => buildServerBulkImportPreview(source, existingServers), [source, existingServers]);
   const globalIssues = fileIssue ? [fileIssue] : preview.globalIssues;
   const visibleRows = preview.rows.slice(0, previewRowLimit);
+  const reportPreview = submittedPreview ?? preview;
 
   if (!open) {
     return null;
@@ -45,6 +49,7 @@ export function ServerBulkImport({ open, existingServers, onClose, onImported }:
     setImporting(true);
     setMessage('');
     setResult(null);
+    setSubmittedPreview(preview);
     try {
       const response = await bulkImportServers(preview.importable);
       setResult(response);
@@ -66,6 +71,7 @@ export function ServerBulkImport({ open, existingServers, onClose, onImported }:
     }
     setFileName(file.name);
     setResult(null);
+    setSubmittedPreview(null);
     setMessage('');
     if (file.size > serverBulkImportMaxBytes) {
       setFileIssue('too-large');
@@ -77,13 +83,26 @@ export function ServerBulkImport({ open, existingServers, onClose, onImported }:
   }
 
   function downloadTemplate() {
-    const blob = new Blob([buildServerBulkImportTemplate()], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = 'colipas-server-import-template.csv';
-    anchor.click();
-    URL.revokeObjectURL(url);
+    downloadTextFile(
+      'colipas-server-import-template.csv',
+      buildServerBulkImportTemplate(),
+      'text/csv;charset=utf-8',
+    );
+  }
+
+  function downloadValidationReport() {
+    if (reportPreview.rows.length === 0) {
+      return;
+    }
+    downloadTextFile(
+      'colipas-server-import-validation.csv',
+      buildServerBulkImportValidationReport(reportPreview, {
+        ready: t('servers.bulkImport.rowReady'),
+        formatIssues: (issues) => formatRowIssues(issues, t),
+      }),
+      'text/csv;charset=utf-8',
+    );
+    setMessage(t('servers.bulkImport.reportDownloaded', { count: reportPreview.rows.length }));
   }
 
   function resetImport() {
@@ -91,6 +110,7 @@ export function ServerBulkImport({ open, existingServers, onClose, onImported }:
     setFileIssue(null);
     setFileName('');
     setResult(null);
+    setSubmittedPreview(null);
     setMessage('');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -146,6 +166,12 @@ export function ServerBulkImport({ open, existingServers, onClose, onImported }:
             <Download size={15} />
             {t('servers.bulkImport.template')}
           </button>
+          {reportPreview.rows.length > 0 && globalIssues.length === 0 && (
+            <button type="button" className="tool-button" data-server-bulk-import-report="true" onClick={downloadValidationReport}>
+              <FileCheck2 size={15} />
+              {t('servers.bulkImport.report')}
+            </button>
+          )}
           {(source || fileIssue) && (
             <button type="button" className="tool-button" onClick={resetImport}>
               <X size={15} />
@@ -165,6 +191,7 @@ export function ServerBulkImport({ open, existingServers, onClose, onImported }:
               setSource(event.target.value);
               setFileIssue(null);
               setResult(null);
+              setSubmittedPreview(null);
               setMessage('');
             }}
           />
@@ -272,4 +299,16 @@ function formatRowIssues(
   t: (key: string, vars?: Record<string, string | number>) => string,
 ) {
   return issues.map((issue) => t(`servers.bulkImport.rowIssue.${issue}`)).join(' / ');
+}
+
+function downloadTextFile(fileName: string, content: string, type: string) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }

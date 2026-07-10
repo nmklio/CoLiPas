@@ -110,8 +110,8 @@ const fleetViewFeature = {
 const bulkImportFeature = {
   icon: FileUp,
   title: '安全批量资产导入',
-  desc: '支持 CSV、JSON、文件选择和粘贴预览，单次最多登记 500 台无凭据资产；重复名称或公网 IP 自动跳过，密码、私钥和 Token 字段直接拒绝。',
-  tags: ['批量迁移', '凭据零导入'],
+  desc: '支持 CSV、JSON、文件选择和粘贴预览，可下载带表格公式注入防护的本地校验报告；单次最多登记 500 台无凭据资产。',
+  tags: ['批量迁移', '本地校验报告'],
   featureId: 'server-bulk-import',
 };
 

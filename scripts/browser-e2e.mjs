@@ -1208,7 +1208,7 @@ async function assertServerBulkImportPanel(targetPage) {
       'name,provider,publicIp,privateIp,region,os,tags',
       `${nameA},Browser Lab,192.0.2.241,10.91.0.1,,Debian 13,browser|bulk`,
       `${nameB},Browser Lab,192.0.2.242,10.91.0.2,JP - Tokyo,Ubuntu 24.04,browser|api`,
-      `x,Browser Lab,192.0.2.243,,SG - Singapore,Linux,invalid`,
+      `x,Browser Lab,192.0.2.243,,=2+2,Linux,invalid`,
       `${nameA.toUpperCase()},Browser Lab,192.0.2.244,,US - California,Linux,duplicate`,
     ].join('\n'));
     const summary = panel.locator('[data-server-bulk-import-summary="true"]');
@@ -1220,6 +1220,27 @@ async function assertServerBulkImportPanel(targetPage) {
     if (await panel.locator('[data-server-bulk-import-row]').count() !== 4) {
       throw new Error('Bulk import preview did not render all four input rows');
     }
+    const [validationReportDownload] = await Promise.all([
+      targetPage.waitForEvent('download', { timeout: 10000 }),
+      panel.locator('[data-server-bulk-import-report="true"]').click(),
+    ]);
+    if (validationReportDownload.suggestedFilename() !== 'colipas-server-import-validation.csv') {
+      throw new Error(`Bulk import validation report used an unexpected filename: ${validationReportDownload.suggestedFilename()}`);
+    }
+    const validationReportPath = await validationReportDownload.path();
+    const validationReport = validationReportPath ? fs.readFileSync(validationReportPath, 'utf8') : '';
+    if (
+      !validationReport.startsWith('\uFEFFrow,name,provider,publicIp,privateIp,region,os,tags,status')
+      || !validationReport.includes(nameA)
+      || !validationReport.includes(nameB)
+      || !/Invalid name|Duplicate name/i.test(validationReport)
+      || !validationReport.includes("'=2+2")
+      || /(?:^|,)=2\+2(?:,|$)/m.test(validationReport)
+      || /password|private.?key|api.?key|token|credential-object|should-not-import/i.test(validationReport)
+    ) {
+      throw new Error(`Bulk import validation report was incomplete or unsafe: ${validationReport.slice(0, 500)}`);
+    }
+    await panel.getByText(/local 4-row validation report/i).waitFor({ timeout: 5000 });
     await assertNoHorizontalOverflow(targetPage, 'desktop server bulk import');
     await captureVisualEvidence(targetPage, 'desktop-server-bulk-import', ['[data-server-bulk-import="true"]', '[data-server-bulk-import-summary="true"]']);
 

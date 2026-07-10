@@ -123,7 +123,7 @@ function buildLandingCheck() {
       await expectLocatorCount(page.locator('[data-colipas-feature="fleet-views"]'), 1, 'landing fleet views feature card');
       await expectText(page.locator('[data-colipas-feature="fleet-views"]'), /资产视图|fleet views|browser/i, 'landing fleet views copy');
       await expectLocatorCount(page.locator('[data-colipas-feature="server-bulk-import"]'), 1, 'landing server bulk import feature card');
-      await expectText(page.locator('[data-colipas-feature="server-bulk-import"]'), /批量资产导入|bulk import|500|CSV|JSON/i, 'landing server bulk import copy');
+      await expectText(page.locator('[data-colipas-feature="server-bulk-import"]'), /批量资产导入|bulk import|500|CSV|JSON|校验报告|validation report/i, 'landing server bulk import copy');
       await expectLocatorCount(page.locator('[data-colipas-feature="command-palette-context"]'), 1, 'landing contextual command palette feature card');
       await expectText(page.locator('[data-colipas-feature="command-palette-context"]'), /上下文命令面板|command palette|最近使用/i, 'landing contextual command palette copy');
       await expectLocatorCount(page.locator('[data-colipas-feature="operations-inbox"]'), 1, 'landing operations inbox feature card');
@@ -168,7 +168,7 @@ function buildDocsCheck() {
       await expectLocatorCount(page.locator('[data-colipas-docs-fleet-views="true"]'), 1, 'docs fleet views section');
       await expectText(page.locator('[data-colipas-docs-fleet-views="true"]'), /资产视图|fleet views|browser/i, 'docs fleet views copy');
       await expectLocatorCount(page.locator('[data-colipas-docs-feature="server-bulk-import"]'), 1, 'docs server bulk import section');
-      await expectText(page.locator('[data-colipas-docs-feature="server-bulk-import"]'), /批量导入|bulk import|500|2 MB|CSV|JSON/i, 'docs server bulk import copy');
+      await expectText(page.locator('[data-colipas-docs-feature="server-bulk-import"]'), /批量导入|bulk import|500|2 MB|CSV|JSON|校验报告|公式注入|validation report/i, 'docs server bulk import copy');
       await expectLocatorCount(page.locator('[data-colipas-docs-mobile-controls="true"]'), 1, 'docs mobile quick controls section');
       await expectText(page.locator('[data-colipas-docs-mobile-controls="true"]'), /移动端快捷控制|quick controls|モバイル/i, 'docs mobile quick controls copy');
       await expectLocatorCount(page.locator('[data-colipas-docs-command-palette="true"]'), 1, 'docs contextual command palette section');

@@ -6096,6 +6096,17 @@ main {
   font-size: 12px;
 }
 
+.server-bulk-import-source-actions .tool-button[data-server-bulk-import-report="true"] {
+  border-color: rgba(15, 118, 110, 0.22);
+  background: #f1faf8;
+  color: #176b64;
+}
+
+.server-bulk-import-source-actions .tool-button[data-server-bulk-import-report="true"]:hover {
+  border-color: rgba(15, 118, 110, 0.38);
+  background: #e7f7f3;
+}
+
 .server-bulk-import-source-actions > span {
   min-width: 0;
   max-width: min(360px, 100%);

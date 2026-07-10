@@ -6410,14 +6410,14 @@ function assertServerBulkImportGuards() {
 
   for (const [label, source, fragments] of [
     ['inventory wiring', inventorySource, ['ServerBulkImport', 'data-server-bulk-import-toggle="true"', 'setBulkImportOpen(false)']],
-    ['bulk import component', componentSource, ['data-server-bulk-import="true"', 'data-server-bulk-import-source="true"', 'data-server-bulk-import-summary="true"', 'data-server-bulk-import-submit="true"', 'serverBulkImportMaxBytes']],
-    ['bulk import parser', parserSource, ['serverBulkImportLimit = 500', 'serverBulkImportMaxBytes = 2 * 1024 * 1024', 'sensitiveKeyPattern', "'sensitive-columns'", "'duplicate-public-ip'", 'buildServerBulkImportTemplate']],
+    ['bulk import component', componentSource, ['data-server-bulk-import="true"', 'data-server-bulk-import-source="true"', 'data-server-bulk-import-summary="true"', 'data-server-bulk-import-report="true"', 'data-server-bulk-import-submit="true"', 'serverBulkImportMaxBytes']],
+    ['bulk import parser', parserSource, ['serverBulkImportLimit = 500', 'serverBulkImportMaxBytes = 2 * 1024 * 1024', 'sensitiveKeyPattern', "'sensitive-columns'", "'duplicate-public-ip'", 'buildServerBulkImportTemplate', 'buildServerBulkImportValidationReport', 'escapeSpreadsheetCsvCell', "/^[=+\\-@]/"]],
     ['bulk import service', serviceSource, ['bulkImportServersSchema', '.max(500)', 'bulkImportServerSchema', '}).strict()', 'upsertServerRows(imported)', "action: 'SERVER_BULK_IMPORT'", 'normalizeServerIdentityKey']],
     ['bulk database transaction', databaseSource, ['export function upsertServerRows', "db.exec('BEGIN IMMEDIATE')", "db.exec('COMMIT')", "db.exec('ROLLBACK')"]],
     ['bulk route', appSource, ["app.post('/api/servers/import'", 'bulkImportServers(request.body)']],
     ['bulk API client', apiClientSource, ['BulkImportServerPayload', 'BulkImportServersResponse', "fetcher('/api/servers/import'"]],
     ['bulk responsive CSS', globalCss, ['.server-bulk-import', '.server-bulk-import-summary', '.server-bulk-import-table-wrap', '@media (max-width: 620px)']],
-    ['bulk browser E2E', browserE2eSource, ['assertServerBulkImportPanel', 'assertMobileServerBulkImportLayout', 'desktop-server-bulk-import', 'mobile-server-bulk-import']],
+    ['bulk browser E2E', browserE2eSource, ['assertServerBulkImportPanel', 'assertMobileServerBulkImportLayout', 'colipas-server-import-validation.csv', "'=2+2", 'desktop-server-bulk-import', 'mobile-server-bulk-import']],
     ['bulk large simulation', largeSimulationSource, ["postJson(baseUrl, '/api/servers/import'", 'offset += 500', 'transaction batch(es)']],
   ]) {
     const missing = fragments.filter((fragment) => !source.includes(fragment));
@@ -6430,6 +6430,8 @@ function assertServerBulkImportGuards() {
     'servers.bulkImport.open',
     'servers.bulkImport.title',
     'servers.bulkImport.safetyDetail',
+    'servers.bulkImport.report',
+    'servers.bulkImport.reportDownloaded',
     'servers.bulkImport.issue.sensitive-columns',
     'servers.bulkImport.rowIssue.duplicate-public-ip',
   ]) {
@@ -6445,7 +6447,7 @@ function assertServerBulkImportGuards() {
     ['README_JP.md', jpReadmeSource, '安全な一括インポート'],
     ['MarketingPage.tsx', marketingSource, 'data-colipas-feature={featureId}'],
     ['DocsPage.tsx', docsSource, 'data-colipas-docs-feature={featureId}'],
-    ['server-update.sh landing page', serverUpdateSource, 'data-colipas-feature="server-bulk-import"'],
+    ['server-update.sh landing page', serverUpdateSource, 'serverBulkImportFeatureCard'],
     ['server-update.sh docs page', serverUpdateSource, 'data-colipas-docs-feature="server-bulk-import"'],
   ]) {
     if (!source.includes(phrase)) {

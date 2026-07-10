@@ -42,6 +42,11 @@ export interface ServerBulkImportPreview {
   };
 }
 
+export interface ServerBulkImportReportLabels {
+  ready: string;
+  formatIssues: (issues: ServerBulkImportRowIssue[]) => string;
+}
+
 const fieldAliases: Record<keyof BulkImportServerPayload, string[]> = {
   name: ['name', 'servername', 'server', 'assetname', '名称', '服务器名称', '資産名', 'サーバー名'],
   provider: ['provider', 'vendor', 'cloudprovider', '厂商', '云厂商', 'プロバイダー'],
@@ -122,6 +127,27 @@ export function buildServerBulkImportTemplate() {
     'prod-api-01,Example Cloud,203.0.113.10,10.0.0.10,US - California,Ubuntu 24.04,prod|api',
     'prod-db-01,Example Cloud,203.0.113.11,10.0.0.11,US - California,Debian 13,prod|database',
   ].join('\n');
+}
+
+export function buildServerBulkImportValidationReport(
+  preview: ServerBulkImportPreview,
+  labels: ServerBulkImportReportLabels,
+) {
+  const rows = preview.rows.map((row) => [
+    row.rowNumber,
+    row.name,
+    row.provider,
+    row.publicIp,
+    row.privateIp,
+    row.region,
+    row.os,
+    row.tags.join('|'),
+    row.issues.length === 0 ? labels.ready : labels.formatIssues(row.issues),
+  ]);
+  return `\uFEFF${[
+    ['row', 'name', 'provider', 'publicIp', 'privateIp', 'region', 'os', 'tags', 'status'],
+    ...rows,
+  ].map((row) => row.map(escapeSpreadsheetCsvCell).join(',')).join('\r\n')}`;
 }
 
 function parseJsonRows(source: string) {
@@ -327,6 +353,16 @@ function isSensitiveFieldName(value: string) {
 
 function normalizeIdentity(value: string) {
   return value.trim().toLocaleLowerCase('en-US');
+}
+
+function escapeSpreadsheetCsvCell(value: string | number) {
+  let normalized = String(value).replace(/\r\n?/g, '\n');
+  if (/^[=+\-@]/.test(normalized)) {
+    normalized = `'${normalized}`;
+  }
+  return /[",\n]/.test(normalized)
+    ? `"${normalized.replaceAll('"', '""')}"`
+    : normalized;
 }
 
 function isValidIp(value: string) {

@@ -276,9 +276,12 @@ if (!html.includes('data-colipas-feature="fleet-views"')) {
       <article class="feature-card" data-colipas-feature="fleet-views">${landingIcon('checklist', 'icon feature-icon')}<h3>资产视图</h3><p>把关键词、厂商、状态、地域和健康筛选保存为浏览器本机视图，排障时可一键恢复工作范围。</p><div class="tags"><span>本机保存</span><span>一键恢复</span></div></article>`);
 }
 
+const serverBulkImportFeatureCard = `<article class="feature-card" data-colipas-feature="server-bulk-import">${landingIcon('assets', 'icon feature-icon')}<h3>安全批量资产导入</h3><p>选择或粘贴 CSV / JSON 后先预览校验，可下载带表格公式注入防护的本地校验报告；单次最多导入 500 台无凭据资产。</p><div class="tags"><span>批量迁移</span><span>本地校验报告</span></div></article>`;
 if (!html.includes('data-colipas-feature="server-bulk-import"')) {
   replaceOnce(/(<div class="feature-grid">)/, `$1
-      <article class="feature-card" data-colipas-feature="server-bulk-import">${landingIcon('assets', 'icon feature-icon')}<h3>安全批量资产导入</h3><p>选择或粘贴 CSV / JSON 后先预览校验，单次最多导入 500 台无凭据资产；重复名称或公网 IP 自动跳过，密码、私钥和 Token 字段直接拒绝。</p><div class="tags"><span>批量迁移</span><span>凭据零导入</span></div></article>`);
+      ${serverBulkImportFeatureCard}`);
+} else {
+  replaceOnce(/<article class="feature-card" data-colipas-feature="server-bulk-import">[\s\S]*?<\/article>/, serverBulkImportFeatureCard);
 }
 
 if (!html.includes('data-colipas-feature="command-palette-context"')) {
@@ -1541,7 +1544,7 @@ P1：补齐 SSH、资产和预检证据
         <div class="grid">
           <article class="doc-card" data-colipas-docs-feature="server-bulk-import">
             <h3>安全批量导入</h3>
-            <p>支持 CSV、JSON、文件选择和粘贴预览，文件最大 2 MB、单次最多 500 行。只导入名称、厂商、IP、地域、系统和标签；重复名称或公网 IP 自动跳过，密码、私钥、Passphrase、API Key、Token 和 SSH 凭据字段会被拒绝。</p>
+            <p>支持 CSV、JSON、文件选择和粘贴预览，文件最大 2 MB、单次最多 500 行。可下载本地 CSV 校验报告，导出值会防护表格公式注入且不会额外上传数据；重复名称或公网 IP 自动跳过，密码、私钥、Passphrase、API Key、Token 和 SSH 凭据字段会被拒绝。</p>
           </article>
           <article class="doc-card">
             <h3>资产模式</h3>

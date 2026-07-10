@@ -62,7 +62,7 @@ The runtime is intentionally simple. One Node.js process serves the Express API 
 | --- | --- |
 | Inventory and map | Cloud account overview, custom provider names, server lifecycle status, region and OS detection, resource refresh, and map grouping. |
 | Server access | Manual onboarding, inventory-only mode, simulated SSH, password/private-key SSH verification, diagnostics, and guarded power actions. |
-| Safe bulk inventory import | CSV / JSON file selection or paste preview, 2 MB and 500-row limits, duplicate name/IP skipping, transactional SQLite writes, and strict rejection of passwords, private keys, tokens, API keys, or SSH credential fields. |
+| Safe bulk inventory import | CSV / JSON file selection or paste preview, local spreadsheet-safe validation report export, 2 MB and 500-row limits, duplicate name/IP skipping, transactional SQLite writes, and strict rejection of passwords, private keys, tokens, API keys, or SSH credential fields. |
 | Live SSH terminal | xterm-style browser terminal, WebSocket streaming with compatible fallback, persistent Operate / Focus / Diagnose workspace presets, copy/clear tools, `Ctrl+C`, large-output guards, visible disconnect recovery, manual reconnect without command replay, and backend shell cleanup when the panel closes. |
 | Fleet views | Save common inventory filters as up to eight browser-only views, then restore a focused operational scope without sending filter or asset data anywhere. |
 | Contextual launch guide | Full six-step release checklist on Overview; a compact, persistent workspace summary elsewhere or in Performance mode, with a one-click path back to complete evidence and the next remediation. |
