@@ -14,6 +14,7 @@ try {
   await assertConcurrentAiStreams();
   await assertConcurrentCustomApiBlocks();
   await assertConcurrentProfileWrites();
+  await assertConcurrentSessionCapacity();
 
   console.log('ok concurrency check completed');
 } finally {
@@ -247,6 +248,122 @@ async function assertConcurrentProfileWrites() {
   }
 
   console.log('ok concurrent profile writes remain valid');
+}
+
+async function assertConcurrentSessionCapacity() {
+  const loginResponses = await Promise.all(
+    Array.from({ length: 24 }, (_, index) => fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': `Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/120.0.6099.${100 + index} Mobile Safari/537.36`,
+      },
+      body: JSON.stringify({ username, password }),
+    })),
+  );
+  if (!loginResponses.every((response) => response.ok)) {
+    throw new Error('Concurrent valid logins returned a failed response');
+  }
+  const cookies = loginResponses.map((response) => response.headers.get('set-cookie')?.split(';')[0] ?? '');
+  if (cookies.some((cookie) => !cookie)) {
+    throw new Error('Concurrent valid logins did not return every session cookie');
+  }
+
+  const guaranteedLatestResponse = await fetch(`${baseUrl}/api/auth/login`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'User-Agent': 'Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/120.0.6099.999 Mobile Safari/537.36',
+    },
+    body: JSON.stringify({ username, password }),
+  });
+  const guaranteedLatestCookie = guaranteedLatestResponse.headers.get('set-cookie')?.split(';')[0] ?? '';
+  if (!guaranteedLatestResponse.ok || !guaranteedLatestCookie) {
+    throw new Error(`Deterministic newest login failed with HTTP ${guaranteedLatestResponse.status}`);
+  }
+
+  const latestHeaders = { Cookie: guaranteedLatestCookie };
+  const sessionsResponse = await fetch(`${baseUrl}/api/account/sessions`, { headers: latestHeaders });
+  const sessions = await safeJson(sessionsResponse);
+  if (
+    !sessionsResponse.ok
+    || !Number.isInteger(sessions?.summary?.maxActive)
+    || sessions.summary.active !== sessions.summary.maxActive
+    || sessions.summary.available !== 0
+    || sessions.summary.atCapacity !== true
+    || sessions.summary.otherSessions !== sessions.summary.maxActive - 1
+  ) {
+    throw new Error(`Concurrent session capacity returned an unexpected summary: ${JSON.stringify(sessions?.summary)}`);
+  }
+
+  const cookieStatuses = await Promise.all(
+    [...cookies, guaranteedLatestCookie].map(async (cookie) => {
+      const response = await fetch(`${baseUrl}/api/account`, { headers: { Cookie: cookie } });
+      return response.status;
+    }),
+  );
+  const validCookieCount = cookieStatuses.filter((status) => status === 200).length;
+  const retiredCookieCount = cookieStatuses.filter((status) => status === 401).length;
+  if (
+    validCookieCount !== sessions.summary.maxActive
+    || retiredCookieCount !== cookieStatuses.length - sessions.summary.maxActive
+    || cookieStatuses.some((status) => status !== 200 && status !== 401)
+  ) {
+    throw new Error(`Concurrent session capacity returned unexpected cookie statuses: ${JSON.stringify(cookieStatuses)}`);
+  }
+  const latestSessionResponse = await fetch(`${baseUrl}/api/account`, { headers: latestHeaders });
+  if (!latestSessionResponse.ok) {
+    throw new Error(`Deterministic newest login must remain active, got HTTP ${latestSessionResponse.status}`);
+  }
+
+  const cleanupResponse = await fetch(`${baseUrl}/api/account/sessions/revoke-others`, {
+    method: 'POST',
+    headers: latestHeaders,
+  });
+  const cleanup = await safeJson(cleanupResponse);
+  if (!cleanupResponse.ok || cleanup?.sessions?.summary?.active !== 1) {
+    throw new Error('Concurrent session capacity cleanup did not retain exactly the newest session');
+  }
+
+  const sequentialCookies = [];
+  for (let index = 0; index < sessions.summary.maxActive; index += 1) {
+    const response = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/121.0.6167.${100 + index} Safari/537.36`,
+      },
+      body: JSON.stringify({ username, password }),
+    });
+    const cookie = response.headers.get('set-cookie')?.split(';')[0] ?? '';
+    if (!response.ok || !cookie) {
+      throw new Error(`Sequential capacity login ${index + 1} failed with HTTP ${response.status}`);
+    }
+    sequentialCookies.push(cookie);
+  }
+  const deterministicOldestResponse = await fetch(`${baseUrl}/api/account`, {
+    headers: { Cookie: guaranteedLatestCookie },
+  });
+  const deterministicNewestHeaders = { Cookie: sequentialCookies.at(-1) };
+  const deterministicNewestResponse = await fetch(`${baseUrl}/api/account`, {
+    headers: deterministicNewestHeaders,
+  });
+  if (deterministicOldestResponse.status !== 401 || !deterministicNewestResponse.ok) {
+    throw new Error(
+      `Sequential capacity retirement expected oldest=401/newest=200, got oldest=${deterministicOldestResponse.status}/newest=${deterministicNewestResponse.status}`,
+    );
+  }
+  const finalCleanupResponse = await fetch(`${baseUrl}/api/account/sessions/revoke-others`, {
+    method: 'POST',
+    headers: deterministicNewestHeaders,
+  });
+  const finalCleanup = await safeJson(finalCleanupResponse);
+  if (!finalCleanupResponse.ok || finalCleanup?.sessions?.summary?.active !== 1) {
+    throw new Error('Sequential session capacity cleanup did not retain exactly the newest session');
+  }
+  authHeaders = deterministicNewestHeaders;
+
+  console.log(`ok concurrent login sessions stay bounded at ${sessions.summary.maxActive}; deterministic order retires the oldest session`);
 }
 
 function deterministicIp(index) {

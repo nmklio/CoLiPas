@@ -3236,6 +3236,33 @@ button:disabled {
   gap: 14px;
 }
 
+.account-session-heading-actions,
+.account-session-live {
+  display: inline-flex;
+  align-items: center;
+}
+
+.account-session-heading-actions {
+  flex: 0 0 auto;
+  gap: 9px;
+}
+
+.account-session-live {
+  gap: 7px;
+  color: #507076;
+  font-size: 10px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.account-session-live i {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #18a999;
+  box-shadow: 0 0 0 4px rgba(24, 169, 153, 0.12);
+}
+
 .account-session-title-icon {
   width: 42px;
   height: 42px;
@@ -3284,6 +3311,69 @@ button:disabled {
   color: var(--text);
   font-size: 20px;
   line-height: 1;
+}
+
+.account-session-capacity {
+  display: grid;
+  grid-template-columns: minmax(150px, auto) minmax(120px, 1fr) minmax(190px, auto);
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgba(15, 118, 110, 0.14);
+  border-radius: 10px;
+  padding: 9px 11px;
+  background: rgba(238, 249, 247, 0.7);
+}
+
+.account-session-capacity-copy {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.account-session-capacity-copy span,
+.account-session-capacity p {
+  color: #5d7479;
+  font-size: 10px;
+}
+
+.account-session-capacity-copy strong {
+  color: #126b64;
+  font-size: 11px;
+}
+
+.account-session-capacity-track {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #d9e9e8;
+}
+
+.account-session-capacity-track i {
+  display: block;
+  min-width: 4px;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #18b5a6, #267785);
+  transition: width 180ms ease;
+}
+
+.account-session-capacity p {
+  margin: 0;
+  text-align: right;
+}
+
+.account-session-capacity.is-full {
+  border-color: rgba(190, 92, 44, 0.24);
+  background: #fff8f2;
+}
+
+.account-session-capacity.is-full .account-session-capacity-copy strong {
+  color: #a95327;
+}
+
+.account-session-capacity.is-full .account-session-capacity-track i {
+  background: linear-gradient(90deg, #d08a3b, #b85f35);
 }
 
 .account-session-list {
@@ -21560,6 +21650,25 @@ pre {
   .account-session-heading,
   .account-session-footer {
     align-items: stretch;
+  }
+
+  .account-session-heading {
+    flex-direction: column;
+  }
+
+  .account-session-heading-actions {
+    width: 100%;
+    justify-content: space-between;
+    padding-left: 52px;
+  }
+
+  .account-session-capacity {
+    grid-template-columns: 1fr;
+    gap: 7px;
+  }
+
+  .account-session-capacity p {
+    text-align: left;
   }
 
   .account-session-footer {

@@ -13,6 +13,7 @@ const envSchema = z.object({
   ADMIN_PASSWORD: z.string().min(8).default('admin123456'),
   SESSION_SECRET: z.string().min(16).default('colipas-local-session-secret'),
   SESSION_TTL_HOURS: z.coerce.number().positive().max(168).default(12),
+  SESSION_MAX_ACTIVE: z.coerce.number().int().min(2).max(64).default(12),
   RELEASE_VERIFY_TOKEN: z.string().default('').refine((value) => value === '' || value.length >= 24, {
     message: 'RELEASE_VERIFY_TOKEN must be empty or at least 24 characters',
   }),
@@ -59,6 +60,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       adminPassword: parsed.ADMIN_PASSWORD,
       sessionSecret: parsed.SESSION_SECRET,
       sessionTtlMs: parsed.SESSION_TTL_HOURS * 60 * 60 * 1000,
+      maxActiveSessions: parsed.SESSION_MAX_ACTIVE,
       secureCookies: parsed.NODE_ENV === 'production' && (
         parsed.COLIPAS_SECURE_COOKIES === '1'
         || parsed.RELEASE_PUBLIC_URL.toLowerCase().startsWith('https://')

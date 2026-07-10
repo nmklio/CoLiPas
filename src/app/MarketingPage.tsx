@@ -133,8 +133,8 @@ const operationsInboxFeature = {
 const accountSessionFeature = {
   icon: MonitorSmartphone,
   title: '登录会话控制',
-  desc: '在账户设置中查看当前与其他登录设备，可逐个撤销或一键撤销其他会话；仅保留解析后的浏览器与系统标签，不返回原始 IP 或 User-Agent。',
-  tags: ['异常访问清理', '隐私最小化'],
+  desc: '账户设置每 15 秒同步当前与其他登录设备，可逐个或批量撤销；活跃会话默认最多保留 12 个，超限时自动退出最旧会话，且不返回原始 IP 或 User-Agent。',
+  tags: ['15 秒自动同步', '容量边界'],
   featureId: 'account-session-control',
 };
 

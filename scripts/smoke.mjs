@@ -481,6 +481,9 @@ const otherManagedSession = accountSessionsBody.items?.find((item) => !item.curr
 if (
   accountSessionsBody.summary?.active !== 2
   || accountSessionsBody.summary?.otherSessions !== 1
+  || accountSessionsBody.summary?.maxActive !== 12
+  || accountSessionsBody.summary?.available !== 10
+  || accountSessionsBody.summary?.atCapacity !== false
   || !currentManagedSession
   || !otherManagedSession
   || !/Chrome · Windows/.test(currentManagedSession.deviceLabel)
@@ -512,6 +515,7 @@ if (
   revokeOtherSessionBody.revoked !== 1
   || revokeOtherSessionBody.sessions?.summary?.active !== 1
   || revokeOtherSessionBody.sessions?.summary?.otherSessions !== 0
+  || revokeOtherSessionBody.sessions?.summary?.available !== 11
 ) {
   throw new Error(`/api/account/sessions/:id returned unexpected revoke result: ${JSON.stringify(revokeOtherSessionBody)}`);
 }
@@ -554,6 +558,7 @@ if (
   revokeOtherSessionsBody.revoked !== 2
   || revokeOtherSessionsBody.sessions?.summary?.active !== 1
   || revokeOtherSessionsBody.sessions?.summary?.otherSessions !== 0
+  || revokeOtherSessionsBody.sessions?.summary?.available !== 11
 ) {
   throw new Error(`/api/account/sessions/revoke-others returned unexpected result: ${JSON.stringify(revokeOtherSessionsBody)}`);
 }
@@ -4304,22 +4309,30 @@ function assertAccountUiGuards() {
     "app.post('/api/account/sessions/revoke-others'",
     'buildSessionManagementId',
     'describeSessionDevice',
+    'retireOldestSessions',
+    'SESSION_MAX_ACTIVE',
     'data-account-session-control="true"',
     'data-account-session-current',
     'data-account-session-revoke-others="true"',
+    'data-account-session-auto-refresh="true"',
+    'data-account-session-capacity="true"',
     'fetchAccountSessions',
     'revokeOtherAccountSessions',
+    'accountSessionRefreshMs = 15_000',
+    'assertConcurrentSessionCapacity',
+    'SESSION_MAX_ACTIVE: String(sessionCapacity)',
     '.account-session-list::before',
     '.account-session-row.is-current',
+    '.account-session-capacity-track',
     'desktop-account-session-control',
     'mobile-account-session-control',
   ];
-  const accountSessionCombinedSource = `${authSource}\n${serverAppSource}\n${accountSessionControlSource}\n${i18nSource}\n${globalCss}\n${fs.readFileSync(new URL('../src/services/apiClient.ts', import.meta.url), 'utf8')}\n${fs.readFileSync(new URL('../scripts/browser-e2e.mjs', import.meta.url), 'utf8')}`;
+  const accountSessionCombinedSource = `${authSource}\n${serverAppSource}\n${accountSessionControlSource}\n${i18nSource}\n${globalCss}\n${fs.readFileSync(new URL('../src/server/config.ts', import.meta.url), 'utf8')}\n${fs.readFileSync(new URL('../src/services/apiClient.ts', import.meta.url), 'utf8')}\n${fs.readFileSync(new URL('../scripts/browser-e2e.mjs', import.meta.url), 'utf8')}\n${fs.readFileSync(new URL('../scripts/concurrency-check.mjs', import.meta.url), 'utf8')}\n${fs.readFileSync(new URL('../scripts/large-user-simulation.mjs', import.meta.url), 'utf8')}`;
   const missingAccountSessions = accountSessionFragments.filter((fragment) => !accountSessionCombinedSource.includes(fragment));
   if (missingAccountSessions.length) {
     throw new Error(`Account session control is incomplete: ${missingAccountSessions.join(', ')}`);
   }
-  for (const key of ['account.sessionsTitle', 'account.sessionsDesc', 'account.sessionsCurrent', 'account.sessionsRevoke', 'account.sessionsRevokeOthers', 'account.sessionsPrivacy']) {
+  for (const key of ['account.sessionsTitle', 'account.sessionsDesc', 'account.sessionsCurrent', 'account.sessionsRevoke', 'account.sessionsRevokeOthers', 'account.sessionsPrivacy', 'account.sessionsAutoRefresh', 'account.sessionsSyncing', 'account.sessionsCapacity', 'account.sessionsCapacityAvailable', 'account.sessionsCapacityFull', 'account.sessionsCapacityPolicy']) {
     const count = (i18nSource.match(new RegExp(key.replace('.', '\\.'), 'g')) ?? []).length;
     if (count < 3) {
       throw new Error(`Account session control i18n key is missing languages: ${key}`);
@@ -5785,17 +5798,17 @@ function assertInteractiveDeployDocsAndScriptGuards() {
   }
 
   const accountSessionControlSources = [
-    ['README.md', readmeSource, 'active-session inventory'],
-    ['README_CN.md', cnReadmeSource, '活跃设备查看'],
-    ['README_JP.md', jpReadmeSource, 'アクティブ端末'],
-    ['MarketingPage.tsx', marketingSource, '登录会话控制'],
-    ['DocsPage.tsx', docsPageSource, '管理登录会话'],
-    ['server-update.sh landing card', serverUpdateSource, 'data-colipas-feature="account-session-control"'],
-    ['server-update.sh docs section', serverUpdateSource, 'data-colipas-docs-feature="account-session-control"'],
-    ['server-update.sh docs navigation', serverUpdateSource, 'href="#account-sessions"'],
+    ['README.md', readmeSource, ['active-session inventory', '15-second foreground sync', 'SESSION_MAX_ACTIVE', 'oldest session']],
+    ['README_CN.md', cnReadmeSource, ['每 15 秒前台自动同步活跃设备', 'SESSION_MAX_ACTIVE', '最旧会话']],
+    ['README_JP.md', jpReadmeSource, ['15 秒ごとのアクティブ端末同期', 'SESSION_MAX_ACTIVE', '最古セッション']],
+    ['MarketingPage.tsx', marketingSource, ['登录会话控制', '15 秒同步', '默认最多保留 12 个']],
+    ['DocsPage.tsx', docsPageSource, ['管理登录会话', '每 15 秒自动同步', 'SESSION_MAX_ACTIVE']],
+    ['server-update.sh landing card', serverUpdateSource, ['data-colipas-feature="account-session-control"', '15 秒同步', '默认最多保留 12 个']],
+    ['server-update.sh docs section', serverUpdateSource, ['data-colipas-docs-feature="account-session-control"', 'SESSION_MAX_ACTIVE', '最旧会话']],
+    ['server-update.sh docs navigation', serverUpdateSource, ['href="#account-sessions"']],
   ];
-  for (const [name, source, phrase] of accountSessionControlSources) {
-    if (!source.includes(phrase)) {
+  for (const [name, source, phrases] of accountSessionControlSources) {
+    if (!phrases.every((phrase) => source.includes(phrase))) {
       throw new Error(`${name} must document account session control`);
     }
   }

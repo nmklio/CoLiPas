@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   CalendarClock,
   CheckCircle2,
@@ -16,17 +16,29 @@ import {
   type AccountSessionsResponse,
 } from '../services/apiClient';
 
+const accountSessionRefreshMs = 15_000;
+
 export function AccountSessionControl() {
   const { language, t } = useI18n();
   const [sessions, setSessions] = useState<AccountSessionsResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [revokingId, setRevokingId] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const refreshInFlightRef = useRef(false);
   const locale = getLocale(language);
 
-  const refreshSessions = useCallback(async () => {
-    setLoading(true);
+  const refreshSessions = useCallback(async (options: { silent?: boolean } = {}) => {
+    if (refreshInFlightRef.current) {
+      return;
+    }
+    refreshInFlightRef.current = true;
+    if (options.silent) {
+      setSyncing(true);
+    } else {
+      setLoading(true);
+    }
     setError('');
     try {
       setSessions(await fetchAccountSessions());
@@ -34,11 +46,28 @@ export function AccountSessionControl() {
       setError(nextError instanceof Error ? nextError.message : t('account.sessionsLoadFailed'));
     } finally {
       setLoading(false);
+      setSyncing(false);
+      refreshInFlightRef.current = false;
     }
   }, [t]);
 
   useEffect(() => {
     void refreshSessions();
+    const refreshTimer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void refreshSessions({ silent: true });
+      }
+    }, accountSessionRefreshMs);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshSessions({ silent: true });
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.clearInterval(refreshTimer);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [refreshSessions]);
 
   async function handleRevoke(sessionId: string) {
@@ -71,6 +100,10 @@ export function AccountSessionControl() {
     }
   }
 
+  const capacityPercent = sessions
+    ? Math.min(100, Math.round((sessions.summary.active / Math.max(1, sessions.summary.maxActive)) * 100))
+    : 0;
+
   return (
     <article className="account-settings-card account-session-control" data-account-session-control="true">
       <div className="account-session-heading">
@@ -81,31 +114,62 @@ export function AccountSessionControl() {
             <span>{t('account.sessionsDesc')}</span>
           </div>
         </div>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label={t('account.sessionsRefresh')}
-          title={t('account.sessionsRefresh')}
-          disabled={loading || Boolean(revokingId)}
-          onClick={() => void refreshSessions()}
-        >
-          <RefreshCw size={16} className={loading ? 'spin-icon' : ''} />
-        </button>
+        <div className="account-session-heading-actions">
+          <span className="account-session-live" data-account-session-auto-refresh="true">
+            <i aria-hidden="true" />
+            {syncing
+              ? t('account.sessionsSyncing')
+              : t('account.sessionsAutoRefresh', { seconds: accountSessionRefreshMs / 1000 })}
+          </span>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label={t('account.sessionsRefresh')}
+            title={t('account.sessionsRefresh')}
+            disabled={loading || syncing || Boolean(revokingId)}
+            onClick={() => void refreshSessions()}
+          >
+            <RefreshCw size={16} className={loading || syncing ? 'spin-icon' : ''} />
+          </button>
+        </div>
       </div>
 
       <div className="account-session-summary" aria-label={t('account.sessionsSummary')}>
-        <div>
+        <div data-account-session-active-count="true">
           <span>{t('account.sessionsActive')}</span>
-          <strong>{sessions?.summary.active ?? '—'}</strong>
+          <strong>
+            {sessions
+              ? `${sessions.summary.active} / ${sessions.summary.maxActive}`
+              : '—'}
+          </strong>
         </div>
-        <div>
+        <div data-account-session-current-count="true">
           <span>{t('account.sessionsCurrent')}</span>
           <strong>{sessions?.items.some((session) => session.current) ? '1' : '—'}</strong>
         </div>
-        <div>
+        <div data-account-session-other-count="true">
           <span>{t('account.sessionsOther')}</span>
           <strong>{sessions?.summary.otherSessions ?? '—'}</strong>
         </div>
+      </div>
+
+      <div
+        className={`account-session-capacity${sessions?.summary.atCapacity ? ' is-full' : ''}`}
+        data-account-session-capacity="true"
+        data-account-session-capacity-max={sessions?.summary.maxActive}
+      >
+        <div className="account-session-capacity-copy">
+          <span>{t('account.sessionsCapacity')}</span>
+          <strong>
+            {sessions?.summary.atCapacity
+              ? t('account.sessionsCapacityFull')
+              : t('account.sessionsCapacityAvailable', { count: sessions?.summary.available ?? '—' })}
+          </strong>
+        </div>
+        <span className="account-session-capacity-track" aria-hidden="true">
+          <i style={{ width: `${capacityPercent}%` }} />
+        </span>
+        <p>{t('account.sessionsCapacityPolicy', { max: sessions?.summary.maxActive ?? '—' })}</p>
       </div>
 
       {loading && !sessions ? (

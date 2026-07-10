@@ -8,7 +8,8 @@ import { chromium } from 'playwright';
 
 const root = process.cwd();
 const serverCount = clampNumber(process.env.LARGE_SIM_SERVER_COUNT, 100, 3000, 1000);
-const userCount = clampNumber(process.env.LARGE_SIM_USERS, 4, 80, 24);
+const userCount = clampNumber(process.env.LARGE_SIM_USERS, 4, 64, 24);
+const sessionCapacity = Math.max(12, userCount);
 const createConcurrency = clampNumber(process.env.LARGE_SIM_CREATE_CONCURRENCY, 2, 64, 16);
 const expectedServerRenderBatch = 120;
 const dataDir = path.resolve(root, '.tmp-large-simulation-data');
@@ -37,7 +38,7 @@ try {
   appServer = startApplicationServer(port, upstreamPort);
   await waitForHealth(baseUrl);
 
-  const adminHeaders = await login(baseUrl);
+  let adminHeaders = await login(baseUrl);
   await timed('insertServersMs', async () => {
     const payloads = buildServerPayloads(serverCount);
     const connectedPayloads = payloads.filter((payload) => payload.ssh.verifyMode === 'simulate');
@@ -72,11 +73,13 @@ try {
   });
 
   const sessions = await timed('loginUsersMs', () => loginUsers(baseUrl, userCount));
+  adminHeaders = sessions.at(-1) ?? adminHeaders;
   await timed('apiReadWriteSimulationMs', () => runConcurrentUserSimulation(baseUrl, sessions));
   await timed('operationsSimulationMs', () => runOperationsSimulation(baseUrl, adminHeaders));
   await timed('aiSimulationMs', () => runAiSimulation(baseUrl, adminHeaders));
   await timed('securityAndReleaseSimulationMs', () => runSecurityAndReleaseSimulation(baseUrl, adminHeaders));
   await timed('browserSimulationMs', () => runBrowserSimulation(baseUrl));
+  adminHeaders = await login(baseUrl);
 
   const overview = await getJson(baseUrl, '/api/overview', adminHeaders);
   const serverList = await getJson(baseUrl, '/api/servers', adminHeaders);
@@ -456,6 +459,7 @@ function buildSummary(overview, serverList) {
     settings: {
       requestedServers: serverCount,
       simulatedUsers: userCount,
+      sessionCapacity,
       createConcurrency,
       tempDataDir: path.basename(dataDir),
     },
@@ -674,6 +678,7 @@ function startApplicationServer(appPort, mockPort) {
       ADMIN_USERNAME: adminUsername,
       ADMIN_PASSWORD: adminPassword,
       SESSION_SECRET: 'large-simulation-session-secret',
+      SESSION_MAX_ACTIVE: String(sessionCapacity),
       RELEASE_VERIFY_TOKEN: releaseVerifyToken,
       AI_API_KEY: '',
       COLIPAS_DATA_DIR: dataDir,

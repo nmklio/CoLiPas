@@ -398,6 +398,9 @@ export interface AccountSessionsResponse {
   summary: {
     active: number;
     otherSessions: number;
+    maxActive: number;
+    available: number;
+    atCapacity: boolean;
   };
 }
 

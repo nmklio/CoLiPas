@@ -100,6 +100,8 @@ export function login(input: unknown, request: Request, response: Response, conf
   }
 
   const now = Date.now();
+  pruneExpiredSessions(now);
+  retireOldestSessions(parsed.username, config.auth.maxActiveSessions - 1);
   const session: SessionRecord = {
     id: crypto.randomBytes(32).toString('hex'),
     username: parsed.username,
@@ -240,7 +242,7 @@ export function buildAccountPayload(request: Request, config: RuntimeConfig) {
 
 export function listAccountSessions(request: Request, config: RuntimeConfig) {
   const currentSessionId = requireSessionId(request, config);
-  return buildAccountSessionsPayload(currentSessionId);
+  return buildAccountSessionsPayload(currentSessionId, config.auth.maxActiveSessions);
 }
 
 export function revokeAccountSession(sessionManagementId: unknown, request: Request, config: RuntimeConfig) {
@@ -260,7 +262,7 @@ export function revokeAccountSession(sessionManagementId: unknown, request: Requ
   return {
     ok: true as const,
     revoked: 1,
-    sessions: buildAccountSessionsPayload(currentSessionId),
+    sessions: buildAccountSessionsPayload(currentSessionId, config.auth.maxActiveSessions),
   };
 }
 
@@ -277,7 +279,7 @@ export function revokeOtherAccountSessions(request: Request, config: RuntimeConf
   return {
     ok: true as const,
     revoked,
-    sessions: buildAccountSessionsPayload(currentSessionId),
+    sessions: buildAccountSessionsPayload(currentSessionId, config.auth.maxActiveSessions),
   };
 }
 
@@ -345,9 +347,14 @@ function clearOtherSessions(sessionId: string) {
   }
 }
 
-function buildAccountSessionsPayload(currentSessionId: string) {
+function buildAccountSessionsPayload(currentSessionId: string, maxActiveSessions: number) {
   pruneExpiredSessions();
+  const currentSession = sessions.get(currentSessionId);
+  if (!currentSession) {
+    throw new HttpError(401, '登录已失效，请重新登录', 'AUTH_REQUIRED');
+  }
   const items = Array.from(sessions.values())
+    .filter((session) => session.username === currentSession.username)
     .sort((left, right) => {
       if (left.id === currentSessionId) {
         return -1;
@@ -371,8 +378,21 @@ function buildAccountSessionsPayload(currentSessionId: string) {
     summary: {
       active: items.length,
       otherSessions: items.filter((item) => !item.current).length,
+      maxActive: maxActiveSessions,
+      available: Math.max(0, maxActiveSessions - items.length),
+      atCapacity: items.length >= maxActiveSessions,
     },
   };
+}
+
+function retireOldestSessions(username: string, slotsToKeep: number) {
+  const orderedSessions = Array.from(sessions.values())
+    .filter((session) => session.username === username)
+    .sort((left, right) => left.createdAt - right.createdAt);
+  const retireCount = Math.max(0, orderedSessions.length - Math.max(0, slotsToKeep));
+  for (let index = 0; index < retireCount; index += 1) {
+    sessions.delete(orderedSessions[index].id);
+  }
 }
 
 function pruneExpiredSessions(now = Date.now()) {

@@ -70,6 +70,7 @@ const configRows = [
   ['PORT', '生产 HTTP 端口，推荐保持 8080。'],
   ['ADMIN_USERNAME / ADMIN_PASSWORD', '初始管理员账号，首次部署后立即修改密码。'],
   ['SESSION_SECRET', '会话签名密钥，必须使用长随机字符串。'],
+  ['SESSION_MAX_ACTIVE', '管理员最大活跃会话数，可设置为 2–64，默认 12；达到上限后自动退出最旧会话。'],
   ['AI_BASE_URL / AI_API_KEY / AI_MODEL', 'OpenAI 兼容 API 地址、密钥和默认模型。'],
   ['CUSTOM_API_ALLOWED_HOSTS', '自定义 API 代理允许访问的域名白名单。'],
   ['COLIPAS_DATA_DIR / COLIPAS_DB_PATH', 'SQLite 数据库和运行数据存储位置。'],
@@ -174,9 +175,10 @@ const accountAppearanceUsageBlock = {
 const accountSessionUsageBlock = {
   icon: MonitorSmartphone,
   title: '管理登录会话',
-  body: '账户设置会列出当前浏览器和同一管理员账号的其他活跃登录设备。发现不熟悉的设备时，可单独撤销，也可保留当前浏览器并一键撤销其他全部会话。',
+  body: '账户设置会列出当前浏览器和同一管理员账号的其他活跃登录设备，页面可见时每 15 秒自动同步。发现不熟悉的设备时，可单独撤销，也可保留当前浏览器并一键撤销其他全部会话。',
   points: [
     '当前会话始终受保护，需要退出登录才能关闭',
+    '默认最多保留 12 个活跃会话，可通过 SESSION_MAX_ACTIVE 调整；达到上限后自动退出最旧会话',
     '列表只返回解析后的浏览器和系统标签，不保存或展示原始 IP 与 User-Agent',
     '单个撤销、一键撤销其他会话和修改密码清理会话都会进入安全审计',
   ],
@@ -187,7 +189,7 @@ const accountSessionUsageBlock = {
 const apiRows = [
   ['GET /api/health', '服务健康状态、SQLite 驱动和运行时间。'],
   ['POST /api/auth/login', '管理员登录并写入会话 cookie。'],
-  ['GET /api/account/sessions', '读取当前进程中的活跃登录会话，仅返回脱敏设备标签和时间。'],
+  ['GET /api/account/sessions', '读取活跃登录会话、脱敏设备标签、时间以及容量上限、剩余名额和满载状态。'],
   ['DELETE /api/account/sessions/:id', '撤销指定的其他登录会话；当前会话需要通过退出登录关闭。'],
   ['POST /api/account/sessions/revoke-others', '保留当前会话并撤销同一管理员账号的其他全部登录。'],
   ['GET /api/overview', '云账号、服务器、事件和总览指标。'],

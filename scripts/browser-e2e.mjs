@@ -1305,18 +1305,56 @@ async function assertAccountSettingsAndAiChat(targetPage) {
     || !/Last active/i.test(accountSessionText)
     || !/Expires/i.test(accountSessionText)
     || !/Raw IP addresses and User-Agent values are not stored or returned/i.test(accountSessionText)
+    || !/Syncs every 15s/i.test(accountSessionText)
+    || !/Keeps up to 12/i.test(accountSessionText)
   ) {
     throw new Error(`Account session control is missing status or privacy guidance: ${accountSessionText}`);
   }
+  const activeSessionSummary = accountSessionControl.locator('[data-account-session-active-count="true"] strong');
+  const otherSessionSummary = accountSessionControl.locator('[data-account-session-other-count="true"] strong');
   if (
     await currentAccountSession.getByRole('button', { name: /^Revoke$/i }).count()
     || !(await accountSessionControl.locator('[data-account-session-revoke-others="true"]').isDisabled())
+    || (await activeSessionSummary.innerText()).trim() !== '1 / 12'
+    || (await otherSessionSummary.innerText()).trim() !== '0'
   ) {
-    throw new Error('Account session control must protect the current session and disable revoke-others when no other session exists');
+    throw new Error('Account session control must protect the current session, expose capacity, and disable revoke-others when no other session exists');
   }
+
+  const externalSessionResponse = await fetch(`${baseUrl}/api/auth/login`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0.6099.110 Safari/537.36 Edg/120.0.2210.61',
+    },
+    body: JSON.stringify({ username, password }),
+  });
+  const externalSessionCookie = externalSessionResponse.headers.get('set-cookie')?.split(';')[0] ?? '';
+  if (!externalSessionResponse.ok || !externalSessionCookie) {
+    throw new Error(`Browser session auto-sync setup failed with HTTP ${externalSessionResponse.status}`);
+  }
+  await targetPage.evaluate(() => {
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await targetPage.waitForFunction(() => {
+    const text = document.querySelector('[data-account-session-other-count="true"] strong')?.textContent?.trim();
+    return text === '1';
+  }, undefined, { timeout: 5000 });
+  await accountSessionControl.locator('.account-session-revoke').waitFor({ timeout: 5000 });
   await accountSessionControl.scrollIntoViewIfNeeded();
   await assertElementHorizontallyWithinViewport(targetPage, '[data-account-session-control="true"]', 'desktop account session control');
   await captureVisualEvidence(targetPage, 'desktop-account-session-control', ['.account-modal', '[data-account-session-control="true"]']);
+  await accountSessionControl.locator('.account-session-revoke').click();
+  await targetPage.waitForFunction(() => {
+    const text = document.querySelector('[data-account-session-other-count="true"] strong')?.textContent?.trim();
+    return text === '0';
+  }, undefined, { timeout: 5000 });
+  const revokedExternalSessionResponse = await fetch(`${baseUrl}/api/account`, {
+    headers: { Cookie: externalSessionCookie },
+  });
+  if (revokedExternalSessionResponse.status !== 401) {
+    throw new Error(`Account session UI revoke expected external session HTTP 401, got ${revokedExternalSessionResponse.status}`);
+  }
   if (await targetPage.getByLabel(/avatar text|fallback text|备用文字|代替文字/i).count()) {
     throw new Error('Account appearance modal must not expose fallback avatar text');
   }

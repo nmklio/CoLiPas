@@ -294,7 +294,7 @@ if (!html.includes('data-colipas-feature="operations-inbox"')) {
       <article class="feature-card" data-colipas-feature="operations-inbox">${landingIcon('inbox', 'icon feature-icon')}<h3>全局运维收件箱</h3><p>汇总上线阻塞、SSH 与资产覆盖缺口和开放事件，按优先级直接跳转处理模块；本机只保存安全事项 ID 与审阅时间。</p><div class="tags"><span>跨模块聚合</span><span>本机审阅</span></div></article>`);
 }
 
-const accountSessionFeatureCard = `<article class="feature-card" data-colipas-feature="account-session-control">${landingIcon('shield', 'icon feature-icon')}<h3>登录会话控制</h3><p>查看当前与其他登录设备，可逐个撤销或一键撤销其他会话；仅返回解析后的浏览器和系统标签，不暴露原始 IP 或 User-Agent。</p><div class="tags"><span>异常访问清理</span><span>隐私最小化</span></div></article>`;
+const accountSessionFeatureCard = `<article class="feature-card" data-colipas-feature="account-session-control">${landingIcon('shield', 'icon feature-icon')}<h3>登录会话控制</h3><p>每 15 秒同步当前与其他登录设备，可逐个或批量撤销；默认最多保留 12 个活跃会话，超限时自动退出最旧会话，且不暴露原始 IP 或 User-Agent。</p><div class="tags"><span>15 秒自动同步</span><span>容量边界</span></div></article>`;
 if (!html.includes('data-colipas-feature="account-session-control"')) {
   replaceOnce(/(<div class="feature-grid">)/, `$1
       ${accountSessionFeatureCard}`);
@@ -1489,6 +1489,7 @@ SVG
         <div class="table">
           <div><code>ADMIN_USERNAME / ADMIN_PASSWORD</code><p>管理员账号和初始密码，部署后应立即在后台修改密码。</p></div>
           <div><code>SESSION_SECRET</code><p>会话签名密钥，必须使用长随机字符串。</p></div>
+          <div><code>SESSION_MAX_ACTIVE</code><p>管理员最大活跃会话数，可设置为 2–64，默认 12；达到上限后自动退出最旧会话。</p></div>
           <div><code>CREDENTIAL_ENCRYPTION_KEY</code><p>SSH 密码和私钥的加密密钥，不能提交到 Git。</p></div>
           <div><code>COLIPAS_DATA_DIR / COLIPAS_DB_PATH</code><p>SQLite 数据库和运行数据目录，默认位于 .data。</p></div>
           <div><code>AI_BASE_URL / AI_API_KEY / AI_MODEL</code><p>OpenAI 兼容 API 配置；不配置密钥时只使用本地规则分析。</p></div>
@@ -1638,15 +1639,15 @@ systemctl status ssh --no-pager
         <div class="grid">
           <article class="doc-card">
             <h3>识别当前设备</h3>
-            <p>账户设置会突出显示当前浏览器，并列出其他活跃登录设备的登录时间、最近活动和到期时间。</p>
+            <p>账户设置会突出显示当前浏览器，并列出其他活跃登录设备的登录时间、最近活动和到期时间；页面可见时每 15 秒自动同步。</p>
           </article>
           <article class="doc-card">
             <h3>主动撤销访问</h3>
             <p>可逐个撤销其他会话，也可保留当前浏览器并一键撤销其他全部会话；当前会话需要通过退出登录关闭。</p>
           </article>
           <article class="doc-card">
-            <h3>最小化设备信息</h3>
-            <p>服务端只保留解析后的浏览器与系统标签，接口不会返回原始 IP、User-Agent、Cookie 或内部会话令牌。</p>
+            <h3>容量与隐私边界</h3>
+            <p>默认最多保留 12 个活跃会话，可用 SESSION_MAX_ACTIVE 调整；达到上限后自动退出最旧会话。接口不会返回原始 IP、User-Agent、Cookie 或内部会话令牌。</p>
           </article>
         </div>
       </section>
@@ -1657,7 +1658,7 @@ systemctl status ssh --no-pager
         <div class="table">
           <div><code>GET /api/health</code><p>公开健康检查，返回运行状态、SQLite 驱动名称和短发布标识，不暴露路径或密钥。</p></div>
           <div><code>POST /api/auth/login</code><p>管理员登录，失败次数会限速并返回 Retry-After。</p></div>
-          <div><code>GET /api/account/sessions</code><p>读取脱敏后的活跃登录设备、最近活动和到期时间。</p></div>
+          <div><code>GET /api/account/sessions</code><p>读取脱敏后的活跃登录设备、最近活动、到期时间，以及容量上限、剩余名额和满载状态。</p></div>
           <div><code>DELETE /api/account/sessions/:id</code><p>撤销指定的其他登录会话，不允许误删当前会话。</p></div>
           <div><code>POST /api/account/sessions/revoke-others</code><p>保留当前浏览器并撤销其他全部登录会话。</p></div>
           <div><code>GET /api/overview</code><p>登录后读取账号、服务器、事件和总览指标。</p></div>
