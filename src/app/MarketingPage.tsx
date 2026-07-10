@@ -10,6 +10,7 @@ import {
   Command,
   Eye,
   EyeOff,
+  FileUp,
   Github,
   Globe2,
   Inbox,
@@ -104,6 +105,14 @@ const fleetViewFeature = {
   title: '资产视图',
   desc: '把地域、厂商、状态和健康筛选保存为浏览器本地视图，排障时一键恢复常用工作范围。',
   tags: ['本机保存', '一键恢复'],
+};
+
+const bulkImportFeature = {
+  icon: FileUp,
+  title: '安全批量资产导入',
+  desc: '支持 CSV、JSON、文件选择和粘贴预览，单次最多登记 500 台无凭据资产；重复名称或公网 IP 自动跳过，密码、私钥和 Token 字段直接拒绝。',
+  tags: ['批量迁移', '凭据零导入'],
+  featureId: 'server-bulk-import',
 };
 
 const commandPaletteFeature = {
@@ -240,10 +249,17 @@ export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
           <h2>围绕“服务器接入到修复”构建的完整后台</h2>
         </div>
         <div className="marketing-feature-grid">
-          {[...featureCards, fleetViewFeature, commandPaletteFeature, operationsInboxFeature].map((feature) => {
+          {[...featureCards, fleetViewFeature, bulkImportFeature, commandPaletteFeature, operationsInboxFeature].map((feature) => {
             const Icon = feature.icon;
+            const featureId = 'featureId' in feature && typeof feature.featureId === 'string'
+              ? feature.featureId
+              : undefined;
             return (
-              <article key={feature.title} className="marketing-feature-card">
+              <article
+                key={feature.title}
+                className="marketing-feature-card"
+                data-colipas-feature={featureId}
+              >
                 <span className="feature-icon"><Icon size={22} /></span>
                 <h3>{feature.title}</h3>
                 <p>{feature.desc}</p>

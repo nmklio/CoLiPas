@@ -49,7 +49,7 @@ The runtime is intentionally simple. One Node.js process serves the Express API 
 
 1. Create a private `.env` from `.env.example` and replace every default secret.
 2. Sign in to the protected console.
-3. Add servers as inventory-only assets, simulated SSH assets, or real SSH-connected machines.
+3. Add servers one at a time, or safely bulk import up to 500 credential-free CSV / JSON inventory assets per request.
 4. Schedule a maintenance window before reboots, shutdowns, or high-impact SSH changes; Operations preflight shows whether each target is covered without bypassing operator confirmation.
 5. Use the contextual launch guide: keep the full release checklist on Overview, then use the compact workspace summary in Servers, AI, Operations, API, and Security until you need to expand the evidence.
 6. Triage the global Operations inbox, which groups release blockers, SSH coverage gaps, and open events and routes each item to the correct module.
@@ -62,6 +62,7 @@ The runtime is intentionally simple. One Node.js process serves the Express API 
 | --- | --- |
 | Inventory and map | Cloud account overview, custom provider names, server lifecycle status, region and OS detection, resource refresh, and map grouping. |
 | Server access | Manual onboarding, inventory-only mode, simulated SSH, password/private-key SSH verification, diagnostics, and guarded power actions. |
+| Safe bulk inventory import | CSV / JSON file selection or paste preview, 2 MB and 500-row limits, duplicate name/IP skipping, transactional SQLite writes, and strict rejection of passwords, private keys, tokens, API keys, or SSH credential fields. |
 | Live SSH terminal | xterm-style browser terminal, WebSocket streaming with compatible fallback, persistent Operate / Focus / Diagnose workspace presets, copy/clear tools, `Ctrl+C`, large-output guards, visible disconnect recovery, manual reconnect without command replay, and backend shell cleanup when the panel closes. |
 | Fleet views | Save common inventory filters as up to eight browser-only views, then restore a focused operational scope without sending filter or asset data anywhere. |
 | Contextual launch guide | Full six-step release checklist on Overview; a compact, persistent workspace summary elsewhere or in Performance mode, with a one-click path back to complete evidence and the next remediation. |

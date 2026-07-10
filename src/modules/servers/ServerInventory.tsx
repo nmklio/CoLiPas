@@ -1,7 +1,7 @@
 import { FormEvent, memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Terminal as XTerm, IDisposable } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
-import { BookmarkCheck, BookmarkPlus, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Cpu, Database, Edit3, Eraser, FileKey2, FileText, Globe2, KeyRound, Network, Plus, Power, PowerOff, RotateCcw, Search, Server, ShieldCheck, SlidersHorizontal, Sparkles, Star, Terminal, Trash2, X } from 'lucide-react';
+import { BookmarkCheck, BookmarkPlus, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Cpu, Database, Edit3, Eraser, FileKey2, FileText, FileUp, Globe2, KeyRound, Network, Plus, Power, PowerOff, RotateCcw, Search, Server, ShieldCheck, SlidersHorizontal, Sparkles, Star, Terminal, Trash2, X } from 'lucide-react';
 import { Language, useI18n } from '../../i18n';
 import {
   closeServerShell,
@@ -59,6 +59,7 @@ import {
   sshTerminalSupportSnapshotStorageKey,
   type SshTerminalSupportSnapshot,
 } from '../../shared/sshTerminalSupportSnapshot';
+import { ServerBulkImport } from './ServerBulkImport';
 
 interface ServerInventoryProps {
   allServers: ServerNode[];
@@ -609,6 +610,7 @@ const ServerWorkspaceRow = memo(function ServerWorkspaceRow({ server, diagnosing
   return (
     <article
       className={`server-workspace-row ${lifecycleStatus}`}
+      data-server-workspace-row-id={server.id}
       data-server-workspace-row-render-count={renderCountRef.current}
     >
       <div className="server-row-main">
@@ -702,7 +704,44 @@ const ServerWorkspaceRow = memo(function ServerWorkspaceRow({ server, diagnosing
       </div>
     </article>
   );
-});
+}, areServerWorkspaceRowPropsEqual);
+
+function areServerWorkspaceRowPropsEqual(previous: ServerWorkspaceRowProps, next: ServerWorkspaceRowProps) {
+  return previous.diagnosing === next.diagnosing
+    && previous.onAction === next.onAction
+    && areServerWorkspaceRowsEqual(previous.server, next.server);
+}
+
+function areServerWorkspaceRowsEqual(previous: ServerNode, next: ServerNode) {
+  return previous.id === next.id
+    && previous.name === next.name
+    && previous.provider === next.provider
+    && previous.region === next.region
+    && previous.status === next.status
+    && previous.publicIp === next.publicIp
+    && previous.privateIp === next.privateIp
+    && previous.os === next.os
+    && previous.cpu === next.cpu
+    && previous.memory === next.memory
+    && previous.disk === next.disk
+    && previous.tags.length === next.tags.length
+    && previous.tags.every((tag, index) => tag === next.tags[index])
+    && areServerWorkspaceSshRowsEqual(previous.ssh, next.ssh);
+}
+
+function areServerWorkspaceSshRowsEqual(previous: ServerNode['ssh'], next: ServerNode['ssh']) {
+  if (!previous || !next) {
+    return previous === next;
+  }
+  return previous.host === next.host
+    && previous.port === next.port
+    && previous.username === next.username
+    && previous.authType === next.authType
+    && previous.connected === next.connected
+    && previous.lastVerifiedAt === next.lastVerifiedAt
+    && previous.verifyMode === next.verifyMode
+    && previous.fingerprint === next.fingerprint;
+}
 
 export function ServerInventory({ allServers, servers, filters, performanceMode = false, onFiltersChange, onTriageDraftOpen, onServerConnected, onAuditTraceOpen, releaseFocusAnchor }: ServerInventoryProps) {
   const { language, t } = useI18n();
@@ -773,6 +812,7 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
   const [checkingSshChannelServerId, setCheckingSshChannelServerId] = useState('');
   const [loginProbe, setLoginProbe] = useState<LoginProbe | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [formDismissed, setFormDismissed] = useState(false);
   const [visibleServerLimit, setVisibleServerLimit] = useState(serverRenderBatchSize);
   const [fleetViews, setFleetViews] = useState<FleetView[]>(readFleetViews);
@@ -1481,9 +1521,30 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
               </button>
             ))}
           </div>
+          <button
+            type="button"
+            className={`tool-button${bulkImportOpen ? ' active' : ''}`}
+            data-server-bulk-import-toggle="true"
+            aria-expanded={bulkImportOpen}
+            aria-controls="server-bulk-import-panel"
+            onClick={() => {
+              const nextOpen = !bulkImportOpen;
+              setBulkImportOpen(nextOpen);
+              if (nextOpen) {
+                resetForm();
+              }
+            }}
+          >
+            <FileUp size={16} />
+            {t('servers.bulkImport.open')}
+          </button>
           <button type="button" className="tool-button primary" onClick={() => {
             setFormDismissed(false);
-            setFormOpen((value) => !value);
+            const nextOpen = !formOpen;
+            setFormOpen(nextOpen);
+            if (nextOpen) {
+              setBulkImportOpen(false);
+            }
           }}>
             {formOpen ? <ChevronUp size={16} /> : <Plus size={16} />}
             {editingServerId ? t('servers.formTitleEdit') : t('servers.formTitleAdd')}
@@ -1513,6 +1574,13 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
           <small>{visibleProviderCount > 0 ? t('servers.summaryProviders', { count: visibleProviderCount }) : t('common.none')}</small>
         </article>
       </div>
+
+      <ServerBulkImport
+        open={bulkImportOpen}
+        existingServers={allServers}
+        onClose={() => setBulkImportOpen(false)}
+        onImported={onServerConnected}
+      />
 
       {fleetTriageCards.length > 0 && (
         <div className="server-triage-strip" data-server-triage="true" aria-label={t('servers.triageTitle')}>
@@ -3209,6 +3277,7 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
     setTagsText(server.tags.join(', '));
     clearActionMessage();
     setFormDismissed(false);
+    setBulkImportOpen(false);
     setFormOpen(true);
     setForm({
       name: server.name,

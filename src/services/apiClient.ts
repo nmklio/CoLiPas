@@ -826,6 +826,30 @@ export async function revokeReleaseEvidenceShare(shareId: string, fetcher: typeo
   };
 }
 
+export interface BulkImportServerPayload {
+  name: string;
+  provider: CloudProvider;
+  region: string;
+  publicIp: string;
+  privateIp: string;
+  os: string;
+  tags: string[];
+}
+
+export interface BulkImportServersResponse {
+  items: ServerNode[];
+  skipped: Array<{
+    row: number;
+    name: string;
+    reason: 'duplicate-name' | 'duplicate-public-ip';
+  }>;
+  summary: {
+    requested: number;
+    imported: number;
+    skipped: number;
+  };
+}
+
 export async function fetchDiagnosticExport(fetcher: typeof fetch = fetch) {
   const response = await fetcher('/api/audit/diagnostics/export');
 
@@ -848,6 +872,20 @@ export async function connectServer(payload: ConnectServerPayload, fetcher: type
   }
 
   return (await response.json()) as ServerNode;
+}
+
+export async function bulkImportServers(items: BulkImportServerPayload[], fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/servers/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as BulkImportServersResponse;
 }
 
 export async function inspectServerIdentity(payload: Pick<ConnectServerPayload, 'publicIp' | 'region' | 'os' | 'ssh'>, fetcher: typeof fetch = fetch) {

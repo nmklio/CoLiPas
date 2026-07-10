@@ -17,6 +17,7 @@ import {
   replaceServerRows,
   upsertCredentialRow,
   upsertServerRow,
+  upsertServerRows,
 } from './database.js';
 import { redactSensitiveText } from './sensitiveRedaction.js';
 import {
@@ -470,6 +471,20 @@ const updateServerSchema = z.object({
   ssh: sshCredentialSchema.optional(),
 });
 
+const bulkImportServerSchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  provider: cloudProviderSchema,
+  region: z.string().trim().max(80).optional().default(''),
+  publicIp: z.string().trim().refine((value) => net.isIP(value) !== 0, 'Invalid public IP'),
+  privateIp: z.string().trim().refine((value) => value === '' || net.isIP(value) !== 0, 'Invalid private IP').optional().default(''),
+  os: z.string().trim().max(120).optional().default(''),
+  tags: z.array(z.string().trim().min(1).max(24)).max(8).optional().default([]),
+}).strict();
+
+const bulkImportServersSchema = z.object({
+  items: z.array(bulkImportServerSchema).min(1).max(500),
+}).strict();
+
 export async function refreshServerMetrics() {
   const now = Date.now();
   const staleServers: ServerNode[] = [];
@@ -584,6 +599,80 @@ export async function connectServer(input: unknown) {
   });
 
   return server;
+}
+
+export function bulkImportServers(input: unknown) {
+  const parsed = bulkImportServersSchema.parse(input);
+  const existingNames = new Set(servers.map((server) => normalizeServerIdentityKey(server.name)));
+  const existingPublicIps = new Set(servers.map((server) => server.publicIp.trim()).filter(Boolean));
+  const batchNames = new Set<string>();
+  const batchPublicIps = new Set<string>();
+  const imported: ServerNode[] = [];
+  const skipped: Array<{
+    row: number;
+    name: string;
+    reason: 'duplicate-name' | 'duplicate-public-ip';
+  }> = [];
+
+  for (const [index, item] of parsed.items.entries()) {
+    const normalizedName = normalizeServerIdentityKey(item.name);
+    const duplicateName = existingNames.has(normalizedName) || batchNames.has(normalizedName);
+    const duplicatePublicIp = existingPublicIps.has(item.publicIp) || batchPublicIps.has(item.publicIp);
+    if (duplicateName || duplicatePublicIp) {
+      skipped.push({
+        row: index + 1,
+        name: item.name,
+        reason: duplicateName ? 'duplicate-name' : 'duplicate-public-ip',
+      });
+      continue;
+    }
+
+    const server: ServerNode = {
+      id: `import-${crypto.randomUUID()}`,
+      name: item.name,
+      provider: item.provider,
+      region: item.region || 'Unknown region',
+      status: 'unconnected',
+      publicIp: item.publicIp,
+      privateIp: item.privateIp || '-',
+      os: item.os || 'Unknown OS',
+      cpu: 0,
+      memory: 0,
+      disk: 0,
+      tags: Array.from(new Set(item.tags.map((tag) => tag.trim()).filter(Boolean))),
+    };
+
+    imported.push(server);
+    batchNames.add(normalizedName);
+    batchPublicIps.add(item.publicIp);
+  }
+
+  upsertServerRows(imported);
+  for (const server of imported) {
+    servers.push(server);
+    indexServer(server);
+  }
+  if (imported.length > 0) {
+    markServerInventoryChanged();
+  }
+
+  recordAudit({
+    action: 'SERVER_BULK_IMPORT',
+    actor: 'operator',
+    target: 'server-inventory',
+    status: 'success',
+    detail: `Bulk imported ${imported.length} inventory-only server(s); skipped ${skipped.length} duplicate row(s)`,
+  });
+
+  return {
+    items: imported,
+    skipped,
+    summary: {
+      requested: parsed.items.length,
+      imported: imported.length,
+      skipped: skipped.length,
+    },
+  };
 }
 
 export async function updateServer(serverId: string, input: unknown) {
@@ -1161,4 +1250,8 @@ function normalizePersistedServer(server: ServerNode): ServerNode {
 
 function hasConnectedCredential(server: ServerNode) {
   return Boolean(server.ssh?.connected && persistedCredentials.has(server.id));
+}
+
+function normalizeServerIdentityKey(value: string) {
+  return value.trim().toLocaleLowerCase('en-US');
 }

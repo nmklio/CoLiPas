@@ -26,6 +26,7 @@ try {
   console.log('ok browser e2e preserves security trace deep link after login');
 
   await assertCommandPalette(page);
+  await assertServerBulkImportPanel(page);
   await assertAccountSettingsAndAiChat(page);
 
   const temporaryServer = await createTemporaryAssetServer(page);
@@ -1138,6 +1139,135 @@ async function assertCommandPalette(targetPage) {
   console.log('ok browser e2e covers command palette keyboard, mouse, contextual next-step, and browser-only recent actions');
 }
 
+async function assertServerBulkImportPanel(targetPage) {
+  const runSuffix = Date.now().toString(36);
+  const nameA = `browser-bulk-a-${runSuffix}`;
+  const nameB = `browser-bulk-b-${runSuffix}`;
+  const importedIds = [];
+  const toggle = targetPage.locator('[data-server-bulk-import-toggle="true"]');
+  const panel = targetPage.locator('[data-server-bulk-import="true"]');
+  const initialTotal = Number(await targetPage.locator('.server-summary-grid article').first().locator('strong').innerText());
+
+  try {
+    await toggle.click();
+    await panel.waitFor({ timeout: 5000 });
+    if (await toggle.getAttribute('aria-expanded') !== 'true') {
+      throw new Error('Bulk import toggle did not expose its expanded state');
+    }
+
+    await targetPage.locator('.module-section .section-header .tool-button.primary').first().click();
+    await panel.waitFor({ state: 'detached', timeout: 5000 });
+    await targetPage.locator('.connect-form.open').waitFor({ timeout: 5000 });
+    await toggle.click();
+    await panel.waitFor({ timeout: 5000 });
+    await targetPage.locator('.connect-form.open').waitFor({ state: 'hidden', timeout: 5000 });
+
+    const source = panel.locator('[data-server-bulk-import-source="true"]');
+    await source.fill([
+      'name,provider,publicIp,privateIp,region,os,tags,password',
+      `${nameA},Browser Lab,192.0.2.241,10.91.0.1,US - Virginia,Debian 13,browser|bulk,should-not-import`,
+    ].join('\n'));
+    const sensitiveError = panel.locator('[data-server-bulk-import-error="true"]');
+    await sensitiveError.waitFor({ timeout: 5000 });
+    if (!/credential|password|private key|token/i.test(await sensitiveError.innerText())) {
+      throw new Error(`Bulk import sensitive-column guidance was unclear: ${await sensitiveError.innerText()}`);
+    }
+    if (!(await panel.locator('[data-server-bulk-import-submit="true"]').isDisabled())) {
+      throw new Error('Bulk import submit must stay disabled when a credential column is present');
+    }
+
+    await source.fill([
+      'name,provider,publicIp,ssh',
+      `${nameA},Browser Lab,192.0.2.241,credential-object`,
+    ].join('\n'));
+    await sensitiveError.waitFor({ timeout: 5000 });
+    if (!(await panel.locator('[data-server-bulk-import-submit="true"]').isDisabled())) {
+      throw new Error('Bulk import submit must reject generic SSH credential columns instead of silently ignoring them');
+    }
+
+    await source.fill([
+      'name,provider,publicIp',
+      `"unterminated,Browser Lab,192.0.2.240`,
+    ].join('\n'));
+    await sensitiveError.waitFor({ timeout: 5000 });
+    if (!/CSV|JSON array|items array|Content must/i.test(await sensitiveError.innerText())) {
+      throw new Error(`Bulk import malformed CSV guidance was unclear: ${await sensitiveError.innerText()}`);
+    }
+
+    await source.fill([
+      'name,provider,publicIp',
+      `leading-zero-${runSuffix},Browser Lab,192.0.2.01`,
+    ].join('\n'));
+    await panel.locator('[data-server-bulk-import-summary="true"]').waitFor({ timeout: 5000 });
+    const invalidIpSummary = await panel.locator('[data-server-bulk-import-summary="true"] article strong').allInnerTexts();
+    if (invalidIpSummary.join(',') !== '1,0,1,0') {
+      throw new Error(`Bulk import preview should reject non-canonical IPv4 addresses, got ${invalidIpSummary.join(',')}`);
+    }
+
+    await source.fill([
+      'name,provider,publicIp,privateIp,region,os,tags',
+      `${nameA},Browser Lab,192.0.2.241,10.91.0.1,,Debian 13,browser|bulk`,
+      `${nameB},Browser Lab,192.0.2.242,10.91.0.2,JP - Tokyo,Ubuntu 24.04,browser|api`,
+      `x,Browser Lab,192.0.2.243,,SG - Singapore,Linux,invalid`,
+      `${nameA.toUpperCase()},Browser Lab,192.0.2.244,,US - California,Linux,duplicate`,
+    ].join('\n'));
+    const summary = panel.locator('[data-server-bulk-import-summary="true"]');
+    await summary.waitFor({ timeout: 5000 });
+    const summaryValues = await summary.locator('article strong').allInnerTexts();
+    if (summaryValues.join(',') !== '4,2,1,1') {
+      throw new Error(`Bulk import preview summary should be 4 total / 2 ready / 1 invalid / 1 duplicate, got ${summaryValues.join(',')}`);
+    }
+    if (await panel.locator('[data-server-bulk-import-row]').count() !== 4) {
+      throw new Error('Bulk import preview did not render all four input rows');
+    }
+    await assertNoHorizontalOverflow(targetPage, 'desktop server bulk import');
+    await captureVisualEvidence(targetPage, 'desktop-server-bulk-import', ['[data-server-bulk-import="true"]', '[data-server-bulk-import-summary="true"]']);
+
+    const importResponsePromise = targetPage.waitForResponse((response) => (
+      response.request().method() === 'POST'
+      && new URL(response.url()).pathname === '/api/servers/import'
+    ), { timeout: 15000 });
+    await panel.locator('[data-server-bulk-import-submit="true"]').click();
+    const importResponse = await importResponsePromise;
+    if (importResponse.status() !== 201) {
+      throw new Error(`/api/servers/import browser flow returned HTTP ${importResponse.status()}: ${await importResponse.text()}`);
+    }
+    const importBody = await importResponse.json();
+    importedIds.push(...(importBody.items ?? []).map((server) => server.id));
+    if (importBody.summary?.imported !== 2 || importBody.summary?.skipped !== 0) {
+      throw new Error(`Bulk import browser flow returned unexpected summary: ${JSON.stringify(importBody.summary)}`);
+    }
+    await panel.getByText(/Imported 2/i).waitFor({ timeout: 10000 });
+    await targetPage.waitForFunction((expectedTotal) => {
+      const value = document.querySelector('.server-summary-grid article strong')?.textContent ?? '';
+      return Number(value) === expectedTotal;
+    }, initialTotal + 2, { timeout: 10000 });
+
+    await panel.locator('.server-bulk-import-head .icon-button').click();
+    await panel.waitFor({ state: 'detached', timeout: 5000 });
+    const queryInput = targetPage.locator('.server-filter-row input').first();
+    await queryInput.fill(nameA);
+    await targetPage.locator('.server-workspace-row').filter({ hasText: nameA }).waitFor({ timeout: 10000 });
+    await queryInput.fill('');
+  } finally {
+    for (const serverId of importedIds) {
+      await deleteTemporaryAssetServer(targetPage, serverId).catch(() => undefined);
+    }
+    const inventoryResponse = await targetPage.request.get(`${baseUrl}/api/servers`);
+    if (inventoryResponse.ok()) {
+      const inventory = await inventoryResponse.json();
+      for (const server of inventory.items ?? []) {
+        if ((server.name === nameA || server.name === nameB) && !importedIds.includes(server.id)) {
+          await deleteTemporaryAssetServer(targetPage, server.id).catch(() => undefined);
+        }
+      }
+    }
+    await targetPage.goto(`${baseUrl}/admin/#servers`, { waitUntil: 'networkidle', timeout: 30000 });
+  }
+
+  console.log('ok browser e2e covers safe server bulk import preview, credential rejection, linkage, and cleanup');
+}
+
 async function assertAccountSettingsAndAiChat(targetPage) {
   const profileName = `Ops E2E ${Date.now().toString().slice(-5)}`;
   let aiSshServerId = '';
@@ -2139,11 +2269,9 @@ async function assertSshTerminalPanel(targetPage) {
         && !('sessionId' in diagnostic.sshTerminal.lastSelfTest);
     }, undefined, { timeout: 5000 });
     console.log(`ok browser e2e SSH safe speed test rendered in ${selfTestDurationMs}ms`);
-    const serverRowRenderCountsBeforeLiveOutput = await targetPage.locator('.server-workspace-row').evaluateAll((rows) => (
-      rows.map((row) => row.getAttribute('data-server-workspace-row-render-count') ?? '')
-    ));
-    if (serverRowRenderCountsBeforeLiveOutput.length === 0 || serverRowRenderCountsBeforeLiveOutput.some((count) => !/^\d+$/.test(count))) {
-      throw new Error(`Server rows did not expose render counters for SSH telemetry regression coverage: ${JSON.stringify(serverRowRenderCountsBeforeLiveOutput)}`);
+    const serverRowsBeforeLiveOutput = await readServerWorkspaceRowRenderState(targetPage);
+    if (serverRowsBeforeLiveOutput.length === 0 || serverRowsBeforeLiveOutput.some((row) => !row.id || !/^\d+$/.test(row.renderCount))) {
+      throw new Error(`Server rows did not expose stable IDs and render counters for SSH telemetry regression coverage: ${JSON.stringify(serverRowsBeforeLiveOutput)}`);
     }
     const longOutputStartedAt = Date.now();
     await targetPage.evaluate(() => {
@@ -2189,13 +2317,17 @@ async function assertSshTerminalPanel(targetPage) {
       throw new Error(`SSH burst output rendered too slowly: ${burstOutputDurationMs}ms, max long task ${maxBurstLongTaskMs}ms`);
     }
     await targetPage.waitForTimeout(1100);
-    const serverRowRenderCountsAfterLiveOutput = await targetPage.locator('.server-workspace-row').evaluateAll((rows) => (
-      rows.map((row) => row.getAttribute('data-server-workspace-row-render-count') ?? '')
-    ));
-    if (JSON.stringify(serverRowRenderCountsAfterLiveOutput) !== JSON.stringify(serverRowRenderCountsBeforeLiveOutput)) {
-      throw new Error(`SSH telemetry rerendered inventory rows during streamed output: before ${JSON.stringify(serverRowRenderCountsBeforeLiveOutput)}, after ${JSON.stringify(serverRowRenderCountsAfterLiveOutput)}`);
+    const serverRowsAfterLiveOutput = await readServerWorkspaceRowRenderState(targetPage);
+    const serverRowsAfterById = new Map(serverRowsAfterLiveOutput.map((row) => [row.id, row]));
+    const unchangedRows = serverRowsBeforeLiveOutput.filter((before) => serverRowsAfterById.get(before.id)?.content === before.content);
+    const unnecessaryRenders = unchangedRows.filter((before) => serverRowsAfterById.get(before.id)?.renderCount !== before.renderCount);
+    if (unchangedRows.length === 0) {
+      throw new Error(`SSH telemetry render regression coverage found no semantically stable inventory row: before ${JSON.stringify(serverRowsBeforeLiveOutput)}, after ${JSON.stringify(serverRowsAfterLiveOutput)}`);
     }
-    console.log(`ok browser e2e SSH telemetry kept ${serverRowRenderCountsAfterLiveOutput.length} inventory rows render-stable during streamed output`);
+    if (unnecessaryRenders.length > 0) {
+      throw new Error(`SSH telemetry rerendered unchanged inventory rows during streamed output: ${JSON.stringify(unnecessaryRenders)}`);
+    }
+    console.log(`ok browser e2e SSH telemetry kept ${unchangedRows.length} unchanged inventory row(s) render-stable during streamed output`);
     const terminalNetworkText = await targetPage.locator('.ssh-terminal-network').innerText();
     if (!/RTT\s+\d+ms\s+\/\s+(?:\d+\s+KB\/s|\d+(?:\.\d)?\s+MB\/s)/i.test(terminalNetworkText)) {
       throw new Error(`SSH terminal network diagnostics did not render latency and throughput: ${terminalNetworkText}`);
@@ -3308,6 +3440,7 @@ async function assertMobileModuleLayoutSweep() {
     await assertElementHorizontallyWithinViewport(mobilePage, '[data-server-fleet-views="true"]', 'mobile fleet views');
     await assertSingleColumnStack(mobilePage, '.server-workspace-row', 'mobile server inventory row');
     await assertMobileServerOpsLayout(mobilePage);
+    await assertMobileServerBulkImportLayout(mobilePage);
     await mobilePage.locator('.module-section .section-header .tool-button.primary').first().click();
     await mobilePage.locator('.connect-form.open').waitFor({ timeout: 5000 });
     await assertElementHorizontallyWithinViewport(mobilePage, '.connect-form.open', 'mobile server connect form');
@@ -3727,6 +3860,54 @@ async function assertMobileAuditRowLayout(targetPage) {
   if (metrics.metaRight > metrics.viewportWidth + 1 || metrics.rowWidth > metrics.viewportWidth + 1) {
     throw new Error(`Mobile audit row overflowed viewport: ${JSON.stringify(metrics)}`);
   }
+}
+
+async function assertMobileServerBulkImportLayout(targetPage) {
+  const toggle = targetPage.locator('[data-server-bulk-import-toggle="true"]');
+  await toggle.click();
+  const panel = targetPage.locator('[data-server-bulk-import="true"]');
+  await panel.waitFor({ timeout: 5000 });
+  await panel.locator('[data-server-bulk-import-source="true"]').fill([
+    'name,provider,publicIp,privateIp,region,os,tags',
+    'mobile-bulk-a,Mobile Lab,192.0.2.245,10.92.0.1,JP - Tokyo,Debian 13,mobile|bulk',
+    'mobile-bulk-b,Mobile Lab,192.0.2.246,10.92.0.2,SG - Singapore,Ubuntu 24.04,mobile|api',
+    'x,Mobile Lab,not-an-ip,,,Linux,invalid',
+  ].join('\n'));
+  await panel.locator('[data-server-bulk-import-summary="true"]').waitFor({ timeout: 5000 });
+  await assertElementHorizontallyWithinViewport(targetPage, '[data-server-bulk-import="true"]', 'mobile server bulk import');
+  await assertNoHorizontalOverflow(targetPage, 'mobile server bulk import');
+  const metrics = await panel.evaluate((element) => {
+    const summary = element.querySelector('[data-server-bulk-import-summary="true"]');
+    const tableWrap = element.querySelector('.server-bulk-import-table-wrap');
+    const sourceActions = element.querySelector('.server-bulk-import-source-actions');
+    return {
+      summaryColumns: summary ? getComputedStyle(summary).gridTemplateColumns : '',
+      sourceActionColumns: sourceActions ? getComputedStyle(sourceActions).gridTemplateColumns : '',
+      tableOverflowX: tableWrap ? getComputedStyle(tableWrap).overflowX : '',
+      tableScrollWidth: tableWrap?.scrollWidth ?? 0,
+      tableClientWidth: tableWrap?.clientWidth ?? 0,
+    };
+  });
+  if (metrics.summaryColumns.split(' ').filter(Boolean).length !== 2) {
+    throw new Error(`Mobile bulk import summary should use two columns, got ${metrics.summaryColumns}`);
+  }
+  if (metrics.sourceActionColumns.split(' ').filter(Boolean).length !== 2) {
+    throw new Error(`Mobile bulk import source actions should use two columns, got ${metrics.sourceActionColumns}`);
+  }
+  if (!['auto', 'scroll'].includes(metrics.tableOverflowX) || metrics.tableScrollWidth <= metrics.tableClientWidth) {
+    throw new Error(`Mobile bulk import table should scroll internally without widening the page: ${JSON.stringify(metrics)}`);
+  }
+  await captureVisualEvidence(targetPage, 'mobile-server-bulk-import', ['[data-server-bulk-import="true"]', '[data-server-bulk-import-summary="true"]']);
+  await panel.locator('.server-bulk-import-head .icon-button').click();
+  await panel.waitFor({ state: 'detached', timeout: 5000 });
+}
+
+async function readServerWorkspaceRowRenderState(targetPage) {
+  return targetPage.locator('.server-workspace-row').evaluateAll((rows) => rows.map((row) => ({
+    id: row.getAttribute('data-server-workspace-row-id') ?? '',
+    renderCount: row.getAttribute('data-server-workspace-row-render-count') ?? '',
+    content: (row.textContent ?? '').replace(/\s+/g, ' ').trim(),
+  })));
 }
 
 async function assertMobileServerOpsLayout(targetPage) {

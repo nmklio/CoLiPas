@@ -36,6 +36,7 @@ assertCustomApiSecretNotPersisted();
 assertOverviewMapInteractionGuards();
 assertMapRegionScopeLifecycleGuards();
 assertFleetViewGuards();
+assertServerBulkImportGuards();
 assertOverviewServerFilterLinkage();
 assertSessionCookieSecurityGuards();
 assertServerIdentityDetectionGuards();
@@ -78,6 +79,24 @@ if (unauthenticatedShellStatusResponse.status !== 401) {
 const unauthenticatedRunbookResponse = await fetch(`${baseUrl}/api/servers/ssh-runbook`);
 if (unauthenticatedRunbookResponse.status !== 401) {
   throw new Error(`/api/servers/ssh-runbook expected 401 before login, got ${unauthenticatedRunbookResponse.status}`);
+}
+const unauthenticatedBulkImportResponse = await fetch(`${baseUrl}/api/servers/import`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    items: [{
+      name: 'unauthorized-import',
+      provider: 'Smoke Lab',
+      region: 'Test region',
+      publicIp: '192.0.2.240',
+      privateIp: '',
+      os: 'Linux',
+      tags: ['smoke'],
+    }],
+  }),
+});
+if (unauthenticatedBulkImportResponse.status !== 401) {
+  throw new Error(`/api/servers/import expected 401 before login, got ${unauthenticatedBulkImportResponse.status}`);
 }
 const unauthenticatedMaintenanceWindowsResponse = await fetch(`${baseUrl}/api/operations/maintenance-windows`);
 if (unauthenticatedMaintenanceWindowsResponse.status !== 401) {
@@ -1733,6 +1752,8 @@ if (runtimeConfig?.customApiAllowedHosts?.includes('127.0.0.1')) {
 } else {
   console.log('skip /api/custom-apis/test success path; 127.0.0.1 is not allowlisted');
 }
+
+await assertServerBulkImportApi();
 
 const smokePrivateKeyMarker = `smoke-private-key-${Date.now()}`;
 const smokePrivateKeyPassphrase = `smoke-key-passphrase-${Date.now()}`;
@@ -6368,6 +6389,73 @@ function assertFleetViewGuards() {
   console.log('ok fleet views stay browser-only, restore sanitized filter scopes, and remain documented');
 }
 
+function assertServerBulkImportGuards() {
+  const inventorySource = fs.readFileSync(new URL('../src/modules/servers/ServerInventory.tsx', import.meta.url), 'utf8');
+  const componentSource = fs.readFileSync(new URL('../src/modules/servers/ServerBulkImport.tsx', import.meta.url), 'utf8');
+  const parserSource = fs.readFileSync(new URL('../src/modules/servers/serverBulkImportParser.ts', import.meta.url), 'utf8');
+  const serviceSource = fs.readFileSync(new URL('../src/server/services/inventoryService.ts', import.meta.url), 'utf8');
+  const databaseSource = fs.readFileSync(new URL('../src/server/services/database.ts', import.meta.url), 'utf8');
+  const appSource = fs.readFileSync(new URL('../src/server/app.ts', import.meta.url), 'utf8');
+  const apiClientSource = fs.readFileSync(new URL('../src/services/apiClient.ts', import.meta.url), 'utf8');
+  const i18nSource = fs.readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
+  const globalCss = fs.readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
+  const browserE2eSource = fs.readFileSync(new URL('../scripts/browser-e2e.mjs', import.meta.url), 'utf8');
+  const largeSimulationSource = fs.readFileSync(new URL('../scripts/large-user-simulation.mjs', import.meta.url), 'utf8');
+  const marketingSource = fs.readFileSync(new URL('../src/app/MarketingPage.tsx', import.meta.url), 'utf8');
+  const docsSource = fs.readFileSync(new URL('../src/app/DocsPage.tsx', import.meta.url), 'utf8');
+  const readmeSource = fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+  const cnReadmeSource = fs.readFileSync(new URL('../README_CN.md', import.meta.url), 'utf8');
+  const jpReadmeSource = fs.readFileSync(new URL('../README_JP.md', import.meta.url), 'utf8');
+  const serverUpdateSource = fs.readFileSync(new URL('../deploy/server-update.sh', import.meta.url), 'utf8');
+
+  for (const [label, source, fragments] of [
+    ['inventory wiring', inventorySource, ['ServerBulkImport', 'data-server-bulk-import-toggle="true"', 'setBulkImportOpen(false)']],
+    ['bulk import component', componentSource, ['data-server-bulk-import="true"', 'data-server-bulk-import-source="true"', 'data-server-bulk-import-summary="true"', 'data-server-bulk-import-submit="true"', 'serverBulkImportMaxBytes']],
+    ['bulk import parser', parserSource, ['serverBulkImportLimit = 500', 'serverBulkImportMaxBytes = 2 * 1024 * 1024', 'sensitiveKeyPattern', "'sensitive-columns'", "'duplicate-public-ip'", 'buildServerBulkImportTemplate']],
+    ['bulk import service', serviceSource, ['bulkImportServersSchema', '.max(500)', 'bulkImportServerSchema', '}).strict()', 'upsertServerRows(imported)', "action: 'SERVER_BULK_IMPORT'", 'normalizeServerIdentityKey']],
+    ['bulk database transaction', databaseSource, ['export function upsertServerRows', "db.exec('BEGIN IMMEDIATE')", "db.exec('COMMIT')", "db.exec('ROLLBACK')"]],
+    ['bulk route', appSource, ["app.post('/api/servers/import'", 'bulkImportServers(request.body)']],
+    ['bulk API client', apiClientSource, ['BulkImportServerPayload', 'BulkImportServersResponse', "fetcher('/api/servers/import'"]],
+    ['bulk responsive CSS', globalCss, ['.server-bulk-import', '.server-bulk-import-summary', '.server-bulk-import-table-wrap', '@media (max-width: 620px)']],
+    ['bulk browser E2E', browserE2eSource, ['assertServerBulkImportPanel', 'assertMobileServerBulkImportLayout', 'desktop-server-bulk-import', 'mobile-server-bulk-import']],
+    ['bulk large simulation', largeSimulationSource, ["postJson(baseUrl, '/api/servers/import'", 'offset += 500', 'transaction batch(es)']],
+  ]) {
+    const missing = fragments.filter((fragment) => !source.includes(fragment));
+    if (missing.length) {
+      throw new Error(`Server bulk import ${label} is incomplete: ${missing.join(', ')}`);
+    }
+  }
+
+  for (const key of [
+    'servers.bulkImport.open',
+    'servers.bulkImport.title',
+    'servers.bulkImport.safetyDetail',
+    'servers.bulkImport.issue.sensitive-columns',
+    'servers.bulkImport.rowIssue.duplicate-public-ip',
+  ]) {
+    const count = (i18nSource.match(new RegExp(key.replaceAll('.', '\\.'), 'g')) ?? []).length;
+    if (count < 3) {
+      throw new Error(`Server bulk import i18n key is missing language coverage: ${key}`);
+    }
+  }
+
+  for (const [name, source, phrase] of [
+    ['README.md', readmeSource, 'Safe bulk inventory import'],
+    ['README_CN.md', cnReadmeSource, '安全批量导入'],
+    ['README_JP.md', jpReadmeSource, '安全な一括インポート'],
+    ['MarketingPage.tsx', marketingSource, 'data-colipas-feature={featureId}'],
+    ['DocsPage.tsx', docsSource, 'data-colipas-docs-feature={featureId}'],
+    ['server-update.sh landing page', serverUpdateSource, 'data-colipas-feature="server-bulk-import"'],
+    ['server-update.sh docs page', serverUpdateSource, 'data-colipas-docs-feature="server-bulk-import"'],
+  ]) {
+    if (!source.includes(phrase)) {
+      throw new Error(`${name} must document server bulk import`);
+    }
+  }
+
+  console.log('ok server bulk import is bounded, credential-free, transactional, responsive, tested, and documented');
+}
+
 function assertOverviewServerFilterLinkage() {
   const appSource = fs.readFileSync(new URL('../src/app/App.tsx', import.meta.url), 'utf8');
   const overviewSource = fs.readFileSync(new URL('../src/modules/overview/MonitoringOverview.tsx', import.meta.url), 'utf8');
@@ -6617,6 +6705,8 @@ function assertServerStatusLifecycleGuards() {
     'disabled={!canOpenTerminal}',
     "onClick={() => dispatch('ssh')}",
     'const ServerWorkspaceRow = memo',
+    'areServerWorkspaceRowPropsEqual',
+    'data-server-workspace-row-id={server.id}',
     'const handleServerWorkspaceRowAction = useCallback',
     'serverWorkspaceRowHandlersRef.current?.onAction(action, server)',
   ];
@@ -8866,6 +8956,162 @@ function startMockStreamingAi() {
 function nextTemporarySimulatedSshPublicIp() {
   const host = 200 + (temporarySimulatedSshServerSequence++ % 50);
   return `198.51.100.${host}`;
+}
+
+async function assertServerBulkImportApi() {
+  const runSuffix = Date.now().toString(36);
+  const nameA = `bulk-smoke-a-${runSuffix}`;
+  const nameB = `bulk-smoke-b-${runSuffix}`;
+  const secretMarker = `bulk-import-password-${runSuffix}`;
+  const importResponse = await fetch(`${baseUrl}/api/servers/import`, {
+    method: 'POST',
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      items: [
+        {
+          name: nameA,
+          provider: 'Smoke Lab',
+          region: '',
+          publicIp: '192.0.2.231',
+          privateIp: '',
+          os: '',
+          tags: ['bulk-smoke', 'api'],
+        },
+        {
+          name: nameB,
+          provider: 'Smoke Lab',
+          region: 'US - Virginia',
+          publicIp: '192.0.2.232',
+          privateIp: '10.90.0.2',
+          os: 'Debian 13',
+          tags: ['bulk-smoke', 'database'],
+        },
+        {
+          name: nameA.toUpperCase(),
+          provider: 'Smoke Lab',
+          region: 'US - California',
+          publicIp: '192.0.2.233',
+          privateIp: '',
+          os: 'Linux',
+          tags: ['duplicate-name'],
+        },
+        {
+          name: `bulk-smoke-c-${runSuffix}`,
+          provider: 'Smoke Lab',
+          region: 'US - California',
+          publicIp: '192.0.2.232',
+          privateIp: '',
+          os: 'Linux',
+          tags: ['duplicate-ip'],
+        },
+      ],
+    }),
+  });
+  if (importResponse.status !== 201) {
+    throw new Error(`/api/servers/import expected 201, got ${importResponse.status}: ${await importResponse.text()}`);
+  }
+  const importBody = await importResponse.json();
+  if (
+    importBody.summary?.requested !== 4
+    || importBody.summary?.imported !== 2
+    || importBody.summary?.skipped !== 2
+    || importBody.items?.length !== 2
+    || importBody.skipped?.length !== 2
+    || !importBody.skipped.some((item) => item.reason === 'duplicate-name')
+    || !importBody.skipped.some((item) => item.reason === 'duplicate-public-ip')
+  ) {
+    throw new Error(`/api/servers/import returned unexpected duplicate summary: ${JSON.stringify(importBody)}`);
+  }
+  if (
+    importBody.items.some((server) => !server.id?.startsWith('import-') || server.status !== 'unconnected' || server.ssh)
+    || importBody.items.find((server) => server.name === nameA)?.region !== 'Unknown region'
+    || importBody.items.find((server) => server.name === nameA)?.os !== 'Unknown OS'
+  ) {
+    throw new Error('/api/servers/import did not create credential-free inventory-only assets with safe fallbacks');
+  }
+
+  const sensitiveResponse = await fetch(`${baseUrl}/api/servers/import`, {
+    method: 'POST',
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      items: [{
+        name: `bulk-sensitive-${runSuffix}`,
+        provider: 'Smoke Lab',
+        region: 'Test region',
+        publicIp: '192.0.2.234',
+        privateIp: '',
+        os: 'Linux',
+        tags: ['bulk-smoke'],
+        password: secretMarker,
+      }],
+    }),
+  });
+  if (sensitiveResponse.status !== 400) {
+    throw new Error(`/api/servers/import expected 400 for credential fields, got ${sensitiveResponse.status}`);
+  }
+  const sensitiveBody = await sensitiveResponse.json();
+  if (sensitiveBody.error?.code !== 'VALIDATION_ERROR' || JSON.stringify(sensitiveBody).includes(secretMarker)) {
+    throw new Error('/api/servers/import credential rejection returned an unsafe or unexpected validation payload');
+  }
+
+  const oversizedResponse = await fetch(`${baseUrl}/api/servers/import`, {
+    method: 'POST',
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      items: Array.from({ length: 501 }, (_, index) => ({
+        name: `bulk-limit-${runSuffix}-${index}`,
+        provider: 'Smoke Lab',
+        region: 'Test region',
+        publicIp: '192.0.2.235',
+        privateIp: '',
+        os: 'Linux',
+        tags: ['bulk-smoke'],
+      })),
+    }),
+  });
+  if (oversizedResponse.status !== 400) {
+    throw new Error(`/api/servers/import expected 400 above 500 rows, got ${oversizedResponse.status}`);
+  }
+
+  const inventoryResponse = await fetch(`${baseUrl}/api/servers`, { headers: authHeaders });
+  if (!inventoryResponse.ok) {
+    throw new Error(`/api/servers bulk import verification returned HTTP ${inventoryResponse.status}`);
+  }
+  const inventoryBody = await inventoryResponse.json();
+  const inventoryPayload = JSON.stringify(inventoryBody);
+  if (
+    !inventoryBody.items?.some((server) => server.name === nameA)
+    || !inventoryBody.items?.some((server) => server.name === nameB)
+    || inventoryPayload.includes(secretMarker)
+  ) {
+    throw new Error('/api/servers did not expose imported assets or leaked rejected credential material');
+  }
+
+  const auditResponse = await fetch(`${baseUrl}/api/audit/events`, { headers: authHeaders });
+  if (!auditResponse.ok) {
+    throw new Error(`/api/audit/events bulk import verification returned HTTP ${auditResponse.status}`);
+  }
+  const auditBody = await auditResponse.json();
+  const importAudit = auditBody.items?.find((event) => event.action === 'SERVER_BULK_IMPORT');
+  if (
+    !importAudit
+    || !/Bulk imported 2 inventory-only server\(s\); skipped 2 duplicate row\(s\)/.test(importAudit.detail ?? '')
+    || JSON.stringify(importAudit).includes(runSuffix)
+    || /\b192\.0\.2\./.test(JSON.stringify(importAudit))
+  ) {
+    throw new Error(`/api/servers/import audit must contain only a safe aggregate summary: ${JSON.stringify(importAudit)}`);
+  }
+
+  for (const server of importBody.items) {
+    const cleanupResponse = await fetch(`${baseUrl}/api/servers/${encodeURIComponent(server.id)}`, {
+      method: 'DELETE',
+      headers: authHeaders,
+    });
+    if (!cleanupResponse.ok) {
+      throw new Error(`/api/servers/:serverId bulk import cleanup returned HTTP ${cleanupResponse.status}`);
+    }
+  }
+  console.log('ok /api/servers/import validates, deduplicates, audits safely, and preserves credential boundaries');
 }
 
 async function createTemporarySimulatedSshServer(overrides = {}) {

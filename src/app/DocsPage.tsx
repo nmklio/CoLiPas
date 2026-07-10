@@ -8,6 +8,7 @@ import {
   Code2,
   Database,
   FileText,
+  FileUp,
   Globe2,
   Inbox,
   KeyRound,
@@ -33,6 +34,7 @@ interface DocsPageProps {
 const quickNav = [
   { href: '#install', label: '安装部署' },
   { href: '#server-access', label: '接入服务器' },
+  { href: '#bulk-import', label: '批量导入' },
   { href: '#ai', label: 'AI 设置' },
   { href: '#ssh', label: 'SSH 终端' },
   { href: '#security', label: '安全审计' },
@@ -124,6 +126,20 @@ const fleetViewUsageBlock = {
   points: ['最多保存 8 个常用视图', '只保存在当前浏览器，不上传筛选或资产信息', '删除视图不会删除服务器或任何运行数据'],
 };
 
+const bulkImportUsageBlock = {
+  icon: FileUp,
+  title: '批量导入服务器资产',
+  body: '服务器页面支持选择 CSV / JSON 文件或直接粘贴内容。系统先在浏览器中预览总行数、可导入项、错误项和重复项，再只提交通过校验的无凭据资产。',
+  points: [
+    '单个文件最大 2 MB，单次最多 500 行',
+    '只接受名称、厂商、公网/内网 IP、地域、系统和标签',
+    '密码、私钥、Passphrase、API Key、Token 与 SSH 凭据字段会被拒绝',
+    '名称或公网 IP 重复时自动跳过，不覆盖已有资产和用户数据',
+  ],
+  sectionId: 'bulk-import',
+  featureId: 'server-bulk-import',
+};
+
 const operationsInboxUsageBlock = {
   icon: Inbox,
   title: '使用全局运维收件箱',
@@ -157,6 +173,7 @@ const apiRows = [
   ['POST /api/auth/login', '管理员登录并写入会话 cookie。'],
   ['GET /api/overview', '云账号、服务器、事件和总览指标。'],
   ['POST /api/servers', '新增资产或执行真实 SSH 验证接入。'],
+  ['POST /api/servers/import', '批量导入最多 500 台无凭据资产，重复项自动跳过。'],
   ['POST /api/servers/shells', '创建实时 SSH shell 会话。'],
   ['POST /api/ai/test', '测试 AI 供应商是否支持流式调用。'],
   ['POST /api/ai/stream', '流式 AI 对话接口。'],
@@ -244,6 +261,7 @@ export function DocsPage({ onLogin }: DocsPageProps) {
           <a href="#install">安装部署</a>
           <a href="#config">环境变量</a>
           <a href="#server-access">服务器接入</a>
+          <a href="#bulk-import">批量导入</a>
           <a href="#ai">AI 助手</a>
           <a href="#ssh">SSH 与编排</a>
           <a href="#api">API 与代理</a>
@@ -296,10 +314,21 @@ export function DocsPage({ onLogin }: DocsPageProps) {
               <p>建议按以下顺序使用。每个模块都会与资产、事件、审计和 AI 上下文联动。</p>
             </div>
             <div className="docs-usage-grid">
-              {[...usageBlocks, fleetViewUsageBlock, operationsInboxUsageBlock, mobileControlsUsageBlock, commandPaletteUsageBlock, accountAppearanceUsageBlock].map((block) => {
+              {[...usageBlocks, bulkImportUsageBlock, fleetViewUsageBlock, operationsInboxUsageBlock, mobileControlsUsageBlock, commandPaletteUsageBlock, accountAppearanceUsageBlock].map((block) => {
                 const Icon = block.icon;
+                const sectionId = 'sectionId' in block && typeof block.sectionId === 'string'
+                  ? block.sectionId
+                  : undefined;
+                const featureId = 'featureId' in block && typeof block.featureId === 'string'
+                  ? block.featureId
+                  : undefined;
                 return (
-                  <article key={block.title} className="docs-usage-card">
+                  <article
+                    key={block.title}
+                    id={sectionId}
+                    className="docs-usage-card"
+                    data-colipas-docs-feature={featureId}
+                  >
                     <div className="feature-icon"><Icon size={22} /></div>
                     <h3>{block.title}</h3>
                     <p>{block.body}</p>

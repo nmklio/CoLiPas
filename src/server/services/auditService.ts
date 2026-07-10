@@ -15,6 +15,7 @@ export type AuditAction =
   | 'AI_TEST'
   | 'CUSTOM_API_TEST'
   | 'SERVER_CONNECT'
+  | 'SERVER_BULK_IMPORT'
   | 'SERVER_UPDATE'
   | 'SERVER_DELETE'
   | 'SERVER_IDENTITY_INSPECT'

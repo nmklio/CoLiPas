@@ -26,6 +26,7 @@ import { claimSshProductionProbeScheduleRun, getSshProductionProbeSchedule, reco
 import { createSshRunbookCommand, deleteSshRunbookCommand, importSshRunbookCommands, listSshRunbookCommands, markSshRunbookCommandUsed, reorderSshRunbookCommands, updateSshRunbookCommand, updateSshRunbookCommandPin } from './services/sshRunbookService.js';
 import {
   buildServerInventorySnapshot,
+  bulkImportServers,
   closeServerShell,
   connectServer,
   deleteServer,
@@ -339,6 +340,14 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
 
   app.get('/api/operations/events', (_request, response) => {
     response.json({ items: listOperationEvents() });
+  });
+
+  app.post('/api/servers/import', (request, response, next) => {
+    try {
+      response.status(201).json(bulkImportServers(request.body));
+    } catch (error) {
+      next(error);
+    }
   });
 
   app.get('/api/operations/maintenance-windows', (_request, response) => {

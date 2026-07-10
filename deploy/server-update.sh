@@ -276,6 +276,11 @@ if (!html.includes('data-colipas-feature="fleet-views"')) {
       <article class="feature-card" data-colipas-feature="fleet-views">${landingIcon('checklist', 'icon feature-icon')}<h3>资产视图</h3><p>把关键词、厂商、状态、地域和健康筛选保存为浏览器本机视图，排障时可一键恢复工作范围。</p><div class="tags"><span>本机保存</span><span>一键恢复</span></div></article>`);
 }
 
+if (!html.includes('data-colipas-feature="server-bulk-import"')) {
+  replaceOnce(/(<div class="feature-grid">)/, `$1
+      <article class="feature-card" data-colipas-feature="server-bulk-import">${landingIcon('assets', 'icon feature-icon')}<h3>安全批量资产导入</h3><p>选择或粘贴 CSV / JSON 后先预览校验，单次最多导入 500 台无凭据资产；重复名称或公网 IP 自动跳过，密码、私钥和 Token 字段直接拒绝。</p><div class="tags"><span>批量迁移</span><span>凭据零导入</span></div></article>`);
+}
+
 if (!html.includes('data-colipas-feature="command-palette-context"')) {
   replaceOnce(/(<div class="feature-grid">)/, `$1
       <article class="feature-card" data-colipas-feature="command-palette-context">${landingIcon('command', 'icon feature-icon')}<h3>上下文命令面板</h3><p>按当前最高优先级事项、最近使用和全部操作分层展示跨模块入口；最近历史只保存在浏览器中，可随时清除。</p><div class="tags"><span>当前优先级</span><span>本机历史</span></div></article>`);
@@ -1532,8 +1537,12 @@ P1：补齐 SSH、资产和预检证据
 
       <section id="server-access" class="section">
         <p class="kicker">服务器接入</p>
-        <h2>资产登记、真实 SSH 验证和地图联动</h2>
+        <h2>单台接入、批量迁移、真实 SSH 验证和地图联动</h2>
         <div class="grid">
+          <article class="doc-card" data-colipas-docs-feature="server-bulk-import">
+            <h3>安全批量导入</h3>
+            <p>支持 CSV、JSON、文件选择和粘贴预览，文件最大 2 MB、单次最多 500 行。只导入名称、厂商、IP、地域、系统和标签；重复名称或公网 IP 自动跳过，密码、私钥、Passphrase、API Key、Token 和 SSH 凭据字段会被拒绝。</p>
+          </article>
           <article class="doc-card">
             <h3>资产模式</h3>
             <p>只登记服务器名称、IP、地区、系统和标签，不会显示为已接入，也不会允许执行 SSH 命令。</p>
@@ -1619,6 +1628,7 @@ systemctl status ssh --no-pager
           <div><code>GET /api/overview</code><p>登录后读取账号、服务器、事件和总览指标。</p></div>
           <div><code>GET / PUT /api/ai/provider</code><p>读取和保存 AI Provider 设置；API Key 只返回是否已托管，不回显明文。</p></div>
           <div><code>POST /api/custom-apis/test</code><p>通过后端代理测试外部接口，阻止内网地址、敏感 Header 和重定向 SSRF。</p></div>
+          <div><code>POST /api/servers/import</code><p>批量导入最多 500 台无凭据资产，重复名称或公网 IP 自动跳过，不覆盖已有用户数据。</p></div>
           <div><code>GET /api/servers/shells/status</code><p>登录后查看 SSH shell 连接数和诊断信息，用于排查终端卡顿或残留会话。</p></div>
           <div><code>POST /api/audit/remediate</code><p>执行安全风险确认或修复动作，并写入审计记录。</p></div>
         </div>

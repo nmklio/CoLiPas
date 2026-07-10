@@ -40,16 +40,35 @@ try {
   const adminHeaders = await login(baseUrl);
   await timed('insertServersMs', async () => {
     const payloads = buildServerPayloads(serverCount);
-    const responses = await mapWithConcurrency(payloads, createConcurrency, async (payload, index) => {
+    const connectedPayloads = payloads.filter((payload) => payload.ssh.verifyMode === 'simulate');
+    const inventoryPayloads = payloads
+      .filter((payload) => payload.ssh.verifyMode === 'assetOnly')
+      .map(({ ssh: _ssh, ...payload }) => payload);
+    const connectedResponses = await mapWithConcurrency(connectedPayloads, createConcurrency, async (payload, index) => {
       const response = await postJson(baseUrl, '/api/servers', payload, adminHeaders, 201);
       if (!response.body.id) {
-        throw new Error(`Created server ${index} did not return an id`);
+        throw new Error(`Created connected server ${index} did not return an id`);
       }
       createdIds.push(response.body.id);
       return response.body;
     });
+    const importedResponses = [];
+    for (let offset = 0; offset < inventoryPayloads.length; offset += 500) {
+      const items = inventoryPayloads.slice(offset, offset + 500);
+      const response = await postJson(baseUrl, '/api/servers/import', { items }, adminHeaders, 201);
+      if (
+        response.body.summary?.requested !== items.length
+        || response.body.summary?.imported !== items.length
+        || response.body.summary?.skipped !== 0
+      ) {
+        throw new Error(`Bulk import batch ${offset / 500 + 1} returned unexpected summary: ${JSON.stringify(response.body.summary)}`);
+      }
+      importedResponses.push(...response.body.items);
+      createdIds.push(...response.body.items.map((server) => server.id));
+    }
 
-    assertions.push(`inserted ${responses.length} simulated servers through POST /api/servers`);
+    assertions.push(`created ${connectedResponses.length} simulated SSH servers through POST /api/servers`);
+    assertions.push(`bulk imported ${importedResponses.length} inventory-only servers in ${Math.ceil(inventoryPayloads.length / 500)} transaction batch(es)`);
   });
 
   const sessions = await timed('loginUsersMs', () => loginUsers(baseUrl, userCount));

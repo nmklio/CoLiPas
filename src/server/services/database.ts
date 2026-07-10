@@ -76,6 +76,32 @@ export function upsertServerRow(item: { id: string }) {
   upsertJsonRow('servers', item.id, item);
 }
 
+export function upsertServerRows(items: Array<{ id: string }>) {
+  if (items.length === 0) {
+    return;
+  }
+
+  const db = ensureDatabase();
+  const now = new Date().toISOString();
+  const insert = prepareStatement(`
+    INSERT INTO servers (id, payload, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at
+  `);
+
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    for (const item of items) {
+      insert.run(item.id, JSON.stringify(item), now);
+    }
+    db.exec('COMMIT');
+    checkpointDatabaseIfNeeded();
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+}
+
 export function deleteServerRow(id: string) {
   prepareStatement('DELETE FROM servers WHERE id = ?').run(id);
   checkpointDatabaseIfNeeded();
