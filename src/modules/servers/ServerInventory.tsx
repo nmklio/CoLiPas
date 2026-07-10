@@ -1,7 +1,7 @@
 import { FormEvent, memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Terminal as XTerm, IDisposable } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
-import { BookmarkCheck, BookmarkPlus, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Cpu, Database, Edit3, Eraser, FileKey2, FileText, Globe2, KeyRound, Network, Plus, Power, PowerOff, RotateCcw, Search, Server, ShieldCheck, Sparkles, Star, Terminal, Trash2, X } from 'lucide-react';
+import { BookmarkCheck, BookmarkPlus, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Cpu, Database, Edit3, Eraser, FileKey2, FileText, Globe2, KeyRound, Network, Plus, Power, PowerOff, RotateCcw, Search, Server, ShieldCheck, SlidersHorizontal, Sparkles, Star, Terminal, Trash2, X } from 'lucide-react';
 import { Language, useI18n } from '../../i18n';
 import {
   closeServerShell,
@@ -116,6 +116,7 @@ const terminalFocusModeStorageKey = 'colipas.sshTerminalFocusMode.v1';
 const sshConsoleMetaCollapsedStorageKey = 'colipas.sshConsoleMetaCollapsed.v1';
 const terminalLiteModeStorageKey = 'colipas.sshTerminalLiteMode.v1';
 const terminalDiagnosticsExpandedStorageKey = 'colipas.sshDiagnosticsExpanded.v1';
+const terminalWorkspaceModeStorageKey = 'colipas.sshTerminalWorkspaceMode.v1';
 const terminalLatencyReportStorageKey = 'colipas.sshLatencyReport.v1';
 const terminalLatencyReportHistoryStorageKey = 'colipas.sshLatencyReportHistory.v1';
 const terminalLatencyReportHistoryLimit = 12;
@@ -201,6 +202,8 @@ interface TerminalNetworkStats {
 }
 
 type TerminalRecoveryState = 'idle' | 'recovering' | 'recovered' | 'interrupted';
+type TerminalWorkspacePreset = 'operate' | 'focus' | 'diagnose';
+type TerminalWorkspaceMode = TerminalWorkspacePreset | 'custom';
 
 interface TerminalNetworkQuality {
   tone: 'pending' | 'good' | 'warn' | 'slow';
@@ -705,6 +708,7 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
   const { language, t } = useI18n();
   const regions = useMemo(() => buildSortedRegions(allServers), [allServers]);
   const initialTerminalLiteModePreference = useMemo(() => readTerminalLiteModePreference(), []);
+  const initialTerminalWorkspaceModePreference = useMemo(() => readTerminalWorkspaceMode(), []);
   const scopedRegions = useMemo(() => normalizeScopedRegions(filters.regionScope), [filters.regionScope]);
   const providerFilters = useMemo(() => buildProviderOptions(allServers.map((server) => server.provider)), [allServers]);
   const healthScopeLabel = filters.health ? t(`servers.healthScope.${filters.health}`) : '';
@@ -741,6 +745,15 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
   const terminalLiteModeCustomizedRef = useRef(initialTerminalLiteModePreference !== null);
   const [terminalLiteMode, setTerminalLiteMode] = useState(() => initialTerminalLiteModePreference ?? performanceMode);
   const [terminalDiagnosticsExpanded, setTerminalDiagnosticsExpanded] = useState(() => readTerminalDiagnosticsExpanded());
+  const [terminalWorkspaceMode, setTerminalWorkspaceMode] = useState<TerminalWorkspaceMode>(() => (
+    initialTerminalWorkspaceModePreference
+      ?? deriveTerminalWorkspaceMode({
+        focus: readTerminalFocusMode(),
+        lite: initialTerminalLiteModePreference ?? performanceMode,
+        diagnosticsExpanded: readTerminalDiagnosticsExpanded(),
+        metaCollapsed: readSshConsoleMetaCollapsed(),
+      })
+  ));
   const [sshRunbookCommands, setSshRunbookCommands] = useState<SshRunbookCommand[]>([]);
   const [sshRunbookForm, setSshRunbookForm] = useState({ title: '', command: '' });
   const [editingSshRunbookId, setEditingSshRunbookId] = useState('');
@@ -1158,6 +1171,10 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
   }, [terminalDiagnosticsExpanded]);
 
   useEffect(() => {
+    writeTerminalWorkspaceMode(terminalWorkspaceMode);
+  }, [terminalWorkspaceMode]);
+
+  useEffect(() => {
     if (!sshConsoleOpen || !activeSshServer?.ssh?.connected) {
       return;
     }
@@ -1194,6 +1211,21 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
     } catch (error) {
       showActionMessage(error instanceof Error ? error.message : 'action failed');
     }
+  }
+
+  function applyTerminalWorkspaceMode(mode: TerminalWorkspacePreset) {
+    const layout = terminalWorkspaceLayouts[mode];
+    terminalLiteModeCustomizedRef.current = true;
+    setTerminalWorkspaceMode(mode);
+    setTerminalFocusMode(layout.focus);
+    setTerminalLiteMode(layout.lite);
+    setTerminalDiagnosticsExpanded(layout.diagnosticsExpanded);
+    setSshConsoleMetaCollapsed(layout.metaCollapsed);
+    scheduleTerminalFit(true);
+  }
+
+  function markTerminalWorkspaceCustom() {
+    setTerminalWorkspaceMode('custom');
   }
 
   async function runSshConnectionDoctor(server: ServerNode) {
@@ -2078,6 +2110,7 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
                   title={sshConsoleMetaCollapsed ? t('servers.expandSshMeta') : t('servers.collapseSshMeta')}
                   onClick={(event) => {
                     event.stopPropagation();
+                    markTerminalWorkspaceCustom();
                     setSshConsoleMetaCollapsed((value) => !value);
                   }}
                 >
@@ -2162,15 +2195,46 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
                     <small>{activeSshServer.os}</small>
                   </div>
                   <div className="ssh-terminal-controls">
-                    <div className="ssh-terminal-tools" aria-label={t('servers.terminalTools')}>
+                    <div className="ssh-terminal-primary-tools" aria-label={t('servers.terminalTools')}>
                       <button type="button" aria-label={t('servers.copyTerminalOutput')} title={t('servers.copyTerminalOutput')} onClick={copyTerminalOutput}>
                         <Copy size={14} />
                       </button>
                       <button type="button" aria-label={t('servers.clearTerminalOutput')} title={t('servers.clearTerminalOutput')} onClick={clearTerminalOutput}>
                         <Eraser size={14} />
                       </button>
+                    </div>
+                    <label className="ssh-terminal-workspace-picker" data-ssh-terminal-workspace-picker="true">
+                      <Terminal size={14} aria-hidden="true" />
+                      <span>{t('servers.terminalWorkspaceLabel')}</span>
+                      <select
+                        data-ssh-terminal-workspace-mode="true"
+                        value={terminalWorkspaceMode}
+                        aria-label={t('servers.terminalWorkspaceLabel')}
+                        onChange={(event) => {
+                          const nextMode = event.target.value as TerminalWorkspaceMode;
+                          if (nextMode !== 'custom') {
+                            applyTerminalWorkspaceMode(nextMode);
+                          }
+                        }}
+                      >
+                        <option value="operate">{t('servers.terminalWorkspaceOperate')}</option>
+                        <option value="focus">{t('servers.terminalWorkspaceFocus')}</option>
+                        <option value="diagnose">{t('servers.terminalWorkspaceDiagnose')}</option>
+                        {terminalWorkspaceMode === 'custom' && (
+                          <option value="custom">{t('servers.terminalWorkspaceCustom')}</option>
+                        )}
+                      </select>
+                    </label>
+                    <details className="ssh-terminal-tools" data-ssh-terminal-tools="true" onClick={(event) => event.stopPropagation()}>
+                      <summary aria-label={t('servers.terminalTools')}>
+                        <SlidersHorizontal size={14} />
+                        <span>{t('servers.terminalTools')}</span>
+                        <ChevronDown size={13} aria-hidden="true" />
+                      </summary>
+                      <div className="ssh-terminal-tools-panel">
                       <button type="button" aria-label={t('servers.runTerminalSelfTest')} title={t('servers.runTerminalSelfTest')} onClick={runTerminalSelfTest} disabled={!terminalShellId || sshInterrupting || terminalSelfTestRunning}>
                         <Cpu size={14} />
+                        <span>{t('servers.runTerminalSelfTest')}</span>
                       </button>
                       <button
                         type="button"
@@ -2184,6 +2248,7 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
                         disabled={!terminalShellId || !terminalLatencyReport}
                       >
                         <FileText size={14} />
+                        <span>{t('servers.terminalLatencyReportCopy')}</span>
                       </button>
                       <button
                         type="button"
@@ -2194,10 +2259,12 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
                         title={terminalFocusMode ? t('servers.terminalFocusOff') : t('servers.terminalFocusOn')}
                         onClick={(event) => {
                           event.stopPropagation();
+                          markTerminalWorkspaceCustom();
                           setTerminalFocusMode((value) => !value);
                         }}
                       >
                         <Terminal size={14} />
+                        <span>{terminalFocusMode ? t('servers.terminalFocusOff') : t('servers.terminalFocusOn')}</span>
                       </button>
                       <button
                         type="button"
@@ -2209,10 +2276,12 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
                         onClick={(event) => {
                           event.stopPropagation();
                           terminalLiteModeCustomizedRef.current = true;
+                          markTerminalWorkspaceCustom();
                           setTerminalLiteMode((value) => !value);
                         }}
                       >
                         <Database size={14} />
+                        <span>{terminalLiteMode ? t('servers.terminalLiteModeOff') : t('servers.terminalLiteModeOn')}</span>
                       </button>
                       <button
                         type="button"
@@ -2223,11 +2292,22 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
                         disabled={!terminalShellId || sshRunning || sshInterrupting || terminalChannelSwitching}
                       >
                         <Network size={14} />
+                        <span>{terminalTransport === 'compatible' ? t('servers.retryWebSocketChannel') : t('servers.switchToCompatibleChannel')}</span>
                       </button>
-                      <button type="button" aria-label={t('servers.sendCtrlC')} title={t('servers.sendCtrlC')} onClick={interruptTerminalCommand} disabled={!terminalShellId || sshInterrupting}>
-                        <span className="ssh-terminal-shortcut-glyph" aria-hidden="true">^C</span>
-                      </button>
-                    </div>
+                      </div>
+                    </details>
+                    <button
+                      type="button"
+                      className="ssh-terminal-interrupt"
+                      data-ssh-terminal-interrupt="true"
+                      aria-label={t('servers.sendCtrlC')}
+                      title={t('servers.sendCtrlC')}
+                      onClick={interruptTerminalCommand}
+                      disabled={!terminalShellId || sshInterrupting}
+                    >
+                      <span className="ssh-terminal-shortcut-glyph" aria-hidden="true">^C</span>
+                      <span>{t('servers.sendCtrlC')}</span>
+                    </button>
                     <span className="ssh-terminal-session-count" title={t('servers.activeShellSessions', { count: activeShellCount })}>
                       {t('servers.activeShellSessionsShort', { count: activeShellCount })}
                     </span>
@@ -2414,7 +2494,10 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
                     type="button"
                     data-ssh-diagnostics-toggle="true"
                     aria-expanded={terminalDiagnosticsExpanded}
-                    onClick={() => setTerminalDiagnosticsExpanded((value) => !value)}
+                    onClick={() => {
+                      markTerminalWorkspaceCustom();
+                      setTerminalDiagnosticsExpanded((value) => !value);
+                    }}
                   >
                     {terminalDiagnosticsExpanded ? (
                       <>
@@ -2632,6 +2715,7 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
                         data-ssh-terminal-lite-expand="true"
                         onClick={() => {
                           terminalLiteModeCustomizedRef.current = true;
+                          markTerminalWorkspaceCustom();
                           setTerminalLiteMode(false);
                         }}
                       >
@@ -4382,7 +4466,7 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
       void copyTerminalLatencyReport();
       return;
     }
-    setTerminalFocusMode(true);
+    applyTerminalWorkspaceMode('focus');
     xtermRef.current?.focus();
   }
 
@@ -5364,6 +5448,76 @@ function writeTerminalDiagnosticsExpanded(enabled: boolean) {
     window.localStorage.setItem(terminalDiagnosticsExpandedStorageKey, enabled ? 'true' : 'false');
   } catch {
     // Diagnostics expansion is a UI preference and must never block terminal interaction.
+  }
+}
+
+const terminalWorkspaceLayouts: Record<TerminalWorkspacePreset, {
+  focus: boolean;
+  lite: boolean;
+  diagnosticsExpanded: boolean;
+  metaCollapsed: boolean;
+}> = {
+  operate: {
+    focus: false,
+    lite: true,
+    diagnosticsExpanded: false,
+    metaCollapsed: false,
+  },
+  focus: {
+    focus: true,
+    lite: true,
+    diagnosticsExpanded: false,
+    metaCollapsed: true,
+  },
+  diagnose: {
+    focus: false,
+    lite: false,
+    diagnosticsExpanded: true,
+    metaCollapsed: false,
+  },
+};
+
+function deriveTerminalWorkspaceMode({
+  focus,
+  lite,
+  diagnosticsExpanded,
+  metaCollapsed,
+}: {
+  focus: boolean;
+  lite: boolean;
+  diagnosticsExpanded: boolean;
+  metaCollapsed: boolean;
+}): TerminalWorkspaceMode {
+  if (focus && lite && !diagnosticsExpanded && metaCollapsed) {
+    return 'focus';
+  }
+  if (!focus && lite && !diagnosticsExpanded && !metaCollapsed) {
+    return 'operate';
+  }
+  if (!focus && !lite && diagnosticsExpanded && !metaCollapsed) {
+    return 'diagnose';
+  }
+  return 'custom';
+}
+
+function readTerminalWorkspaceMode(): TerminalWorkspaceMode | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  const value = window.localStorage.getItem(terminalWorkspaceModeStorageKey);
+  return value === 'operate' || value === 'focus' || value === 'diagnose' || value === 'custom'
+    ? value
+    : null;
+}
+
+function writeTerminalWorkspaceMode(mode: TerminalWorkspaceMode) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  try {
+    window.localStorage.setItem(terminalWorkspaceModeStorageKey, mode);
+  } catch {
+    // Workspace mode is a UI preference and must never block terminal interaction.
   }
 }
 

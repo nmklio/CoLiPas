@@ -92,7 +92,7 @@ const usageBlocks = [
   {
     icon: TerminalSquare,
     title: '4. 打开 SSH 终端',
-    body: '已验证 SSH 的服务器可以打开浏览器 xterm 交互式终端。命令实时输出，输入框不会因为命令执行中而锁死；WebSocket 中断会切到兼容流，兼容流断开时可安全手动重连。',
+    body: '已验证 SSH 的服务器可以打开浏览器 xterm 交互式终端。命令实时输出，输入不会因为命令执行中而锁死；可用操作、专注、诊断三种工作区快速切换布局；WebSocket 中断会切到兼容流，兼容流断开时可安全手动重连。',
     points: ['支持 Ctrl+C 中断', '支持实时 PTY 输出与兼容流降级', '重连不会重放已输入命令，命令摘要会脱敏进入审计'],
   },
   {
@@ -325,7 +325,7 @@ export function DocsPage({ onLogin }: DocsPageProps) {
               <div className="docs-section-heading">
                 <span><TerminalSquare size={18} /> SSH 与运维编排</span>
                 <h2>先验证 SSH，再执行命令和任务</h2>
-              <p>真实 SSH 接入支持密码和私钥。只有已验证的服务器才能打开实时终端和执行远程动作；实时通道中断会自动尝试兼容流，失败后显示手动重连入口且不会重放已输入命令。</p>
+              <p>真实 SSH 接入支持密码和私钥。只有已验证的服务器才能打开实时终端和执行远程动作；终端提供可持久化的操作、专注、诊断工作区，分别用于轻量操作、终端优先和完整证据排查；实时通道中断会自动尝试兼容流，失败后显示手动重连入口且不会重放已输入命令。</p>
               </div>
               <div className="docs-check-list">
                 <p><CheckCircle2 size={16} /> 开机、关机、重启会更新服务器生命周期状态。</p>

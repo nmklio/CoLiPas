@@ -123,7 +123,11 @@ async function createE2ePage(options) {
     window.localStorage.removeItem('colipas.sshTerminalSupportSnapshotHistory.v1');
     window.localStorage.removeItem('colipas.sshLatencyReport.v1');
     window.localStorage.removeItem('colipas.sshLatencyReportHistory.v1');
+    window.localStorage.removeItem('colipas.sshTerminalFocusMode.v1');
     window.localStorage.removeItem('colipas.sshTerminalLiteMode.v1');
+    window.localStorage.removeItem('colipas.sshDiagnosticsExpanded.v1');
+    window.localStorage.removeItem('colipas.sshConsoleMetaCollapsed.v1');
+    window.localStorage.removeItem('colipas.sshTerminalWorkspaceMode.v1');
     window.localStorage.removeItem('colipas.serverFleetViews.v1');
     window.localStorage.removeItem('colipas.launchGuide.dismissed.v1');
     window.localStorage.removeItem('colipas.launchGuide.view.v1');
@@ -1331,6 +1335,20 @@ async function assertFleetViews(targetPage, sshServer) {
   console.log('ok browser e2e saves, restores, persists, and removes browser-only fleet views without asset leakage');
 }
 
+async function openSshTerminalTools(targetPage) {
+  const tools = targetPage.locator('[data-ssh-terminal-tools="true"]');
+  await tools.waitFor({ timeout: 5000 });
+  const isOpen = await tools.evaluate((node) => node instanceof HTMLDetailsElement && node.open);
+  if (!isOpen) {
+    await tools.locator('summary').click();
+    await targetPage.waitForFunction(() => {
+      const node = document.querySelector('[data-ssh-terminal-tools="true"]');
+      return node instanceof HTMLDetailsElement && node.open;
+    }, undefined, { timeout: 5000 });
+  }
+  return tools;
+}
+
 async function assertSshTerminalPanel(targetPage) {
   const sshServer = await createTemporarySimulatedSshServer(targetPage);
   try {
@@ -1560,6 +1578,7 @@ async function assertSshTerminalPanel(targetPage) {
     }
     await targetPage.locator('[data-ssh-quick-command-deck="true"]').waitFor({ timeout: 5000 });
     await ensureSshQuickCommandsEnabled(targetPage, sshServerRow);
+    await openSshTerminalTools(targetPage);
     const liteToggleButton = targetPage.locator('[data-ssh-terminal-lite-toggle="true"]');
     await liteToggleButton.waitFor({ timeout: 5000 });
     await targetPage.locator('[data-ssh-terminal-experience-center="true"]').waitFor({ timeout: 5000 });
@@ -2312,6 +2331,79 @@ async function assertSshTerminalPanel(targetPage) {
     if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(storedTerminalSupportHistory) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(storedTerminalSupportHistory) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(storedTerminalSupportHistory)) {
       throw new Error('SSH terminal support snapshot history leaked a raw IP address or secret');
     }
+    const workspaceModeSelect = targetPage.locator('[data-ssh-terminal-workspace-mode="true"]');
+    await workspaceModeSelect.waitFor({ timeout: 5000 });
+    const workspaceOptions = await workspaceModeSelect.locator('option').allTextContents();
+    if (!workspaceOptions.some((option) => /Operate/i.test(option)) || !workspaceOptions.some((option) => /Focus/i.test(option)) || !workspaceOptions.some((option) => /Diagnose/i.test(option))) {
+      throw new Error(`SSH workspace selector did not expose all presets: ${workspaceOptions.join(', ')}`);
+    }
+    await workspaceModeSelect.selectOption('operate');
+    await targetPage.locator('[data-ssh-terminal-lite-summary="true"]').waitFor({ timeout: 5000 });
+    const operateWorkspaceState = await targetPage.evaluate(() => ({
+      workspace: window.localStorage.getItem('colipas.sshTerminalWorkspaceMode.v1'),
+      focus: window.localStorage.getItem('colipas.sshTerminalFocusMode.v1'),
+      lite: window.localStorage.getItem('colipas.sshTerminalLiteMode.v1'),
+      diagnostics: window.localStorage.getItem('colipas.sshDiagnosticsExpanded.v1'),
+      meta: window.localStorage.getItem('colipas.sshConsoleMetaCollapsed.v1'),
+    }));
+    if (JSON.stringify(operateWorkspaceState) !== JSON.stringify({ workspace: 'operate', focus: 'false', lite: 'true', diagnostics: 'false', meta: 'false' })) {
+      throw new Error(`SSH operate workspace did not persist its layout: ${JSON.stringify(operateWorkspaceState)}`);
+    }
+    await workspaceModeSelect.selectOption('diagnose');
+    await targetPage.locator('[data-ssh-terminal-experience-center="true"]').waitFor({ timeout: 5000 });
+    await targetPage.waitForFunction(() => {
+      const toggle = document.querySelector('[data-ssh-diagnostics-toggle="true"]');
+      return toggle?.getAttribute('aria-expanded') === 'true'
+        && document.querySelectorAll('[data-ssh-terminal-bottleneck="true"], [data-ssh-terminal-root-cause="true"], [data-ssh-terminal-latency-report="true"], [data-ssh-terminal-support-bundle="true"]').length === 4;
+    }, undefined, { timeout: 5000 });
+    const diagnoseWorkspaceState = await targetPage.evaluate(() => ({
+      workspace: window.localStorage.getItem('colipas.sshTerminalWorkspaceMode.v1'),
+      focus: window.localStorage.getItem('colipas.sshTerminalFocusMode.v1'),
+      lite: window.localStorage.getItem('colipas.sshTerminalLiteMode.v1'),
+      diagnostics: window.localStorage.getItem('colipas.sshDiagnosticsExpanded.v1'),
+      meta: window.localStorage.getItem('colipas.sshConsoleMetaCollapsed.v1'),
+    }));
+    if (JSON.stringify(diagnoseWorkspaceState) !== JSON.stringify({ workspace: 'diagnose', focus: 'false', lite: 'false', diagnostics: 'true', meta: 'false' })) {
+      throw new Error(`SSH diagnose workspace did not persist its layout: ${JSON.stringify(diagnoseWorkspaceState)}`);
+    }
+    const terminalHeightBeforeWorkspaceFocus = await targetPage.locator('.ssh-terminal-screen').evaluate((node) => node.getBoundingClientRect().height);
+    await workspaceModeSelect.selectOption('focus');
+    await targetPage.waitForFunction(() => {
+      const shell = document.querySelector('.ssh-terminal-shell');
+      const meta = document.querySelector('[data-ssh-console-meta="true"]');
+      const hiddenPanels = [
+        '[data-ssh-terminal-telemetry="true"]',
+        '[data-ssh-diagnostics-summary="true"]',
+        '[data-ssh-terminal-bottleneck="true"]',
+        '[data-ssh-terminal-root-cause="true"]',
+        '[data-ssh-terminal-experience-center="true"]',
+        '[data-ssh-terminal-latency-report="true"]',
+        '[data-ssh-terminal-support-bundle="true"]',
+        '[data-ssh-quick-command-deck="true"]',
+      ];
+      return shell?.classList.contains('focus-mode')
+        && meta?.getAttribute('data-ssh-console-meta-state') === 'collapsed'
+        && hiddenPanels.every((selector) => !document.querySelector(selector));
+    }, undefined, { timeout: 5000 });
+    const focusWorkspaceState = await targetPage.evaluate(() => ({
+      workspace: window.localStorage.getItem('colipas.sshTerminalWorkspaceMode.v1'),
+      focus: window.localStorage.getItem('colipas.sshTerminalFocusMode.v1'),
+      lite: window.localStorage.getItem('colipas.sshTerminalLiteMode.v1'),
+      diagnostics: window.localStorage.getItem('colipas.sshDiagnosticsExpanded.v1'),
+      meta: window.localStorage.getItem('colipas.sshConsoleMetaCollapsed.v1'),
+      horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+    }));
+    if (JSON.stringify(focusWorkspaceState) !== JSON.stringify({ workspace: 'focus', focus: 'true', lite: 'true', diagnostics: 'false', meta: 'true', horizontalOverflow: false })) {
+      throw new Error(`SSH focus workspace did not persist a terminal-first layout: ${JSON.stringify(focusWorkspaceState)}`);
+    }
+    const terminalHeightInWorkspaceFocus = await targetPage.locator('.ssh-terminal-screen').evaluate((node) => node.getBoundingClientRect().height);
+    if (terminalHeightInWorkspaceFocus < terminalHeightBeforeWorkspaceFocus) {
+      throw new Error(`SSH focus workspace should not shrink the xterm viewport: before ${terminalHeightBeforeWorkspaceFocus}, focus ${terminalHeightInWorkspaceFocus}`);
+    }
+    await captureVisualEvidence(targetPage, 'desktop-ssh-workspace-focus', ['.ssh-console', '[data-ssh-terminal-workspace-picker="true"]', '.ssh-terminal-screen']);
+    await workspaceModeSelect.selectOption('diagnose');
+    await targetPage.locator('[data-ssh-terminal-support-bundle="true"]').waitFor({ timeout: 5000 });
+    await openSshTerminalTools(targetPage);
     const focusToggleButton = targetPage.locator('[data-ssh-terminal-focus-toggle="true"]');
     await focusToggleButton.waitFor({ timeout: 5000 });
     const terminalHeightBeforeFocus = await targetPage.locator('.ssh-terminal-screen').evaluate((node) => node.getBoundingClientRect().height);
@@ -2342,6 +2434,7 @@ async function assertSshTerminalPanel(targetPage) {
     if (focusPreferenceOff !== 'false') {
       throw new Error(`SSH terminal focus mode preference was not cleared: ${focusPreferenceOff}`);
     }
+    await openSshTerminalTools(targetPage);
     const channelSwitchButton = targetPage.locator('[data-ssh-channel-switch="true"]');
     await channelSwitchButton.waitFor({ timeout: 5000 });
     const initialChannelSwitchLabel = await channelSwitchButton.getAttribute('aria-label');

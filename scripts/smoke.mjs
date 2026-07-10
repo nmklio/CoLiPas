@@ -6607,6 +6607,7 @@ function assertSshTerminalRealtimeGuards() {
     'renderLagMs >= terminalRenderForceLagMs || pendingBytes >= terminalRenderForceBacklogThreshold',
     'terminalFocusModeStorageKey',
     'terminalLiteModeStorageKey',
+    'terminalWorkspaceModeStorageKey',
     'terminalLatencyReportStorageKey',
     'terminalLatencyReportHistoryStorageKey',
     'terminalFocusModeNetworkUiRefreshMs',
@@ -6615,6 +6616,7 @@ function assertSshTerminalRealtimeGuards() {
     'const [terminalFocusMode, setTerminalFocusMode]',
     'const [terminalLiteMode, setTerminalLiteMode]',
     'const [terminalDiagnosticsExpanded, setTerminalDiagnosticsExpanded]',
+    'const [terminalWorkspaceMode, setTerminalWorkspaceMode]',
     'const terminalFocusModeRef = useRef(terminalFocusMode)',
     'function readTerminalFocusMode()',
     'function writeTerminalFocusMode(enabled: boolean)',
@@ -6622,7 +6624,16 @@ function assertSshTerminalRealtimeGuards() {
     'function writeTerminalLiteModePreference(enabled: boolean)',
     'function readTerminalDiagnosticsExpanded()',
     'function writeTerminalDiagnosticsExpanded(enabled: boolean)',
+    'type TerminalWorkspaceMode',
+    'const terminalWorkspaceLayouts',
+    'function deriveTerminalWorkspaceMode(',
+    'function readTerminalWorkspaceMode()',
+    'function writeTerminalWorkspaceMode(mode: TerminalWorkspaceMode)',
+    'function applyTerminalWorkspaceMode(mode: TerminalWorkspacePreset)',
     "className={terminalFocusMode ? 'ssh-terminal-shell focus-mode' : 'ssh-terminal-shell'}",
+    'data-ssh-terminal-workspace-picker="true"',
+    'data-ssh-terminal-workspace-mode="true"',
+    'data-ssh-terminal-tools="true"',
     'data-ssh-terminal-focus-toggle="true"',
     'data-ssh-terminal-lite-toggle="true"',
     'data-ssh-terminal-lite-summary="true"',
@@ -6843,6 +6854,11 @@ function assertSshTerminalRealtimeGuards() {
   }
   const requiredToolLabels = [
     'servers.terminalTools',
+    'servers.terminalWorkspaceLabel',
+    'servers.terminalWorkspaceOperate',
+    'servers.terminalWorkspaceFocus',
+    'servers.terminalWorkspaceDiagnose',
+    'servers.terminalWorkspaceCustom',
     'servers.terminalRefreshModeLabel',
     'servers.terminalRefreshModeDetail',
     'servers.terminalFocusOn',
@@ -7398,7 +7414,7 @@ function assertSshTerminalRealtimeGuards() {
   if (!globalCssSource.includes('.ssh-terminal-self-test') || !globalCssSource.includes('.ssh-terminal-self-test.complete')) {
     throw new Error('SSH terminal self-test result chip styles are missing');
   }
-  if (!globalCssSource.includes('.ssh-terminal-experience-center') || !globalCssSource.includes('.ssh-terminal-experience-score') || !globalCssSource.includes('.ssh-terminal-experience-pills') || !globalCssSource.includes('.ssh-terminal-diagnostics-summary') || !globalCssSource.includes('.ssh-terminal-diagnostics-chips') || !globalCssSource.includes('.ssh-terminal-diagnostics-summary > button') || !globalCssSource.includes('.ssh-terminal-latency-report') || !globalCssSource.includes('.ssh-terminal-latency-report-grid') || !globalCssSource.includes('.ssh-terminal-latency-report-copy') || !globalCssSource.includes('.ssh-quick-command-deck') || !globalCssSource.includes('.ssh-runbook-workspace') || !globalCssSource.includes('.ssh-runbook-form') || !globalCssSource.includes('.ssh-runbook-form.editing') || !globalCssSource.includes('.ssh-runbook-lens') || !globalCssSource.includes('.ssh-runbook-categories button.active') || !globalCssSource.includes('.ssh-runbook-views button.active') || !globalCssSource.includes('.ssh-runbook-view-hint') || !globalCssSource.includes('.ssh-runbook-clear-filter') || !globalCssSource.includes('.ssh-runbook-recommendations') || !globalCssSource.includes('.ssh-runbook-recommendation-grid') || !globalCssSource.includes('.ssh-runbook-pack-dock') || !globalCssSource.includes('.ssh-runbook-pack-grid') || !globalCssSource.includes('.ssh-quick-command-grid') || !globalCssSource.includes('.ssh-quick-command-grid article.custom.pinned') || !globalCssSource.includes('.ssh-quick-command-grid .ssh-runbook-usage') || !globalCssSource.includes('.ssh-quick-command-grid button.pin') || !globalCssSource.includes('.ssh-quick-command-grid button.sort') || !globalCssSource.includes('.ssh-terminal-refresh-mode') || !globalCssSource.includes('.ssh-terminal-tools button.active') || !globalCssSource.includes('.ssh-terminal-shell.focus-mode .ssh-terminal-screen') || !globalCssSource.includes('.ssh-terminal-root-cause') || !globalCssSource.includes('.ssh-terminal-root-cause-meter') || !globalCssSource.includes('.ssh-terminal-root-cause-lanes') || !globalCssSource.includes('flex-direction: column') || !globalCssSource.includes('overflow-y: auto') || !globalCssSource.includes('order: 2') || !globalCssSource.includes('flex: 1 0 clamp(320px, 52vh, 520px)') || !globalCssSource.includes('min-height: clamp(300px, 46vh, 500px)')) {
+  if (!globalCssSource.includes('.ssh-terminal-experience-center') || !globalCssSource.includes('.ssh-terminal-experience-score') || !globalCssSource.includes('.ssh-terminal-experience-pills') || !globalCssSource.includes('.ssh-terminal-diagnostics-summary') || !globalCssSource.includes('.ssh-terminal-diagnostics-chips') || !globalCssSource.includes('.ssh-terminal-diagnostics-summary > button') || !globalCssSource.includes('.ssh-terminal-latency-report') || !globalCssSource.includes('.ssh-terminal-latency-report-grid') || !globalCssSource.includes('.ssh-terminal-latency-report-copy') || !globalCssSource.includes('.ssh-quick-command-deck') || !globalCssSource.includes('.ssh-runbook-workspace') || !globalCssSource.includes('.ssh-runbook-form') || !globalCssSource.includes('.ssh-runbook-form.editing') || !globalCssSource.includes('.ssh-runbook-lens') || !globalCssSource.includes('.ssh-runbook-categories button.active') || !globalCssSource.includes('.ssh-runbook-views button.active') || !globalCssSource.includes('.ssh-runbook-view-hint') || !globalCssSource.includes('.ssh-runbook-clear-filter') || !globalCssSource.includes('.ssh-runbook-recommendations') || !globalCssSource.includes('.ssh-runbook-pack-dock') || !globalCssSource.includes('.ssh-runbook-pack-grid') || !globalCssSource.includes('.ssh-quick-command-grid') || !globalCssSource.includes('.ssh-quick-command-grid article.custom.pinned') || !globalCssSource.includes('.ssh-quick-command-grid .ssh-runbook-usage') || !globalCssSource.includes('.ssh-quick-command-grid button.pin') || !globalCssSource.includes('.ssh-quick-command-grid button.sort') || !globalCssSource.includes('.ssh-terminal-refresh-mode') || !globalCssSource.includes('.ssh-terminal-primary-tools') || !globalCssSource.includes('.ssh-terminal-workspace-picker') || !globalCssSource.includes('.ssh-terminal-tools-panel') || !globalCssSource.includes('.ssh-terminal-interrupt') || !globalCssSource.includes('.ssh-terminal-shell.focus-mode .ssh-terminal-screen') || !globalCssSource.includes('.ssh-terminal-root-cause') || !globalCssSource.includes('.ssh-terminal-root-cause-meter') || !globalCssSource.includes('.ssh-terminal-root-cause-lanes') || !globalCssSource.includes('flex-direction: column') || !globalCssSource.includes('overflow-y: auto') || !globalCssSource.includes('order: 2') || !globalCssSource.includes('flex: 1 0 clamp(320px, 52vh, 520px)') || !globalCssSource.includes('min-height: clamp(300px, 46vh, 500px)')) {
     throw new Error('SSH terminal quick command deck styles are missing or the terminal grid does not reserve space for it');
   }
 

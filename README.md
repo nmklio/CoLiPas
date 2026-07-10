@@ -61,7 +61,7 @@ The runtime is intentionally simple. One Node.js process serves the Express API 
 | --- | --- |
 | Inventory and map | Cloud account overview, custom provider names, server lifecycle status, region and OS detection, resource refresh, and map grouping. |
 | Server access | Manual onboarding, inventory-only mode, simulated SSH, password/private-key SSH verification, diagnostics, and guarded power actions. |
-| Live SSH terminal | xterm-style browser terminal, WebSocket streaming with compatible fallback, copy/clear tools, `Ctrl+C`, large-output guards, visible disconnect recovery, manual reconnect without command replay, and backend shell cleanup when the panel closes. |
+| Live SSH terminal | xterm-style browser terminal, WebSocket streaming with compatible fallback, persistent Operate / Focus / Diagnose workspace presets, copy/clear tools, `Ctrl+C`, large-output guards, visible disconnect recovery, manual reconnect without command replay, and backend shell cleanup when the panel closes. |
 | Fleet views | Save common inventory filters as up to eight browser-only views, then restore a focused operational scope without sending filter or asset data anywhere. |
 | Contextual launch guide | Full six-step release checklist on Overview; a compact, persistent workspace summary elsewhere or in Performance mode, with a one-click path back to complete evidence and the next remediation. |
 | Mobile quick controls | Keeps navigation, launch readiness, and the command palette on the first mobile row; performance mode, language, refresh, account settings, and sign-out move into an accessible compact drawer. |
