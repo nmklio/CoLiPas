@@ -1292,7 +1292,70 @@ async function assertServerBulkImportPanel(targetPage) {
 async function assertAccountSettingsAndAiChat(targetPage) {
   const profileName = `Ops E2E ${Date.now().toString().slice(-5)}`;
   let aiSshServerId = '';
-  await targetPage.locator('.account-settings-trigger').click();
+  const topbarMetrics = await targetPage.locator('.topbar').evaluate((element) => ({
+    height: element.getBoundingClientRect().height,
+    scrollWidth: element.scrollWidth,
+    clientWidth: element.clientWidth,
+  }));
+  if (topbarMetrics.height > 76 || topbarMetrics.scrollWidth > topbarMetrics.clientWidth + 1) {
+    throw new Error(`Desktop operator topbar must remain a single non-overflowing row: ${JSON.stringify(topbarMetrics)}`);
+  }
+  const topbarMetricLayout = await targetPage.locator('.topbar-metrics').evaluate((element) => {
+    const container = element.getBoundingClientRect();
+    return {
+      container: { left: container.left, right: container.right, width: container.width },
+      chips: Array.from(element.querySelectorAll('.topbar-chip')).map((chip) => {
+        const rect = chip.getBoundingClientRect();
+        return { left: rect.left, right: rect.right, width: rect.width };
+      }),
+    };
+  });
+  if (
+    topbarMetricLayout.chips.length !== 4
+    || topbarMetricLayout.chips.some((chip) => (
+      chip.width < 48
+      || chip.left < topbarMetricLayout.container.left - 1
+      || chip.right > topbarMetricLayout.container.right + 1
+    ))
+  ) {
+    throw new Error(`Desktop operator topbar must keep all four runtime metrics readable: ${JSON.stringify(topbarMetricLayout)}`);
+  }
+  await captureVisualEvidence(targetPage, 'desktop-operator-topbar', ['.topbar']);
+  const desktopViewport = targetPage.viewportSize();
+  if (desktopViewport) {
+    await targetPage.setViewportSize({ width: 1024, height: 800 });
+    const tabletTopbarMetrics = await targetPage.locator('.topbar').evaluate((element) => ({
+      height: element.getBoundingClientRect().height,
+      scrollWidth: element.scrollWidth,
+      clientWidth: element.clientWidth,
+    }));
+    if (tabletTopbarMetrics.height > 76 || tabletTopbarMetrics.scrollWidth > tabletTopbarMetrics.clientWidth + 1) {
+      throw new Error(`Tablet operator topbar must remain compact and non-overflowing: ${JSON.stringify(tabletTopbarMetrics)}`);
+    }
+    await targetPage.setViewportSize(desktopViewport);
+  }
+  const operatorUtilityTrigger = targetPage.locator('[data-operator-utility-trigger="true"]');
+  await operatorUtilityTrigger.waitFor({ timeout: 5000 });
+  if (!new RegExp(username, 'i').test(await operatorUtilityTrigger.innerText())) {
+    throw new Error('Operator controls trigger must keep the signed-in username visible');
+  }
+  await operatorUtilityTrigger.click();
+  const operatorUtilityMenu = targetPage.locator('[data-operator-utility-menu="true"]');
+  await operatorUtilityMenu.waitFor({ timeout: 5000 });
+  if (
+    await operatorUtilityMenu.locator('.language-switcher-option').count() !== 3
+    || await operatorUtilityMenu.locator('[data-operator-utility-refresh="true"]').count() !== 1
+    || await operatorUtilityMenu.locator('[data-operator-utility-account="true"]').count() !== 1
+    || await operatorUtilityMenu.locator('[data-operator-utility-logout="true"]').count() !== 1
+  ) {
+    throw new Error('Desktop operator controls must expose language, refresh, account, and sign-out actions');
+  }
+  await captureVisualEvidence(targetPage, 'desktop-operator-controls', ['.topbar', '[data-operator-utility-menu="true"]']);
+  await targetPage.keyboard.press('Escape');
+  await operatorUtilityMenu.waitFor({ state: 'hidden', timeout: 5000 });
+  await operatorUtilityTrigger.click();
+  await operatorUtilityMenu.waitFor({ timeout: 5000 });
+  await operatorUtilityMenu.locator('[data-operator-utility-account="true"]').click();
   await targetPage.locator('.account-modal').waitFor({ timeout: 5000 });
   const accountSessionControl = targetPage.locator('[data-account-session-control="true"]');
   await accountSessionControl.waitFor({ timeout: 10000 });
@@ -1367,7 +1430,7 @@ async function assertAccountSettingsAndAiChat(targetPage) {
   await targetPage.getByText(/avatar and display name updated|appearance settings updated/i).waitFor({ timeout: 10000 });
   await targetPage.locator('.account-modal .icon-button').first().click();
   await targetPage.locator('.account-modal').waitFor({ state: 'hidden', timeout: 5000 });
-  await targetPage.locator('.account-settings-trigger').filter({ hasText: username }).waitFor({ timeout: 5000 });
+  await targetPage.locator('[data-operator-utility-trigger="true"]').filter({ hasText: username }).waitFor({ timeout: 5000 });
   await targetPage.locator('.brand').filter({ hasText: profileName }).waitFor({ timeout: 5000 });
   const sidebarBrandMark = targetPage.locator('.sidebar .brand .brand-mark').first();
   await sidebarBrandMark.locator('svg').waitFor({ timeout: 5000 });
@@ -1378,9 +1441,9 @@ async function assertAccountSettingsAndAiChat(targetPage) {
   if (brokenProfileImages !== 0) {
     throw new Error(`Account UI rendered ${brokenProfileImages} broken profile image(s)`);
   }
-  const accountTriggerMediaCount = await targetPage.locator('.account-settings-trigger svg, .account-settings-trigger img, .account-settings-trigger .brand-mark').count();
+  const accountTriggerMediaCount = await targetPage.locator('[data-operator-utility-trigger="true"] img, [data-operator-utility-trigger="true"] .brand-mark').count();
   if (accountTriggerMediaCount !== 0) {
-    throw new Error(`Topbar account settings trigger must be text-only, found ${accountTriggerMediaCount} media nodes`);
+    throw new Error(`Topbar operator controls must not render a profile image, found ${accountTriggerMediaCount} media nodes`);
   }
 
   try {

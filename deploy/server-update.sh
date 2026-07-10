@@ -174,6 +174,7 @@ function landingIcon(kind, className) {
     flow: '<circle cx="6.5" cy="7" r="2.2"/><circle cx="17.5" cy="7" r="2.2"/><circle cx="12" cy="17" r="2.2"/><path d="M8.6 7h6.8M7.8 9l3.1 5.7M16.2 9l-3.1 5.7"/>',
     shield: '<path d="M12 3.8 18.3 6v5.3c0 4.1-2.5 7.2-6.3 8.9-3.8-1.7-6.3-4.8-6.3-8.9V6L12 3.8Z"/><path d="M9.2 12.1 11.1 14l3.9-4.3"/><path d="M8.6 17.3h6.8"/>',
     command: '<rect x="4.2" y="5" width="15.6" height="14" rx="2.7"/><path d="M4.2 9.1h15.6"/><path d="m8 12.2 2.5 1.8L8 15.8"/><path d="M13.3 15.7h3.6"/><circle cx="7" cy="7.1" r=".55"/><circle cx="8.9" cy="7.1" r=".55"/>',
+    controls: '<path d="M4.5 7h8.2M16.4 7h3.1M4.5 12h3.1M11.3 12h8.2M4.5 17h6.2M14.4 17h5.1"/><circle cx="14.5" cy="7" r="1.7"/><circle cx="9.5" cy="12" r="1.7"/><circle cx="12.6" cy="17" r="1.7"/>',
     inbox: '<path d="M5.2 5.1h13.6l1.4 8.1v4.4a1.8 1.8 0 0 1-1.8 1.8H5.6a1.8 1.8 0 0 1-1.8-1.8v-4.4l1.4-8.1Z"/><path d="M4.1 13.2h4.2l1.2 2h5l1.2-2h4.2"/><path d="M8.1 8.7h7.8"/>',
     code: '<path d="m9 8-4 4 4 4M15 8l4 4-4 4"/><path d="m13.2 6.8-2.4 10.4"/>',
     database: '<ellipse cx="12" cy="6.4" rx="6.8" ry="2.8"/><path d="M5.2 6.4v7.2c0 1.6 3 2.8 6.8 2.8s6.8-1.2 6.8-2.8V6.4"/><path d="M5.2 10c0 1.6 3 2.8 6.8 2.8s6.8-1.2 6.8-2.8"/>',
@@ -300,6 +301,14 @@ if (!html.includes('data-colipas-feature="account-session-control"')) {
       ${accountSessionFeatureCard}`);
 } else {
   replaceOnce(/<article class="feature-card" data-colipas-feature="account-session-control">[\s\S]*?<\/article>/, accountSessionFeatureCard);
+}
+
+const operatorControlsFeatureCard = `<article class="feature-card" data-colipas-feature="operator-controls">${landingIcon('controls', 'icon feature-icon')}<h3>自适应操作员控制</h3><p>桌面和手机端把刷新、语言、账户与退出集中到同一个溢出面板，顶栏始终保留登录名称、同步状态和核心运维入口。</p><div class="tags"><span>单行顶栏</span><span>键盘可关闭</span></div></article>`;
+if (!html.includes('data-colipas-feature="operator-controls"')) {
+  replaceOnce(/(<div class="feature-grid">)/, `$1
+      ${operatorControlsFeatureCard}`);
+} else {
+  replaceOnce(/<article class="feature-card" data-colipas-feature="operator-controls">[\s\S]*?<\/article>/, operatorControlsFeatureCard);
 }
 
 replaceAll(/<article class="deploy-card"><h3>Linux systemd<\/h3>/g, `<article class="deploy-card">${landingIcon('terminal', 'deploy-icon')}<h3>Linux systemd</h3>`);
@@ -1725,25 +1734,31 @@ if (!html.includes('data-colipas-docs-fleet-views="true"')) {
           </article>`,
   );
 }
+const operatorControlsDocsSection = `      <section class="section" data-colipas-docs-mobile-controls="true" data-colipas-docs-operator-controls="true">
+        <p class="kicker">自适应操作员控制</p>
+        <h2>登录名称与同步状态常驻，次要动作集中到一个控制面板</h2>
+        <div class="grid">
+          <article class="doc-card">
+            <h3>桌面端保持单行</h3>
+            <p>顶栏保留运维收件箱、上线检查、命令面板和性能模式；刷新、语言、账户设置与退出登录收进带登录名称的操作员控制器，避免实时指标被挤掉。</p>
+          </article>
+          <article class="doc-card">
+            <h3>移动端自动压缩</h3>
+            <p>手机端继续使用“…”打开同一组控制；三种语言始终可用，并支持 Escape、遮罩或关闭按钮返回当前模块。</p>
+          </article>
+        </div>
+      </section>`;
 if (!html.includes('data-colipas-docs-mobile-controls="true"')) {
   html = html.replace(
     /(<section id="server-access")/,
-    `      <section class="section" data-colipas-docs-mobile-controls="true">
-        <p class="kicker">移动端快捷控制</p>
-        <h2>主操作保持在首行，其余控制集中在快捷抽屉</h2>
-        <div class="grid">
-          <article class="doc-card">
-            <h3>更紧凑的工作区</h3>
-            <p>手机端首行保留导航、上线检查和命令面板，避免多行工具栏持续挤占服务器、SSH 和 AI 的操作空间。</p>
-          </article>
-          <article class="doc-card">
-            <h3>快捷控制</h3>
-            <p>点击顶部“…”可打开性能模式、三种语言、资产刷新、账户设置和退出登录；点击遮罩或关闭按钮即可返回当前模块。</p>
-          </article>
-        </div>
-      </section>
+    `${operatorControlsDocsSection}
 
 $1`,
+  );
+} else {
+  html = html.replace(
+    /<section class="section" data-colipas-docs-mobile-controls="true"[\s\S]*?<\/section>/,
+    operatorControlsDocsSection,
   );
 }
 if (!html.includes('data-colipas-docs-command-palette="true"')) {

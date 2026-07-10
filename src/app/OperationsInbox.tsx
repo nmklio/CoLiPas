@@ -223,7 +223,8 @@ export function OperationsInboxMobileAction(props: {
   return (
     <button
       type="button"
-      className={`mobile-utility-action operations-inbox-mobile-action ${summary.tone}`}
+      className={`operator-utility-action operations-inbox-mobile-action ${summary.tone}`}
+      data-operator-utility-inbox="true"
       data-mobile-utility-inbox="true"
       onClick={onOpen}
     >

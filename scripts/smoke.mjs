@@ -45,7 +45,7 @@ assertSshTerminalRealtimeGuards();
 assertSshConnectionDoctorGuards();
 assertProductionSshProbeGuards();
 assertSshKeyAuthenticationGuards();
-assertMobileTopbarKeepsCoreActions();
+assertAdaptiveOperatorControls();
 assertSecurityAuditRelationsAreSpecific();
 assertOperationsTargetSelectionGuards();
 assertMaintenanceWindowGuards();
@@ -4289,17 +4289,19 @@ function assertAccountUiGuards() {
   if (!appSource.includes('<strong>{sidebarDisplayLabel}</strong>')) {
     throw new Error('Sidebar brand must keep the custom profile display name separate from the topbar login username');
   }
-  const accountTriggerSource = appSource.match(/<button[\s\S]*?className="session-chip account-settings-trigger"[\s\S]*?<\/button>/)?.[0] ?? '';
+  const accountTriggerSource = appSource.match(/<button(?:(?!<\/button>)[\s\S])*?data-operator-utility-trigger="true"(?:(?!<\/button>)[\s\S])*?<\/button>/)?.[0] ?? '';
   if (
     !accountTriggerSource.includes('<b>{accountDisplayLabel}</b>')
+    || !accountTriggerSource.includes('operator-sync-dot')
+    || !accountTriggerSource.includes("t('app.resourceAt'")
     || accountTriggerSource.includes('AvatarMark')
     || accountTriggerSource.includes('BrandIcon')
     || accountTriggerSource.includes('<img')
   ) {
-    throw new Error('Topbar account settings trigger must display only the login username without an avatar or brand image');
+    throw new Error('Topbar operator controls must display the login username and sync state without an avatar or brand image');
   }
-  if (globalCss.includes('.session-chip .brand-mark.mini') || globalCss.includes('.session-chip svg')) {
-    throw new Error('Topbar account chip must not reserve image or SVG styling; it is text-only');
+  if (globalCss.includes('.operator-utility-trigger img') || globalCss.includes('.operator-utility-trigger .brand-mark')) {
+    throw new Error('Topbar operator controls must not reserve profile-image styling');
   }
   const accountSessionFragments = [
     'listAccountSessions',
@@ -5861,16 +5863,19 @@ function assertInteractiveDeployDocsAndScriptGuards() {
     }
   }
 
-  const mobileQuickControlSources = [
-    ['README.md', readmeSource, 'Mobile quick controls'],
-    ['README_CN.md', cnReadmeSource, '移动端快捷控制'],
-    ['README_JP.md', jpReadmeSource, 'モバイル クイック操作'],
-    ['DocsPage.tsx', docsPageSource, '移动端快捷控制'],
-    ['server-update.sh docs', serverUpdateSource, 'data-colipas-docs-mobile-controls="true"'],
+  const adaptiveOperatorControlSources = [
+    ['README.md', readmeSource, 'Adaptive operator controls'],
+    ['README_CN.md', cnReadmeSource, '自适应操作员控制'],
+    ['README_JP.md', jpReadmeSource, 'レスポンシブ オペレーター操作'],
+    ['MarketingPage.tsx', marketingSource, "featureId: 'operator-controls'"],
+    ['MarketingPage.tsx', marketingSource, '自适应操作员控制'],
+    ['DocsPage.tsx', docsPageSource, '自适应操作员控制'],
+    ['server-update.sh landing', serverUpdateSource, 'data-colipas-feature="operator-controls"'],
+    ['server-update.sh docs', serverUpdateSource, 'data-colipas-docs-operator-controls="true"'],
   ];
-  for (const [name, source, phrase] of mobileQuickControlSources) {
+  for (const [name, source, phrase] of adaptiveOperatorControlSources) {
     if (!source.includes(phrase)) {
-      throw new Error(`${name} must document mobile quick controls`);
+      throw new Error(`${name} must document adaptive operator controls`);
     }
   }
 
@@ -8127,7 +8132,7 @@ function assertSshKeyAuthenticationGuards() {
   console.log('ok SSH private-key authentication supports file import, validation, and i18n coverage');
 }
 
-function assertMobileTopbarKeepsCoreActions() {
+function assertAdaptiveOperatorControls() {
   const globalCss = fs.readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
   const appSource = fs.readFileSync(new URL('../src/app/App.tsx', import.meta.url), 'utf8');
   const i18nSource = fs.readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
@@ -8137,21 +8142,30 @@ function assertMobileTopbarKeepsCoreActions() {
     throw new Error('Mobile topbar must keep its primary controls visible');
   }
 
-  const requiredFragments = [
+  const sharedFragments = [
+    '.operator-utility-trigger',
+    '.operator-sync-dot',
+    '.operator-utility-scrim',
+    '.operator-utility-menu',
+    '.operator-utility-menu-grid',
+    '.operator-utility-action',
+    'grid-template-columns: repeat(2, minmax(0, 1fr))',
+    '.operator-utility-language',
+  ];
+  const missingShared = sharedFragments.filter((fragment) => !globalCss.includes(fragment));
+  if (missingShared.length) {
+    throw new Error(`Adaptive operator controls shared CSS is incomplete: ${missingShared.join(', ')}`);
+  }
+
+  const mobileFragments = [
     '.topbar-actions {',
     'min-height: 60px',
     'flex-wrap: nowrap',
-    '.topbar-actions > .performance-mode-toggle',
-    '.topbar-actions > .topbar-language-switcher',
-    '.topbar-actions > .topbar-refresh',
-    '.topbar-actions > .account-settings-trigger',
-    '.topbar-actions > .topbar-logout',
-    '.mobile-utility-trigger',
-    '.mobile-utility-scrim',
-    '.mobile-utility-menu',
-    '.mobile-utility-menu-grid',
-    'grid-template-columns: repeat(2, minmax(0, 1fr))',
-    '.mobile-utility-language',
+    '.operator-utility-trigger',
+    '.operator-utility-scrim',
+    '.operator-utility-menu',
+    '.operator-utility-trigger .operator-sync-dot',
+    '.operator-utility-trigger .operator-utility-copy',
     '.ai-dock',
     'position: fixed',
     'top: auto',
@@ -8165,21 +8179,27 @@ function assertMobileTopbarKeepsCoreActions() {
     'z-index: 9',
     '.ai-launcher',
   ];
-  const missing = requiredFragments.filter((fragment) => !mobileSection.includes(fragment));
-  if (missing.length) {
-    throw new Error(`Mobile topbar core actions are incomplete: ${missing.join(', ')}`);
+  const missingMobile = mobileFragments.filter((fragment) => !mobileSection.includes(fragment));
+  if (missingMobile.length) {
+    throw new Error(`Mobile topbar core actions are incomplete: ${missingMobile.join(', ')}`);
   }
 
   const appRequiredFragments = [
-    'const [mobileUtilityOpen, setMobileUtilityOpen] = useState(false);',
+    'const [operatorUtilityOpen, setOperatorUtilityOpen] = useState(false);',
+    'data-operator-utility-trigger="true"',
+    'data-operator-utility-menu="true"',
+    'data-operator-utility-refresh="true"',
+    'data-operator-utility-account="true"',
+    'data-operator-utility-logout="true"',
     'data-mobile-utility-trigger="true"',
     'data-mobile-utility-menu="true"',
     'data-mobile-utility-performance="true"',
     'data-mobile-utility-refresh="true"',
     'data-mobile-utility-account="true"',
     'data-mobile-utility-logout="true"',
-    'aria-expanded={mobileUtilityOpen}',
-    'setMobileUtilityOpen(false);',
+    'aria-expanded={operatorUtilityOpen}',
+    'setOperatorUtilityOpen(false);',
+    "event.key === 'Escape'",
     'role="group"',
     'aria-pressed={language === option.id}',
     'onClick={() => setLanguage(option.id)}',
@@ -8187,17 +8207,24 @@ function assertMobileTopbarKeepsCoreActions() {
   ];
   const missingAppFragments = appRequiredFragments.filter((fragment) => !appSource.includes(fragment));
   if (missingAppFragments.length) {
-    throw new Error(`Mobile quick controls behavior is incomplete: ${missingAppFragments.join(', ')}`);
+    throw new Error(`Adaptive operator controls behavior is incomplete: ${missingAppFragments.join(', ')}`);
   }
 
-  for (const key of ['app.mobileControls', 'app.closeMobileControls', 'app.accountControls']) {
+  for (const key of ['app.mobileControls', 'app.closeMobileControls', 'app.operatorControls', 'app.closeOperatorControls', 'app.accountControls']) {
     const count = (i18nSource.match(new RegExp(key.replaceAll('.', '\\.'), 'g')) ?? []).length;
     if (count < 3) {
-      throw new Error(`Mobile quick controls i18n key is missing language coverage: ${key}`);
+      throw new Error(`Adaptive operator controls i18n key is missing language coverage: ${key}`);
     }
   }
 
   const browserE2eFragments = [
+    'Desktop operator topbar must remain a single non-overflowing row',
+    'Desktop operator topbar must keep all four runtime metrics readable',
+    'Tablet operator topbar must remain compact and non-overflowing',
+    'data-operator-utility-trigger="true"',
+    'data-operator-utility-menu="true"',
+    'desktop-operator-topbar',
+    'desktop-operator-controls',
     'Mobile topbar should keep primary controls to one compact row',
     'data-mobile-utility-trigger="true"',
     'data-mobile-utility-menu="true"',
@@ -8205,10 +8232,10 @@ function assertMobileTopbarKeepsCoreActions() {
   ];
   const missingBrowserE2e = browserE2eFragments.filter((fragment) => !browserE2eSource.includes(fragment));
   if (missingBrowserE2e.length) {
-    throw new Error(`Mobile quick controls browser regression coverage is incomplete: ${missingBrowserE2e.join(', ')}`);
+    throw new Error(`Adaptive operator controls browser regression coverage is incomplete: ${missingBrowserE2e.join(', ')}`);
   }
 
-  console.log('ok mobile topbar keeps primary actions compact and moves secondary controls into an accessible drawer');
+  console.log('ok adaptive operator controls keep desktop and mobile topbars compact with accessible secondary actions');
 }
 
 function assertSecurityAuditRelationsAreSpecific() {

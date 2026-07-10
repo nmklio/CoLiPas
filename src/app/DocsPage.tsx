@@ -151,11 +151,12 @@ const operationsInboxUsageBlock = {
   points: ['阻塞、需处理和已审阅事项分组显示', '支持单项审阅、全部已读和清除本机审阅状态', '浏览器只保存稳定事项 ID 与审阅时间，不保存事件正文、服务器地址或凭据'],
 };
 
-const mobileControlsUsageBlock = {
-  icon: Layers3,
-  title: '移动端快捷控制',
-  body: '手机端顶部优先保留导航、上线检查和命令面板；性能模式、语言、刷新、账户设置与退出登录集中在快捷控制抽屉中，减少顶栏占用。',
-  points: ['点击顶部“…”打开，三种语言切换始终可用', '账户设置和退出登录不会挤占主工作区', '点击遮罩或关闭按钮即可回到当前模块'],
+const operatorControlsUsageBlock = {
+  icon: UserRoundCog,
+  title: '自适应操作员控制',
+  body: '桌面端和手机端都把刷新、语言、账户设置与退出登录集中在操作员控制面板中；顶栏保留登录名称、同步状态和当前最重要的运维入口。',
+  points: ['点击带登录名称的控制器或手机端“…”打开，三种语言始终可用', '窄屏自动压缩次要标签，避免顶栏换行或横向溢出', '支持 Escape、遮罩和关闭按钮返回当前模块'],
+  featureId: 'operator-controls',
 };
 
 const commandPaletteUsageBlock = {
@@ -336,7 +337,7 @@ export function DocsPage({ onLogin }: DocsPageProps) {
               <p>建议按以下顺序使用。每个模块都会与资产、事件、审计和 AI 上下文联动。</p>
             </div>
             <div className="docs-usage-grid">
-              {[...usageBlocks, bulkImportUsageBlock, fleetViewUsageBlock, operationsInboxUsageBlock, mobileControlsUsageBlock, commandPaletteUsageBlock, accountAppearanceUsageBlock, accountSessionUsageBlock].map((block) => {
+              {[...usageBlocks, bulkImportUsageBlock, fleetViewUsageBlock, operationsInboxUsageBlock, operatorControlsUsageBlock, commandPaletteUsageBlock, accountAppearanceUsageBlock, accountSessionUsageBlock].map((block) => {
                 const Icon = block.icon;
                 const sectionId = 'sectionId' in block && typeof block.sectionId === 'string'
                   ? block.sectionId

@@ -27,6 +27,7 @@ import {
   Server,
   ShieldCheck,
   TerminalSquare,
+  UserRoundCog,
   Workflow,
 } from 'lucide-react';
 import { languageOptions, useI18n } from '../i18n';
@@ -136,6 +137,14 @@ const accountSessionFeature = {
   desc: '只把令牌哈希和脱敏设备信息写入 SQLite，不保存原始 Cookie、IP 或 User-Agent；服务重启后会话仍保持且可撤销，并支持容量边界和最旧会话自动退出。',
   tags: ['重启后保持', '令牌哈希入库'],
   featureId: 'account-session-control',
+};
+
+const operatorControlsFeature = {
+  icon: UserRoundCog,
+  title: '自适应操作员控制',
+  desc: '桌面和手机端把刷新、语言、账户与退出集中到同一个溢出面板，顶栏始终保留登录名称、同步状态和核心运维入口。',
+  tags: ['单行顶栏', '键盘可关闭'],
+  featureId: 'operator-controls',
 };
 
 const securityItems = ['登录会话保护', 'SSH 命令边界', 'AI Base URL 校验', '自定义 API 白名单', '敏感信息脱敏'];
@@ -258,7 +267,7 @@ export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
           <h2>围绕“服务器接入到修复”构建的完整后台</h2>
         </div>
         <div className="marketing-feature-grid">
-          {[...featureCards, fleetViewFeature, bulkImportFeature, commandPaletteFeature, operationsInboxFeature, accountSessionFeature].map((feature) => {
+          {[...featureCards, fleetViewFeature, bulkImportFeature, commandPaletteFeature, operationsInboxFeature, accountSessionFeature, operatorControlsFeature].map((feature) => {
             const Icon = feature.icon;
             const featureId = 'featureId' in feature && typeof feature.featureId === 'string'
               ? feature.featureId

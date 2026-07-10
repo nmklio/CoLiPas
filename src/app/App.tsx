@@ -388,7 +388,7 @@ export function App() {
   const [operationDraft, setOperationDraft] = useState<OperationsDraft | null>(null);
   const [overviewPreflightSnapshot, setOverviewPreflightSnapshot] = useState<OverviewPreflightSnapshot | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [mobileUtilityOpen, setMobileUtilityOpen] = useState(false);
+  const [operatorUtilityOpen, setOperatorUtilityOpen] = useState(false);
   const [operationsInboxOpen, setOperationsInboxOpen] = useState(false);
   const [aiCollapsed, setAiCollapsed] = useState(true);
   const [performanceMode, setPerformanceMode] = useState(readStoredPerformanceMode);
@@ -608,9 +608,25 @@ export function App() {
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'auto' });
-    setMobileUtilityOpen(false);
+    setOperatorUtilityOpen(false);
     setOperationsInboxOpen(false);
   }, [activeSection]);
+
+  useEffect(() => {
+    if (!operatorUtilityOpen) {
+      return undefined;
+    }
+
+    function closeOperatorUtilityOnEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setOperatorUtilityOpen(false);
+      }
+    }
+
+    window.addEventListener('keydown', closeOperatorUtilityOnEscape);
+    return () => window.removeEventListener('keydown', closeOperatorUtilityOnEscape);
+  }, [operatorUtilityOpen]);
 
   useEffect(() => {
     if (filters.region === 'all' && !(filters.regionScope?.length)) {
@@ -1438,98 +1454,73 @@ export function App() {
               <span>{t('app.performanceMode')}</span>
               <b>{performanceMode ? t('app.performanceModeOn') : t('app.performanceModeOff')}</b>
             </button>
-            <div className="language-switcher topbar-language-switcher" role="group" aria-label={t('language.label')}>
-              <span className="language-switcher-label">{t('language.label')}</span>
-              <div className="language-switcher-options">
-                {languageOptions.map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    className={language === option.id ? 'language-switcher-option active' : 'language-switcher-option'}
-                    aria-pressed={language === option.id}
-                    title={option.label}
-                    onClick={() => setLanguage(option.id)}
-                  >
-                    {option.shortLabel}
-                  </button>
-                ))}
-              </div>
-            </div>
             <button
               type="button"
-              className="icon-button topbar-refresh"
-              aria-label={dataSource === 'api' ? t('app.refresh') : t('app.retryApi')}
-              title={dataSource === 'api' ? t('app.refresh') : t('app.retryApi')}
-              onClick={() => {
-                void refreshOverview();
-                void refreshConfigSummary();
-              }}
-            >
-              <RefreshCw size={16} />
-            </button>
-            <span className="refresh-stamp" title={lastRefreshedAt ? lastRefreshedAt.toLocaleString(timeLocale) : t('app.resourcePending')}>
-              {lastRefreshedAt ? t('app.resourceAt', { time: lastRefreshedAt.toLocaleTimeString(timeLocale) }) : t('app.resourcePending')}
-            </span>
-            <button
-              type="button"
-              className="session-chip account-settings-trigger"
-              title={sessionTooltip}
-              onClick={openSettings}
-            >
-              <b>{accountDisplayLabel}</b>
-            </button>
-            <button type="button" className="icon-button topbar-logout" aria-label={t('login.logout')} title={t('login.logout')} onClick={handleLogout}>
-              <LogOut size={16} />
-            </button>
-            <button
-              type="button"
-              className="icon-button mobile-utility-trigger"
+              className={dataSource === 'api' ? 'operator-utility-trigger is-live' : 'operator-utility-trigger is-fallback'}
+              data-operator-utility-trigger="true"
               data-mobile-utility-trigger="true"
-              aria-label={t('app.mobileControls')}
-              aria-expanded={mobileUtilityOpen}
-              aria-controls="mobile-utility-menu"
-              title={t('app.mobileControls')}
-              onClick={() => setMobileUtilityOpen((value) => !value)}
+              aria-label={t('app.operatorControls')}
+              aria-expanded={operatorUtilityOpen}
+              aria-controls="operator-utility-menu"
+              title={sessionTooltip}
+              onClick={() => setOperatorUtilityOpen((value) => !value)}
             >
+              <i className="operator-sync-dot" aria-hidden="true" />
+              <span className="operator-utility-copy">
+                <small>
+                  {lastRefreshedAt
+                    ? t('app.resourceAt', { time: lastRefreshedAt.toLocaleTimeString(timeLocale) })
+                    : t('app.resourcePending')}
+                </small>
+                <b>{accountDisplayLabel}</b>
+              </span>
               <MoreHorizontal size={19} />
             </button>
           </div>
-          {mobileUtilityOpen && (
+          {operatorUtilityOpen && (
             <>
               <button
                 type="button"
-                className="mobile-utility-scrim"
-                aria-label={t('app.closeMobileControls')}
-                onClick={() => setMobileUtilityOpen(false)}
+                className="operator-utility-scrim"
+                aria-label={t('app.closeOperatorControls')}
+                onClick={() => setOperatorUtilityOpen(false)}
               />
-              <section id="mobile-utility-menu" className="mobile-utility-menu" data-mobile-utility-menu="true" aria-label={t('app.mobileControls')}>
-                <div className="mobile-utility-menu-head">
+              <section
+                id="operator-utility-menu"
+                className="operator-utility-menu"
+                data-operator-utility-menu="true"
+                data-mobile-utility-menu="true"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="operator-utility-title"
+              >
+                <div className="operator-utility-menu-head">
                   <div>
                     <span>{t('app.currentFocus')}</span>
-                    <strong>{t('app.mobileControls')}</strong>
+                    <strong id="operator-utility-title">{t('app.operatorControls')}</strong>
                   </div>
                   <button
                     type="button"
                     className="icon-button"
-                    aria-label={t('app.closeMobileControls')}
-                    title={t('app.closeMobileControls')}
-                    onClick={() => setMobileUtilityOpen(false)}
+                    aria-label={t('app.closeOperatorControls')}
+                    title={t('app.closeOperatorControls')}
+                    onClick={() => setOperatorUtilityOpen(false)}
                   >
                     <X size={17} />
                   </button>
                 </div>
-                <div className="mobile-utility-menu-grid">
+                <div className="operator-utility-menu-grid">
                   <OperationsInboxMobileAction
                     summary={operationsInboxReview.summary}
                     t={t}
                     onOpen={() => {
-                      setMobileUtilityOpen(false);
+                      setOperatorUtilityOpen(false);
                       setOperationsInboxOpen(true);
                     }}
                   />
                   <button
                     type="button"
-                    className={performanceMode ? 'mobile-utility-action active' : 'mobile-utility-action'}
+                    className={performanceMode ? 'operator-utility-action active' : 'operator-utility-action'}
                     data-mobile-utility-performance="true"
                     aria-pressed={performanceMode}
                     onClick={() => setPerformanceMode((value) => !value)}
@@ -1540,8 +1531,9 @@ export function App() {
                   </button>
                   <button
                     type="button"
-                    className="mobile-utility-action"
+                    className="operator-utility-action"
                     data-mobile-utility-refresh="true"
+                    data-operator-utility-refresh="true"
                     onClick={() => {
                       void refreshOverview();
                       void refreshConfigSummary();
@@ -1551,7 +1543,7 @@ export function App() {
                     <span>{dataSource === 'api' ? t('app.refresh') : t('app.retryApi')}</span>
                     <b>{lastRefreshedAt ? t('app.resourceAt', { time: lastRefreshedAt.toLocaleTimeString(timeLocale) }) : t('app.resourcePending')}</b>
                   </button>
-                  <div className="language-switcher mobile-utility-language" role="group" aria-label={t('language.label')}>
+                  <div className="language-switcher operator-utility-language" role="group" aria-label={t('language.label')}>
                     <span className="language-switcher-label">{t('language.label')}</span>
                     <div className="language-switcher-options">
                       {languageOptions.map((option) => (
@@ -1570,10 +1562,11 @@ export function App() {
                   </div>
                   <button
                     type="button"
-                    className="mobile-utility-action"
+                    className="operator-utility-action"
                     data-mobile-utility-account="true"
+                    data-operator-utility-account="true"
                     onClick={() => {
-                      setMobileUtilityOpen(false);
+                      setOperatorUtilityOpen(false);
                       openSettings();
                     }}
                   >
@@ -1583,10 +1576,11 @@ export function App() {
                   </button>
                   <button
                     type="button"
-                    className="mobile-utility-action danger"
+                    className="operator-utility-action danger"
                     data-mobile-utility-logout="true"
+                    data-operator-utility-logout="true"
                     onClick={() => {
-                      setMobileUtilityOpen(false);
+                      setOperatorUtilityOpen(false);
                       void handleLogout();
                     }}
                   >

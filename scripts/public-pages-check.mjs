@@ -130,6 +130,8 @@ function buildLandingCheck() {
       await expectText(page.locator('[data-colipas-feature="operations-inbox"]'), /运维收件箱|operations inbox|跨模块/i, 'landing operations inbox copy');
       await expectLocatorCount(page.locator('[data-colipas-feature="account-session-control"]'), 1, 'landing account session control feature card');
       await expectText(page.locator('[data-colipas-feature="account-session-control"]'), /登录会话控制|令牌哈希|SQLite|原始 Cookie|重启后|最旧会话/i, 'landing account session control copy');
+      await expectLocatorCount(page.locator('[data-colipas-feature="operator-controls"]'), 1, 'landing adaptive operator controls feature card');
+      await expectText(page.locator('[data-colipas-feature="operator-controls"]'), /自适应操作员控制|登录名称|同步状态|单行顶栏|键盘可关闭/i, 'landing adaptive operator controls copy');
       await expectLocatorCountAtLeast(page.locator('.feature-card .feature-icon svg'), 8, 'landing feature SVG icons');
       await expectLocatorCountAtLeast(page.locator('.position-card.position-flow-card'), 4, 'landing redesigned flow position cards');
       await expectLocatorCount(page.locator('.position-card .position-step'), 4, 'landing position flow step numbers');
@@ -174,8 +176,8 @@ function buildDocsCheck() {
       await expectLocatorCount(page.locator('[data-colipas-docs-feature="account-session-control"]'), 1, 'docs account session control section');
       await expectText(page.locator('[data-colipas-docs-feature="account-session-control"]'), /当前会话|15 秒|SESSION_MAX_ACTIVE|SHA-256|令牌哈希|原始 Cookie|重启后|最旧会话/i, 'docs account session control copy');
       await expectText(page.locator('body'), /SESSION_MAX_ACTIVE|2–64|默认 12|最旧会话/i, 'docs account session capacity configuration');
-      await expectLocatorCount(page.locator('[data-colipas-docs-mobile-controls="true"]'), 1, 'docs mobile quick controls section');
-      await expectText(page.locator('[data-colipas-docs-mobile-controls="true"]'), /移动端快捷控制|quick controls|モバイル/i, 'docs mobile quick controls copy');
+      await expectLocatorCount(page.locator('[data-colipas-docs-operator-controls="true"]'), 1, 'docs adaptive operator controls section');
+      await expectText(page.locator('[data-colipas-docs-operator-controls="true"]'), /自适应操作员控制|登录名称|同步状态|桌面端保持单行|移动端自动压缩|Escape/i, 'docs adaptive operator controls copy');
       await expectLocatorCount(page.locator('[data-colipas-docs-command-palette="true"]'), 1, 'docs contextual command palette section');
       await expectText(page.locator('[data-colipas-docs-command-palette="true"]'), /上下文命令面板|command palette|最近使用/i, 'docs contextual command palette copy');
       await expectLocatorCount(page.locator('[data-colipas-docs-ai-starters="true"]'), 1, 'docs safe AI starter section');
