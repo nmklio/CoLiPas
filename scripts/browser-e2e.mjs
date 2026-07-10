@@ -59,6 +59,56 @@ try {
 async function createE2ePage(options) {
   const targetPage = await browser.newPage(options);
   await targetPage.addInitScript(() => {
+    const nativeFetch = window.fetch.bind(window);
+    const NativeWebSocket = window.WebSocket;
+    window.__colipasE2eSshSockets = [];
+    window.__colipasE2eLastSshSessionId = '';
+    window.fetch = async (...args) => {
+      const response = await nativeFetch(...args);
+      const request = args[0];
+      const requestUrl = typeof request === 'string'
+        ? request
+        : request instanceof Request
+          ? request.url
+          : String(request);
+      const requestMethod = args[1]?.method ?? (request instanceof Request ? request.method : 'GET');
+      if (
+        requestMethod.toUpperCase() === 'POST'
+        && new URL(requestUrl, window.location.href).pathname === '/api/servers/shells'
+      ) {
+        response.clone().json()
+          .then((payload) => {
+            if (typeof payload?.sessionId === 'string') {
+              window.__colipasE2eLastSshSessionId = payload.sessionId;
+            }
+          })
+          .catch(() => undefined);
+      }
+      return response;
+    };
+    class E2eTrackedWebSocket extends NativeWebSocket {
+      constructor(url, protocols) {
+        if (protocols === undefined) {
+          super(url);
+        } else {
+          super(url, protocols);
+        }
+        if (String(url).includes('/api/servers/shells/ws')) {
+          window.__colipasE2eSshSockets.push(this);
+          this.addEventListener('message', (event) => {
+            try {
+              const payload = JSON.parse(String(event.data));
+              if (payload?.type === 'ready' && typeof payload.sessionId === 'string') {
+                window.__colipasE2eLastSshSessionId = payload.sessionId;
+              }
+            } catch {
+              // Non-JSON browser WebSocket traffic is irrelevant to SSH recovery coverage.
+            }
+          });
+        }
+      }
+    }
+    window.WebSocket = E2eTrackedWebSocket;
     if (window.sessionStorage.getItem('colipas.browserE2e.initialized.v1') === '1') {
       return;
     }
@@ -2329,6 +2379,60 @@ async function assertSshTerminalPanel(targetPage) {
     await targetPage.waitForFunction(() => {
       const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
       return terminalText.includes('simulated$ channel-websocket-ok') && terminalText.includes('command simulated.');
+    }, undefined, { timeout: 10000 });
+    const forcedSocketClose = await targetPage.evaluate(() => {
+      const sockets = window.__colipasE2eSshSockets ?? [];
+      const socket = [...sockets].reverse().find((candidate) => candidate.readyState === WebSocket.OPEN);
+      if (!socket) {
+        return false;
+      }
+      socket.close(4100, 'e2e-recovery-check');
+      return true;
+    });
+    if (!forcedSocketClose) {
+      throw new Error('SSH recovery regression could not locate the live WebSocket');
+    }
+    const recoveredRecoveryBanner = targetPage.locator('[data-ssh-terminal-recovery="recovered"]');
+    await recoveredRecoveryBanner.waitFor({ timeout: 10000 });
+    const recoveredRecoveryText = await recoveredRecoveryBanner.innerText();
+    if (!/Terminal connection restored|new session is ready/i.test(recoveredRecoveryText)) {
+      throw new Error(`SSH WebSocket recovery did not show a restored-session status: ${recoveredRecoveryText}`);
+    }
+    if (/\b(?:\d{1,3}\.){3}\d{1,3}\b|sk-[A-Za-z0-9_-]{12,}|BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY|password=|passphrase=/i.test(recoveredRecoveryText)) {
+      throw new Error('SSH recovery status rendered a raw host or secret');
+    }
+    await targetPage.waitForFunction(() => {
+      const toggle = document.querySelector('[data-ssh-channel-switch="true"]');
+      return /Retry WebSocket channel/i.test(toggle?.getAttribute('aria-label') ?? '');
+    }, undefined, { timeout: 10000 });
+    const compatibleSessionHandle = await targetPage.waitForFunction(() => window.__colipasE2eLastSshSessionId || null, undefined, { timeout: 5000 });
+    const compatibleSessionId = await compatibleSessionHandle.jsonValue();
+    if (typeof compatibleSessionId !== 'string' || !compatibleSessionId) {
+      throw new Error('SSH recovery regression did not capture the compatible shell session');
+    }
+    await targetPage.evaluate(async (sessionId) => {
+      const response = await fetch(`/api/servers/shells/${encodeURIComponent(sessionId)}`, { method: 'DELETE' });
+      if (!response.ok) {
+        throw new Error(`Unable to close compatible shell: HTTP ${response.status}`);
+      }
+    }, compatibleSessionId);
+    const interruptedRecoveryBanner = targetPage.locator('[data-ssh-terminal-recovery="interrupted"]');
+    await interruptedRecoveryBanner.waitFor({ timeout: 10000 });
+    const reconnectButton = targetPage.locator('[data-ssh-terminal-reconnect="true"]');
+    await reconnectButton.waitFor({ timeout: 5000 });
+    if (await reconnectButton.isDisabled()) {
+      throw new Error('SSH reconnect control remained disabled after compatible stream interruption');
+    }
+    await reconnectButton.click();
+    await targetPage.locator('[data-ssh-terminal-recovery="recovered"]').waitFor({ timeout: 10000 });
+    await targetPage.locator('.ssh-terminal-session-count').filter({ hasText: /(?:sessions|会话|セッション)\s*1/i }).waitFor({ timeout: 10000 });
+    await targetPage.locator('.ssh-terminal-screen').click();
+    await targetPage.keyboard.type('recovery-manual-ok', { delay: 1 });
+    await targetPage.keyboard.press('Enter');
+    await targetPage.waitForFunction(() => {
+      const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
+      const commandCount = (terminalText.match(/simulated\$ recovery-manual-ok/g) ?? []).length;
+      return commandCount === 1 && terminalText.includes('command simulated.');
     }, undefined, { timeout: 10000 });
     console.log(`ok browser e2e SSH burst output rendered in ${burstOutputDurationMs}ms with max long task ${maxBurstLongTaskMs}ms`);
     await assertElementWithinViewport(targetPage, '.ssh-console', 'desktop SSH console');

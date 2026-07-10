@@ -1559,11 +1559,12 @@ POST /api/ai/stream
         <div>
           <p class="kicker">SSH 与运维编排</p>
           <h2>浏览器 xterm 交互终端，关闭即释放后端会话</h2>
-          <p>SSH 终端在浏览器中以 WebSocket + PTY 流式交互，输入不需要等上一条命令结束。关闭弹窗、断开连接或页面退出时，后端 shell 会同步销毁；运维编排会拒绝未接入或不存在的服务器，重启、关机等动作需要二次确认。</p>
+          <p>SSH 终端在浏览器中以 WebSocket + PTY 流式交互，输入不需要等上一条命令结束。实时通道中断会切到兼容流；兼容流断开时会显示安全的手动重连入口，且不会重放已输入命令。关闭弹窗、断开连接或页面退出时，后端 shell 会同步销毁；运维编排会拒绝未接入或不存在的服务器，重启、关机等动作需要二次确认。</p>
           <div class="check-list">
             <p class="check-line"><span>✓</span> 支持密码和私钥认证，只有握手成功的服务器才能远程执行。</p>
             <p class="check-line"><span>✓</span> 支持 Ctrl+C 中断长命令。</p>
             <p class="check-line"><span>✓</span> 支持终端 resize 和实时输出。</p>
+            <p class="check-line"><span>✓</span> WebSocket 中断会自动降级到兼容流；恢复失败时可手动重连，已输入命令不会自动重放。</p>
             <p class="check-line"><span>✓</span> 关闭终端后继续输入会被拒绝，避免后台残留 shell。</p>
             <p class="check-line"><span>✓</span> 任务结果和 AI 执行证据会关联审计 trace。</p>
           </div>

@@ -106,6 +106,7 @@ const terminalRenderForceBacklogThreshold = terminalWriteLargeBacklogThreshold *
 const terminalWebSocketOpenTimeoutMs = 1400;
 const terminalWebSocketReadyTimeoutMs = 14000;
 const terminalWebSocketFallbackCacheMs = 2 * 60 * 1000;
+const terminalRecoveryNoticeMs = 6000;
 const terminalPasteReviewMinBytes = 2048;
 const terminalPasteReviewMinLines = 3;
 const terminalPasteReviewPreviewLines = 8;
@@ -198,6 +199,8 @@ interface TerminalNetworkStats {
   throughputBytesPerSecond: number;
   rttMs: number | null;
 }
+
+type TerminalRecoveryState = 'idle' | 'recovering' | 'recovered' | 'interrupted';
 
 interface TerminalNetworkQuality {
   tone: 'pending' | 'good' | 'warn' | 'slow';
@@ -730,6 +733,7 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
   const [terminalSelfTest, setTerminalSelfTest] = useState<TerminalSelfTestState | null>(null);
   const [terminalTransport, setTerminalTransport] = useState<'websocket' | 'compatible' | null>(null);
   const [terminalChannelSwitching, setTerminalChannelSwitching] = useState(false);
+  const [terminalRecoveryState, setTerminalRecoveryState] = useState<TerminalRecoveryState>('idle');
   const [terminalPasteReview, setTerminalPasteReview] = useState<TerminalPasteReview | null>(null);
   const [terminalPasteSending, setTerminalPasteSending] = useState(false);
   const [terminalFocusMode, setTerminalFocusMode] = useState(() => readTerminalFocusMode());
@@ -796,6 +800,8 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
   const terminalPasteReviewRef = useRef<TerminalPasteReview | null>(null);
   const terminalCssInjectedRef = useRef(false);
   const actionMessageTimerRef = useRef<number | null>(null);
+  const terminalRecoveryNoticeTimerRef = useRef<number | null>(null);
+  const terminalRecoveryAttemptRef = useRef(0);
   const sshConsoleOpenRef = useRef(false);
   const sshPanelServerIdRef = useRef('');
   const terminalLifecycleSeqRef = useRef(0);
@@ -1053,6 +1059,7 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
   useEffect(() => () => {
     closeActiveShellSession(false);
     disposeXterm();
+    clearTerminalRecoveryNotice();
   }, []);
   const formVisible = formOpen || Boolean(editingServerId) || (allServers.length === 0 && !formDismissed);
 
@@ -2248,9 +2255,21 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
                       {t('servers.terminalRefreshModeLabel')}
                     </span>
                     <div className="ssh-terminal-state">
-                      <span className={terminalShellId ? 'live' : sshRunning ? 'pending' : ''} aria-hidden="true" />
-                      <small>{sshInterrupting ? t('servers.sshInterrupting') : terminalShellId ? t('servers.sshConnected') : sshRunning ? t('servers.runningSsh') : t('servers.sshConnect')}</small>
-                      {(sshRunning || terminalShellId) && (
+                      <span className={terminalShellId ? 'live' : sshRunning || terminalRecoveryState === 'recovering' ? 'pending' : terminalRecoveryState === 'interrupted' ? 'interrupted' : ''} aria-hidden="true" />
+                      <small>
+                        {sshInterrupting
+                          ? t('servers.sshInterrupting')
+                          : terminalRecoveryState === 'recovering'
+                            ? t('servers.terminalRecoveryReconnecting')
+                            : terminalRecoveryState === 'interrupted'
+                              ? t('servers.terminalRecoveryInterrupted')
+                              : terminalShellId
+                                ? t('servers.sshConnected')
+                                : sshRunning
+                                  ? t('servers.runningSsh')
+                                  : t('servers.sshConnect')}
+                      </small>
+                      {(sshRunning || terminalShellId || terminalRecoveryState !== 'idle') && (
                         <button type="button" onClick={closeSshConsole}>
                           {terminalShellId ? t('servers.disconnectSsh') : t('common.cancel')}
                         </button>
@@ -2258,6 +2277,45 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
                     </div>
                   </div>
                 </div>
+                {terminalRecoveryState !== 'idle' && (
+                  <div
+                    className={`ssh-terminal-recovery ${terminalRecoveryState}`}
+                    data-ssh-terminal-recovery={terminalRecoveryState}
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <span className="ssh-terminal-recovery-beacon" aria-hidden="true">
+                      <Network size={15} />
+                    </span>
+                    <div>
+                      <strong>
+                        {terminalRecoveryState === 'recovering'
+                          ? t('servers.terminalRecoveryReconnecting')
+                          : terminalRecoveryState === 'recovered'
+                            ? t('servers.terminalRecoveryRestored')
+                            : t('servers.terminalRecoveryInterrupted')}
+                      </strong>
+                      <small>
+                        {terminalRecoveryState === 'recovering'
+                          ? t('servers.terminalRecoveryReconnectingDetail')
+                          : terminalRecoveryState === 'recovered'
+                            ? t('servers.terminalRecoveryRestoredDetail')
+                            : t('servers.terminalRecoveryInterruptedDetail')}
+                      </small>
+                    </div>
+                    {terminalRecoveryState === 'interrupted' && (
+                      <button
+                        type="button"
+                        data-ssh-terminal-reconnect="true"
+                        onClick={() => void retryTerminalConnection()}
+                        disabled={sshRunning || sshInterrupting}
+                      >
+                        <RotateCcw size={14} />
+                        {t('servers.terminalRecoveryRetry')}
+                      </button>
+                    )}
+                  </div>
+                )}
                 {terminalInsightPanelsVisible && terminalExperienceCenter && (
                   <div className={`ssh-terminal-experience-center ${terminalExperienceCenter.tone}`} data-ssh-terminal-experience-center="true" aria-live="polite" onClick={(event) => event.stopPropagation()}>
                     <div className="ssh-terminal-experience-copy">
@@ -3080,6 +3138,7 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
     }
     sshPanelServerIdRef.current = server.id;
     sshConsoleOpenRef.current = true;
+    resetTerminalRecoveryState();
     setSshPanelServerId(server.id);
     setLoginProbe(null);
     clearTerminalNetworkStats();
@@ -3131,6 +3190,7 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
     terminalLifecycleSeqRef.current += 1;
     sshConsoleOpenRef.current = false;
     sshPanelServerIdRef.current = '';
+    resetTerminalRecoveryState();
     closeActiveShellSession();
     disposeXterm();
     setSshConsoleOpen(false);
@@ -3159,6 +3219,7 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
       return;
     }
     setSshRunning(true);
+    resetTerminalRecoveryState();
     clearTerminalNetworkStats();
     resetTerminalTelemetry();
     closeActiveShellSession();
@@ -3182,6 +3243,7 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
       };
 
       setLoginProbe(mergedProbe);
+      resetTerminalRecoveryState();
       showActionMessage(t('servers.sshConnectedMessage', { name: server.name }));
       bringTerminalScreenIntoView();
       scheduleTerminalFit(true);
@@ -3201,6 +3263,7 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
       });
       terminal.reset();
       terminal.writeln(error instanceof Error ? error.message : 'SSH login failed');
+      setTerminalRecovery('interrupted');
       showActionMessage(error instanceof Error ? error.message : 'SSH login failed');
     } finally {
       if (terminalLifecycleSeqRef.current === lifecycleSeq) {
@@ -3399,9 +3462,15 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
       return;
     }
     if (event.type === 'close') {
+      if (terminalShellTransportRef.current === 'websocket') {
+        // The socket close callback owns WebSocket recovery. Handling the streamed
+        // close here would clear the live session before that callback can switch
+        // to the compatible channel.
+        return;
+      }
       persistTerminalBottleneckSnapshot('remote-close');
       flushTerminalWriteBuffer(terminal, { drainAll: true });
-      terminal.writeln('\r\nConnection closed.');
+      terminal.writeln(`\r\n${t('servers.terminalRecoveryInterruptedTerminal')}`);
       terminal.scrollToBottom();
       terminalShellIdRef.current = null;
       setTerminalShellId(null);
@@ -3420,6 +3489,9 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
         pendingBytes: 0,
         commandSubmittedAt: null,
       }), { force: true });
+      setSshRunning(false);
+      setTerminalRecovery('interrupted');
+      showActionMessage(t('servers.terminalRecoveryInterruptedMessage'), { autoDismissMs: 7000 });
       refreshShellStatus();
     }
     if (event.type === 'error' && sshConsoleOpenRef.current) {
@@ -3448,28 +3520,93 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
     setTerminalTransport(null);
     clearTerminalInputBuffer();
     clearTerminalNetworkStats();
-    terminal.writeln(`\r\nWebSocket terminal disconnected (${event.code || 'closed'}); reconnecting with compatible stream mode...`);
-    terminal.scrollToBottom();
     closeServerShell(closedSessionId).catch(() => undefined);
-    openCompatibleTerminalTransport(server, terminal, lifecycleSeq)
+    void recoverTerminalSession(server, terminal, 'compatible');
+  }
+
+  function recoverTerminalSession(server: ServerNode, terminal: XTerm, mode: 'compatible' | 'preferred') {
+    terminalLifecycleSeqRef.current += 1;
+    const recoveryLifecycleSeq = terminalLifecycleSeqRef.current;
+    const recoveryAttempt = terminalRecoveryAttemptRef.current + 1;
+    terminalRecoveryAttemptRef.current = recoveryAttempt;
+    setTerminalRecovery('recovering');
+    setSshRunning(true);
+    clearTerminalInputBuffer();
+    terminalShellIdRef.current = null;
+    terminalShellServerIdRef.current = null;
+    terminalShellTransportRef.current = null;
+    terminalShellSocketRef.current = null;
+    terminalDataSubscriptionRef.current?.dispose();
+    terminalDataSubscriptionRef.current = null;
+    terminalShellStreamRef.current?.close();
+    terminalShellStreamRef.current = null;
+    setTerminalShellId(null);
+    setTerminalTransport(null);
+    clearTerminalNetworkStats();
+    terminal.writeln(`\r\n${t(mode === 'compatible' ? 'servers.terminalRecoveryFallbackTerminal' : 'servers.terminalRecoveryManualTerminal')}`);
+    terminal.scrollToBottom();
+
+    const isCurrentRecovery = () => (
+      terminalRecoveryAttemptRef.current === recoveryAttempt
+      && isCurrentTerminalLifecycle(server.id, recoveryLifecycleSeq)
+    );
+    const openTransport = mode === 'compatible'
+      ? openCompatibleTerminalTransport(server, terminal, recoveryLifecycleSeq)
+      : openTerminalTransport(server, terminal, recoveryLifecycleSeq);
+
+    void openTransport
       .then(() => {
-        if (isCurrentTerminalLifecycle(server.id, lifecycleSeq)) {
-          terminal.writeln('\r\nCompatible stream mode is active.');
-          terminal.scrollToBottom();
-          bringTerminalScreenIntoView();
-          scheduleTerminalFit(true);
-          showActionMessage(t('servers.sshConnectedMessage', { name: server.name }));
-        }
-      })
-      .catch((error) => {
-        if (!isCurrentTerminalLifecycle(server.id, lifecycleSeq)) {
+        if (!isCurrentRecovery()) {
           return;
         }
-        terminal.writeln(`\r\n${error instanceof Error ? error.message : 'SSH fallback reconnect failed'}`);
+        setLoginProbe({
+          host: server.ssh?.host || server.publicIp,
+          user: server.ssh?.username || 'root',
+          pwd: '~',
+          date: new Date().toString(),
+          uname: `${server.os} ${server.publicIp}`,
+        });
+        setTerminalRecovery('recovered');
+        terminal.writeln(`\r\n${t('servers.terminalRecoveryRestoredTerminal')}`);
         terminal.scrollToBottom();
-        showActionMessage(error instanceof Error ? error.message : 'SSH fallback reconnect failed', { autoDismissMs: 7000 });
+        bringTerminalScreenIntoView();
+        scheduleTerminalFit(true);
+        window.setTimeout(() => terminal.focus(), 30);
+        showActionMessage(t('servers.terminalRecoveryRestoredMessage', { name: server.name }));
+      })
+      .catch(() => {
+        if (!isCurrentRecovery()) {
+          return;
+        }
+        terminal.writeln(`\r\n${t('servers.terminalRecoveryFailedTerminal')}`);
+        terminal.scrollToBottom();
+        setTerminalRecovery('interrupted');
+        showActionMessage(t('servers.terminalRecoveryFailedMessage'), { autoDismissMs: 7000 });
         refreshShellStatus();
+      })
+      .finally(() => {
+        if (isCurrentRecovery()) {
+          setSshRunning(false);
+        }
       });
+  }
+
+  async function retryTerminalConnection() {
+    const server = activeSshServer;
+    if (!server?.ssh?.connected || !sshConsoleOpenRef.current) {
+      return;
+    }
+
+    try {
+      const terminal = await ensureXterm();
+      if (!sshConsoleOpenRef.current || sshPanelServerIdRef.current !== server.id) {
+        return;
+      }
+      recoverTerminalSession(server, terminal, 'preferred');
+    } catch {
+      setTerminalRecovery('interrupted');
+      showActionMessage(t('servers.terminalRecoveryFailedMessage'), { autoDismissMs: 7000 });
+    }
   }
 
   function updateTerminalNetworkStats(metrics: ServerShellSocketMetrics) {
@@ -4619,6 +4756,29 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
           .finally(() => refreshShellStatus());
       }
     }
+  }
+
+  function clearTerminalRecoveryNotice() {
+    if (terminalRecoveryNoticeTimerRef.current !== null) {
+      window.clearTimeout(terminalRecoveryNoticeTimerRef.current);
+      terminalRecoveryNoticeTimerRef.current = null;
+    }
+  }
+
+  function setTerminalRecovery(nextState: TerminalRecoveryState) {
+    clearTerminalRecoveryNotice();
+    setTerminalRecoveryState(nextState);
+    if (nextState === 'recovered') {
+      terminalRecoveryNoticeTimerRef.current = window.setTimeout(() => {
+        setTerminalRecoveryState('idle');
+        terminalRecoveryNoticeTimerRef.current = null;
+      }, terminalRecoveryNoticeMs);
+    }
+  }
+
+  function resetTerminalRecoveryState() {
+    terminalRecoveryAttemptRef.current += 1;
+    setTerminalRecovery('idle');
   }
 
   function showActionMessage(message: string, options: { traceId?: string; autoDismissMs?: number | null } = {}) {
