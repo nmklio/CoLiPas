@@ -26,6 +26,7 @@ $script:TargetHealthResults = @()
 $script:ReleaseSyncTargetsEnv = ""
 $script:DefaultTargetUpdateAttempts = 2
 $script:DefaultTargetUpdateRetryDelaySeconds = 15
+$script:DefaultTermarkTimeoutSeconds = 180
 $script:DefaultHealthCommitValidationAttempts = 6
 $script:DefaultHealthCommitValidationRetryDelaySeconds = 5
 
@@ -380,6 +381,7 @@ function ConvertTo-DeployTargets {
         skipPublicValidation = Get-PropertyBool $item "skipPublicValidation" $false
         updateAttempts = Get-PropertyIntRange $item @("updateAttempts", "retryAttempts") $script:DefaultTargetUpdateAttempts 1 5
         retryDelaySeconds = Get-PropertyIntRange $item @("retryDelaySeconds", "updateRetryDelaySeconds") $script:DefaultTargetUpdateRetryDelaySeconds 0 300
+        termarkTimeoutSeconds = Get-PropertyIntRange $item @("termarkTimeoutSeconds", "termarkTimeout") $script:DefaultTermarkTimeoutSeconds 30 3600
       }
     }
   }
@@ -430,6 +432,7 @@ function Write-DeployPlan {
       skipPublicValidation = $_.skipPublicValidation
       updateAttempts = $_.updateAttempts
       retryDelaySeconds = $_.retryDelaySeconds
+      termarkTimeoutSeconds = $_.termarkTimeoutSeconds
     }
   } | ConvertTo-Json -Depth 5
 }
@@ -522,6 +525,9 @@ function Get-TermarkFailureHint {
   if ($combined -match '(?i)(authentication failed|permission denied|publickey|password)') {
     return "Termark transport authentication failed. Check the saved Termark asset credentials and access policy."
   }
+  if ($combined -match '(?i)(command timeout|context deadline exceeded|deadline exceeded)') {
+    return "Termark remote update exceeded its command timeout. Increase termarkTimeoutSeconds for this target if the update normally takes longer."
+  }
   if ($combined -match '(?i)(connection refused|connection timed out|operation timed out|no route to host|network is unreachable)') {
     return "Termark transport could not reach the target. Check the saved asset connection and remote SSH availability."
   }
@@ -539,18 +545,22 @@ function Invoke-TermarkWithDiagnostics {
   param(
     [string]$TargetName,
     [string]$AssetId,
-    [string]$Command
+    [string]$Command,
+    [int]$TimeoutSeconds = $script:DefaultTermarkTimeoutSeconds
   )
 
   if (-not (Get-Command termark -ErrorAction SilentlyContinue)) {
     throw "Target $TargetName requires Termark transport, but the local termark command is unavailable."
+  }
+  if ($TimeoutSeconds -lt 30 -or $TimeoutSeconds -gt 3600) {
+    throw "Target $TargetName has invalid Termark timeout $TimeoutSeconds seconds. Expected 30 to 3600."
   }
 
   $capturedLines = [Collections.Generic.List[string]]::new()
   $previousErrorActionPreference = $ErrorActionPreference
   try {
     $ErrorActionPreference = "Continue"
-    & termark exec $AssetId $Command 2>&1 | ForEach-Object {
+    & termark exec $AssetId --timeout $TimeoutSeconds $Command 2>&1 | ForEach-Object {
       $line = [string]$_
       $capturedLines.Add($line)
       Write-Host $line
@@ -599,8 +609,13 @@ function Invoke-TargetUpdate {
   }
 
   if ($Target.transport -eq "termark") {
+    $termarkTimeoutSeconds = [int]$Target.termarkTimeoutSeconds
+    if ($termarkTimeoutSeconds -lt 30 -or $termarkTimeoutSeconds -gt 3600) {
+      $termarkTimeoutSeconds = $script:DefaultTermarkTimeoutSeconds
+    }
+
     Write-Host "Updating target $($Target.name) through Termark transport."
-    Invoke-TermarkWithDiagnostics -TargetName $Target.name -AssetId $Target.termarkAssetId -Command $evidenceCommand
+    Invoke-TermarkWithDiagnostics -TargetName $Target.name -AssetId $Target.termarkAssetId -Command $evidenceCommand -TimeoutSeconds $termarkTimeoutSeconds
     return
   }
 
@@ -1235,6 +1250,7 @@ esac
         skipPublicValidation = $false
         updateAttempts = 1
         retryDelaySeconds = 0
+        termarkTimeoutSeconds = 240
       }
     )
 
@@ -1248,11 +1264,16 @@ esac
     }
 
     $captured = Get-Content -LiteralPath $capturePath -Raw
-    if (-not $captured.Contains("exec termark-selftest-asset") -or -not $captured.Contains("RELEASE_TARGET_NAME=") -or $captured.Contains("ssh-host-should-not-be-used")) {
+    if (
+      -not $captured.Contains("exec termark-selftest-asset") -or
+      -not $captured.Contains("--timeout 240") -or
+      -not $captured.Contains("RELEASE_TARGET_NAME=") -or
+      $captured.Contains("ssh-host-should-not-be-used")
+    ) {
       throw "Termark target update did not use the sanitized asset transport command."
     }
 
-    Write-Host "ok release deploy selects configured Termark assets without falling back to direct SSH"
+    Write-Host "ok release deploy selects configured Termark assets with an explicit timeout and without falling back to direct SSH"
   } finally {
     $env:PATH = $previousPath
     $script:TargetUpdateResults = $previousResults
