@@ -12,6 +12,7 @@ import {
   EyeOff,
   Github,
   Globe2,
+  Inbox,
   KeyRound,
   Layers3,
   ListChecks,
@@ -110,6 +111,13 @@ const commandPaletteFeature = {
   title: '上下文命令面板',
   desc: '以当前最高优先级事项、最近使用和全部操作分层展示跨模块入口，减少重复搜索与页面跳转；最近操作只保存无敏感信息的操作 ID。',
   tags: ['当前优先级', '本机历史'],
+};
+
+const operationsInboxFeature = {
+  icon: Inbox,
+  title: '全局运维收件箱',
+  desc: '把上线阻塞、SSH 覆盖缺口和开放事件汇总到同一个值班入口，按优先级跳转对应模块；审阅状态只保存安全的本机事项 ID 与时间。',
+  tags: ['跨模块聚合', '本机审阅'],
 };
 
 const securityItems = ['登录会话保护', 'SSH 命令边界', 'AI Base URL 校验', '自定义 API 白名单', '敏感信息脱敏'];
@@ -232,7 +240,7 @@ export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
           <h2>围绕“服务器接入到修复”构建的完整后台</h2>
         </div>
         <div className="marketing-feature-grid">
-          {[...featureCards, fleetViewFeature, commandPaletteFeature].map((feature) => {
+          {[...featureCards, fleetViewFeature, commandPaletteFeature, operationsInboxFeature].map((feature) => {
             const Icon = feature.icon;
             return (
               <article key={feature.title} className="marketing-feature-card">

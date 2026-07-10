@@ -21,6 +21,7 @@ try {
   await openAndLogin(page, `${baseUrl}/admin/#security?trace=${encodeURIComponent(traceId)}`);
   await assertSyntheticTraceDeepLink(page, traceId);
   await assertLaunchGuide(page);
+  await assertOperationsInbox(page);
 
   console.log('ok browser e2e preserves security trace deep link after login');
 
@@ -131,6 +132,7 @@ async function createE2ePage(options) {
     window.localStorage.removeItem('colipas.serverFleetViews.v1');
     window.localStorage.removeItem('colipas.launchGuide.dismissed.v1');
     window.localStorage.removeItem('colipas.launchGuide.view.v1');
+    window.localStorage.removeItem('colipas.operationsInbox.review.v1');
   });
   targetPage.on('console', (message) => {
     if (message.type() === 'error' || message.type() === 'warning') {
@@ -230,6 +232,87 @@ async function assertLaunchGuide(targetPage) {
     throw new Error(`Launch guide compact preference did not persist: ${compactPreference}`);
   }
   console.log('ok browser e2e covers contextual launch guide compaction, detail routing, recheck, and sanitization');
+}
+
+async function assertOperationsInbox(targetPage) {
+  const trigger = targetPage.locator('[data-operations-inbox-open="true"]');
+  await trigger.waitFor({ timeout: 5000 });
+  await trigger.click();
+  const drawer = targetPage.locator('[data-operations-inbox-drawer="true"]');
+  await drawer.waitFor({ timeout: 5000 });
+  const items = drawer.locator('[data-operations-inbox-item]');
+  const itemCount = await items.count();
+  if (itemCount < 3) {
+    throw new Error(`Operations inbox should aggregate actionable launch or event items, got ${itemCount}`);
+  }
+  const drawerText = await drawer.innerText();
+  if (!/Operations inbox|Release blockers|Needs action|Launch checklist/i.test(drawerText)) {
+    throw new Error(`Operations inbox content is incomplete: ${drawerText}`);
+  }
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b|sk-[A-Za-z0-9_-]{12,}|BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY|password=|passphrase=/i.test(drawerText)) {
+    throw new Error('Operations inbox rendered a raw IP address or secret');
+  }
+
+  const firstUnread = items.filter({ has: targetPage.locator('.operations-inbox-review-button') }).first();
+  const firstItemId = await firstUnread.getAttribute('data-operations-inbox-item');
+  if (!firstItemId || !/^ops-(?:launch-[a-z0-9-]+|event-[a-z0-9]{8,20})$/.test(firstItemId)) {
+    throw new Error(`Operations inbox item did not use a safe stable ID: ${firstItemId}`);
+  }
+  await firstUnread.locator('.operations-inbox-review-button').click();
+  await targetPage.locator(`[data-operations-inbox-item="${firstItemId}"]`).waitFor({ timeout: 5000 });
+  if (await targetPage.locator(`[data-operations-inbox-item="${firstItemId}"]`).getAttribute('data-inbox-reviewed') !== 'true') {
+    throw new Error('Operations inbox item did not move into the reviewed group');
+  }
+  const storedReview = await targetPage.evaluate(() => window.localStorage.getItem('colipas.operationsInbox.review.v1') ?? '');
+  let parsedReview;
+  try {
+    parsedReview = JSON.parse(storedReview);
+  } catch {
+    throw new Error(`Operations inbox review state is not valid JSON: ${storedReview}`);
+  }
+  const reviewShapeIsSafe = (
+    parsedReview?.version === 1
+    && Array.isArray(parsedReview.reviewed)
+    && parsedReview.reviewed.length === 1
+    && parsedReview.reviewed.every((entry) => (
+      entry
+      && Object.keys(entry).sort().join(',') === 'at,id'
+      && /^ops-(?:launch-[a-z0-9-]+|event-[a-z0-9]{8,20})$/.test(entry.id)
+      && Number.isSafeInteger(entry.at)
+    ))
+  );
+  if (!reviewShapeIsSafe || /(?:publicIp|privateIp|password|apiKey|privateKey|eventText|title|source)/i.test(storedReview)) {
+    throw new Error(`Operations inbox storage must contain only safe IDs and timestamps: ${storedReview}`);
+  }
+  await captureVisualEvidence(targetPage, 'desktop-operations-inbox', ['.topbar', '[data-operations-inbox-drawer="true"]']);
+  await drawer.getByRole('button', { name: /close operations inbox/i }).click();
+  await drawer.waitFor({ state: 'hidden', timeout: 5000 });
+
+  await targetPage.reload({ waitUntil: 'networkidle', timeout: 30000 });
+  await targetPage.locator('.topbar').waitFor({ timeout: 10000 });
+  await targetPage.locator('[data-operations-inbox-open="true"]').click();
+  const persistedItem = targetPage.locator(`[data-operations-inbox-item="${firstItemId}"]`);
+  await persistedItem.waitFor({ timeout: 5000 });
+  if (await persistedItem.getAttribute('data-inbox-reviewed') !== 'true') {
+    throw new Error('Operations inbox review state did not persist across reload');
+  }
+  const serverItemAction = targetPage.locator('[data-operations-inbox-item][data-inbox-section="servers"] .operations-inbox-item-action').first();
+  if (await serverItemAction.count() !== 1) {
+    throw new Error('Operations inbox should expose a direct route to the server coverage workspace');
+  }
+  await serverItemAction.click();
+  await targetPage.waitForURL(/#servers$/, { timeout: 10000 });
+  await targetPage.locator('[data-operations-inbox-drawer="true"]').waitFor({ state: 'hidden', timeout: 5000 });
+
+  await targetPage.locator('[data-operations-inbox-open="true"]').click();
+  const reopenedDrawer = targetPage.locator('[data-operations-inbox-drawer="true"]');
+  await reopenedDrawer.locator('[data-operations-inbox-clear-review="true"]').click();
+  const clearedReview = await targetPage.evaluate(() => window.localStorage.getItem('colipas.operationsInbox.review.v1'));
+  if (clearedReview !== null) {
+    throw new Error('Operations inbox clear action must remove browser review state');
+  }
+  await reopenedDrawer.getByRole('button', { name: /close operations inbox/i }).click();
+  console.log('ok browser e2e covers operations inbox aggregation, safe persistence, review controls, and deep routing');
 }
 
 function isExpectedBrowserConsoleNoise(text) {
@@ -3114,6 +3197,18 @@ async function assertMobileConsoleAndMap() {
     if ((await mobilePage.locator('.shell').getAttribute('data-performance-mode')) !== 'false') {
       throw new Error('Mobile quick controls did not restore standard performance mode');
     }
+    const mobileInboxAction = mobileUtilityMenu.locator('[data-mobile-utility-inbox="true"]');
+    await mobileInboxAction.waitFor({ timeout: 5000 });
+    await mobileInboxAction.click();
+    const mobileInboxDrawer = mobilePage.locator('[data-operations-inbox-drawer="true"]');
+    await mobileInboxDrawer.waitFor({ timeout: 5000 });
+    await assertElementWithinViewport(mobilePage, '[data-operations-inbox-drawer="true"]', 'mobile operations inbox');
+    await assertNoHorizontalOverflow(mobilePage, 'mobile operations inbox');
+    await captureVisualEvidence(mobilePage, 'mobile-operations-inbox', ['.topbar', '[data-operations-inbox-drawer="true"]']);
+    await mobileInboxDrawer.getByRole('button', { name: /close operations inbox/i }).click();
+    await mobileInboxDrawer.waitFor({ state: 'hidden', timeout: 5000 });
+    await mobileUtilityTrigger.click();
+    await mobileUtilityMenu.waitFor({ timeout: 5000 });
     await assertNoHorizontalOverflow(mobilePage, 'mobile quick controls');
     await captureVisualEvidence(mobilePage, 'mobile-quick-controls', ['.topbar', '[data-mobile-utility-menu="true"]']);
 

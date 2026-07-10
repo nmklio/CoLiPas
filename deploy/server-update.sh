@@ -174,6 +174,7 @@ function landingIcon(kind, className) {
     flow: '<circle cx="6.5" cy="7" r="2.2"/><circle cx="17.5" cy="7" r="2.2"/><circle cx="12" cy="17" r="2.2"/><path d="M8.6 7h6.8M7.8 9l3.1 5.7M16.2 9l-3.1 5.7"/>',
     shield: '<path d="M12 3.8 18.3 6v5.3c0 4.1-2.5 7.2-6.3 8.9-3.8-1.7-6.3-4.8-6.3-8.9V6L12 3.8Z"/><path d="M9.2 12.1 11.1 14l3.9-4.3"/><path d="M8.6 17.3h6.8"/>',
     command: '<rect x="4.2" y="5" width="15.6" height="14" rx="2.7"/><path d="M4.2 9.1h15.6"/><path d="m8 12.2 2.5 1.8L8 15.8"/><path d="M13.3 15.7h3.6"/><circle cx="7" cy="7.1" r=".55"/><circle cx="8.9" cy="7.1" r=".55"/>',
+    inbox: '<path d="M5.2 5.1h13.6l1.4 8.1v4.4a1.8 1.8 0 0 1-1.8 1.8H5.6a1.8 1.8 0 0 1-1.8-1.8v-4.4l1.4-8.1Z"/><path d="M4.1 13.2h4.2l1.2 2h5l1.2-2h4.2"/><path d="M8.1 8.7h7.8"/>',
     code: '<path d="m9 8-4 4 4 4M15 8l4 4-4 4"/><path d="m13.2 6.8-2.4 10.4"/>',
     database: '<ellipse cx="12" cy="6.4" rx="6.8" ry="2.8"/><path d="M5.2 6.4v7.2c0 1.6 3 2.8 6.8 2.8s6.8-1.2 6.8-2.8V6.4"/><path d="M5.2 10c0 1.6 3 2.8 6.8 2.8s6.8-1.2 6.8-2.8"/>',
   };
@@ -278,6 +279,11 @@ if (!html.includes('data-colipas-feature="fleet-views"')) {
 if (!html.includes('data-colipas-feature="command-palette-context"')) {
   replaceOnce(/(<div class="feature-grid">)/, `$1
       <article class="feature-card" data-colipas-feature="command-palette-context">${landingIcon('command', 'icon feature-icon')}<h3>上下文命令面板</h3><p>按当前最高优先级事项、最近使用和全部操作分层展示跨模块入口；最近历史只保存在浏览器中，可随时清除。</p><div class="tags"><span>当前优先级</span><span>本机历史</span></div></article>`);
+}
+
+if (!html.includes('data-colipas-feature="operations-inbox"')) {
+  replaceOnce(/(<div class="feature-grid">)/, `$1
+      <article class="feature-card" data-colipas-feature="operations-inbox">${landingIcon('inbox', 'icon feature-icon')}<h3>全局运维收件箱</h3><p>汇总上线阻塞、SSH 与资产覆盖缺口和开放事件，按优先级直接跳转处理模块；本机只保存安全事项 ID 与审阅时间。</p><div class="tags"><span>跨模块聚合</span><span>本机审阅</span></div></article>`);
 }
 
 replaceAll(/<article class="deploy-card"><h3>Linux systemd<\/h3>/g, `<article class="deploy-card">${landingIcon('terminal', 'deploy-icon')}<h3>Linux systemd</h3>`);
@@ -1406,6 +1412,7 @@ SVG
       <a href="#config">环境变量 <span>→</span></a>
       <a href="#first-run">首次使用 <span>→</span></a>
       <a href="#launch-checklist">上线检查 <span>→</span></a>
+      <a href="#operations-inbox">运维收件箱 <span>→</span></a>
       <a href="#server-access">服务器接入 <span>→</span></a>
       <a href="#ssh">SSH 终端 <span>→</span></a>
       <a href="#ai">AI 设置 <span>→</span></a>
@@ -1419,6 +1426,7 @@ SVG
       <a href="#config">环境变量</a>
       <a href="#first-run">首次使用</a>
       <a href="#launch-checklist">上线检查</a>
+      <a href="#operations-inbox">运维收件箱</a>
       <a href="#server-access">服务器接入</a>
       <a href="#ai">AI 助手</a>
       <a href="#ssh">SSH 与编排</a>
@@ -1499,6 +1507,26 @@ SVG
 工作区：按摘要处理下一步
 性能模式：保持摘要，减少首屏负担
 上线前：展开完整证据并复检</pre>
+        </aside>
+      </section>
+
+      <section id="operations-inbox" class="section split">
+        <div>
+          <p class="kicker">全局运维收件箱</p>
+          <h2>把跨模块待办收拢到同一个值班入口</h2>
+          <p>桌面端从后台顶栏打开，移动端从快捷控制进入。收件箱会汇总上线阻塞、SSH 与资产覆盖缺口和开放事件，并按上线阻塞、需处理、已审阅分组；点击事项可直接进入服务器、运维、AI 或安全模块。</p>
+          <div class="check-list">
+            <p class="check-line"><span>✓</span> 单项审阅、全部已读和清除本机审阅状态都不会修改服务器或用户数据。</p>
+            <p class="check-line"><span>✓</span> 浏览器仅保存稳定事项 ID 与审阅时间，不保存事件正文、IP、密码、API Key 或私钥。</p>
+            <p class="check-line"><span>✓</span> 开放事项发生变化后会随总览资源刷新自动更新。</p>
+          </div>
+        </div>
+        <aside class="terminal-card">
+          <strong>值班处理顺序</strong>
+          <pre>P0：先处理上线阻塞
+P1：补齐 SSH、资产和预检证据
+事件：进入安全审计确认或关闭
+完成：标为已审阅，保留当前工作焦点</pre>
         </aside>
       </section>
 

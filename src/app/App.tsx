@@ -34,6 +34,15 @@ import type { OverviewPreflightSnapshot } from '../modules/overview/MonitoringOv
 import type { ServerFleetTriageCardId } from '../modules/servers/ServerInventory';
 import { BrandIcon } from './BrandIcon';
 import {
+  OperationsInboxDrawer,
+  OperationsInboxMobileAction,
+  OperationsInboxTrigger,
+  buildOperationsInboxItems,
+  useOperationsInboxReview,
+  type OperationsInboxItem,
+  type OperationsInboxSection,
+} from './OperationsInbox';
+import {
   cloudAccounts as fallbackCloudAccounts,
   operationEvents as fallbackOperationEvents,
   servers as fallbackServers,
@@ -56,7 +65,7 @@ import {
 } from '../services/apiClient';
 import type { OperationTaskPreflightResponse, ServerNode } from '../types';
 
-type SectionId = 'overview' | 'servers' | 'operations' | 'ai' | 'api' | 'security';
+type SectionId = OperationsInboxSection;
 
 interface ReleaseFixFocusPayload {
   id: string;
@@ -379,6 +388,7 @@ export function App() {
   const [overviewPreflightSnapshot, setOverviewPreflightSnapshot] = useState<OverviewPreflightSnapshot | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mobileUtilityOpen, setMobileUtilityOpen] = useState(false);
+  const [operationsInboxOpen, setOperationsInboxOpen] = useState(false);
   const [aiCollapsed, setAiCollapsed] = useState(true);
   const [performanceMode, setPerformanceMode] = useState(readStoredPerformanceMode);
   const [aiSeedQuestion, setAiSeedQuestion] = useState('');
@@ -598,6 +608,7 @@ export function App() {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'auto' });
     setMobileUtilityOpen(false);
+    setOperationsInboxOpen(false);
   }, [activeSection]);
 
   useEffect(() => {
@@ -696,6 +707,12 @@ export function App() {
     opsPreflightSnapshot: overviewPreflightSnapshot,
     t,
   }), [configSummary, connectedCount, dataSource, onlineCount, openEventCount, overview.servers.length, overviewPreflightSnapshot, t]);
+  const operationsInboxItems = useMemo(() => buildOperationsInboxItems({
+    launchSteps: launchChecklist.remediationSteps,
+    events: overview.operationEvents,
+    t,
+  }), [launchChecklist.remediationSteps, overview.operationEvents, t]);
+  const operationsInboxReview = useOperationsInboxReview(operationsInboxItems);
   const launchGuideCompact = launchGuideViewPreference === 'compact'
     || (launchGuideViewPreference === 'auto' && (performanceMode || activeSection !== 'overview'));
   const nextRemediation = launchChecklist.remediationSteps[0]?.item;
@@ -886,6 +903,7 @@ export function App() {
     setLastRefreshedAt(null);
     setAiCollapsed(true);
     setReleaseFixFocus(null);
+    setOperationsInboxOpen(false);
   }
 
   function navigateToSection(section: SectionId, focus?: ReleaseFixFocusPayload) {
@@ -1144,6 +1162,13 @@ export function App() {
     navigateToSection(item.section);
   }
 
+  function openOperationsInboxItem(item: OperationsInboxItem) {
+    if (item.section === 'servers') {
+      setFilters(defaultFilters);
+    }
+    navigateToSection(item.section);
+  }
+
   function openSettings() {
     setProfileDraft(profile);
     setPasswordDraft({ currentPassword: '', newPassword: '', confirmPassword: '' });
@@ -1371,6 +1396,11 @@ export function App() {
             </div>
           </div>
           <div className="topbar-actions">
+            <OperationsInboxTrigger
+              summary={operationsInboxReview.summary}
+              t={t}
+              onOpen={() => setOperationsInboxOpen(true)}
+            />
             <button
               type="button"
               className={`launch-guide-open ${launchChecklist.tone}`}
@@ -1488,6 +1518,14 @@ export function App() {
                   </button>
                 </div>
                 <div className="mobile-utility-menu-grid">
+                  <OperationsInboxMobileAction
+                    summary={operationsInboxReview.summary}
+                    t={t}
+                    onOpen={() => {
+                      setMobileUtilityOpen(false);
+                      setOperationsInboxOpen(true);
+                    }}
+                  />
                   <button
                     type="button"
                     className={performanceMode ? 'mobile-utility-action active' : 'mobile-utility-action'}
@@ -1560,6 +1598,20 @@ export function App() {
             </>
           )}
         </header>
+
+        <OperationsInboxDrawer
+          open={operationsInboxOpen}
+          items={operationsInboxItems}
+          reviewedAtById={operationsInboxReview.reviewedAtById}
+          summary={operationsInboxReview.summary}
+          locale={timeLocale}
+          t={t}
+          onClose={() => setOperationsInboxOpen(false)}
+          onOpenItem={openOperationsInboxItem}
+          onMarkReviewed={operationsInboxReview.markReviewed}
+          onMarkAllReviewed={operationsInboxReview.markAllReviewed}
+          onClearReviewState={operationsInboxReview.clearReviewState}
+        />
 
         <main>
           {launchGuideOpen && (

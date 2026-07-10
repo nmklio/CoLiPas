@@ -3967,6 +3967,7 @@ function assertAccountUiGuards() {
   const loginSource = fs.readFileSync(new URL('../src/app/LoginPage.tsx', import.meta.url), 'utf8');
   const marketingSource = fs.readFileSync(new URL('../src/app/MarketingPage.tsx', import.meta.url), 'utf8');
   const appSource = fs.readFileSync(new URL('../src/app/App.tsx', import.meta.url), 'utf8');
+  const operationsInboxSource = fs.readFileSync(new URL('../src/app/OperationsInbox.tsx', import.meta.url), 'utf8');
   const brandIconSource = fs.readFileSync(new URL('../src/app/BrandIcon.tsx', import.meta.url), 'utf8');
   const indexSource = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const publicIconSource = fs.readFileSync(new URL('../public/colipas-icon.svg', import.meta.url), 'utf8');
@@ -4058,6 +4059,31 @@ function assertAccountUiGuards() {
     const count = (i18nSource.match(new RegExp(key.replace('.', '\\.'), 'g')) ?? []).length;
     if (count < 3) {
       throw new Error(`Launch guide i18n key is missing languages: ${key}`);
+    }
+  }
+  const operationsInboxFragments = [
+    'buildOperationsInboxItems',
+    'useOperationsInboxReview',
+    'data-operations-inbox-open="true"',
+    'data-operations-inbox-drawer="true"',
+    'data-mobile-utility-inbox="true"',
+    'colipas.operationsInbox.review.v1',
+    'operationsInboxIdPattern',
+    'operationsInboxStorageLimit',
+    'async function assertOperationsInbox',
+    'safe persistence, review controls, and deep routing',
+    '.operations-inbox-drawer',
+    '.operations-inbox-item',
+  ];
+  const operationsInboxCombinedSource = `${appSource}\n${operationsInboxSource}\n${i18nSource}\n${globalCss}\n${fs.readFileSync(new URL('../scripts/browser-e2e.mjs', import.meta.url), 'utf8')}`;
+  const missingOperationsInbox = operationsInboxFragments.filter((fragment) => !operationsInboxCombinedSource.includes(fragment));
+  if (missingOperationsInbox.length) {
+    throw new Error(`Global operations inbox is incomplete: ${missingOperationsInbox.join(', ')}`);
+  }
+  for (const key of ['operationsInbox.open', 'operationsInbox.title', 'operationsInbox.detail', 'operationsInbox.markAll', 'operationsInbox.clearReview', 'operationsInbox.groupCritical', 'operationsInbox.groupWatch', 'operationsInbox.groupReviewed', 'operationsInbox.privacy']) {
+    const count = (i18nSource.match(new RegExp(key.replace('.', '\\.'), 'g')) ?? []).length;
+    if (count < 3) {
+      throw new Error(`Operations inbox i18n key is missing languages: ${key}`);
     }
   }
   if (
@@ -5450,6 +5476,7 @@ function assertInteractiveDeployDocsAndScriptGuards() {
   const jpReadmeSource = fs.readFileSync(new URL('../README_JP.md', import.meta.url), 'utf8');
   const marketingSource = fs.readFileSync(new URL('../src/app/MarketingPage.tsx', import.meta.url), 'utf8');
   const docsPageSource = fs.readFileSync(new URL('../src/app/DocsPage.tsx', import.meta.url), 'utf8');
+  const operationsInboxSource = fs.readFileSync(new URL('../src/app/OperationsInbox.tsx', import.meta.url), 'utf8');
   const serverUpdateSource = fs.readFileSync(new URL('../deploy/server-update.sh', import.meta.url), 'utf8');
   const installerRequired = [
     'CoLiPas cloud server management panel interactive deployment',
@@ -5515,6 +5542,31 @@ function assertInteractiveDeployDocsAndScriptGuards() {
     if (!source.includes(phrase)) {
       throw new Error(`${name} must document the contextual launch guide`);
     }
+  }
+
+  const operationsInboxSources = [
+    ['README.md', readmeSource, 'Global operations inbox'],
+    ['README_CN.md', cnReadmeSource, '全局运维收件箱'],
+    ['README_JP.md', jpReadmeSource, 'グローバル運用受信箱'],
+    ['MarketingPage.tsx', marketingSource, '全局运维收件箱'],
+    ['DocsPage.tsx', docsPageSource, '使用全局运维收件箱'],
+    ['server-update.sh landing card', serverUpdateSource, 'data-colipas-feature="operations-inbox"'],
+    ['server-update.sh docs', serverUpdateSource, 'id="operations-inbox"'],
+  ];
+  for (const [name, source, phrase] of operationsInboxSources) {
+    if (!source.includes(phrase)) {
+      throw new Error(`${name} must document the global operations inbox`);
+    }
+  }
+  if (
+    !operationsInboxSource.includes('colipas.operationsInbox.review.v1')
+    || !operationsInboxSource.includes("map(([id, at]) => ({ id, at }))")
+    || operationsInboxSource.includes('eventText:')
+    || operationsInboxSource.includes('publicIp:')
+    || operationsInboxSource.includes('privateKey:')
+    || operationsInboxSource.includes('apiKey:')
+  ) {
+    throw new Error('Operations inbox review persistence must remain limited to safe stable IDs and timestamps');
   }
 
   const mobileQuickControlSources = [

@@ -52,8 +52,9 @@ The runtime is intentionally simple. One Node.js process serves the Express API 
 3. Add servers as inventory-only assets, simulated SSH assets, or real SSH-connected machines.
 4. Schedule a maintenance window before reboots, shutdowns, or high-impact SSH changes; Operations preflight shows whether each target is covered without bypassing operator confirmation.
 5. Use the contextual launch guide: keep the full release checklist on Overview, then use the compact workspace summary in Servers, AI, Operations, API, and Security until you need to expand the evidence.
-6. Use the overview map, server table, live browser terminal, operations center, AI assistant, custom API lab, and security audit as one linked workflow.
-7. Run `npm test` or the release script before shipping changes so build, API, browser, performance, concurrency, reset-password, and secret-scan checks run together.
+6. Triage the global Operations inbox, which groups release blockers, SSH coverage gaps, and open events and routes each item to the correct module.
+7. Use the overview map, server table, live browser terminal, operations center, AI assistant, custom API lab, and security audit as one linked workflow.
+8. Run `npm test` or the release script before shipping changes so build, API, browser, performance, concurrency, reset-password, and secret-scan checks run together.
 
 ## Core Modules
 
@@ -64,7 +65,8 @@ The runtime is intentionally simple. One Node.js process serves the Express API 
 | Live SSH terminal | xterm-style browser terminal, WebSocket streaming with compatible fallback, persistent Operate / Focus / Diagnose workspace presets, copy/clear tools, `Ctrl+C`, large-output guards, visible disconnect recovery, manual reconnect without command replay, and backend shell cleanup when the panel closes. |
 | Fleet views | Save common inventory filters as up to eight browser-only views, then restore a focused operational scope without sending filter or asset data anywhere. |
 | Contextual launch guide | Full six-step release checklist on Overview; a compact, persistent workspace summary elsewhere or in Performance mode, with a one-click path back to complete evidence and the next remediation. |
-| Mobile quick controls | Keeps navigation, launch readiness, and the command palette on the first mobile row; performance mode, language, refresh, account settings, and sign-out move into an accessible compact drawer. |
+| Global operations inbox | Aggregates release blockers, SSH and asset coverage gaps, and open events into priority groups with direct module routing. Review state stores only safe stable IDs and timestamps in the current browser. |
+| Mobile quick controls | Keeps navigation, launch readiness, and the command palette on the first mobile row; the operations inbox, performance mode, language, refresh, account settings, and sign-out move into an accessible compact drawer. |
 | Contextual command palette | Groups the current highest-priority remediation, recent safe actions, and all available actions. Recent history stores only up to five browser-local action IDs and can be cleared at any time. |
 | AI operations | OpenAI-compatible base URL support, model discovery, streaming chat, multi-turn context, cached answers, force refresh, and server-side key storage. New chats provide three safe starter paths for risk review, SSH health-check planning, and daily prioritization; they only fill the composer and never send or execute automatically. |
 | Workflow automation | Asset sync, health checks, SSH commands, reboot/shutdown flows, persisted maintenance windows with quick-duration scheduling, target preflight, and high-impact command confirmation. |

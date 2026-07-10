@@ -124,7 +124,9 @@ function buildLandingCheck() {
       await expectText(page.locator('[data-colipas-feature="fleet-views"]'), /资产视图|fleet views|browser/i, 'landing fleet views copy');
       await expectLocatorCount(page.locator('[data-colipas-feature="command-palette-context"]'), 1, 'landing contextual command palette feature card');
       await expectText(page.locator('[data-colipas-feature="command-palette-context"]'), /上下文命令面板|command palette|最近使用/i, 'landing contextual command palette copy');
-      await expectLocatorCountAtLeast(page.locator('.feature-card .feature-icon svg'), 7, 'landing feature SVG icons');
+      await expectLocatorCount(page.locator('[data-colipas-feature="operations-inbox"]'), 1, 'landing operations inbox feature card');
+      await expectText(page.locator('[data-colipas-feature="operations-inbox"]'), /运维收件箱|operations inbox|跨模块/i, 'landing operations inbox copy');
+      await expectLocatorCountAtLeast(page.locator('.feature-card .feature-icon svg'), 8, 'landing feature SVG icons');
       await expectLocatorCountAtLeast(page.locator('.position-card.position-flow-card'), 4, 'landing redesigned flow position cards');
       await expectLocatorCount(page.locator('.position-card .position-step'), 4, 'landing position flow step numbers');
       await expectLocatorCount(page.locator('.position-card .position-state'), 4, 'landing position flow state pills');
@@ -159,6 +161,8 @@ function buildDocsCheck() {
       await expectTextAbsent(page, /不要把真实密码写进公开仓库或截图|公开仓库或截图|ChangeThisStrongPassword123|NewStrongPassword123|admin123456|乱填|类 VNC|\u4e91\u7ef4|截图里的真实资产|当作正式服务|开发者改代码后再上线|演示后台|演示登录|默认演示密码|是不是固定/, 'docs awkward wording');
       await expectLocatorCount(page.locator('#launch-checklist'), 1, 'docs contextual launch guide section');
       await expectText(page.locator('#launch-checklist'), /上线检查|workspace summary|release checklist/i, 'docs contextual launch guide copy');
+      await expectLocatorCount(page.locator('#operations-inbox'), 1, 'docs operations inbox section');
+      await expectText(page.locator('#operations-inbox'), /运维收件箱|稳定事项 ID|值班入口/i, 'docs operations inbox copy');
       await expectLocatorCount(page.locator('[data-colipas-docs-fleet-views="true"]'), 1, 'docs fleet views section');
       await expectText(page.locator('[data-colipas-docs-fleet-views="true"]'), /资产视图|fleet views|browser/i, 'docs fleet views copy');
       await expectLocatorCount(page.locator('[data-colipas-docs-mobile-controls="true"]'), 1, 'docs mobile quick controls section');

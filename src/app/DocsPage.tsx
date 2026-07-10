@@ -9,6 +9,7 @@ import {
   Database,
   FileText,
   Globe2,
+  Inbox,
   KeyRound,
   Layers3,
   ListChecks,
@@ -121,6 +122,13 @@ const fleetViewUsageBlock = {
   title: '保存资产视图',
   body: '服务器页面可把当前的关键词、厂商、状态、地域、地图范围和健康筛选保存为资产视图；点击视图即可恢复同一工作范围。',
   points: ['最多保存 8 个常用视图', '只保存在当前浏览器，不上传筛选或资产信息', '删除视图不会删除服务器或任何运行数据'],
+};
+
+const operationsInboxUsageBlock = {
+  icon: Inbox,
+  title: '使用全局运维收件箱',
+  body: '桌面端可从顶栏打开运维收件箱，移动端则从快捷控制进入。它会聚合上线修复队列、SSH 与资产覆盖缺口以及开放事件，并把每个事项直接路由到对应模块。',
+  points: ['阻塞、需处理和已审阅事项分组显示', '支持单项审阅、全部已读和清除本机审阅状态', '浏览器只保存稳定事项 ID 与审阅时间，不保存事件正文、服务器地址或凭据'],
 };
 
 const mobileControlsUsageBlock = {
@@ -288,7 +296,7 @@ export function DocsPage({ onLogin }: DocsPageProps) {
               <p>建议按以下顺序使用。每个模块都会与资产、事件、审计和 AI 上下文联动。</p>
             </div>
             <div className="docs-usage-grid">
-              {[...usageBlocks, fleetViewUsageBlock, mobileControlsUsageBlock, commandPaletteUsageBlock, accountAppearanceUsageBlock].map((block) => {
+              {[...usageBlocks, fleetViewUsageBlock, operationsInboxUsageBlock, mobileControlsUsageBlock, commandPaletteUsageBlock, accountAppearanceUsageBlock].map((block) => {
                 const Icon = block.icon;
                 return (
                   <article key={block.title} className="docs-usage-card">
