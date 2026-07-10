@@ -1697,6 +1697,10 @@ async function assertSshTerminalPanel(targetPage) {
     await liteToggleButton.waitFor({ timeout: 5000 });
     await targetPage.locator('[data-ssh-terminal-experience-center="true"]').waitFor({ timeout: 5000 });
     await liteToggleButton.click();
+    await targetPage.waitForFunction(() => {
+      const node = document.querySelector('[data-ssh-terminal-tools="true"]');
+      return node instanceof HTMLDetailsElement && !node.open;
+    }, undefined, { timeout: 5000 });
     await targetPage.locator('[data-ssh-terminal-lite-summary="true"]').waitFor({ timeout: 5000 });
     await targetPage.waitForFunction(() => {
       const heavyPanels = [
@@ -2110,6 +2114,7 @@ async function assertSshTerminalPanel(targetPage) {
       return terminalText.includes('simulated$ id') && terminalText.includes('command simulated.');
     }, undefined, { timeout: 10000 });
     const selfTestStartedAt = Date.now();
+    await openSshTerminalTools(targetPage);
     await targetPage.getByRole('button', { name: /run ssh safe speed test/i }).click();
     await targetPage.waitForFunction(() => {
       const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
@@ -2542,6 +2547,7 @@ async function assertSshTerminalPanel(targetPage) {
       const terminalText = document.querySelector('.ssh-terminal-screen .xterm-rows')?.textContent ?? '';
       return terminalText.includes('simulated$ focus-mode-ok') && terminalText.includes('command simulated.');
     }, undefined, { timeout: 10000 });
+    await openSshTerminalTools(targetPage);
     await focusToggleButton.click();
     await targetPage.locator('[data-ssh-terminal-telemetry="true"]').waitFor({ timeout: 5000 });
     const focusPreferenceOff = await targetPage.evaluate(() => window.localStorage.getItem('colipas.sshTerminalFocusMode.v1'));
@@ -2573,6 +2579,7 @@ async function assertSshTerminalPanel(targetPage) {
     if (!/Retry WebSocket channel/i.test(compatibleSwitchLabel ?? '')) {
       throw new Error(`SSH channel switch should offer WebSocket retry after compatible fallback: ${compatibleSwitchLabel}`);
     }
+    await openSshTerminalTools(targetPage);
     await channelSwitchButton.click();
     await targetPage.locator('.action-message').filter({ hasText: /WebSocket live channel|WebSocket/i }).waitFor({ timeout: 10000 });
     await targetPage.waitForFunction(() => {

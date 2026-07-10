@@ -780,6 +780,7 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
   const [fleetViewName, setFleetViewName] = useState('');
   const [fleetViewMessage, setFleetViewMessage] = useState('');
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
+  const terminalToolsRef = useRef<HTMLDetailsElement | null>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const terminalRuntimeRef = useRef<Promise<{
@@ -1226,6 +1227,12 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
 
   function markTerminalWorkspaceCustom() {
     setTerminalWorkspaceMode('custom');
+  }
+
+  function closeTerminalTools() {
+    if (terminalToolsRef.current) {
+      terminalToolsRef.current.open = false;
+    }
   }
 
   async function runSshConnectionDoctor(server: ServerNode) {
@@ -2225,14 +2232,24 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
                         )}
                       </select>
                     </label>
-                    <details className="ssh-terminal-tools" data-ssh-terminal-tools="true" onClick={(event) => event.stopPropagation()}>
+                    <details ref={terminalToolsRef} className="ssh-terminal-tools" data-ssh-terminal-tools="true" onClick={(event) => event.stopPropagation()}>
                       <summary aria-label={t('servers.terminalTools')}>
                         <SlidersHorizontal size={14} />
                         <span>{t('servers.terminalTools')}</span>
                         <ChevronDown size={13} aria-hidden="true" />
                       </summary>
                       <div className="ssh-terminal-tools-panel">
-                      <button type="button" aria-label={t('servers.runTerminalSelfTest')} title={t('servers.runTerminalSelfTest')} onClick={runTerminalSelfTest} disabled={!terminalShellId || sshInterrupting || terminalSelfTestRunning}>
+                      <button
+                        type="button"
+                        aria-label={t('servers.runTerminalSelfTest')}
+                        title={t('servers.runTerminalSelfTest')}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          closeTerminalTools();
+                          runTerminalSelfTest();
+                        }}
+                        disabled={!terminalShellId || sshInterrupting || terminalSelfTestRunning}
+                      >
                         <Cpu size={14} />
                         <span>{t('servers.runTerminalSelfTest')}</span>
                       </button>
@@ -2243,6 +2260,7 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
                         title={t('servers.terminalLatencyReportCopy')}
                         onClick={(event) => {
                           event.stopPropagation();
+                          closeTerminalTools();
                           void copyTerminalLatencyReport();
                         }}
                         disabled={!terminalShellId || !terminalLatencyReport}
@@ -2259,6 +2277,7 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
                         title={terminalFocusMode ? t('servers.terminalFocusOff') : t('servers.terminalFocusOn')}
                         onClick={(event) => {
                           event.stopPropagation();
+                          closeTerminalTools();
                           markTerminalWorkspaceCustom();
                           setTerminalFocusMode((value) => !value);
                         }}
@@ -2275,6 +2294,7 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
                         title={terminalLiteMode ? t('servers.terminalLiteModeOff') : t('servers.terminalLiteModeOn')}
                         onClick={(event) => {
                           event.stopPropagation();
+                          closeTerminalTools();
                           terminalLiteModeCustomizedRef.current = true;
                           markTerminalWorkspaceCustom();
                           setTerminalLiteMode((value) => !value);
@@ -2288,7 +2308,11 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
                         data-ssh-channel-switch="true"
                         aria-label={terminalTransport === 'compatible' ? t('servers.retryWebSocketChannel') : t('servers.switchToCompatibleChannel')}
                         title={terminalTransport === 'compatible' ? t('servers.retryWebSocketChannel') : t('servers.switchToCompatibleChannel')}
-                        onClick={switchTerminalChannel}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          closeTerminalTools();
+                          void switchTerminalChannel();
+                        }}
                         disabled={!terminalShellId || sshRunning || sshInterrupting || terminalChannelSwitching}
                       >
                         <Network size={14} />
