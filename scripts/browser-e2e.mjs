@@ -296,11 +296,7 @@ async function ensureSshQuickCommandsEnabled(targetPage, sshServerRow) {
 
   await targetPage.locator('[data-ssh-console-close="true"]').click();
   await targetPage.locator('.ssh-console').waitFor({ state: 'hidden', timeout: 5000 });
-  await targetPage.waitForFunction(async () => {
-    const response = await fetch('/api/servers/shells/status');
-    const status = await response.json();
-    return status.activeCount === 0;
-  }, undefined, { timeout: 7000 });
+  await waitForSshShellCount(targetPage, 0, 7000);
   await sshServerRow.getByRole('button', { name: /^SSH$/i }).click();
   await targetPage.locator('.ssh-console').waitFor({ timeout: 10000 });
   await targetPage.locator('.ssh-terminal-screen .xterm').waitFor({ timeout: 10000 });
@@ -1074,6 +1070,15 @@ async function assertAccountSettingsAndAiChat(targetPage) {
   await targetPage.locator('.account-modal').waitFor({ state: 'hidden', timeout: 5000 });
   await targetPage.locator('.account-settings-trigger').filter({ hasText: username }).waitFor({ timeout: 5000 });
   await targetPage.locator('.brand').filter({ hasText: profileName }).waitFor({ timeout: 5000 });
+  const sidebarBrandMark = targetPage.locator('.sidebar .brand .brand-mark').first();
+  await sidebarBrandMark.locator('svg').waitFor({ timeout: 5000 });
+  if (await sidebarBrandMark.locator('img').count() !== 0) {
+    throw new Error('Default sidebar brand must render the inline CoLiPas SVG instead of a stale profile image');
+  }
+  const brokenProfileImages = await targetPage.locator('.brand-mark img').evaluateAll((images) => images.filter((image) => image.naturalWidth === 0).length);
+  if (brokenProfileImages !== 0) {
+    throw new Error(`Account UI rendered ${brokenProfileImages} broken profile image(s)`);
+  }
   const accountTriggerMediaCount = await targetPage.locator('.account-settings-trigger svg, .account-settings-trigger img, .account-settings-trigger .brand-mark').count();
   if (accountTriggerMediaCount !== 0) {
     throw new Error(`Topbar account settings trigger must be text-only, found ${accountTriggerMediaCount} media nodes`);
@@ -1350,6 +1355,21 @@ async function assertFleetViews(targetPage, sshServer) {
   console.log('ok browser e2e saves, restores, persists, and removes browser-only fleet views without asset leakage');
 }
 
+async function waitForSshShellCount(targetPage, expectedCount, timeout = 7000) {
+  await targetPage.waitForFunction(async (expected) => {
+    try {
+      const response = await fetch('/api/servers/shells/status');
+      if (!response.ok) {
+        return false;
+      }
+      const status = await response.json();
+      return status.activeCount === expected;
+    } catch {
+      return false;
+    }
+  }, expectedCount, { timeout });
+}
+
 async function openSshTerminalTools(targetPage) {
   const tools = targetPage.locator('[data-ssh-terminal-tools="true"]');
   await tools.waitFor({ timeout: 5000 });
@@ -1525,11 +1545,7 @@ async function assertSshTerminalPanel(targetPage) {
     if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(copiedSshChannelFixPlan) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(copiedSshChannelFixPlan) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY|test-browser-e2e-value|password=|passphrase=|__colipas_/i.test(copiedSshChannelFixPlan)) {
       throw new Error('SSH channel fix plan copy output leaked raw host, secret, or probe marker');
     }
-    await targetPage.waitForFunction(async () => {
-      const response = await fetch('/api/servers/shells/status');
-      const status = await response.json();
-      return status.activeCount === 0;
-    }, undefined, { timeout: 7000 });
+    await waitForSshShellCount(targetPage, 0, 7000);
     await captureVisualEvidence(targetPage, 'desktop-ssh-connection-doctor', ['[data-ssh-connection-doctor="true"]']);
     await targetPage.getByRole('button', { name: /open ssh terminal/i }).click();
     await targetPage.locator('.ssh-console').waitFor({ timeout: 10000 });
@@ -2562,11 +2578,7 @@ async function assertSshTerminalPanel(targetPage) {
     if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(storedSshBottleneckHistory) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(storedSshBottleneckHistory) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(storedSshBottleneckHistory)) {
       throw new Error('SSH bottleneck trend storage leaked a raw IP address or secret');
     }
-    await targetPage.waitForFunction(async () => {
-      const response = await fetch('/api/servers/shells/status');
-      const status = await response.json();
-      return status.activeCount === 0;
-    }, undefined, { timeout: 5000 });
+    await waitForSshShellCount(targetPage, 0, 5000);
     await targetPage.locator('.server-workspace-row').filter({ hasText: sshServer.name }).getByRole('button', { name: /^SSH$/i }).click();
     await targetPage.locator('.ssh-console').waitFor({ timeout: 10000 });
     await targetPage.waitForFunction(() => {
@@ -2582,11 +2594,7 @@ async function assertSshTerminalPanel(targetPage) {
     const closeMessage = targetPage.locator('.action-message').filter({ hasText: /disconnected/i });
     await closeMessage.waitFor({ timeout: 5000 });
     await closeMessage.waitFor({ state: 'hidden', timeout: 7000 });
-    await targetPage.waitForFunction(async () => {
-      const response = await fetch('/api/servers/shells/status');
-      const status = await response.json();
-      return status.activeCount === 0;
-    }, undefined, { timeout: 5000 });
+    await waitForSshShellCount(targetPage, 0, 5000);
     await targetPage.locator('.nav-list').getByRole('button', { name: /^Security$/i }).click();
     await targetPage.locator('[data-ssh-terminal-support-snapshot="true"]').waitFor({ timeout: 10000 });
     const securityTerminalSnapshotText = await targetPage.locator('[data-ssh-terminal-support-snapshot="true"]').innerText();

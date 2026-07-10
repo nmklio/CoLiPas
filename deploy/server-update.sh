@@ -1474,7 +1474,7 @@ SVG
         <p class="kicker">首次使用</p>
         <h2>部署完成后按这个顺序检查</h2>
         <div class="flow">
-          <div class="flow-step"><b>1</b><div><h3>打开后台并登录</h3><p>访问你的域名 `/admin/`，使用部署脚本里设置的管理员账号和初始密码登录。首次进入后优先在账号设置中修改密码。</p></div></div>
+          <div class="flow-step" data-colipas-docs-avatar-guard="true"><b>1</b><div><h3>打开后台并登录</h3><p>访问你的域名 `/admin/`，使用部署脚本里设置的管理员账号和初始密码登录。首次进入后优先在账号设置中修改密码；头像保存前会验证图片可正常解码，历史坏图会自动回退到 CoLiPas 品牌图标。</p></div></div>
           <div class="flow-step"><b>2</b><div><h3>确认系统状态</h3><p>在安全审计和总览页确认健康检查、SQLite、发布信息、会话状态和基础指标正常，再继续接入真实服务器。</p></div></div>
           <div class="flow-step"><b>3</b><div><h3>添加第一台服务器</h3><p>先填写名称、IP、地区、系统和标签；需要远程操作时必须选择 SSH 验证模式并通过密码或私钥握手。</p></div></div>
           <div class="flow-step"><b>4</b><div><h3>验证 SSH、AI 与编排联动</h3><p>打开终端执行只读诊断命令，再配置 AI Provider、加载模型、测试自定义 API 白名单，最后执行一条低风险编排任务。</p></div></div>

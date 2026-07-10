@@ -70,7 +70,7 @@ The runtime is intentionally simple. One Node.js process serves the Express API 
 | Workflow automation | Asset sync, health checks, SSH commands, reboot/shutdown flows, persisted maintenance windows with quick-duration scheduling, target preflight, and high-impact command confirmation. |
 | Custom API lab | Allowlisted backend proxy for provider API testing without exposing browser-side secrets or private network targets. |
 | Security audit | Auth events, blocked calls, SSH actions, remediation flows, relation cards, diagnostics export, release readiness evidence, and revocable public-safe evidence snapshots for external review. |
-| Operator account | Login, session protection, profile/avatar update, password change, and Chinese / English / Japanese UI language switching. |
+| Operator account | Login, session protection, profile/avatar update with decoded-image validation and automatic brand fallback, password change, and Chinese / English / Japanese UI language switching. |
 
 ## Quick Start
 

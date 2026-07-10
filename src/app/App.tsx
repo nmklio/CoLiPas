@@ -229,6 +229,7 @@ const overviewTriageCommand = [
   "ps -eo pid,comm,%cpu,%mem --sort=-%cpu 2>/dev/null | head -8 || true",
 ].join(' && ');
 const avatarMaxBytes = 2 * 1024 * 1024;
+const avatarMaxDimension = 4096;
 const settingsMessageTtlMs = 2800;
 const launchGuideStorageKey = 'colipas.launchGuide.dismissed.v1';
 const launchGuideViewStorageKey = 'colipas.launchGuide.view.v1';
@@ -1227,13 +1228,21 @@ export function App() {
       return;
     }
 
+    let dataUrl = '';
     try {
-      const dataUrl = await readFileAsDataUrl(file);
+      dataUrl = await readFileAsDataUrl(file);
+    } catch {
+      setSettingsError(t('account.avatarImageReadFailed'));
+      return;
+    }
+
+    try {
+      await validateAvatarDataUrl(dataUrl);
       setProfileDraft((current) => ({ ...current, avatarImage: dataUrl }));
       setSettingsError('');
       setSettingsSuccess(t('account.avatarImageReady'));
     } catch {
-      setSettingsError(t('account.avatarImageReadFailed'));
+      setSettingsError(t('account.avatarImageInvalid'));
     } finally {
       if (avatarUploadRef.current) {
         avatarUploadRef.current.value = '';
@@ -2322,12 +2331,17 @@ function sanitizeLaunchChecklistReport(value: string) {
 }
 
 function AvatarMark({ profile, className = '' }: { profile: AccountProfile; className?: string }) {
-  const usesDefaultIcon = !profile.avatarImage;
+  const [imageFailed, setImageFailed] = useState(false);
+  useEffect(() => setImageFailed(false), [profile.avatarImage]);
+  const showProfileImage = Boolean(profile.avatarImage && !imageFailed);
+  const usesDefaultIcon = !showProfileImage;
   const classes = ['brand-mark', usesDefaultIcon ? 'app-brand-mark' : '', className].filter(Boolean).join(' ');
 
   return (
-    <div className={classes}>
-      {profile.avatarImage ? <img src={profile.avatarImage} alt="" aria-hidden="true" /> : <BrandIcon />}
+    <div className={classes} data-avatar-fallback={imageFailed ? 'true' : undefined}>
+      {showProfileImage
+        ? <img src={profile.avatarImage} alt="" aria-hidden="true" onError={() => setImageFailed(true)} />
+        : <BrandIcon />}
     </div>
   );
 }
@@ -2344,5 +2358,25 @@ function readFileAsDataUrl(file: File) {
     });
     reader.addEventListener('error', () => reject(reader.error ?? new Error('file read failed')));
     reader.readAsDataURL(file);
+  });
+}
+
+function validateAvatarDataUrl(dataUrl: string) {
+  return new Promise<void>((resolve, reject) => {
+    const image = new Image();
+    image.addEventListener('load', () => {
+      if (
+        image.naturalWidth > 0
+        && image.naturalWidth <= avatarMaxDimension
+        && image.naturalHeight > 0
+        && image.naturalHeight <= avatarMaxDimension
+      ) {
+        resolve();
+        return;
+      }
+      reject(new Error('invalid avatar dimensions'));
+    }, { once: true });
+    image.addEventListener('error', () => reject(new Error('avatar image cannot be decoded')), { once: true });
+    image.src = dataUrl;
   });
 }

@@ -167,6 +167,8 @@ function buildDocsCheck() {
       await expectText(page.locator('[data-colipas-docs-command-palette="true"]'), /上下文命令面板|command palette|最近使用/i, 'docs contextual command palette copy');
       await expectLocatorCount(page.locator('[data-colipas-docs-ai-starters="true"]'), 1, 'docs safe AI starter section');
       await expectText(page.locator('[data-colipas-docs-ai-starters="true"]'), /三个安全起步入口|只会填充输入框|不会自动发送或执行/i, 'docs safe AI starter copy');
+      await expectLocatorCount(page.locator('[data-colipas-docs-avatar-guard="true"]'), 1, 'docs avatar decode guard');
+      await expectText(page.locator('[data-colipas-docs-avatar-guard="true"]'), /头像保存前会验证图片可正常解码|自动回退到 CoLiPas 品牌图标/i, 'docs avatar decode guard copy');
       await assertSensitiveTextAbsent(page, 'docs');
     },
   };

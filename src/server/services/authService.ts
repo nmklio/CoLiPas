@@ -6,6 +6,7 @@ import { HttpError } from '../httpErrors.js';
 import { readAppSetting, writeAppSetting } from './database.js';
 
 const avatarMaxBytes = 2 * 1024 * 1024;
+const avatarMaxDimension = 4096;
 const avatarMaxDataUrlLength = Math.ceil(avatarMaxBytes * 4 / 3) + 64;
 const defaultAvatarText = 'CP';
 const defaultDisplayName = 'CoLiPas';
@@ -163,7 +164,7 @@ export function getConsoleProfile() {
   return {
     displayName: stored.displayName || fallbackProfile.displayName,
     avatarText: (stored.avatarText || fallbackProfile.avatarText).toUpperCase(),
-    avatarImage: stored.avatarImage || '',
+    avatarImage: stored.avatarImage && isSafeAvatarDataUrl(stored.avatarImage) ? stored.avatarImage : '',
   };
 }
 
@@ -421,7 +422,72 @@ function isSafeAvatarDataUrl(value: string) {
     return false;
   }
 
-  return Buffer.byteLength(match[2], 'base64') <= avatarMaxBytes;
+  const bytes = Buffer.from(match[2], 'base64');
+  if (bytes.length === 0 || bytes.length > avatarMaxBytes) {
+    return false;
+  }
+
+  const format = match[1].toLowerCase();
+  if (format === 'png') {
+    return isValidPngAvatar(bytes);
+  }
+  if (format === 'jpeg') {
+    return bytes.length >= 32
+      && bytes[0] === 0xff
+      && bytes[1] === 0xd8
+      && bytes[2] === 0xff
+      && bytes.lastIndexOf(Buffer.from([0xff, 0xd9])) >= 2;
+  }
+  if (format === 'webp') {
+    return bytes.length >= 20
+      && bytes.toString('ascii', 0, 4) === 'RIFF'
+      && bytes.toString('ascii', 8, 12) === 'WEBP'
+      && ['VP8 ', 'VP8L', 'VP8X'].includes(bytes.toString('ascii', 12, 16));
+  }
+
+  const gifHeader = bytes.toString('ascii', 0, 6);
+  return bytes.length >= 14
+    && (gifHeader === 'GIF87a' || gifHeader === 'GIF89a')
+    && bytes.readUInt16LE(6) > 0
+    && bytes.readUInt16LE(6) <= avatarMaxDimension
+    && bytes.readUInt16LE(8) > 0
+    && bytes.readUInt16LE(8) <= avatarMaxDimension
+    && bytes.lastIndexOf(0x3b) >= 13;
+}
+
+function isValidPngAvatar(bytes: Buffer) {
+  const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  if (bytes.length < 45 || !bytes.subarray(0, pngSignature.length).equals(pngSignature)) {
+    return false;
+  }
+
+  let offset = pngSignature.length;
+  let hasHeader = false;
+  while (offset + 12 <= bytes.length) {
+    const chunkLength = bytes.readUInt32BE(offset);
+    const chunkType = bytes.toString('ascii', offset + 4, offset + 8);
+    const nextOffset = offset + 12 + chunkLength;
+    if (nextOffset > bytes.length) {
+      return false;
+    }
+    if (!hasHeader) {
+      if (chunkType !== 'IHDR' || chunkLength !== 13) {
+        return false;
+      }
+      const width = bytes.readUInt32BE(offset + 8);
+      const height = bytes.readUInt32BE(offset + 12);
+      if (width === 0 || height === 0 || width > avatarMaxDimension || height > avatarMaxDimension) {
+        return false;
+      }
+      hasHeader = true;
+    }
+    if (chunkType === 'IEND') {
+      return hasHeader && chunkLength === 0;
+    }
+    offset = nextOffset;
+  }
+
+  return false;
 }
 
 function signToken(sessionId: string, secret: string) {

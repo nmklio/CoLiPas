@@ -14,6 +14,8 @@ let currentSmokePassword = initialSmokePassword;
 let temporarySimulatedSshServerSequence = 1;
 const operationTagSmokeLabel = 'ops-smoke';
 const sensitiveOperationTagSmokeLabel = `token=ops-${Date.now().toString(36)}`;
+const validAvatarBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+const validAvatarDataUrl = `data:image/png;base64,${validAvatarBase64}`;
 
 function assertFileContains(relativePath, requiredFragments, label) {
   const source = fs.readFileSync(new URL(`../${relativePath}`, import.meta.url), 'utf8');
@@ -291,7 +293,7 @@ const profileUpdateResponse = await fetch(`${baseUrl}/api/account/profile`, {
   body: JSON.stringify({
     displayName: 'OpsDesk',
     avatarText: 'OD',
-    avatarImage: 'data:image/png;base64,iVBORw0KGgo=',
+    avatarImage: validAvatarDataUrl,
   }),
 });
 if (!profileUpdateResponse.ok) {
@@ -301,7 +303,7 @@ const profileUpdateBody = await profileUpdateResponse.json();
 if (
   profileUpdateBody.profile?.displayName !== 'OpsDesk'
   || profileUpdateBody.profile?.avatarText !== 'OD'
-  || profileUpdateBody.profile?.avatarImage !== 'data:image/png;base64,iVBORw0KGgo='
+  || profileUpdateBody.profile?.avatarImage !== validAvatarDataUrl
 ) {
   throw new Error('/api/account/profile returned unexpected profile');
 }
@@ -310,14 +312,18 @@ const profileSessionBody = await profileSessionResponse.json();
 if (
   profileSessionBody.profile?.displayName !== 'OpsDesk'
   || profileSessionBody.profile?.avatarText !== 'OD'
-  || profileSessionBody.profile?.avatarImage !== 'data:image/png;base64,iVBORw0KGgo='
+  || profileSessionBody.profile?.avatarImage !== validAvatarDataUrl
 ) {
   throw new Error('/api/auth/session did not expose updated profile');
 }
 console.log('ok /api/account/profile persists custom avatar and display name');
 
 const twoMbAvatarBytes = 2 * 1024 * 1024;
-const nearLimitAvatarImage = `data:image/png;base64,${Buffer.alloc(twoMbAvatarBytes - 256).toString('base64')}`;
+const validAvatarBytes = Buffer.from(validAvatarBase64, 'base64');
+const nearLimitAvatarImage = `data:image/png;base64,${Buffer.concat([
+  validAvatarBytes,
+  Buffer.alloc(twoMbAvatarBytes - validAvatarBytes.length - 256),
+]).toString('base64')}`;
 const nearLimitAvatarResponse = await fetch(`${baseUrl}/api/account/profile`, {
   method: 'PATCH',
   headers: { ...authHeaders, 'Content-Type': 'application/json' },
@@ -332,6 +338,20 @@ if (!nearLimitAvatarResponse.ok) {
 }
 console.log('ok /api/account/profile accepts near-2MB avatar images');
 
+const truncatedAvatarResponse = await fetch(`${baseUrl}/api/account/profile`, {
+  method: 'PATCH',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    displayName: 'OpsDesk',
+    avatarText: 'OD',
+    avatarImage: 'data:image/png;base64,iVBORw0KGgo=',
+  }),
+});
+if (truncatedAvatarResponse.status !== 400) {
+  throw new Error(`/api/account/profile expected 400 for a truncated PNG, got HTTP ${truncatedAvatarResponse.status}`);
+}
+console.log('ok /api/account/profile rejects truncated avatar images');
+
 const invalidAvatarResponse = await fetch(`${baseUrl}/api/account/profile`, {
   method: 'PATCH',
   headers: { ...authHeaders, 'Content-Type': 'application/json' },
@@ -345,6 +365,20 @@ if (invalidAvatarResponse.status !== 400) {
   throw new Error(`/api/account/profile expected 400 for unsafe avatar image, got ${invalidAvatarResponse.status}`);
 }
 console.log('ok /api/account/profile rejects unsafe avatar images');
+
+const profileResetResponse = await fetch(`${baseUrl}/api/account/profile`, {
+  method: 'PATCH',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    displayName: 'CoLiPas',
+    avatarText: 'CP',
+    avatarImage: '',
+  }),
+});
+if (!profileResetResponse.ok) {
+  throw new Error(`/api/account/profile test cleanup returned HTTP ${profileResetResponse.status}`);
+}
+console.log('ok /api/account/profile restores the default brand icon before browser validation');
 
 const weakPasswordResponse = await fetch(`${baseUrl}/api/account/password`, {
   method: 'POST',
@@ -4321,8 +4355,12 @@ function assertAccountUiGuards() {
     "new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])",
     'file.size > avatarMaxBytes',
     'const avatarMaxBytes = 2 * 1024 * 1024',
+    'const avatarMaxDimension = 4096',
     'readFileAsDataUrl',
+    'validateAvatarDataUrl',
     '<AvatarMark profile={profile}',
+    'data-avatar-fallback={imageFailed ? \'true\' : undefined}',
+    'onError={() => setImageFailed(true)}',
     'className="avatar-upload-row"',
     'settingsMessageTtlMs',
     'setSettingsSuccess(\'\')',
@@ -4347,7 +4385,11 @@ function assertAccountUiGuards() {
     'avatarMaxDataUrlLength',
     'function isSafeAvatarDataUrl',
     'data:image\\/(png|jpeg|webp|gif)',
-    'Buffer.byteLength(match[2], \'base64\') <= avatarMaxBytes',
+    'Buffer.from(match[2], \'base64\')',
+    'function isValidPngAvatar',
+    "chunkType !== 'IHDR'",
+    "chunkType === 'IEND'",
+    'width > avatarMaxDimension',
   ];
   const backendSource = `${serverAppSource}\n${authSource}`;
   const missingBackend = backendFragments.filter((fragment) => !backendSource.includes(fragment));
@@ -5514,6 +5556,20 @@ function assertInteractiveDeployDocsAndScriptGuards() {
   for (const [name, source, phrase] of safeAiStarterSources) {
     if (!source.includes(phrase)) {
       throw new Error(`${name} must document that AI starter prompts never auto-send or execute`);
+    }
+  }
+
+  const resilientAvatarSources = [
+    ['README.md', readmeSource, 'decoded-image validation and automatic brand fallback'],
+    ['README_CN.md', cnReadmeSource, '历史坏图会自动回退到 CoLiPas 品牌图标'],
+    ['README_JP.md', jpReadmeSource, 'CoLiPas ブランドアイコンへ自動的に戻します'],
+    ['DocsPage.tsx', docsPageSource, '账户外观与头像保护'],
+    ['server-update.sh docs', serverUpdateSource, 'data-colipas-docs-avatar-guard="true"'],
+    ['server-update.sh docs', serverUpdateSource, '历史坏图会自动回退到 CoLiPas 品牌图标'],
+  ];
+  for (const [name, source, phrase] of resilientAvatarSources) {
+    if (!source.includes(phrase)) {
+      throw new Error(`${name} must document avatar decode validation and brand fallback`);
     }
   }
 

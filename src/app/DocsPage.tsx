@@ -19,6 +19,7 @@ import {
   Server,
   ShieldCheck,
   TerminalSquare,
+  UserRoundCog,
   Workflow,
 } from 'lucide-react';
 import { languageOptions, useI18n } from '../i18n';
@@ -134,6 +135,13 @@ const commandPaletteUsageBlock = {
   title: '上下文命令面板',
   body: '使用 Ctrl/⌘ + K 打开命令面板。无搜索时会按“继续处理、最近使用、全部操作”分层展示；搜索时只保留匹配结果。',
   points: ['“继续处理”会跳转当前最高优先级的上线修复事项', '最近使用仅保存操作 ID，最多保留 5 条，不保存密码、密钥、IP 或 API Key', '可在面板内一键清除本机历史，不影响任何服务器或审计数据'],
+};
+
+const accountAppearanceUsageBlock = {
+  icon: UserRoundCog,
+  title: '账户外观与头像保护',
+  body: '账户设置支持修改显示名称和上传 2MB 内的 PNG、JPEG、WebP 或 GIF。图片会先确认可以正常解码再保存，历史坏图会自动显示 CoLiPas 品牌图标。',
+  points: ['浏览器先解码验证，服务器端再检查格式签名和基础结构', '头像加载失败不会在侧栏留下破图', '删除头像只恢复品牌图标，不影响账号或用户数据'],
 };
 
 const apiRows = [
@@ -280,7 +288,7 @@ export function DocsPage({ onLogin }: DocsPageProps) {
               <p>建议按以下顺序使用。每个模块都会与资产、事件、审计和 AI 上下文联动。</p>
             </div>
             <div className="docs-usage-grid">
-              {[...usageBlocks, fleetViewUsageBlock, mobileControlsUsageBlock, commandPaletteUsageBlock].map((block) => {
+              {[...usageBlocks, fleetViewUsageBlock, mobileControlsUsageBlock, commandPaletteUsageBlock, accountAppearanceUsageBlock].map((block) => {
                 const Icon = block.icon;
                 return (
                   <article key={block.title} className="docs-usage-card">
