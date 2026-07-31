@@ -1385,9 +1385,29 @@ async function assertAccountSettingsAndAiChat(targetPage) {
     await crossTabProbePage.locator('[data-operator-utility-trigger="true"]').click();
     const standbySyncCard = crossTabProbePage.locator('[data-tab-sync-card="true"][data-tab-sync-role="standby"]');
     await standbySyncCard.waitFor({ timeout: 5000 });
+    await targetPage.locator('[data-operator-utility-trigger="true"]').click();
+    await targetPage.locator('[data-operator-utility-refresh="true"]').waitFor({ timeout: 5000 });
+    await targetPage.locator('[data-operator-utility-refresh="true"]').click();
+    await targetPage.keyboard.press('Escape');
+    await standbySyncCard.evaluate((element) => new Promise((resolve, reject) => {
+      const startedAt = Date.now();
+      const readSavedPolls = () => Number(element.getAttribute('data-tab-sync-saved-polls') ?? '0');
+      const tick = () => {
+        if (readSavedPolls() >= 1) {
+          resolve();
+          return;
+        }
+        if (Date.now() - startedAt > 10000) {
+          reject(new Error(`Standby sync health did not record an avoided duplicate poll; saved=${readSavedPolls()}`));
+          return;
+        }
+        window.setTimeout(tick, 100);
+      };
+      tick();
+    }));
     const standbySyncText = await standbySyncCard.innerText();
-    if (!/Standby tab|Receives broadcasts/i.test(standbySyncText)) {
-      throw new Error(`Cross-tab standby sync card did not explain duplicate polling reduction: ${standbySyncText}`);
+    if (!/Standby tab|Receiving snapshots|Saved polls|less polling/i.test(standbySyncText)) {
+      throw new Error(`Cross-tab standby sync health did not explain duplicate polling reduction: ${standbySyncText}`);
     }
     const standbyTitle = await crossTabProbePage.locator('[data-operator-utility-trigger="true"]').getAttribute('title');
     if (!/Standby tab/i.test(standbyTitle ?? '')) {

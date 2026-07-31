@@ -75,6 +75,7 @@ import {
   createTabSyncCoordinator,
   tabSyncStandbyCheckMs,
   type TabSyncRole,
+  type TabSyncStats,
 } from './tabSyncCoordinator';
 
 type SectionId = OperationsInboxSection;
@@ -424,6 +425,7 @@ export function App() {
   ));
   const tabSyncCoordinator = useMemo(() => createTabSyncCoordinator(), []);
   const [tabSyncRole, setTabSyncRole] = useState<TabSyncRole>(() => tabSyncCoordinator.getRole());
+  const [tabSyncStats, setTabSyncStats] = useState<TabSyncStats>(() => tabSyncCoordinator.getStats());
   const [launchGuideOpen, setLaunchGuideOpen] = useState(() => {
     if (typeof window === 'undefined') {
       return true;
@@ -540,6 +542,7 @@ export function App() {
 
   useEffect(() => {
     const unsubscribeRole = tabSyncCoordinator.subscribeRole(setTabSyncRole);
+    const unsubscribeStats = tabSyncCoordinator.subscribeStats(setTabSyncStats);
     const unsubscribeOverview = tabSyncCoordinator.subscribeOverview((snapshot) => {
       if (!appMountedRef.current || !sessionAuthenticatedRef.current) {
         return;
@@ -558,6 +561,7 @@ export function App() {
     });
     return () => {
       unsubscribeRole();
+      unsubscribeStats();
       unsubscribeOverview();
       unsubscribeConfig();
       tabSyncCoordinator.dispose();
@@ -769,7 +773,7 @@ export function App() {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [performanceMode, session?.authenticated, tabSyncCoordinator, tabSyncRole]);
+  }, [performanceMode, session?.authenticated, tabSyncCoordinator]);
 
   useEffect(() => {
     if (!settingsError && !settingsSuccess) {
@@ -926,6 +930,18 @@ export function App() {
     : tabSyncRole === 'standby'
       ? t('app.tabSyncStandbyDetail')
       : t('app.tabSyncSoloDetail');
+  const syncSnapshotCount = tabSyncRole === 'standby'
+    ? tabSyncStats.overviewSnapshotsReceived
+    : tabSyncStats.overviewSnapshotsBroadcast;
+  const syncSavedPollCount = tabSyncRole === 'standby'
+    ? tabSyncStats.avoidedOverviewPolls
+    : 0;
+  const syncUpdatedAt = tabSyncRole === 'standby'
+    ? tabSyncStats.lastSnapshotAt
+    : tabSyncStats.lastBroadcastAt;
+  const syncUpdatedAtLabel = syncUpdatedAt
+    ? new Date(syncUpdatedAt).toLocaleTimeString(timeLocale)
+    : t('app.resourcePending');
   const activeSectionConfig = sections.find((section) => section.id === activeSection) ?? sections[0];
   const ActiveSectionIcon = activeSectionConfig.icon;
   const commandShortcutLabel = isApplePlatform() ? '⌘K' : 'Ctrl K';
@@ -1761,19 +1777,47 @@ export function App() {
                     <b>{lastRefreshedAt ? t('app.resourceAt', { time: lastRefreshedAt.toLocaleTimeString(timeLocale) }) : t('app.resourcePending')}</b>
                   </button>
                   <div
-                    className={`operator-utility-status ${adaptiveRefreshStatus} tab-${tabSyncRole}`}
+                    className={`operator-sync-health ${adaptiveRefreshStatus} tab-${tabSyncRole}`}
                     data-adaptive-refresh-card="true"
                     data-adaptive-refresh-state={adaptiveRefreshStatus}
                     data-tab-sync-card="true"
                     data-tab-sync-role={tabSyncRole}
+                    data-tab-sync-saved-polls={syncSavedPollCount}
+                    data-tab-sync-snapshots={syncSnapshotCount}
                     role="status"
                     aria-live="polite"
                     title={`${adaptiveRefreshStatusLabel} - ${adaptiveRefreshStatusDetail}; ${tabSyncStatusLabel} - ${tabSyncStatusDetail}`}
                   >
-                    <RefreshCw size={17} aria-hidden="true" />
-                    <span>{t('app.adaptiveRefresh')}</span>
-                    <b>{adaptiveRefreshStatusLabel} / {adaptiveRefreshStatusDetail}</b>
-                    <small>{tabSyncStatusLabel} / {tabSyncStatusDetail}</small>
+                    <div className="operator-sync-health-head">
+                      <div className="operator-sync-health-title">
+                        <RefreshCw size={17} aria-hidden="true" />
+                        <span>{t('app.syncHealth')}</span>
+                        <b>{adaptiveRefreshStatusLabel}</b>
+                      </div>
+                      <div className="operator-sync-pill-row" aria-label={t('app.syncStatusBadges')}>
+                        <span className={`operator-sync-pill refresh-${adaptiveRefreshStatus}`}>{adaptiveRefreshStatusDetail}</span>
+                        <span className={`operator-sync-pill role-${tabSyncRole}`}>{tabSyncStatusLabel}</span>
+                      </div>
+                    </div>
+                    <dl className="operator-sync-meter" aria-label={t('app.syncHealthMetrics')}>
+                      <div>
+                        <dt>{t('app.syncCadenceLabel')}</dt>
+                        <dd>{adaptiveRefreshStatus === 'active' ? t('app.adaptiveRefreshCadence', { seconds: adaptiveRefreshCadenceSeconds }) : adaptiveRefreshStatusLabel}</dd>
+                      </div>
+                      <div>
+                        <dt>{tabSyncRole === 'standby' ? t('app.syncSavedPollsLabel') : t('app.syncSnapshotsLabel')}</dt>
+                        <dd>{tabSyncRole === 'standby'
+                          ? t('app.syncSavedPollsValue', { count: syncSavedPollCount })
+                          : t('app.syncSnapshotsValue', { count: syncSnapshotCount })}</dd>
+                      </div>
+                      <div>
+                        <dt>{tabSyncRole === 'standby' ? t('app.syncSnapshotsLabel') : t('app.syncUpdatedLabel')}</dt>
+                        <dd>{tabSyncRole === 'standby'
+                          ? t('app.syncSnapshotsValue', { count: syncSnapshotCount })
+                          : syncUpdatedAtLabel}</dd>
+                      </div>
+                    </dl>
+                    <small>{tabSyncStatusDetail}</small>
                   </div>
                   <div className="language-switcher operator-utility-language" role="group" aria-label={t('language.label')}>
                     <span className="language-switcher-label">{t('language.label')}</span>

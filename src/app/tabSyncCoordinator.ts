@@ -2,6 +2,16 @@ import type { ConfigSummaryResponse, OverviewResponse } from '../services/apiCli
 
 export type TabSyncRole = 'solo' | 'primary' | 'standby';
 
+export interface TabSyncStats {
+  overviewSnapshotsBroadcast: number;
+  configSnapshotsBroadcast: number;
+  overviewSnapshotsReceived: number;
+  configSnapshotsReceived: number;
+  avoidedOverviewPolls: number;
+  lastBroadcastAt: string | null;
+  lastSnapshotAt: string | null;
+}
+
 export const tabSyncChannelName = 'colipas.tab-sync.v1';
 export const tabSyncLeaderStorageKey = 'colipas.tab-sync.leader.v1';
 export const tabSyncLeaderLeaseMs = 7_500;
@@ -38,6 +48,16 @@ interface LeaderReleaseMessage {
 }
 
 type TabSyncMessage = OverviewSnapshotMessage | ConfigSnapshotMessage | LeaderReleaseMessage;
+
+const initialTabSyncStats: TabSyncStats = {
+  overviewSnapshotsBroadcast: 0,
+  configSnapshotsBroadcast: 0,
+  overviewSnapshotsReceived: 0,
+  configSnapshotsReceived: 0,
+  avoidedOverviewPolls: 0,
+  lastBroadcastAt: null,
+  lastSnapshotAt: null,
+};
 
 function createTabId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -110,6 +130,10 @@ export class TabSyncCoordinator {
 
   private readonly roleSubscribers = new Set<(role: TabSyncRole) => void>();
 
+  private stats: TabSyncStats = { ...initialTabSyncStats };
+
+  private readonly statsSubscribers = new Set<(stats: TabSyncStats) => void>();
+
   private readonly overviewSubscribers = new Set<(snapshot: {
     data: OverviewResponse;
     refreshedAt: string;
@@ -139,6 +163,14 @@ export class TabSyncCoordinator {
     callback(this.role);
     return () => {
       this.roleSubscribers.delete(callback);
+    };
+  }
+
+  subscribeStats(callback: (stats: TabSyncStats) => void) {
+    this.statsSubscribers.add(callback);
+    callback(this.getStats());
+    return () => {
+      this.statsSubscribers.delete(callback);
     };
   }
 
@@ -181,6 +213,10 @@ export class TabSyncCoordinator {
     return this.role;
   }
 
+  getStats(): TabSyncStats {
+    return { ...this.stats };
+  }
+
   shouldRunSharedRefresh() {
     return this.role !== 'standby';
   }
@@ -190,6 +226,12 @@ export class TabSyncCoordinator {
     refreshedAt: string;
     source: 'api' | 'fallback';
   }) {
+    if (this.role !== 'standby') {
+      this.updateStats({
+        overviewSnapshotsBroadcast: this.stats.overviewSnapshotsBroadcast + 1,
+        lastBroadcastAt: snapshot.refreshedAt,
+      });
+    }
     this.postMessage({
       type: 'overview-snapshot',
       tabId: this.tabId,
@@ -204,6 +246,12 @@ export class TabSyncCoordinator {
     data: ConfigSummaryResponse;
     refreshedAt: string;
   }) {
+    if (this.role !== 'standby') {
+      this.updateStats({
+        configSnapshotsBroadcast: this.stats.configSnapshotsBroadcast + 1,
+        lastBroadcastAt: snapshot.refreshedAt,
+      });
+    }
     this.postMessage({
       type: 'config-snapshot',
       tabId: this.tabId,
@@ -232,6 +280,7 @@ export class TabSyncCoordinator {
       this.channel.close();
     }
     this.roleSubscribers.clear();
+    this.statsSubscribers.clear();
     this.overviewSubscribers.clear();
     this.configSubscribers.clear();
   }
@@ -304,6 +353,11 @@ export class TabSyncCoordinator {
       return;
     }
     if (message.type === 'overview-snapshot') {
+      this.updateStats({
+        overviewSnapshotsReceived: this.stats.overviewSnapshotsReceived + 1,
+        avoidedOverviewPolls: this.stats.avoidedOverviewPolls + 1,
+        lastSnapshotAt: message.refreshedAt,
+      });
       for (const subscriber of this.overviewSubscribers) {
         subscriber({
           data: message.data,
@@ -314,6 +368,10 @@ export class TabSyncCoordinator {
       return;
     }
     if (message.type === 'config-snapshot') {
+      this.updateStats({
+        configSnapshotsReceived: this.stats.configSnapshotsReceived + 1,
+        lastSnapshotAt: message.refreshedAt,
+      });
       for (const subscriber of this.configSubscribers) {
         subscriber({
           data: message.data,
@@ -322,6 +380,16 @@ export class TabSyncCoordinator {
       }
     }
   };
+
+  private updateStats(nextStats: Partial<TabSyncStats>) {
+    this.stats = {
+      ...this.stats,
+      ...nextStats,
+    };
+    for (const subscriber of this.statsSubscribers) {
+      subscriber(this.getStats());
+    }
+  }
 
   private postMessage(message: TabSyncMessage) {
     try {

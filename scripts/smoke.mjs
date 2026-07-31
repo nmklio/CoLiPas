@@ -8327,6 +8327,10 @@ function assertAdaptiveOverviewRefreshScheduler() {
     '.operator-utility-status.paused',
     '.operator-utility-status.offline',
     '.operator-utility-status.retrying',
+    '.operator-sync-health',
+    '.operator-sync-health-head',
+    '.operator-sync-pill',
+    '.operator-sync-meter',
   ];
   const missingCssFragments = cssFragments.filter((fragment) => !globalCss.includes(fragment));
   if (missingCssFragments.length) {
@@ -8347,6 +8351,10 @@ function assertAdaptiveOverviewRefreshScheduler() {
     'app.tabSyncPrimary',
     'app.tabSyncStandby',
     'app.tabSyncStandbyDetail',
+    'app.syncHealth',
+    'app.syncSavedPollsLabel',
+    'app.syncSnapshotsLabel',
+    'app.syncHealthMetrics',
   ]) {
     const count = (i18nSource.match(new RegExp(key.replaceAll('.', '\\.'), 'g')) ?? []).length;
     if (count < 3) {
@@ -8363,7 +8371,8 @@ function assertAdaptiveOverviewRefreshScheduler() {
     'data-adaptive-refresh-card="true"',
     'data-tab-sync-card="true"',
     'data-tab-sync-role="standby"',
-    'Cross-tab standby sync card did not explain duplicate polling reduction',
+    'data-tab-sync-saved-polls',
+    'Cross-tab standby sync health did not explain duplicate polling reduction',
     'Adaptive refresh card did not render its foreground cadence',
   ];
   const missingBrowserFragments = browserFragments.filter((fragment) => !browserE2eSource.includes(fragment));
@@ -8373,6 +8382,7 @@ function assertAdaptiveOverviewRefreshScheduler() {
 
   const tabSyncFragments = [
     'export type TabSyncRole',
+    'export interface TabSyncStats',
     'tabSyncChannelName',
     'tabSyncLeaderStorageKey',
     'BroadcastChannel',
@@ -8381,6 +8391,8 @@ function assertAdaptiveOverviewRefreshScheduler() {
     'overview-snapshot',
     'config-snapshot',
     'leader-release',
+    'avoidedOverviewPolls',
+    'subscribeStats',
     'shouldRunSharedRefresh',
     'broadcastOverview',
     'broadcastConfig',
@@ -8395,6 +8407,9 @@ function assertAdaptiveOverviewRefreshScheduler() {
     'tabSyncCoordinator.broadcastConfig',
     'tabSyncCoordinator.setEnvironmentActive',
     'tabSyncCoordinator.setEnvironmentActive(false)',
+    'tabSyncCoordinator.subscribeStats',
+    'const syncSavedPollCount',
+    'className={`operator-sync-health',
     'syncRole === \'standby\'',
     'tabSyncStandbyCheckMs',
     'data-tab-sync-role={tabSyncRole}',

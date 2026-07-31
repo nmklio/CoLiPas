@@ -312,7 +312,7 @@ if (!html.includes('data-colipas-feature="operator-controls"')) {
   replaceOnce(/<article class="feature-card" data-colipas-feature="operator-controls">[\s\S]*?<\/article>/, operatorControlsFeatureCard);
 }
 
-const adaptiveRefreshFeatureCard = `<article class="feature-card" data-colipas-feature="adaptive-refresh">${landingIcon('refresh', 'icon feature-icon')}<h3>智能刷新调度</h3><p>标准模式每 15 秒、性能模式每 30 秒同步总览；隐藏或离线暂停，多标签页选出一个主同步标签页并广播快照，备用标签页不重复轮询，失败时最长退避到 120 秒。</p><div class="tags"><span>单主同步</span><span>失败退避</span></div></article>`;
+const adaptiveRefreshFeatureCard = `<article class="feature-card" data-colipas-feature="adaptive-refresh">${landingIcon('refresh', 'icon feature-icon')}<h3>智能刷新调度</h3><p>标准模式每 15 秒、性能模式每 30 秒同步总览；隐藏或离线暂停，多标签页选出一个主同步标签页并广播快照，备用标签页不重复轮询，操作员菜单展示同步健康和减少轮询次数。</p><div class="tags"><span>同步健康</span><span>减少轮询</span></div></article>`;
 if (!html.includes('data-colipas-feature="adaptive-refresh"')) {
   replaceOnce(/(<div class="feature-grid">)/, `$1
       ${adaptiveRefreshFeatureCard}`);
@@ -1757,7 +1757,7 @@ const operatorControlsDocsSection = `      <section class="section" data-colipas
           </article>
           <article class="doc-card">
             <h3>智能刷新与失败退避</h3>
-            <p>总览在标准模式每 15 秒、性能模式每 30 秒同步；标签页隐藏或网络离线时停止轮询，多标签页通过 BroadcastChannel/localStorage 选出一个主同步标签页并把快照广播给备用标签页。返回前台或恢复网络后按数据新鲜度续传，连续失败最长等待 120 秒，同时保留手动刷新入口。</p>
+            <p>总览在标准模式每 15 秒、性能模式每 30 秒同步；标签页隐藏或网络离线时停止轮询，多标签页通过 BroadcastChannel/localStorage 选出一个主同步标签页并把快照广播给备用标签页。操作员菜单会展示同步健康、快照数和减少轮询次数；返回前台或恢复网络后按数据新鲜度续传，连续失败最长等待 120 秒，同时保留手动刷新入口。</p>
           </article>
         </div>
       </section>`;
