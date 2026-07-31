@@ -74,7 +74,7 @@ The runtime is intentionally simple. One Node.js process serves the Express API 
 | Workflow automation | Asset sync, health checks, SSH commands, reboot/shutdown flows, persisted maintenance windows with quick-duration scheduling, target preflight, and high-impact command confirmation. |
 | Custom API lab | Allowlisted backend proxy for provider API testing without exposing browser-side secrets or private network targets. |
 | Security audit | Auth events, blocked calls, SSH actions, remediation flows, relation cards, diagnostics export, release readiness evidence, and revocable public-safe evidence snapshots for external review. |
-| Operator account | Login, restart-safe SQLite session storage using token hashes instead of raw Cookies, 15-second foreground sync, configurable active-session capacity with oldest-session retirement, individual or bulk revocation of other signed-in devices, privacy-minimized device labels without raw IP or User-Agent values, profile/avatar update with decoded-image validation and automatic brand fallback, password change, and Chinese / English / Japanese UI language switching. |
+| Operator account | Login, restart-safe SQLite session storage using token hashes instead of raw Cookies, 15-second foreground-and-online sync that pauses while hidden or offline and resumes immediately after reconnect, configurable active-session capacity with oldest-session retirement, individual or bulk revocation of other signed-in devices, privacy-minimized device labels without raw IP or User-Agent values, profile/avatar update with decoded-image validation and automatic brand fallback, password change, and Chinese / English / Japanese UI language switching. |
 
 ## Quick Start
 
@@ -232,7 +232,7 @@ The reset script updates the administrator password and immediately revokes that
 ## Security Model
 
 - All operational APIs except health and auth require an authenticated session.
-- Session cookies are HTTP-only. Only SHA-256 token hashes and sanitized device/time metadata are stored in SQLite, so valid sessions survive service restarts without persisting raw Cookie, IP, or User-Agent values. Account settings refresh every 15 seconds, enforce the configured capacity, and support individual or bulk revocation.
+- Session cookies are HTTP-only. Only SHA-256 token hashes and sanitized device/time metadata are stored in SQLite, so valid sessions survive service restarts without persisting raw Cookie, IP, or User-Agent values. Account settings sync every 15 seconds while the tab is visible and online, pause hidden/offline polling, resume immediately after reconnect, enforce the configured capacity, and support individual or bulk revocation.
 - Stored SSH credentials are encrypted with `CREDENTIAL_ENCRYPTION_KEY`.
 - AI provider keys are stored server-side or accepted as one-time request payloads; smoke checks guard against leakage.
 - The custom API proxy blocks localhost, private IPv4 ranges, link-local ranges, multicast ranges, unsafe headers, and redirect-following.

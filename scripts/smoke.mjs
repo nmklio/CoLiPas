@@ -4323,6 +4323,7 @@ function assertAccountUiGuards() {
     'data-account-session-current',
     'data-account-session-revoke-others="true"',
     'data-account-session-auto-refresh="true"',
+    'data-account-session-sync-status={syncStatus}',
     'data-account-session-capacity="true"',
     'data-account-session-persistence="true"',
     'fetchAccountSessions',
@@ -4334,6 +4335,9 @@ function assertAccountUiGuards() {
     '.account-session-list::before',
     '.account-session-row.is-current',
     '.account-session-capacity-track',
+    '.account-session-live.is-paused',
+    '.account-session-live.is-offline',
+    '.account-session-live.is-retrying',
     'desktop-account-session-control',
     'mobile-account-session-control',
   ];
@@ -4342,7 +4346,7 @@ function assertAccountUiGuards() {
   if (missingAccountSessions.length) {
     throw new Error(`Account session control is incomplete: ${missingAccountSessions.join(', ')}`);
   }
-  for (const key of ['account.sessionsTitle', 'account.sessionsDesc', 'account.sessionsCurrent', 'account.sessionsRevoke', 'account.sessionsRevokeOthers', 'account.sessionsPrivacy', 'account.sessionsAutoRefresh', 'account.sessionsSyncing', 'account.sessionsCapacity', 'account.sessionsCapacityAvailable', 'account.sessionsCapacityFull', 'account.sessionsCapacityPolicy', 'account.sessionsPersistence']) {
+  for (const key of ['account.sessionsTitle', 'account.sessionsDesc', 'account.sessionsCurrent', 'account.sessionsRevoke', 'account.sessionsRevokeOthers', 'account.sessionsPrivacy', 'account.sessionsAutoRefresh', 'account.sessionsSyncing', 'account.sessionsPaused', 'account.sessionsOffline', 'account.sessionsRetrying', 'account.sessionsCapacity', 'account.sessionsCapacityAvailable', 'account.sessionsCapacityFull', 'account.sessionsCapacityPolicy', 'account.sessionsPersistence']) {
     const count = (i18nSource.match(new RegExp(key.replace('.', '\\.'), 'g')) ?? []).length;
     if (count < 3) {
       throw new Error(`Account session control i18n key is missing languages: ${key}`);

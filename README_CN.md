@@ -83,6 +83,8 @@ npm start            # 启动生产服务
 | `CUSTOM_API_ALLOWED_HOSTS` | 自定义 API 测试允许访问的主机列表。 |
 | `RELEASE_VERIFY_TOKEN` | 可选的发布验证接口 Bearer Token。 |
 
+账户设置中的登录会话仅在页面可见且在线时每 15 秒同步；标签页隐藏或网络离线会自动暂停，恢复连接后立即同步，避免后台无效请求。
+
 ## 生产部署
 
 生产部署支持 Docker Compose 和原生 Linux + systemd 两种一键模式。大多数用户选 Docker；需要主机 systemd 直接托管服务时选原生 Linux。部署用户只需要运行下面的一键脚本；脚本会拉取项目并启动服务，不要求你推送代码、构建 Docker 镜像或发布镜像。

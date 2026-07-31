@@ -1417,6 +1417,31 @@ async function assertAccountSettingsAndAiChat(targetPage) {
   if (await accountSessionControl.locator('[data-account-session-persistence="true"]').count() !== 1) {
     throw new Error('Account session control must expose restart-safe server persistence');
   }
+  const sessionSyncStatus = accountSessionControl.locator('[data-account-session-sync-status="active"]');
+  await sessionSyncStatus.waitFor({ timeout: 5000 });
+  if (!(await sessionSyncStatus.getAttribute('title'))?.match(/Syncs every 15s/i)) {
+    throw new Error('Account session control must describe its active foreground sync cadence');
+  }
+  await targetPage.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'hidden',
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await accountSessionControl.locator('[data-account-session-sync-status="paused"]').waitFor({ timeout: 5000 });
+  await targetPage.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await accountSessionControl.locator('[data-account-session-sync-status="active"]').waitFor({ timeout: 5000 });
+  await targetPage.context().setOffline(true);
+  await accountSessionControl.locator('[data-account-session-sync-status="offline"]').waitFor({ timeout: 5000 });
+  await targetPage.context().setOffline(false);
+  await accountSessionControl.locator('[data-account-session-sync-status="active"]').waitFor({ timeout: 5000 });
   const activeSessionSummary = accountSessionControl.locator('[data-account-session-active-count="true"] strong');
   const otherSessionSummary = accountSessionControl.locator('[data-account-session-other-count="true"] strong');
   if (

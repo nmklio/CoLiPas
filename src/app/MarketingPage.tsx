@@ -135,8 +135,8 @@ const operationsInboxFeature = {
 const accountSessionFeature = {
   icon: MonitorSmartphone,
   title: '登录会话控制',
-  desc: '只把令牌哈希和脱敏设备信息写入 SQLite，不保存原始 Cookie、IP 或 User-Agent；服务重启后会话仍保持且可撤销，并支持容量边界和最旧会话自动退出。',
-  tags: ['重启后保持', '令牌哈希入库'],
+  desc: '只把令牌哈希和脱敏设备信息写入 SQLite，不保存原始 Cookie、IP 或 User-Agent；服务重启后会话仍保持且可撤销，并支持容量边界和最旧会话自动退出。页面仅在前台且在线时同步，隐藏或离线自动暂停。',
+  tags: ['前台在线同步', '隐藏即暂停'],
   featureId: 'account-session-control',
 };
 

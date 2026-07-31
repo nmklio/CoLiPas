@@ -296,7 +296,7 @@ if (!html.includes('data-colipas-feature="operations-inbox"')) {
       <article class="feature-card" data-colipas-feature="operations-inbox">${landingIcon('inbox', 'icon feature-icon')}<h3>全局运维收件箱</h3><p>汇总上线阻塞、SSH 与资产覆盖缺口和开放事件，按优先级直接跳转处理模块；本机只保存安全事项 ID 与审阅时间。</p><div class="tags"><span>跨模块聚合</span><span>本机审阅</span></div></article>`);
 }
 
-const accountSessionFeatureCard = `<article class="feature-card" data-colipas-feature="account-session-control">${landingIcon('shield', 'icon feature-icon')}<h3>登录会话控制</h3><p>只把令牌哈希与脱敏设备信息写入 SQLite，不保存原始 Cookie、IP 或 User-Agent；服务重启后会话仍保持且可撤销，并支持容量边界和最旧会话自动退出。</p><div class="tags"><span>重启后保持</span><span>令牌哈希入库</span></div></article>`;
+const accountSessionFeatureCard = `<article class="feature-card" data-colipas-feature="account-session-control">${landingIcon('shield', 'icon feature-icon')}<h3>登录会话控制</h3><p>只把令牌哈希与脱敏设备信息写入 SQLite，不保存原始 Cookie、IP 或 User-Agent；服务重启后会话仍保持且可撤销。账户设置仅在前台且在线时同步，隐藏或离线自动暂停。</p><div class="tags"><span>令牌哈希入库</span><span>前台在线同步</span><span>隐藏即暂停</span></div></article>`;
 if (!html.includes('data-colipas-feature="account-session-control"')) {
   replaceOnce(/(<div class="feature-grid">)/, `$1
       ${accountSessionFeatureCard}`);
@@ -1657,7 +1657,7 @@ systemctl status ssh --no-pager
         <div class="grid">
           <article class="doc-card">
             <h3>识别当前设备</h3>
-            <p>账户设置会突出显示当前浏览器，并列出其他活跃登录设备的登录时间、最近活动和到期时间；页面可见时每 15 秒自动同步，服务重启后有效会话仍会恢复。</p>
+            <p>账户设置会突出显示当前浏览器，并列出其他活跃登录设备的登录时间、最近活动和到期时间；页面可见且在线时每 15 秒自动同步，隐藏或离线会暂停，恢复连接后立即同步。</p>
           </article>
           <article class="doc-card">
             <h3>主动撤销访问</h3>

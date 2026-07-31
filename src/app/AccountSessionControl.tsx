@@ -16,6 +16,11 @@ import {
   revokeOtherAccountSessions,
   type AccountSessionsResponse,
 } from '../services/apiClient';
+import {
+  getAdaptiveRefreshDelay,
+  resolveAdaptiveRefreshStatus,
+  type AdaptiveRefreshStatus,
+} from './adaptiveRefresh';
 
 const accountSessionRefreshMs = 15_000;
 
@@ -27,12 +32,17 @@ export function AccountSessionControl() {
   const [revokingId, setRevokingId] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [syncStatus, setSyncStatus] = useState<AdaptiveRefreshStatus>(() => (
+    typeof document === 'undefined' || typeof navigator === 'undefined'
+      ? 'paused'
+      : resolveAdaptiveRefreshStatus(document.visibilityState, navigator.onLine)
+  ));
   const refreshInFlightRef = useRef(false);
   const locale = getLocale(language);
 
   const refreshSessions = useCallback(async (options: { silent?: boolean } = {}) => {
     if (refreshInFlightRef.current) {
-      return;
+      return true;
     }
     refreshInFlightRef.current = true;
     if (options.silent) {
@@ -43,8 +53,13 @@ export function AccountSessionControl() {
     setError('');
     try {
       setSessions(await fetchAccountSessions());
+      const environmentStatus = resolveAdaptiveRefreshStatus(document.visibilityState, navigator.onLine);
+      setSyncStatus(environmentStatus);
+      return true;
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : t('account.sessionsLoadFailed'));
+      setSyncStatus(navigator.onLine ? 'retrying' : 'offline');
+      return false;
     } finally {
       setLoading(false);
       setSyncing(false);
@@ -54,20 +69,85 @@ export function AccountSessionControl() {
 
   useEffect(() => {
     void refreshSessions();
-    const refreshTimer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        void refreshSessions({ silent: true });
+    let disposed = false;
+    let refreshTimer: number | null = null;
+    let failureCount = 0;
+
+    function clearRefreshTimer() {
+      if (refreshTimer !== null) {
+        window.clearTimeout(refreshTimer);
+        refreshTimer = null;
       }
-    }, accountSessionRefreshMs);
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        void refreshSessions({ silent: true });
+    }
+
+    function scheduleRefresh(delay: number) {
+      clearRefreshTimer();
+      if (disposed) {
+        return;
       }
+      refreshTimer = window.setTimeout(() => {
+        void runRefresh();
+      }, Math.max(0, delay));
+    }
+
+    async function runRefresh() {
+      if (disposed) {
+        return;
+      }
+      const environmentStatus = resolveAdaptiveRefreshStatus(document.visibilityState, navigator.onLine);
+      if (environmentStatus !== 'active') {
+        setSyncStatus(environmentStatus);
+        clearRefreshTimer();
+        return;
+      }
+
+      const refreshed = await refreshSessions({ silent: true });
+      if (disposed) {
+        return;
+      }
+      const postRefreshStatus = resolveAdaptiveRefreshStatus(document.visibilityState, navigator.onLine);
+      if (postRefreshStatus !== 'active') {
+        setSyncStatus(postRefreshStatus);
+        clearRefreshTimer();
+        return;
+      }
+      failureCount = refreshed ? 0 : Math.min(failureCount + 1, 3);
+      setSyncStatus(refreshed ? 'active' : 'retrying');
+      scheduleRefresh(getAdaptiveRefreshDelay({
+        failureCount,
+        lastSuccessAt: refreshed ? Date.now() : null,
+        performanceMode: false,
+      }));
+    }
+
+    function scheduleFromEnvironment(forceImmediate = false) {
+      clearRefreshTimer();
+      const environmentStatus = resolveAdaptiveRefreshStatus(document.visibilityState, navigator.onLine);
+      setSyncStatus(environmentStatus);
+      if (environmentStatus !== 'active') {
+        return;
+      }
+      scheduleRefresh(forceImmediate
+        ? 0
+        : accountSessionRefreshMs);
+    }
+
+    const handleVisibilityChange = () => scheduleFromEnvironment(document.visibilityState === 'visible');
+    const handleOnline = () => {
+      failureCount = 0;
+      scheduleFromEnvironment(true);
     };
+    const handleOffline = () => scheduleFromEnvironment(false);
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    scheduleFromEnvironment(false);
     return () => {
-      window.clearInterval(refreshTimer);
+      disposed = true;
+      clearRefreshTimer();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
     };
   }, [refreshSessions]);
 
@@ -116,11 +196,34 @@ export function AccountSessionControl() {
           </div>
         </div>
         <div className="account-session-heading-actions">
-          <span className="account-session-live" data-account-session-auto-refresh="true">
+          <span
+            className={`account-session-live is-${syncStatus}`}
+            data-account-session-auto-refresh="true"
+            data-account-session-sync-status={syncStatus}
+            role="status"
+            aria-live="polite"
+            title={
+              syncing
+                ? t('account.sessionsSyncing')
+                : syncStatus === 'active'
+                  ? t('account.sessionsAutoRefresh', { seconds: accountSessionRefreshMs / 1000 })
+                  : syncStatus === 'paused'
+                    ? t('account.sessionsPaused')
+                    : syncStatus === 'offline'
+                      ? t('account.sessionsOffline')
+                      : t('account.sessionsRetrying')
+            }
+          >
             <i aria-hidden="true" />
             {syncing
               ? t('account.sessionsSyncing')
-              : t('account.sessionsAutoRefresh', { seconds: accountSessionRefreshMs / 1000 })}
+              : syncStatus === 'active'
+                ? t('account.sessionsAutoRefresh', { seconds: accountSessionRefreshMs / 1000 })
+                : syncStatus === 'paused'
+                  ? t('account.sessionsPaused')
+                  : syncStatus === 'offline'
+                    ? t('account.sessionsOffline')
+                    : t('account.sessionsRetrying')}
           </span>
           <button
             type="button"
