@@ -1365,7 +1365,9 @@ async function assertAccountSettingsAndAiChat(targetPage) {
     document.querySelector('[data-operator-utility-trigger="true"]')?.getAttribute('data-adaptive-refresh-status') === 'offline'
   ), undefined, { timeout: 5000 });
   const reconnectOverviewResponse = targetPage.waitForResponse((response) => (
-    new URL(response.url()).pathname === '/api/overview' && response.request().method() === 'GET' && response.ok()
+    new URL(response.url()).pathname === '/api/overview'
+    && response.request().method() === 'GET'
+    && (response.status() === 200 || response.status() === 304)
   ), { timeout: 10000 });
   await targetPage.context().setOffline(false);
   await reconnectOverviewResponse;
@@ -1387,7 +1389,20 @@ async function assertAccountSettingsAndAiChat(targetPage) {
     await standbySyncCard.waitFor({ timeout: 5000 });
     await targetPage.locator('[data-operator-utility-trigger="true"]').click();
     await targetPage.locator('[data-operator-utility-refresh="true"]').waitFor({ timeout: 5000 });
+    const primarySyncCard = targetPage.locator('[data-tab-sync-card="true"][data-tab-sync-role="primary"]');
+    const reusedOverviewResponse = targetPage.waitForResponse((response) => (
+      new URL(response.url()).pathname === '/api/overview'
+      && response.request().method() === 'GET'
+      && response.status() === 304
+    ), { timeout: 10000 });
     await targetPage.locator('[data-operator-utility-refresh="true"]').click();
+    await reusedOverviewResponse;
+    await primarySyncCard.waitFor({ timeout: 5000 });
+    await targetPage.waitForFunction(() => Number(document.querySelector('[data-tab-sync-card="true"][data-tab-sync-role="primary"]')?.getAttribute('data-overview-cache-reuses') ?? '0') >= 1, undefined, { timeout: 5000 });
+    const primarySyncText = await primarySyncCard.innerText();
+    if (!/Payload reuse|hits|saved/i.test(primarySyncText)) {
+      throw new Error(`Primary sync health did not expose conditional snapshot reuse: ${primarySyncText}`);
+    }
     await targetPage.keyboard.press('Escape');
     await standbySyncCard.evaluate((element) => new Promise((resolve, reject) => {
       const startedAt = Date.now();
@@ -1432,8 +1447,12 @@ async function assertAccountSettingsAndAiChat(targetPage) {
     throw new Error('Desktop operator controls must expose language, adaptive refresh, manual refresh, account, and sign-out actions');
   }
   const adaptiveRefreshCardText = await operatorUtilityMenu.locator('[data-adaptive-refresh-card="true"]').innerText();
-  if (!/Adaptive refresh|Foreground sync|Every 15s/i.test(adaptiveRefreshCardText)) {
+  if (!/Adaptive refresh|Foreground sync|Every 15s|Payload reuse|saved/i.test(adaptiveRefreshCardText)) {
     throw new Error(`Adaptive refresh card did not render its foreground cadence: ${adaptiveRefreshCardText}`);
+  }
+  const syncMetricCount = await operatorUtilityMenu.locator('.operator-sync-meter > div').count();
+  if (syncMetricCount !== 4) {
+    throw new Error(`Sync health should expose four compact metrics, got ${syncMetricCount}`);
   }
   await captureVisualEvidence(targetPage, 'desktop-operator-controls', ['.topbar', '[data-operator-utility-menu="true"]']);
   await targetPage.keyboard.press('Escape');

@@ -52,6 +52,7 @@ assertSecurityAuditRelationsAreSpecific();
 assertOperationsTargetSelectionGuards();
 assertMaintenanceWindowGuards();
 assertInventorySnapshotCacheGuards();
+assertOverviewConditionalSnapshotGuards();
 assertLocalizedFormatCacheGuards();
 assertCustomApiProxySecurityGuards();
 assertSqlitePersistenceGuards();
@@ -258,6 +259,32 @@ if (new URL(baseUrl).protocol === 'http:' && /;\s*Secure\b/i.test(sessionSetCook
 }
 authHeaders.Cookie = sessionCookie;
 console.log('ok /api/auth/login');
+
+const initialOverviewSnapshotResponse = await fetch(`${baseUrl}/api/overview`, { headers: authHeaders });
+const initialOverviewSnapshotText = await initialOverviewSnapshotResponse.text();
+const initialOverviewSnapshotEtag = initialOverviewSnapshotResponse.headers.get('etag') ?? '';
+const initialOverviewSnapshotBytes = Number(initialOverviewSnapshotResponse.headers.get('x-colipas-overview-bytes'));
+if (
+  initialOverviewSnapshotResponse.status !== 200
+  || !initialOverviewSnapshotEtag.startsWith('"colipas-overview-')
+  || initialOverviewSnapshotResponse.headers.get('cache-control') !== 'private, no-cache'
+  || !Number.isSafeInteger(initialOverviewSnapshotBytes)
+  || initialOverviewSnapshotBytes !== Buffer.byteLength(initialOverviewSnapshotText)
+) {
+  throw new Error('/api/overview did not return a private, measurable conditional snapshot');
+}
+const reusedOverviewSnapshotResponse = await fetch(`${baseUrl}/api/overview`, {
+  headers: { ...authHeaders, 'If-None-Match': initialOverviewSnapshotEtag },
+});
+if (
+  reusedOverviewSnapshotResponse.status !== 304
+  || (await reusedOverviewSnapshotResponse.text()).length !== 0
+  || reusedOverviewSnapshotResponse.headers.get('etag') !== initialOverviewSnapshotEtag
+  || Number(reusedOverviewSnapshotResponse.headers.get('x-colipas-overview-bytes')) !== initialOverviewSnapshotBytes
+) {
+  throw new Error('/api/overview did not reuse an unchanged ETag snapshot with an empty 304 response');
+}
+console.log(`ok /api/overview reuses ${initialOverviewSnapshotBytes} byte snapshots with HTTP 304`);
 
 const sessionResponse = await fetch(`${baseUrl}/api/auth/session`, { headers: authHeaders });
 if (!sessionResponse.ok) {
@@ -1113,6 +1140,18 @@ if (aiExecutableServerResponse.status !== 201) {
   throw new Error(`/api/servers AI executable setup returned HTTP ${aiExecutableServerResponse.status}`);
 }
 const aiExecutableServer = await aiExecutableServerResponse.json();
+const invalidatedOverviewSnapshotResponse = await fetch(`${baseUrl}/api/overview`, {
+  headers: { ...authHeaders, 'If-None-Match': initialOverviewSnapshotEtag },
+});
+const invalidatedOverviewSnapshotBody = await invalidatedOverviewSnapshotResponse.json();
+if (
+  invalidatedOverviewSnapshotResponse.status !== 200
+  || invalidatedOverviewSnapshotResponse.headers.get('etag') === initialOverviewSnapshotEtag
+  || !invalidatedOverviewSnapshotBody.servers.some((server) => server.id === aiExecutableServer.id)
+) {
+  throw new Error('/api/overview ETag cache did not invalidate after an inventory mutation');
+}
+console.log('ok /api/overview invalidates conditional snapshots after inventory changes');
 try {
   const aiExecutableResponse = await fetch(`${baseUrl}/api/ai/analyze`, {
     method: 'POST',
@@ -5223,6 +5262,7 @@ function assertSessionCookieSecurityGuards() {
 function assertSqlitePersistenceGuards() {
   const databaseSource = fs.readFileSync(new URL('../src/server/services/database.ts', import.meta.url), 'utf8');
   const inventoryServiceSource = fs.readFileSync(new URL('../src/server/services/inventoryService.ts', import.meta.url), 'utf8');
+  const overviewSnapshotSource = fs.readFileSync(new URL('../src/server/services/overviewSnapshotService.ts', import.meta.url), 'utf8');
   const auditServiceSource = fs.readFileSync(new URL('../src/server/services/auditService.ts', import.meta.url), 'utf8');
   const appSource = fs.readFileSync(new URL('../src/server/app.ts', import.meta.url), 'utf8');
   const sshAccessSource = fs.readFileSync(new URL('../src/server/services/sshAccessService.ts', import.meta.url), 'utf8');
@@ -5500,7 +5540,7 @@ function assertSqlitePersistenceGuards() {
     'busiestServer: inventory.summary.busiestServer',
     'const inventorySummary = summarizeServerInventory()',
   ];
-  const inventorySummarySource = `${inventoryServiceSource}\n${appSource}\n${diagnosticServiceSource}\n${releaseVerificationSource}`;
+  const inventorySummarySource = `${inventoryServiceSource}\n${overviewSnapshotSource}\n${appSource}\n${diagnosticServiceSource}\n${releaseVerificationSource}`;
   const missingInventorySummaryFragments = inventorySummaryFragments.filter((fragment) => !inventorySummarySource.includes(fragment));
   if (missingInventorySummaryFragments.length) {
     throw new Error(`Inventory summary fast path is incomplete: ${missingInventorySummaryFragments.join(', ')}`);
@@ -8355,6 +8395,8 @@ function assertAdaptiveOverviewRefreshScheduler() {
     'app.syncSavedPollsLabel',
     'app.syncSnapshotsLabel',
     'app.syncHealthMetrics',
+    'app.syncCacheReuseLabel',
+    'app.syncCacheReuseValue',
   ]) {
     const count = (i18nSource.match(new RegExp(key.replaceAll('.', '\\.'), 'g')) ?? []).length;
     if (count < 3) {
@@ -8372,6 +8414,9 @@ function assertAdaptiveOverviewRefreshScheduler() {
     'data-tab-sync-card="true"',
     'data-tab-sync-role="standby"',
     'data-tab-sync-saved-polls',
+    'data-overview-cache-reuses',
+    'response.status() === 304',
+    'Primary sync health did not expose conditional snapshot reuse',
     'Cross-tab standby sync health did not explain duplicate polling reduction',
     'Adaptive refresh card did not render its foreground cadence',
   ];
@@ -8392,6 +8437,9 @@ function assertAdaptiveOverviewRefreshScheduler() {
     'config-snapshot',
     'leader-release',
     'avoidedOverviewPolls',
+    'overviewResponsesReused',
+    'overviewBytesAvoided',
+    'recordOverviewReuse',
     'subscribeStats',
     'shouldRunSharedRefresh',
     'broadcastOverview',
@@ -9337,6 +9385,67 @@ function assertInventorySnapshotCacheGuards() {
   }
 
   console.log('ok inventory snapshot cache avoids repeated full recomputation');
+}
+
+function assertOverviewConditionalSnapshotGuards() {
+  const overviewSnapshotSource = fs.readFileSync(new URL('../src/server/services/overviewSnapshotService.ts', import.meta.url), 'utf8');
+  const inventorySource = fs.readFileSync(new URL('../src/server/services/inventoryService.ts', import.meta.url), 'utf8');
+  const appSource = fs.readFileSync(new URL('../src/server/app.ts', import.meta.url), 'utf8');
+  const apiClientSource = fs.readFileSync(new URL('../src/services/apiClient.ts', import.meta.url), 'utf8');
+  const tabSyncSource = fs.readFileSync(new URL('../src/app/tabSyncCoordinator.ts', import.meta.url), 'utf8');
+  const appUiSource = fs.readFileSync(new URL('../src/app/App.tsx', import.meta.url), 'utf8');
+
+  for (const fragment of [
+    'export function getServerInventoryRevision()',
+    'let cachedOverviewSnapshot',
+    'export function buildOverviewHttpSnapshot()',
+    'export function matchesOverviewEtag(',
+    'Buffer.byteLength(body)',
+    "createHash('sha256')",
+  ]) {
+    if (!`${inventorySource}\n${overviewSnapshotSource}`.includes(fragment)) {
+      throw new Error(`Overview conditional snapshot service is incomplete: ${fragment}`);
+    }
+  }
+
+  for (const fragment of [
+    "response.setHeader('Cache-Control', 'private, no-cache')",
+    "response.setHeader('ETag', snapshot.etag)",
+    "response.setHeader('X-CoLiPas-Overview-Bytes'",
+    "request.headers['if-none-match']",
+    'response.status(304).end()',
+  ]) {
+    if (!appSource.includes(fragment)) {
+      throw new Error(`Overview conditional response route is incomplete: ${fragment}`);
+    }
+  }
+
+  for (const fragment of [
+    'const overviewResponseCache = new WeakMap',
+    "headers: cached?.etag ? { 'If-None-Match': cached.etag }",
+    'response.status === 304',
+    'export function clearOverviewCache',
+    'cache: { reused: true, payloadBytes: cached.payloadBytes }',
+  ]) {
+    if (!apiClientSource.includes(fragment)) {
+      throw new Error(`Overview client snapshot reuse is incomplete: ${fragment}`);
+    }
+  }
+
+  for (const fragment of [
+    'overviewResponsesReused',
+    'overviewBytesAvoided',
+    'recordOverviewReuse(payloadBytes: number)',
+    'tabSyncCoordinator.recordOverviewReuse(cache.payloadBytes)',
+    'data-overview-cache-reuses={tabSyncStats.overviewResponsesReused}',
+    "t('app.syncCacheReuseValue'",
+  ]) {
+    if (!`${tabSyncSource}\n${appUiSource}`.includes(fragment)) {
+      throw new Error(`Overview snapshot savings telemetry is incomplete: ${fragment}`);
+    }
+  }
+
+  console.log('ok overview conditional snapshots reuse unchanged payloads and expose avoided bytes');
 }
 
 function assertLocalizedFormatCacheGuards() {

@@ -382,6 +382,10 @@ function markServerInventoryChanged() {
   cachedServerInventorySnapshot = null;
 }
 
+export function getServerInventoryRevision() {
+  return serverInventoryRevision;
+}
+
 function getCachedServerInventorySnapshot() {
   if (cachedServerInventorySnapshot?.revision !== serverInventoryRevision) {
     return null;

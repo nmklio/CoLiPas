@@ -30,6 +30,7 @@ import { getDatabasePath } from './services/database.js';
 import { buildDiagnosticExport } from './services/diagnosticService.js';
 import { createMaintenanceWindow, deleteMaintenanceWindow, listMaintenanceWindows } from './services/maintenanceWindowService.js';
 import { createOperationTask, preflightOperationTask } from './services/operationsService.js';
+import { buildOverviewHttpSnapshot, matchesOverviewEtag } from './services/overviewSnapshotService.js';
 import { createReleaseEvidenceShare, listReleaseEvidenceShares, readPublicReleaseEvidenceShare, revokeReleaseEvidenceShare } from './services/releaseEvidenceShareService.js';
 import { buildReleaseReadiness, buildReleaseReadinessReport, getReleaseGatePolicy, recordReleaseReadinessSnapshot, updateReleaseGatePolicy } from './services/releaseReadinessService.js';
 import { checkReleaseSyncHealth } from './services/releaseSyncHealthService.js';
@@ -297,7 +298,7 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
     }
   });
 
-  app.get('/api/overview', async (_request, response, next) => {
+  app.get('/api/overview', async (request, response, next) => {
     try {
       await refreshServerMetrics();
     } catch (error) {
@@ -305,20 +306,19 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
       return;
     }
 
-    const inventory = buildServerInventorySnapshot();
-    response.json({
-      cloudAccounts,
-      servers: inventory.items,
-      operationEvents,
-      summary: {
-        totalServers: inventory.summary.total,
-        onlineServers: inventory.summary.running,
-        openEvents: inventory.summary.openEvents,
-        connectedSsh: inventory.summary.sshConnected,
-        avgCpu: inventory.summary.avgCpu,
-        busiestServer: inventory.summary.busiestServer,
-      },
-    });
+    const snapshot = buildOverviewHttpSnapshot();
+    response.setHeader('Cache-Control', 'private, no-cache');
+    response.setHeader('ETag', snapshot.etag);
+    response.setHeader('X-CoLiPas-Overview-Bytes', String(snapshot.bytes));
+    response.setHeader('X-CoLiPas-Overview-Revision', snapshot.revision);
+    response.vary('Cookie');
+
+    if (matchesOverviewEtag(request.headers['if-none-match'], snapshot.etag)) {
+      response.status(304).end();
+      return;
+    }
+
+    response.type('application/json').send(snapshot.body);
   });
 
   app.get('/api/config', (_request, response) => {

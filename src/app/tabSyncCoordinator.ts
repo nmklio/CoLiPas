@@ -8,6 +8,8 @@ export interface TabSyncStats {
   overviewSnapshotsReceived: number;
   configSnapshotsReceived: number;
   avoidedOverviewPolls: number;
+  overviewResponsesReused: number;
+  overviewBytesAvoided: number;
   lastBroadcastAt: string | null;
   lastSnapshotAt: string | null;
 }
@@ -55,6 +57,8 @@ const initialTabSyncStats: TabSyncStats = {
   overviewSnapshotsReceived: 0,
   configSnapshotsReceived: 0,
   avoidedOverviewPolls: 0,
+  overviewResponsesReused: 0,
+  overviewBytesAvoided: 0,
   lastBroadcastAt: null,
   lastSnapshotAt: null,
 };
@@ -219,6 +223,13 @@ export class TabSyncCoordinator {
 
   shouldRunSharedRefresh() {
     return this.role !== 'standby';
+  }
+
+  recordOverviewReuse(payloadBytes: number) {
+    this.updateStats({
+      overviewResponsesReused: this.stats.overviewResponsesReused + 1,
+      overviewBytesAvoided: this.stats.overviewBytesAvoided + Math.max(0, Math.round(payloadBytes)),
+    });
   }
 
   broadcastOverview(snapshot: {

@@ -412,6 +412,23 @@ export class AuthRequiredError extends Error {
   }
 }
 
+interface OverviewResponseCacheEntry {
+  data: OverviewResponse;
+  etag: string;
+  payloadBytes: number;
+}
+
+export interface OverviewFetchResult {
+  data: OverviewResponse;
+  source: 'api' | 'fallback';
+  cache: {
+    reused: boolean;
+    payloadBytes: number;
+  };
+}
+
+const overviewResponseCache = new WeakMap<typeof fetch, OverviewResponseCacheEntry>();
+
 const fallbackOverview: OverviewResponse = {
   cloudAccounts,
   servers,
@@ -423,22 +440,63 @@ const fallbackOverview: OverviewResponse = {
   },
 };
 
-export async function fetchOverview(fetcher: typeof fetch = fetch): Promise<{ data: OverviewResponse; source: 'api' | 'fallback' }> {
+export async function fetchOverview(fetcher: typeof fetch = fetch): Promise<OverviewFetchResult> {
+  const cached = overviewResponseCache.get(fetcher);
   try {
-    const response = await fetcher('/api/overview');
+    const response = await fetcher('/api/overview', {
+      credentials: 'include',
+      cache: 'no-store',
+      headers: cached?.etag ? { 'If-None-Match': cached.etag } : undefined,
+    });
     if (response.status === 401) {
+      overviewResponseCache.delete(fetcher);
       throw new AuthRequiredError();
+    }
+    if (response.status === 304) {
+      if (!cached) {
+        throw new Error('Overview API returned 304 without a cached snapshot');
+      }
+      return {
+        data: cached.data,
+        source: 'api',
+        cache: { reused: true, payloadBytes: cached.payloadBytes },
+      };
     }
     if (!response.ok) {
       throw new Error(`Overview API returned ${response.status}`);
     }
-    return { data: (await response.json()) as OverviewResponse, source: 'api' };
+    const data = (await response.json()) as OverviewResponse;
+    const etag = response.headers.get('etag')?.trim() ?? '';
+    const payloadBytes = readPositiveHeaderInteger(response.headers.get('x-colipas-overview-bytes'));
+    if (etag) {
+      overviewResponseCache.set(fetcher, { data, etag, payloadBytes });
+    } else {
+      overviewResponseCache.delete(fetcher);
+    }
+    return {
+      data,
+      source: 'api',
+      cache: { reused: false, payloadBytes },
+    };
   } catch (error) {
     if (error instanceof AuthRequiredError) {
       throw error;
     }
-    return { data: fallbackOverview, source: 'fallback' };
+    return {
+      data: fallbackOverview,
+      source: 'fallback',
+      cache: { reused: false, payloadBytes: 0 },
+    };
   }
+}
+
+export function clearOverviewCache(fetcher: typeof fetch = fetch) {
+  overviewResponseCache.delete(fetcher);
+}
+
+function readPositiveHeaderInteger(value: string | null) {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : 0;
 }
 
 export async function fetchAuthSession(fetcher: typeof fetch = fetch) {

@@ -57,6 +57,7 @@ import {
   ConfigSummaryResponse,
   OverviewResponse,
   changeAccountPassword,
+  clearOverviewCache,
   fetchAuthSession,
   fetchConfigSummary,
   fetchOverview,
@@ -448,9 +449,12 @@ export function App() {
     }
     overviewRefreshInFlightRef.current = true;
     try {
-      const { data, source } = await fetchOverview();
+      const { data, source, cache } = await fetchOverview();
       if (!appMountedRef.current || !sessionAuthenticatedRef.current) {
         return false;
+      }
+      if (cache.reused) {
+        tabSyncCoordinator.recordOverviewReuse(cache.payloadBytes);
       }
       const refreshedAt = new Date();
       setOverview(data);
@@ -942,6 +946,10 @@ export function App() {
   const syncUpdatedAtLabel = syncUpdatedAt
     ? new Date(syncUpdatedAt).toLocaleTimeString(timeLocale)
     : t('app.resourcePending');
+  const syncCacheReuseLabel = t('app.syncCacheReuseValue', {
+    count: tabSyncStats.overviewResponsesReused,
+    size: formatByteCount(tabSyncStats.overviewBytesAvoided, timeLocale),
+  });
   const activeSectionConfig = sections.find((section) => section.id === activeSection) ?? sections[0];
   const ActiveSectionIcon = activeSectionConfig.icon;
   const commandShortcutLabel = isApplePlatform() ? '⌘K' : 'Ctrl K';
@@ -1124,6 +1132,7 @@ export function App() {
   async function handleLogin(username: string, password: string) {
     setLoginLoading(true);
     setLoginError('');
+    clearOverviewCache();
     try {
       const nextSession = await login(username, password);
       setSession(nextSession.authenticated ? nextSession : null);
@@ -1143,6 +1152,7 @@ export function App() {
 
   async function handleLogout() {
     await logout().catch(() => undefined);
+    clearOverviewCache();
     setSession(null);
     setProfile(fallbackProfile);
     setOverview(fallbackOverview);
@@ -1784,6 +1794,8 @@ export function App() {
                     data-tab-sync-role={tabSyncRole}
                     data-tab-sync-saved-polls={syncSavedPollCount}
                     data-tab-sync-snapshots={syncSnapshotCount}
+                    data-overview-cache-reuses={tabSyncStats.overviewResponsesReused}
+                    data-overview-cache-bytes={tabSyncStats.overviewBytesAvoided}
                     role="status"
                     aria-live="polite"
                     title={`${adaptiveRefreshStatusLabel} - ${adaptiveRefreshStatusDetail}; ${tabSyncStatusLabel} - ${tabSyncStatusDetail}`}
@@ -1815,6 +1827,10 @@ export function App() {
                         <dd>{tabSyncRole === 'standby'
                           ? t('app.syncSnapshotsValue', { count: syncSnapshotCount })
                           : syncUpdatedAtLabel}</dd>
+                      </div>
+                      <div>
+                        <dt>{t('app.syncCacheReuseLabel')}</dt>
+                        <dd title={syncCacheReuseLabel}>{syncCacheReuseLabel}</dd>
                       </div>
                     </dl>
                     <small>{tabSyncStatusDetail}</small>
@@ -2653,6 +2669,20 @@ function sanitizeLaunchChecklistReport(value: string) {
     .replace(/\bsk-[A-Za-z0-9_-]{12,}\b/g, '[redacted-api-key]')
     .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, '[redacted-ip]')
     .replace(/\b(password|passphrase)=\S+/gi, '$1=[redacted]');
+}
+
+function formatByteCount(bytes: number, locale: string) {
+  const normalized = Number.isFinite(bytes) ? Math.max(0, bytes) : 0;
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let value = normalized;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${new Intl.NumberFormat(locale, {
+    maximumFractionDigits: value > 0 && value < 10 && unitIndex > 0 ? 1 : 0,
+  }).format(value)} ${units[unitIndex]}`;
 }
 
 function AvatarMark({ profile, className = '' }: { profile: AccountProfile; className?: string }) {
