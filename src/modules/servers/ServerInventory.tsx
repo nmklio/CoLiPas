@@ -36,7 +36,7 @@ import {
 } from '../../services/apiClient';
 import { CloudProvider, ServerNode, ServerStatus, SshAuthType, SshRunbookCommand, SshVerifyMode } from '../../types';
 import { formatRegionName, percentClass, statusLabel } from '../../utils/format';
-import { ServerFilters } from './serverFilters';
+import type { ServerFilters } from '../../shared/serverFilters';
 import { baseCloudProviders, customProviderFilterValue, resolveServerLifecycleStatus } from '../../shared/serverFilters';
 import {
   captureFleetViewFilters,
@@ -1224,14 +1224,24 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
   }, [sshConsoleOpen, activeSshServer?.id]);
 
   useEffect(() => {
-    refreshShellStatus();
+    function refreshVisibleShellStatus() {
+      if (document.visibilityState === 'visible') {
+        refreshShellStatus();
+      }
+    }
+
+    refreshVisibleShellStatus();
 
     if (!sshConsoleOpen && !terminalShellId) {
       return undefined;
     }
 
-    const timer = window.setInterval(refreshShellStatus, 5000);
-    return () => window.clearInterval(timer);
+    const timer = window.setInterval(refreshVisibleShellStatus, 5000);
+    document.addEventListener('visibilitychange', refreshVisibleShellStatus);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', refreshVisibleShellStatus);
+    };
   }, [sshConsoleOpen, terminalShellId]);
 
   useEffect(() => () => clearActionMessageTimer(), []);

@@ -46,6 +46,8 @@ assertSshConnectionDoctorGuards();
 assertProductionSshProbeGuards();
 assertSshKeyAuthenticationGuards();
 assertAdaptiveOperatorControls();
+assertAdaptiveOverviewRefreshScheduler();
+assertSecretScanHandlesDeletedTrackedFiles();
 assertSecurityAuditRelationsAreSpecific();
 assertOperationsTargetSelectionGuards();
 assertMaintenanceWindowGuards();
@@ -8236,6 +8238,169 @@ function assertAdaptiveOperatorControls() {
   }
 
   console.log('ok adaptive operator controls keep desktop and mobile topbars compact with accessible secondary actions');
+}
+
+function assertAdaptiveOverviewRefreshScheduler() {
+  const schedulerSource = fs.readFileSync(new URL('../src/app/adaptiveRefresh.ts', import.meta.url), 'utf8');
+  const appSource = fs.readFileSync(new URL('../src/app/App.tsx', import.meta.url), 'utf8');
+  const serverInventorySource = fs.readFileSync(new URL('../src/modules/servers/ServerInventory.tsx', import.meta.url), 'utf8');
+  const globalCss = fs.readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
+  const i18nSource = fs.readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
+  const browserE2eSource = fs.readFileSync(new URL('../scripts/browser-e2e.mjs', import.meta.url), 'utf8');
+  const performanceSource = fs.readFileSync(new URL('../scripts/performance-check.mjs', import.meta.url), 'utf8');
+  const publicPagesSource = fs.readFileSync(new URL('../scripts/public-pages-check.mjs', import.meta.url), 'utf8');
+  const viteConfigSource = fs.readFileSync(new URL('../vite.config.ts', import.meta.url), 'utf8');
+  const readmeSource = fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+  const cnReadmeSource = fs.readFileSync(new URL('../README_CN.md', import.meta.url), 'utf8');
+  const jpReadmeSource = fs.readFileSync(new URL('../README_JP.md', import.meta.url), 'utf8');
+  const marketingSource = fs.readFileSync(new URL('../src/app/MarketingPage.tsx', import.meta.url), 'utf8');
+  const docsSource = fs.readFileSync(new URL('../src/app/DocsPage.tsx', import.meta.url), 'utf8');
+  const serverUpdateSource = fs.readFileSync(new URL('../deploy/server-update.sh', import.meta.url), 'utf8');
+
+  const schedulerFragments = [
+    "export type AdaptiveRefreshStatus = 'active' | 'paused' | 'offline' | 'retrying'",
+    'standardMs: 15_000',
+    'performanceMs: 30_000',
+    'maxRetryMs: 120_000',
+    'export function getOverviewRefreshInterval',
+    'export function getOverviewRefreshDelay',
+    '2 ** failureCount',
+    'export function resolveAdaptiveRefreshStatus',
+  ];
+  const missingSchedulerFragments = schedulerFragments.filter((fragment) => !schedulerSource.includes(fragment));
+  if (missingSchedulerFragments.length) {
+    throw new Error(`Adaptive overview refresh scheduler is incomplete: ${missingSchedulerFragments.join(', ')}`);
+  }
+
+  const appFragments = [
+    'const [adaptiveRefreshStatus, setAdaptiveRefreshStatus]',
+    'const lastRefreshedAtRef = useRef<number | null>(null)',
+    "document.addEventListener('visibilitychange', handleVisibilityChange)",
+    "window.addEventListener('online', handleOnline)",
+    "window.addEventListener('offline', handleOffline)",
+    'scheduleFromEnvironment(true)',
+    'data-adaptive-refresh-status={adaptiveRefreshStatus}',
+    'data-adaptive-refresh-card="true"',
+    'const nextSectionBySection: Record<SectionId, SectionId>',
+    "document.visibilityState !== 'visible' || !navigator.onLine",
+    '}, 1800)',
+    '{ timeout: 3200 }',
+  ];
+  const missingAppFragments = appFragments.filter((fragment) => !appSource.includes(fragment));
+  if (missingAppFragments.length) {
+    throw new Error(`Adaptive overview refresh integration is incomplete: ${missingAppFragments.join(', ')}`);
+  }
+  if (/setInterval\(\(\)\s*=>\s*\{\s*refreshOverview\(\)/m.test(appSource)) {
+    throw new Error('Overview refresh must not regress to a fixed background setInterval');
+  }
+  if (
+    appSource.includes('../modules/servers/serverFilters')
+    || fs.existsSync(new URL('../src/modules/servers/serverFilters.ts', import.meta.url))
+  ) {
+    throw new Error('The application shell must not statically enter the lazy server-module chunk through a forwarding filter module');
+  }
+
+  const serverPollFragments = [
+    'function refreshVisibleShellStatus()',
+    "document.visibilityState === 'visible'",
+    "document.addEventListener('visibilitychange', refreshVisibleShellStatus)",
+    "document.removeEventListener('visibilitychange', refreshVisibleShellStatus)",
+  ];
+  const missingServerPollFragments = serverPollFragments.filter((fragment) => !serverInventorySource.includes(fragment));
+  if (missingServerPollFragments.length) {
+    throw new Error(`SSH shell status polling is not visibility-aware: ${missingServerPollFragments.join(', ')}`);
+  }
+
+  const cssFragments = [
+    '.operator-utility-trigger.sync-paused .operator-sync-dot',
+    '.operator-utility-trigger.sync-offline .operator-sync-dot',
+    '.operator-utility-trigger.sync-retrying .operator-sync-dot',
+    '.operator-utility-status.active',
+    '.operator-utility-status.paused',
+    '.operator-utility-status.offline',
+    '.operator-utility-status.retrying',
+  ];
+  const missingCssFragments = cssFragments.filter((fragment) => !globalCss.includes(fragment));
+  if (missingCssFragments.length) {
+    throw new Error(`Adaptive refresh status UI CSS is incomplete: ${missingCssFragments.join(', ')}`);
+  }
+
+  for (const key of [
+    'app.adaptiveRefresh',
+    'app.adaptiveRefreshActive',
+    'app.adaptiveRefreshPaused',
+    'app.adaptiveRefreshOffline',
+    'app.adaptiveRefreshRetrying',
+    'app.adaptiveRefreshCadence',
+    'app.adaptiveRefreshPausedDetail',
+    'app.adaptiveRefreshOfflineDetail',
+    'app.adaptiveRefreshRetryingDetail',
+  ]) {
+    const count = (i18nSource.match(new RegExp(key.replaceAll('.', '\\.'), 'g')) ?? []).length;
+    if (count < 3) {
+      throw new Error(`Adaptive refresh i18n key is missing language coverage: ${key}`);
+    }
+  }
+
+  const browserFragments = [
+    "getAttribute('data-adaptive-refresh-status') === 'paused'",
+    "getAttribute('data-adaptive-refresh-status') === 'offline'",
+    'setOffline(true)',
+    'setOffline(false)',
+    'reconnectOverviewResponse',
+    'data-adaptive-refresh-card="true"',
+    'Adaptive refresh card did not render its foreground cadence',
+  ];
+  const missingBrowserFragments = browserFragments.filter((fragment) => !browserE2eSource.includes(fragment));
+  if (missingBrowserFragments.length) {
+    throw new Error(`Adaptive refresh browser coverage is incomplete: ${missingBrowserFragments.join(', ')}`);
+  }
+
+  for (const fragment of ['initialModuleChunks', 'unexpectedInitialChunks', 'Initial overview loaded unrelated admin modules before navigation']) {
+    if (!performanceSource.includes(fragment)) {
+      throw new Error(`Progressive module prewarm performance coverage is incomplete: ${fragment}`);
+    }
+  }
+  for (const fragment of [
+    "normalizedId.endsWith('/src/data/mockData.ts')",
+    "normalizedId.endsWith('/src/services/apiClient.ts')",
+    "normalizedId.endsWith('/src/shared/serverFilters.ts')",
+    "return 'app-shared'",
+    "return 'shared-ssh-support'",
+  ]) {
+    if (!viteConfigSource.includes(fragment)) {
+      throw new Error(`Lazy module boundary build guard is incomplete: ${fragment}`);
+    }
+  }
+
+  for (const [name, source, fragments] of [
+    ['README.md', readmeSource, ['Adaptive refresh scheduler', '15 seconds', '30 seconds', '120 seconds']],
+    ['README_CN.md', cnReadmeSource, ['智能刷新调度', '15 秒', '30 秒', '120 秒']],
+    ['README_JP.md', jpReadmeSource, ['適応型更新スケジューラー', '15 秒', '30 秒', '120 秒']],
+    ['MarketingPage.tsx', marketingSource, ["featureId: 'adaptive-refresh'", '智能刷新调度']],
+    ['DocsPage.tsx', docsSource, ["featureId: 'adaptive-refresh'", '使用智能刷新调度']],
+    ['server-update.sh landing', serverUpdateSource, ['data-colipas-feature="adaptive-refresh"', '智能刷新调度']],
+    ['server-update.sh docs', serverUpdateSource, ['data-colipas-docs-adaptive-refresh="true"', '智能刷新与失败退避']],
+    ['public-pages-check.mjs', publicPagesSource, ['data-colipas-feature="adaptive-refresh"', 'data-colipas-docs-adaptive-refresh="true"']],
+  ]) {
+    const missingFragments = fragments.filter((fragment) => !source.includes(fragment));
+    if (missingFragments.length) {
+      throw new Error(`${name} must document adaptive refresh scheduling: ${missingFragments.join(', ')}`);
+    }
+  }
+
+  console.log('ok adaptive refresh pauses hidden/offline work, reconnects immediately, backs off failures, and prewarms one next module');
+}
+
+function assertSecretScanHandlesDeletedTrackedFiles() {
+  const secretScanSource = fs.readFileSync(new URL('../scripts/secret-scan.mjs', import.meta.url), 'utf8');
+  if (
+    !secretScanSource.includes('if (!fs.existsSync(absolutePath))')
+    || !secretScanSource.includes("return '';")
+  ) {
+    throw new Error('Secret scanning must skip tracked paths that are deleted in the current working tree');
+  }
+  console.log('ok secret scan tolerates tracked file deletions without weakening content inspection');
 }
 
 function assertSecurityAuditRelationsAreSpecific() {

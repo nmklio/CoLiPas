@@ -23,6 +23,16 @@ export default defineConfig({
           if (id.includes('node_modules/@xterm/')) {
             return 'vendor-terminal';
           }
+          if (
+            normalizedId.endsWith('/src/data/mockData.ts')
+            || normalizedId.endsWith('/src/services/apiClient.ts')
+            || normalizedId.endsWith('/src/shared/serverFilters.ts')
+          ) {
+            return 'app-shared';
+          }
+          if (normalizedId.endsWith('/src/shared/sshTerminalSupportSnapshot.ts')) {
+            return 'shared-ssh-support';
+          }
           if (normalizedId.includes('/src/modules/servers/')) {
             return 'module-servers';
           }

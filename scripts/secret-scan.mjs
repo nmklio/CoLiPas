@@ -65,6 +65,9 @@ function isBinary(buffer) {
 
 function readTextFile(file) {
   const absolutePath = path.join(root, file);
+  if (!fs.existsSync(absolutePath)) {
+    return '';
+  }
   const stat = fs.statSync(absolutePath);
   if (stat.size > maxTextBytes) {
     return '';

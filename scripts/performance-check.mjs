@@ -64,6 +64,18 @@ try {
     await page.getByRole('button', { name: /sign in/i }).click();
     await page.locator('.topbar').waitFor({ timeout: 15000 });
   });
+  const initialModuleChunks = await page.evaluate(() => (
+    performance.getEntriesByType('resource')
+      .map((entry) => entry.name)
+      .filter((name) => /\/module-[^/]+\.js(?:$|\?)/i.test(name))
+      .map((name) => name.split('/').pop() ?? name)
+  ));
+  const unexpectedInitialChunks = initialModuleChunks.filter((name) => (
+    !name.startsWith('module-overview-')
+  ));
+  if (unexpectedInitialChunks.length > 0) {
+    throw new Error(`Initial overview loaded unrelated admin modules before navigation: ${unexpectedInitialChunks.join(', ')}`);
+  }
 
   const sections = [
     { name: 'servers', button: /^Servers$/i, url: /#servers$/, ready: '.server-workspace-list, .empty-state' },
@@ -115,6 +127,7 @@ try {
     mapInteractionMs,
     longTaskCount: longTasks.length,
     maxLongTaskMs: Math.round(maxLongTask),
+    initialModuleChunks,
     thresholds,
   }, null, 2));
 } finally {

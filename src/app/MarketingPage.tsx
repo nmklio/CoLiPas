@@ -23,6 +23,7 @@ import {
   Network,
   PlayCircle,
   PlugZap,
+  RefreshCw,
   ScrollText,
   Server,
   ShieldCheck,
@@ -147,6 +148,14 @@ const operatorControlsFeature = {
   featureId: 'operator-controls',
 };
 
+const adaptiveRefreshFeature = {
+  icon: RefreshCw,
+  title: '智能刷新调度',
+  desc: '根据标签页可见性、网络状态、性能模式和请求失败次数自动暂停、恢复或退避总览同步，减少后台请求与无效渲染。',
+  tags: ['隐藏即暂停', '失败退避'],
+  featureId: 'adaptive-refresh',
+};
+
 const securityItems = ['登录会话保护', 'SSH 命令边界', 'AI Base URL 校验', '自定义 API 白名单', '敏感信息脱敏'];
 
 export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
@@ -267,7 +276,7 @@ export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
           <h2>围绕“服务器接入到修复”构建的完整后台</h2>
         </div>
         <div className="marketing-feature-grid">
-          {[...featureCards, fleetViewFeature, bulkImportFeature, commandPaletteFeature, operationsInboxFeature, accountSessionFeature, operatorControlsFeature].map((feature) => {
+          {[...featureCards, fleetViewFeature, bulkImportFeature, commandPaletteFeature, operationsInboxFeature, accountSessionFeature, operatorControlsFeature, adaptiveRefreshFeature].map((feature) => {
             const Icon = feature.icon;
             const featureId = 'featureId' in feature && typeof feature.featureId === 'string'
               ? feature.featureId

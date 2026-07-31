@@ -19,6 +19,7 @@ import {
   MapPinned,
   MonitorSmartphone,
   PlayCircle,
+  RefreshCw,
   Server,
   ShieldCheck,
   TerminalSquare,
@@ -157,6 +158,14 @@ const operatorControlsUsageBlock = {
   body: '桌面端和手机端都把刷新、语言、账户设置与退出登录集中在操作员控制面板中；顶栏保留登录名称、同步状态和当前最重要的运维入口。',
   points: ['点击带登录名称的控制器或手机端“…”打开，三种语言始终可用', '窄屏自动压缩次要标签，避免顶栏换行或横向溢出', '支持 Escape、遮罩和关闭按钮返回当前模块'],
   featureId: 'operator-controls',
+};
+
+const adaptiveRefreshUsageBlock = {
+  icon: RefreshCw,
+  title: '使用智能刷新调度',
+  body: '总览同步会根据页面可见性、网络状态、性能模式和连续失败次数自动调整，不再让隐藏标签页或离线浏览器持续产生后台请求。',
+  points: ['标准模式每 15 秒同步，性能模式每 30 秒同步', '标签页隐藏或网络离线时暂停，返回前台或恢复网络后按数据新鲜度立即续传', '连续失败采用指数退避，最长 120 秒，并保留手动刷新入口'],
+  featureId: 'adaptive-refresh',
 };
 
 const commandPaletteUsageBlock = {
@@ -337,7 +346,7 @@ export function DocsPage({ onLogin }: DocsPageProps) {
               <p>建议按以下顺序使用。每个模块都会与资产、事件、审计和 AI 上下文联动。</p>
             </div>
             <div className="docs-usage-grid">
-              {[...usageBlocks, bulkImportUsageBlock, fleetViewUsageBlock, operationsInboxUsageBlock, operatorControlsUsageBlock, commandPaletteUsageBlock, accountAppearanceUsageBlock, accountSessionUsageBlock].map((block) => {
+              {[...usageBlocks, bulkImportUsageBlock, fleetViewUsageBlock, operationsInboxUsageBlock, operatorControlsUsageBlock, adaptiveRefreshUsageBlock, commandPaletteUsageBlock, accountAppearanceUsageBlock, accountSessionUsageBlock].map((block) => {
                 const Icon = block.icon;
                 const sectionId = 'sectionId' in block && typeof block.sectionId === 'string'
                   ? block.sectionId

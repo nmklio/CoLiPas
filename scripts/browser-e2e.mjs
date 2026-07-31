@@ -1336,6 +1336,41 @@ async function assertAccountSettingsAndAiChat(targetPage) {
   }
   const operatorUtilityTrigger = targetPage.locator('[data-operator-utility-trigger="true"]');
   await operatorUtilityTrigger.waitFor({ timeout: 5000 });
+  await targetPage.waitForFunction(() => (
+    document.querySelector('[data-operator-utility-trigger="true"]')?.getAttribute('data-adaptive-refresh-status') === 'active'
+  ), undefined, { timeout: 5000 });
+  await targetPage.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'hidden',
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await targetPage.waitForFunction(() => (
+    document.querySelector('[data-operator-utility-trigger="true"]')?.getAttribute('data-adaptive-refresh-status') === 'paused'
+  ), undefined, { timeout: 5000 });
+  await targetPage.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await targetPage.waitForFunction(() => (
+    document.querySelector('[data-operator-utility-trigger="true"]')?.getAttribute('data-adaptive-refresh-status') === 'active'
+  ), undefined, { timeout: 5000 });
+  await targetPage.context().setOffline(true);
+  await targetPage.waitForFunction(() => (
+    document.querySelector('[data-operator-utility-trigger="true"]')?.getAttribute('data-adaptive-refresh-status') === 'offline'
+  ), undefined, { timeout: 5000 });
+  const reconnectOverviewResponse = targetPage.waitForResponse((response) => (
+    new URL(response.url()).pathname === '/api/overview' && response.request().method() === 'GET' && response.ok()
+  ), { timeout: 10000 });
+  await targetPage.context().setOffline(false);
+  await reconnectOverviewResponse;
+  await targetPage.waitForFunction(() => (
+    document.querySelector('[data-operator-utility-trigger="true"]')?.getAttribute('data-adaptive-refresh-status') === 'active'
+  ), undefined, { timeout: 5000 });
   if (!new RegExp(username, 'i').test(await operatorUtilityTrigger.innerText())) {
     throw new Error('Operator controls trigger must keep the signed-in username visible');
   }
@@ -1345,10 +1380,15 @@ async function assertAccountSettingsAndAiChat(targetPage) {
   if (
     await operatorUtilityMenu.locator('.language-switcher-option').count() !== 3
     || await operatorUtilityMenu.locator('[data-operator-utility-refresh="true"]').count() !== 1
+    || await operatorUtilityMenu.locator('[data-adaptive-refresh-card="true"]').count() !== 1
     || await operatorUtilityMenu.locator('[data-operator-utility-account="true"]').count() !== 1
     || await operatorUtilityMenu.locator('[data-operator-utility-logout="true"]').count() !== 1
   ) {
-    throw new Error('Desktop operator controls must expose language, refresh, account, and sign-out actions');
+    throw new Error('Desktop operator controls must expose language, adaptive refresh, manual refresh, account, and sign-out actions');
+  }
+  const adaptiveRefreshCardText = await operatorUtilityMenu.locator('[data-adaptive-refresh-card="true"]').innerText();
+  if (!/Adaptive refresh|Foreground sync|Every 15s/i.test(adaptiveRefreshCardText)) {
+    throw new Error(`Adaptive refresh card did not render its foreground cadence: ${adaptiveRefreshCardText}`);
   }
   await captureVisualEvidence(targetPage, 'desktop-operator-controls', ['.topbar', '[data-operator-utility-menu="true"]']);
   await targetPage.keyboard.press('Escape');

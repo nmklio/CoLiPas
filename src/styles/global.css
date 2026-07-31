@@ -2306,6 +2306,21 @@ button:disabled {
   box-shadow: 0 0 0 4px rgba(217, 119, 6, 0.14);
 }
 
+.operator-utility-trigger.sync-paused .operator-sync-dot {
+  background: #64748b;
+  box-shadow: 0 0 0 4px rgba(100, 116, 139, 0.14);
+}
+
+.operator-utility-trigger.sync-offline .operator-sync-dot {
+  background: #dc2626;
+  box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.13);
+}
+
+.operator-utility-trigger.sync-retrying .operator-sync-dot {
+  background: #d97706;
+  box-shadow: 0 0 0 4px rgba(217, 119, 6, 0.14);
+}
+
 .operator-utility-copy {
   min-width: 0;
   display: grid;
@@ -2402,6 +2417,7 @@ button:disabled {
 }
 
 .operator-utility-action,
+.operator-utility-status,
 .operator-utility-language {
   min-width: 0;
   min-height: 66px;
@@ -2413,42 +2429,94 @@ button:disabled {
   text-align: left;
 }
 
-.operator-utility-action {
+.operator-utility-action,
+.operator-utility-status {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   column-gap: 8px;
   align-items: center;
+}
+
+.operator-utility-action {
   cursor: pointer;
 }
 
-.operator-utility-action svg {
+.operator-utility-action svg,
+.operator-utility-status svg {
   grid-row: 1 / 3;
   color: var(--brand-strong);
 }
 
 .operator-utility-action span,
-.operator-utility-action b {
+.operator-utility-action b,
+.operator-utility-status span,
+.operator-utility-status b {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.operator-utility-action span {
+.operator-utility-action span,
+.operator-utility-status span {
   font-size: 12px;
   font-weight: 850;
 }
 
-.operator-utility-action b {
+.operator-utility-action b,
+.operator-utility-status b {
   margin-top: 2px;
   color: #668087;
   font-size: 10px;
   font-weight: 750;
 }
 
+.operator-utility-status b {
+  display: -webkit-box;
+  overflow: hidden;
+  line-height: 1.25;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .operator-utility-action.active {
   border-color: rgba(15, 118, 110, 0.4);
   background: linear-gradient(135deg, #e8faf6, #ffffff);
+}
+
+.operator-utility-status.active {
+  border-color: rgba(15, 118, 110, 0.3);
+  background: linear-gradient(135deg, #effcf9, #ffffff);
+}
+
+.operator-utility-status.paused {
+  border-color: rgba(100, 116, 139, 0.24);
+  background: linear-gradient(135deg, #f8fafc, #ffffff);
+}
+
+.operator-utility-status.paused svg {
+  color: #64748b;
+}
+
+.operator-utility-status.offline {
+  border-color: rgba(220, 38, 38, 0.22);
+  background: linear-gradient(135deg, #fff1f2, #ffffff);
+}
+
+.operator-utility-status.offline svg,
+.operator-utility-status.offline span {
+  color: #b91c1c;
+}
+
+.operator-utility-status.retrying {
+  border-color: rgba(217, 119, 6, 0.28);
+  background: linear-gradient(135deg, #fff7ed, #ffffff);
+}
+
+.operator-utility-status.retrying svg,
+.operator-utility-status.retrying span {
+  color: #a16207;
 }
 
 .operator-utility-action.danger {

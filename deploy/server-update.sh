@@ -175,6 +175,7 @@ function landingIcon(kind, className) {
     shield: '<path d="M12 3.8 18.3 6v5.3c0 4.1-2.5 7.2-6.3 8.9-3.8-1.7-6.3-4.8-6.3-8.9V6L12 3.8Z"/><path d="M9.2 12.1 11.1 14l3.9-4.3"/><path d="M8.6 17.3h6.8"/>',
     command: '<rect x="4.2" y="5" width="15.6" height="14" rx="2.7"/><path d="M4.2 9.1h15.6"/><path d="m8 12.2 2.5 1.8L8 15.8"/><path d="M13.3 15.7h3.6"/><circle cx="7" cy="7.1" r=".55"/><circle cx="8.9" cy="7.1" r=".55"/>',
     controls: '<path d="M4.5 7h8.2M16.4 7h3.1M4.5 12h3.1M11.3 12h8.2M4.5 17h6.2M14.4 17h5.1"/><circle cx="14.5" cy="7" r="1.7"/><circle cx="9.5" cy="12" r="1.7"/><circle cx="12.6" cy="17" r="1.7"/>',
+    refresh: '<path d="M19.2 8.3A7.6 7.6 0 0 0 6.4 6.1L4.2 8.3"/><path d="M4.2 4.8v3.5h3.5"/><path d="M4.8 15.7a7.6 7.6 0 0 0 12.8 2.2l2.2-2.2"/><path d="M19.8 19.2v-3.5h-3.5"/>',
     inbox: '<path d="M5.2 5.1h13.6l1.4 8.1v4.4a1.8 1.8 0 0 1-1.8 1.8H5.6a1.8 1.8 0 0 1-1.8-1.8v-4.4l1.4-8.1Z"/><path d="M4.1 13.2h4.2l1.2 2h5l1.2-2h4.2"/><path d="M8.1 8.7h7.8"/>',
     code: '<path d="m9 8-4 4 4 4M15 8l4 4-4 4"/><path d="m13.2 6.8-2.4 10.4"/>',
     database: '<ellipse cx="12" cy="6.4" rx="6.8" ry="2.8"/><path d="M5.2 6.4v7.2c0 1.6 3 2.8 6.8 2.8s6.8-1.2 6.8-2.8V6.4"/><path d="M5.2 10c0 1.6 3 2.8 6.8 2.8s6.8-1.2 6.8-2.8"/>',
@@ -309,6 +310,14 @@ if (!html.includes('data-colipas-feature="operator-controls"')) {
       ${operatorControlsFeatureCard}`);
 } else {
   replaceOnce(/<article class="feature-card" data-colipas-feature="operator-controls">[\s\S]*?<\/article>/, operatorControlsFeatureCard);
+}
+
+const adaptiveRefreshFeatureCard = `<article class="feature-card" data-colipas-feature="adaptive-refresh">${landingIcon('refresh', 'icon feature-icon')}<h3>智能刷新调度</h3><p>标准模式每 15 秒、性能模式每 30 秒同步总览；标签页隐藏或浏览器离线时暂停，恢复后按数据新鲜度继续，失败时最长退避到 120 秒。</p><div class="tags"><span>隐藏即暂停</span><span>失败退避</span></div></article>`;
+if (!html.includes('data-colipas-feature="adaptive-refresh"')) {
+  replaceOnce(/(<div class="feature-grid">)/, `$1
+      ${adaptiveRefreshFeatureCard}`);
+} else {
+  replaceOnce(/<article class="feature-card" data-colipas-feature="adaptive-refresh">[\s\S]*?<\/article>/, adaptiveRefreshFeatureCard);
 }
 
 replaceAll(/<article class="deploy-card"><h3>Linux systemd<\/h3>/g, `<article class="deploy-card">${landingIcon('terminal', 'deploy-icon')}<h3>Linux systemd</h3>`);
@@ -1734,7 +1743,7 @@ if (!html.includes('data-colipas-docs-fleet-views="true"')) {
           </article>`,
   );
 }
-const operatorControlsDocsSection = `      <section class="section" data-colipas-docs-mobile-controls="true" data-colipas-docs-operator-controls="true">
+const operatorControlsDocsSection = `      <section class="section" data-colipas-docs-mobile-controls="true" data-colipas-docs-operator-controls="true" data-colipas-docs-adaptive-refresh="true">
         <p class="kicker">自适应操作员控制</p>
         <h2>登录名称与同步状态常驻，次要动作集中到一个控制面板</h2>
         <div class="grid">
@@ -1745,6 +1754,10 @@ const operatorControlsDocsSection = `      <section class="section" data-colipas
           <article class="doc-card">
             <h3>移动端自动压缩</h3>
             <p>手机端继续使用“…”打开同一组控制；三种语言始终可用，并支持 Escape、遮罩或关闭按钮返回当前模块。</p>
+          </article>
+          <article class="doc-card">
+            <h3>智能刷新与失败退避</h3>
+            <p>总览在标准模式每 15 秒、性能模式每 30 秒同步；标签页隐藏或网络离线时停止轮询，返回前台或恢复网络后按数据新鲜度续传。连续失败会指数退避，最长等待 120 秒，同时保留手动刷新入口。</p>
           </article>
         </div>
       </section>`;

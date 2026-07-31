@@ -48,7 +48,7 @@ import {
   operationEvents as fallbackOperationEvents,
   servers as fallbackServers,
 } from '../data/mockData';
-import { ServerFilters, filterServers } from '../modules/servers/serverFilters';
+import { filterServers, type ServerFilters } from '../shared/serverFilters';
 import { resolveServerLifecycleStatus } from '../shared/serverFilters';
 import {
   AccountProfile,
@@ -65,6 +65,12 @@ import {
   updateAccountProfile,
 } from '../services/apiClient';
 import type { OperationTaskPreflightResponse, ServerNode } from '../types';
+import {
+  getOverviewRefreshDelay,
+  getOverviewRefreshInterval,
+  resolveAdaptiveRefreshStatus,
+  type AdaptiveRefreshStatus,
+} from './adaptiveRefresh';
 
 type SectionId = OperationsInboxSection;
 
@@ -174,10 +180,19 @@ function preloadAiConsole() {
 }
 
 function warmIdleAdminModules(activeSection: SectionId, aiCollapsed: boolean) {
-  const warmSections: SectionId[] = activeSection === 'overview'
-    ? ['servers', 'operations', 'security']
-    : ['overview', 'servers', 'operations'];
-  warmSections.forEach(preloadSectionModule);
+  if (document.visibilityState !== 'visible' || !navigator.onLine) {
+    return;
+  }
+
+  const nextSectionBySection: Record<SectionId, SectionId> = {
+    overview: 'servers',
+    servers: 'operations',
+    operations: 'security',
+    ai: 'servers',
+    api: 'security',
+    security: 'operations',
+  };
+  preloadSectionModule(nextSectionBySection[activeSection]);
   if (!aiCollapsed || activeSection === 'ai') {
     preloadAiConsole();
   }
@@ -397,6 +412,11 @@ export function App() {
   const [configSummary, setConfigSummary] = useState<ConfigSummaryResponse | null>(null);
   const [dataSource, setDataSource] = useState<'api' | 'fallback'>('fallback');
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
+  const [adaptiveRefreshStatus, setAdaptiveRefreshStatus] = useState<AdaptiveRefreshStatus>(() => (
+    typeof document === 'undefined'
+      ? 'paused'
+      : resolveAdaptiveRefreshStatus(document.visibilityState, navigator.onLine)
+  ));
   const [launchGuideOpen, setLaunchGuideOpen] = useState(() => {
     if (typeof window === 'undefined') {
       return true;
@@ -409,6 +429,7 @@ export function App() {
   const appMountedRef = useRef(true);
   const sessionAuthenticatedRef = useRef(false);
   const overviewRefreshInFlightRef = useRef(false);
+  const lastRefreshedAtRef = useRef<number | null>(null);
   const settingsMessageTimerRef = useRef<number | null>(null);
   const launchGuideMessageTimerRef = useRef<number | null>(null);
 
@@ -422,9 +443,11 @@ export function App() {
       if (!appMountedRef.current || !sessionAuthenticatedRef.current) {
         return false;
       }
+      const refreshedAt = new Date();
       setOverview(data);
       setDataSource(source);
-      setLastRefreshedAt(new Date());
+      setLastRefreshedAt(refreshedAt);
+      lastRefreshedAtRef.current = refreshedAt.getTime();
       return true;
     } catch (error) {
       if (appMountedRef.current && error instanceof AuthRequiredError) {
@@ -525,9 +548,6 @@ export function App() {
     }
 
     preloadSectionModule(activeSection);
-    if (!performanceMode && activeSection === 'overview') {
-      preloadSectionModule('servers');
-    }
     if (
       activeSection === 'ai'
       || aiSeedQuestion
@@ -540,13 +560,24 @@ export function App() {
       return undefined;
     }
 
-    if (typeof window.requestIdleCallback === 'function') {
-      const handle = window.requestIdleCallback(() => warmIdleAdminModules(activeSection, aiCollapsed), { timeout: 2600 });
-      return () => window.cancelIdleCallback(handle);
-    }
+    let idleHandle: number | null = null;
+    const warmDelay = window.setTimeout(() => {
+      if (typeof window.requestIdleCallback === 'function') {
+        idleHandle = window.requestIdleCallback(
+          () => warmIdleAdminModules(activeSection, aiCollapsed),
+          { timeout: 3200 },
+        );
+        return;
+      }
+      warmIdleAdminModules(activeSection, aiCollapsed);
+    }, 1800);
 
-    const timer = window.setTimeout(() => warmIdleAdminModules(activeSection, aiCollapsed), 1200);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(warmDelay);
+      if (idleHandle !== null) {
+        window.cancelIdleCallback(idleHandle);
+      }
+    };
   }, [activeSection, aiCollapsed, aiSeedQuestion, performanceMode, releaseFixFocus?.targetSection, session?.authenticated]);
 
   useEffect(() => {
@@ -573,15 +604,108 @@ export function App() {
 
   useEffect(() => {
     if (!session?.authenticated) {
+      setAdaptiveRefreshStatus('paused');
       return undefined;
     }
 
-    const timer = window.setInterval(() => {
-      refreshOverview().catch(() => undefined);
-    }, 15000);
+    let disposed = false;
+    let timer: number | null = null;
+    let failureCount = 0;
 
-    return () => window.clearInterval(timer);
-  }, [session?.authenticated]);
+    function clearTimer() {
+      if (timer !== null) {
+        window.clearTimeout(timer);
+        timer = null;
+      }
+    }
+
+    function readEnvironmentStatus() {
+      return resolveAdaptiveRefreshStatus(document.visibilityState, navigator.onLine);
+    }
+
+    function schedule(delay: number) {
+      clearTimer();
+      if (disposed) {
+        return;
+      }
+      timer = window.setTimeout(() => {
+        void runRefresh();
+      }, Math.max(0, delay));
+    }
+
+    async function runRefresh() {
+      if (disposed) {
+        return;
+      }
+
+      const environmentStatus = readEnvironmentStatus();
+      if (environmentStatus !== 'active') {
+        setAdaptiveRefreshStatus(environmentStatus);
+        clearTimer();
+        return;
+      }
+
+      if (overviewRefreshInFlightRef.current) {
+        setAdaptiveRefreshStatus('active');
+        schedule(getOverviewRefreshInterval(performanceMode));
+        return;
+      }
+
+      const refreshed = await refreshOverview();
+      if (disposed) {
+        return;
+      }
+      failureCount = refreshed ? 0 : Math.min(failureCount + 1, 3);
+      setAdaptiveRefreshStatus(refreshed ? 'active' : 'retrying');
+      schedule(getOverviewRefreshDelay({
+        failureCount,
+        lastSuccessAt: lastRefreshedAtRef.current,
+        performanceMode,
+      }));
+    }
+
+    function scheduleFromEnvironment(forceImmediate = false) {
+      clearTimer();
+      const environmentStatus = readEnvironmentStatus();
+      setAdaptiveRefreshStatus(environmentStatus);
+      if (environmentStatus !== 'active') {
+        return;
+      }
+
+      schedule(forceImmediate
+        ? 0
+        : getOverviewRefreshDelay({
+          lastSuccessAt: lastRefreshedAtRef.current,
+          performanceMode,
+        }));
+    }
+
+    function handleVisibilityChange() {
+      scheduleFromEnvironment(false);
+    }
+
+    function handleOnline() {
+      failureCount = 0;
+      scheduleFromEnvironment(true);
+    }
+
+    function handleOffline() {
+      scheduleFromEnvironment(false);
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    scheduleFromEnvironment(false);
+
+    return () => {
+      disposed = true;
+      clearTimer();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [performanceMode, session?.authenticated]);
 
   useEffect(() => {
     if (!settingsError && !settingsSuccess) {
@@ -711,6 +835,21 @@ export function App() {
   const sessionTooltip = session?.expiresAt
     ? `${accountDisplayLabel} - ${t('login.expiresAt', { time: new Date(session.expiresAt).toLocaleString(timeLocale) })}`
     : accountDisplayLabel;
+  const adaptiveRefreshCadenceSeconds = Math.round(getOverviewRefreshInterval(performanceMode) / 1000);
+  const adaptiveRefreshStatusLabel = adaptiveRefreshStatus === 'active'
+    ? t('app.adaptiveRefreshActive')
+    : adaptiveRefreshStatus === 'paused'
+      ? t('app.adaptiveRefreshPaused')
+      : adaptiveRefreshStatus === 'offline'
+        ? t('app.adaptiveRefreshOffline')
+        : t('app.adaptiveRefreshRetrying');
+  const adaptiveRefreshStatusDetail = adaptiveRefreshStatus === 'active'
+    ? t('app.adaptiveRefreshCadence', { seconds: adaptiveRefreshCadenceSeconds })
+    : adaptiveRefreshStatus === 'paused'
+      ? t('app.adaptiveRefreshPausedDetail')
+      : adaptiveRefreshStatus === 'offline'
+        ? t('app.adaptiveRefreshOfflineDetail')
+        : t('app.adaptiveRefreshRetryingDetail');
   const activeSectionConfig = sections.find((section) => section.id === activeSection) ?? sections[0];
   const ActiveSectionIcon = activeSectionConfig.icon;
   const commandShortcutLabel = isApplePlatform() ? '⌘K' : 'Ctrl K';
@@ -1456,9 +1595,10 @@ export function App() {
             </button>
             <button
               type="button"
-              className={dataSource === 'api' ? 'operator-utility-trigger is-live' : 'operator-utility-trigger is-fallback'}
+              className={`${dataSource === 'api' ? 'operator-utility-trigger is-live' : 'operator-utility-trigger is-fallback'} sync-${adaptiveRefreshStatus}`}
               data-operator-utility-trigger="true"
               data-mobile-utility-trigger="true"
+              data-adaptive-refresh-status={adaptiveRefreshStatus}
               aria-label={t('app.operatorControls')}
               aria-expanded={operatorUtilityOpen}
               aria-controls="operator-utility-menu"
@@ -1543,6 +1683,18 @@ export function App() {
                     <span>{dataSource === 'api' ? t('app.refresh') : t('app.retryApi')}</span>
                     <b>{lastRefreshedAt ? t('app.resourceAt', { time: lastRefreshedAt.toLocaleTimeString(timeLocale) }) : t('app.resourcePending')}</b>
                   </button>
+                  <div
+                    className={`operator-utility-status ${adaptiveRefreshStatus}`}
+                    data-adaptive-refresh-card="true"
+                    data-adaptive-refresh-state={adaptiveRefreshStatus}
+                    role="status"
+                    aria-live="polite"
+                    title={`${adaptiveRefreshStatusLabel} - ${adaptiveRefreshStatusDetail}`}
+                  >
+                    <RefreshCw size={17} aria-hidden="true" />
+                    <span>{t('app.adaptiveRefresh')}</span>
+                    <b>{adaptiveRefreshStatusLabel} · {adaptiveRefreshStatusDetail}</b>
+                  </div>
                   <div className="language-switcher operator-utility-language" role="group" aria-label={t('language.label')}>
                     <span className="language-switcher-label">{t('language.label')}</span>
                     <div className="language-switcher-options">
