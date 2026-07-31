@@ -24,6 +24,7 @@ import {
   PlayCircle,
   PlugZap,
   RefreshCw,
+  Route,
   ScrollText,
   Server,
   ShieldCheck,
@@ -156,6 +157,14 @@ const adaptiveRefreshFeature = {
   featureId: 'adaptive-refresh',
 };
 
+const intentReadyNavigationFeature = {
+  icon: Route,
+  title: '意图就绪导航',
+  desc: '目标工作区准备完成前保留当前界面，连续切换时只响应最后一次选择；标准模式按网络条件分阶段准备，性能模式只加载明确选择的模块。',
+  tags: ['原子切换', '竞态保护'],
+  featureId: 'intent-ready-navigation',
+};
+
 const securityItems = ['登录会话保护', 'SSH 命令边界', 'AI Base URL 校验', '自定义 API 白名单', '敏感信息脱敏'];
 
 export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
@@ -276,7 +285,7 @@ export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
           <h2>围绕“服务器接入到修复”构建的完整后台</h2>
         </div>
         <div className="marketing-feature-grid">
-          {[...featureCards, fleetViewFeature, bulkImportFeature, commandPaletteFeature, operationsInboxFeature, accountSessionFeature, operatorControlsFeature, adaptiveRefreshFeature].map((feature) => {
+          {[...featureCards, fleetViewFeature, bulkImportFeature, commandPaletteFeature, operationsInboxFeature, accountSessionFeature, operatorControlsFeature, adaptiveRefreshFeature, intentReadyNavigationFeature].map((feature) => {
             const Icon = feature.icon;
             const featureId = 'featureId' in feature && typeof feature.featureId === 'string'
               ? feature.featureId

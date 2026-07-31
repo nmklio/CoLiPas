@@ -5692,19 +5692,28 @@ function assertAdminModuleLazyLoadingGuards() {
   const globalCss = fs.readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
   const i18nSource = fs.readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
   const requiredAppFragments = [
-    'const LazyMonitoringOverview = lazy',
-    'const LazyServerInventory = lazy',
-    'const LazyOperationsCenter = lazy',
-    'const LazyCustomApiLab = lazy',
-    'const LazySecurityPanel = lazy',
-    'const LazyAIConsole = lazy',
+    'function createPreloadableComponent<Module, Props extends object>',
+    'let loadedComponent: ComponentType<Props> | null = null',
+    'throw preload();',
+    'const sectionModuleLoaders: Record<SectionId, () => Promise<void>>',
+    'const backgroundModuleWarmOrder: SectionId[]',
+    'function canBackgroundWarmModules()',
+    "document.visibilityState !== 'visible' || !navigator.onLine",
+    'connection?.saveData',
     'function preloadSectionModule(section: SectionId)',
-    'function warmIdleAdminModules(activeSection: SectionId, aiCollapsed: boolean)',
     'requestIdleCallback',
     'performanceModeStorageKey',
     'data-performance-mode-toggle="true"',
-    'if (!performanceMode) {',
+    'if (!session?.authenticated || performanceMode)',
     'setPerformanceMode((value) => !value)',
+    'const intent = navigationIntentRef.current + 1',
+    'navigationIntentRef.current !== intent',
+    'navigationIntentRef.current += 1',
+    'setPendingSection(null)',
+    'data-module-pending={isPending',
+    'aria-current={activeSection === section.id',
+    'onPointerEnter={() => preloadSectionModule(section.id)}',
+    'onPointerDown={() => preloadSectionModule(section.id)}',
     'shouldRenderAiConsole ? (',
     "<Suspense fallback={<ModuleLoadingFallback title={t('nav.servers')} />}>",
     '<button type="button" className="ai-launcher"',
@@ -5726,10 +5735,24 @@ function assertAdminModuleLazyLoadingGuards() {
     throw new Error(`Admin modules must stay lazy-loaded instead of static imports: ${forbiddenStaticImports.join(', ')}`);
   }
 
-  const missingCssFragments = ['.module-loading-card', '.module-loading-orb', '@keyframes module-loading-pulse']
+  const missingCssFragments = [
+    '.nav-item.pending',
+    '.nav-item-loading',
+    '.module-loading-card',
+    '.module-loading-mark',
+    '.module-loading-track',
+    '.module-loading-skeleton',
+    '@keyframes module-loading-track',
+    '@media (prefers-reduced-motion: reduce)',
+  ]
     .filter((fragment) => !globalCss.includes(fragment));
   if (missingCssFragments.length) {
     throw new Error(`Admin lazy loading UI CSS is incomplete: ${missingCssFragments.join(', ')}`);
+  }
+  const staleCssFragments = ['.module-loading-orb', 'module-loading-pulse']
+    .filter((fragment) => globalCss.includes(fragment));
+  if (staleCssFragments.length) {
+    throw new Error(`Removed admin loading UI selectors must not remain: ${staleCssFragments.join(', ')}`);
   }
 
   for (const key of ['app.moduleLoadingOptimize', 'app.moduleLoadingTitle', 'app.moduleLoadingDetail', 'app.performanceMode', 'app.performanceModeOn', 'app.performanceModeOff']) {
@@ -5739,7 +5762,7 @@ function assertAdminModuleLazyLoadingGuards() {
     }
   }
 
-  console.log('ok admin modules lazy-load with idle prewarm and localized skeleton UI');
+  console.log('ok admin modules use intent-ready navigation, guarded background prewarm, and localized stable loading UI');
 }
 
 function assertStandalonePerformanceCheckGuards() {
@@ -5753,6 +5776,11 @@ function assertStandalonePerformanceCheckGuards() {
     'waitForLocalHealth(targetBaseUrl, child',
     'fs.rmSync(tempDataDir',
     'getAvailablePort(Number(process.env.PERF_PORT ?? 18080))',
+    'PERF_SECTION_MS ?? 700',
+    'const phases = { click: 0, route: 0, ready: 0 }',
+    "performance.getEntriesByType('resource')",
+    'sectionDurations.push({ section: section.name, duration, phases, resources })',
+    'sectionDurations,',
   ];
   const missing = requiredFragments.filter((fragment) => !performanceSource.includes(fragment));
   if (packageJson.scripts?.perf !== 'npm run build && node scripts/performance-check.mjs' || missing.length) {
@@ -8326,10 +8354,15 @@ function assertAdaptiveOverviewRefreshScheduler() {
     'scheduleFromEnvironment(true)',
     'data-adaptive-refresh-status={adaptiveRefreshStatus}',
     'data-adaptive-refresh-card="true"',
-    'const nextSectionBySection: Record<SectionId, SectionId>',
+    'const backgroundModuleWarmInitialDelayMs = 180',
+    'const backgroundModuleWarmGapMs = 160',
+    'const backgroundModuleWarmRetryMs = 1200',
+    'function canBackgroundWarmModules()',
     "document.visibilityState !== 'visible' || !navigator.onLine",
-    '}, 1800)',
-    '{ timeout: 3200 }',
+    'connection?.saveData',
+    "!/^(?:slow-)?2g$/i.test(connection?.effectiveType ?? '')",
+    'if (!session?.authenticated || performanceMode)',
+    '{ timeout: 900 }',
   ];
   const missingAppFragments = appFragments.filter((fragment) => !appSource.includes(fragment));
   if (missingAppFragments.length) {
@@ -8500,7 +8533,23 @@ function assertAdaptiveOverviewRefreshScheduler() {
     }
   }
 
-  console.log('ok adaptive refresh pauses hidden/offline work, reconnects immediately, backs off failures, and prewarms one next module');
+  for (const [name, source, phrase] of [
+    ['README.md', readmeSource, 'Intent-ready navigation'],
+    ['README_CN.md', cnReadmeSource, '意图就绪导航'],
+    ['README_JP.md', jpReadmeSource, 'インテント準備型ナビゲーション'],
+    ['MarketingPage.tsx', marketingSource, "featureId: 'intent-ready-navigation'"],
+    ['DocsPage.tsx', docsSource, "featureId: 'intent-ready-navigation'"],
+    ['server-update.sh landing', serverUpdateSource, 'data-colipas-feature="intent-ready-navigation"'],
+    ['server-update.sh docs', serverUpdateSource, 'data-colipas-docs-intent-navigation="true"'],
+    ['public-pages-check.mjs landing', publicPagesSource, 'data-colipas-feature="intent-ready-navigation"'],
+    ['public-pages-check.mjs docs', publicPagesSource, 'data-colipas-docs-intent-navigation="true"'],
+  ]) {
+    if (!source.includes(phrase)) {
+      throw new Error(`${name} must document intent-ready navigation`);
+    }
+  }
+
+  console.log('ok adaptive refresh pauses hidden/offline work and guarded intent-ready module navigation stays race-safe');
 }
 
 function assertSecretScanHandlesDeletedTrackedFiles() {
@@ -8983,7 +9032,7 @@ function assertSecurityAuditRelationsAreSpecific() {
     'const initialHashRouteRef = useRef<HashRoute | null>(null)',
     'const [securityTraceFocusId, setSecurityTraceFocusId] = useState(initialHashRouteRef.current.traceId)',
     'window.addEventListener(\'hashchange\', syncRouteFromHash)',
-    'function navigateToSection(section: SectionId, focus?: ReleaseFixFocusPayload)',
+    "function navigateToSection(section: SectionId, focus?: ReleaseFixFocusPayload, traceId = '')",
     'function openSecurityTrace(correlationId: string)',
     'writeHashRoute(\'security\', traceId)',
     'function handleSecurityTraceFilterChange(correlationId: string)',

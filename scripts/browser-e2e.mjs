@@ -3349,6 +3349,7 @@ async function assertOperationsResultTraceRoundTrip(targetPage) {
 
 async function assertOverviewHealthBaseline(targetPage) {
   await assertOverviewPerformanceMode();
+  await assertIntentReadyModuleNavigation();
   await targetPage.goto(`${baseUrl}/admin/#overview`, { waitUntil: 'networkidle', timeout: 30000 });
   const baseline = targetPage.locator('[data-health-baseline="true"]');
   await baseline.waitFor({ timeout: 10000 });
@@ -4147,6 +4148,126 @@ async function assertMobileAuditRowLayout(targetPage) {
   if (metrics.metaRight > metrics.viewportWidth + 1 || metrics.rowWidth > metrics.viewportWidth + 1) {
     throw new Error(`Mobile audit row overflowed viewport: ${JSON.stringify(metrics)}`);
   }
+}
+
+async function assertIntentReadyModuleNavigation() {
+  const navigationPage = await createE2ePage({ viewport: { width: 1440, height: 980 } });
+  let releaseServersChunk = () => undefined;
+  let serversChunkRequestCount = 0;
+  const serversChunkGate = new Promise((resolve) => {
+    releaseServersChunk = resolve;
+  });
+
+  try {
+    await navigationPage.addInitScript(() => {
+      window.localStorage.setItem('colipas.performanceMode.v1', '1');
+    });
+    await navigationPage.route(/\/assets\/module-servers-[^/]+\.js(?:\?.*)?$/i, async (route) => {
+      serversChunkRequestCount += 1;
+      await serversChunkGate;
+      await route.continue();
+    });
+    await openAndLogin(navigationPage, `${baseUrl}/admin/#overview`);
+    await navigationPage.waitForTimeout(700);
+
+    const backgroundModuleChunks = await navigationPage.evaluate(() => (
+      performance.getEntriesByType('resource')
+        .map((entry) => entry.name.split('/').pop() ?? entry.name)
+        .filter((name) => /^module-(?:servers|operations|ai|custom-api|security)-/i.test(name))
+    ));
+    if (backgroundModuleChunks.length > 0) {
+      throw new Error(`Performance mode should not warm background modules: ${backgroundModuleChunks.join(', ')}`);
+    }
+
+    const overviewNav = navigationPage.locator('button.nav-item').filter({ hasText: /^Overview$/i });
+    const serversNav = navigationPage.locator('button.nav-item').filter({ hasText: /^Servers$/i });
+    const operationsNav = navigationPage.locator('button.nav-item').filter({ hasText: /^Operations$/i });
+    const serversBoxBefore = await serversNav.boundingBox();
+    await serversNav.click();
+    await serversNav.locator('.nav-item-loading').waitFor({ timeout: 5000 });
+
+    if (await serversNav.getAttribute('aria-busy') !== 'true') {
+      throw new Error('Intent-ready navigation should expose the pending module through aria-busy');
+    }
+    if (await overviewNav.getAttribute('aria-current') !== 'page' || !/#overview$/.test(navigationPage.url())) {
+      throw new Error(`Pending module navigation should keep the current workspace active: ${navigationPage.url()}`);
+    }
+    if (await navigationPage.locator('[data-module-loading="true"]').count() !== 0) {
+      throw new Error('Pointer navigation should not replace the current workspace with a loading fallback');
+    }
+    const serversBoxPending = await serversNav.boundingBox();
+    if (
+      !serversBoxBefore
+      || !serversBoxPending
+      || Math.abs(serversBoxBefore.width - serversBoxPending.width) > 1
+      || Math.abs(serversBoxBefore.height - serversBoxPending.height) > 1
+    ) {
+      throw new Error(`Pending navigation changed sidebar geometry: ${JSON.stringify({ serversBoxBefore, serversBoxPending })}`);
+    }
+    await captureVisualEvidence(navigationPage, 'desktop-intent-ready-navigation', ['.sidebar', 'button.nav-item[data-module-pending="true"]', 'main']);
+
+    await operationsNav.click();
+    await navigationPage.waitForURL(/#operations$/, { timeout: 10000 });
+    await navigationPage.locator('.ops-layout').waitFor({ timeout: 10000 });
+    releaseServersChunk();
+    await navigationPage.waitForTimeout(300);
+
+    if (!/#operations$/.test(navigationPage.url())) {
+      throw new Error(`A stale module request replaced the latest navigation intent: ${navigationPage.url()}`);
+    }
+    if (await operationsNav.getAttribute('aria-current') !== 'page') {
+      throw new Error('The latest navigation intent should remain selected after an older chunk finishes');
+    }
+    if (await navigationPage.locator('button.nav-item[data-module-pending="true"]').count() !== 0) {
+      throw new Error('Pending navigation state should clear after the latest module becomes ready');
+    }
+    if (serversChunkRequestCount !== 1) {
+      throw new Error(`Pointer preload and navigation should share one servers chunk request, got ${serversChunkRequestCount}`);
+    }
+  } finally {
+    releaseServersChunk();
+    await navigationPage.close();
+  }
+
+  const mobileLoadingPage = await createE2ePage({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+  });
+  let releaseSecurityChunk = () => undefined;
+  const securityChunkGate = new Promise((resolve) => {
+    releaseSecurityChunk = resolve;
+  });
+
+  try {
+    await mobileLoadingPage.addInitScript(() => {
+      window.localStorage.setItem('colipas.performanceMode.v1', '1');
+    });
+    await mobileLoadingPage.route(/\/assets\/module-security-[^/]+\.js(?:\?.*)?$/i, async (route) => {
+      await securityChunkGate;
+      await route.continue();
+    });
+    await mobileLoadingPage.goto(`${baseUrl}/admin/#security`, {
+      waitUntil: 'networkidle',
+      timeout: 30000,
+    });
+    await assertLoginGitHubLink(mobileLoadingPage);
+    await mobileLoadingPage.locator('input[autocomplete="username"]').fill(username);
+    await mobileLoadingPage.locator('input[autocomplete="current-password"]').fill(password);
+    await mobileLoadingPage.getByRole('button', { name: /sign in/i }).click();
+    await mobileLoadingPage.locator('.topbar').waitFor({ timeout: 15000 });
+    const loadingWorkspace = mobileLoadingPage.locator('[data-module-loading="true"]');
+    await loadingWorkspace.waitFor({ timeout: 5000 });
+    await assertElementHorizontallyWithinViewport(mobileLoadingPage, '[data-module-loading="true"]', 'mobile module loading workspace');
+    await assertNoHorizontalOverflow(mobileLoadingPage, 'mobile module loading workspace');
+    await captureVisualEvidence(mobileLoadingPage, 'mobile-module-loading-workspace', ['.topbar', '[data-module-loading="true"]']);
+    releaseSecurityChunk();
+    await mobileLoadingPage.locator('.security-workbench').waitFor({ timeout: 10000 });
+  } finally {
+    releaseSecurityChunk();
+    await mobileLoadingPage.close();
+  }
+
+  console.log('ok browser e2e covers intent-ready navigation, stale intent cancellation, performance-mode loading, and mobile loading UI');
 }
 
 async function assertMobileServerBulkImportLayout(targetPage) {

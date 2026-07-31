@@ -12,7 +12,7 @@ const tempDataDir = path.resolve(process.cwd(), '.tmp-perf-data');
 
 const thresholds = {
   loginMs: Number(process.env.PERF_LOGIN_MS ?? 3500),
-  sectionSwitchMs: Number(process.env.PERF_SECTION_MS ?? 1800),
+  sectionSwitchMs: Number(process.env.PERF_SECTION_MS ?? 700),
   mapInteractionMs: Number(process.env.PERF_MAP_MS ?? 1200),
   longTaskMs: Number(process.env.PERF_LONG_TASK_MS ?? 250),
 };
@@ -87,12 +87,33 @@ try {
   ];
   const sectionDurations = [];
   for (const section of sections) {
+    const browserStartedAt = await page.evaluate(() => performance.now());
+    const phases = { click: 0, route: 0, ready: 0 };
     const duration = await measure(section.name, async () => {
+      const clickStartedAt = performance.now();
       await clickNav(section.button);
+      phases.click = Math.round(performance.now() - clickStartedAt);
+      const routeStartedAt = performance.now();
       await page.waitForURL(section.url, { timeout: 10000 });
+      phases.route = Math.round(performance.now() - routeStartedAt);
+      const readyStartedAt = performance.now();
       await waitForReady(section.ready, section.name);
+      phases.ready = Math.round(performance.now() - readyStartedAt);
     });
-    sectionDurations.push({ section: section.name, duration });
+    const resources = await page.evaluate((startedAt) => (
+      performance.getEntriesByType('resource')
+        .filter((entry) => (
+          entry.startTime >= startedAt - 1
+          && /\/assets\/(?:module|shared|vendor)-[^/]+\.js(?:$|\?)/i.test(entry.name)
+        ))
+        .map((entry) => ({
+          name: entry.name.split('/').pop() ?? entry.name,
+          duration: Math.round(entry.duration),
+          transferSize: 'transferSize' in entry ? entry.transferSize : 0,
+          encodedBodySize: 'encodedBodySize' in entry ? entry.encodedBodySize : 0,
+        }))
+    ), browserStartedAt);
+    sectionDurations.push({ section: section.name, duration, phases, resources });
   }
 
   const mapInteractionMs = await measure('map interaction', async () => {
@@ -124,6 +145,7 @@ try {
     localServer: Boolean(localServer),
     loginMs,
     worstSection,
+    sectionDurations,
     mapInteractionMs,
     longTaskCount: longTasks.length,
     maxLongTaskMs: Math.round(maxLongTask),

@@ -320,6 +320,14 @@ if (!html.includes('data-colipas-feature="adaptive-refresh"')) {
   replaceOnce(/<article class="feature-card" data-colipas-feature="adaptive-refresh">[\s\S]*?<\/article>/, adaptiveRefreshFeatureCard);
 }
 
+const intentReadyNavigationFeatureCard = `<article class="feature-card" data-colipas-feature="intent-ready-navigation">${landingIcon('flow', 'icon feature-icon')}<h3>意图就绪导航</h3><p>目标工作区准备完成前保留当前界面，连续切换只响应最后一次选择；标准模式按网络条件分阶段准备，性能模式只加载明确选择的模块。</p><div class="tags"><span>原子切换</span><span>竞态保护</span></div></article>`;
+if (!html.includes('data-colipas-feature="intent-ready-navigation"')) {
+  replaceOnce(/(<div class="feature-grid">)/, `$1
+      ${intentReadyNavigationFeatureCard}`);
+} else {
+  replaceOnce(/<article class="feature-card" data-colipas-feature="intent-ready-navigation">[\s\S]*?<\/article>/, intentReadyNavigationFeatureCard);
+}
+
 replaceAll(/<article class="deploy-card"><h3>Linux systemd<\/h3>/g, `<article class="deploy-card">${landingIcon('terminal', 'deploy-icon')}<h3>Linux systemd</h3>`);
 replaceAll(/<article class="deploy-card"><h3>Node 20\+<\/h3>/g, `<article class="deploy-card">${landingIcon('code', 'deploy-icon')}<h3>Node 20+</h3>`);
 replaceAll(/<article class="deploy-card"><h3>Docker Compose<\/h3>/g, `<article class="deploy-card">${landingIcon('database', 'deploy-icon')}<h3>Docker Compose</h3>`);
@@ -1772,6 +1780,33 @@ $1`,
   html = html.replace(
     /<section class="section" data-colipas-docs-mobile-controls="true"[\s\S]*?<\/section>/,
     operatorControlsDocsSection,
+  );
+}
+const intentReadyNavigationDocsSection = `      <section class="section" data-colipas-docs-intent-navigation="true">
+        <p class="kicker">意图就绪导航</p>
+        <h2>目标准备完成后再切换，较早请求不会覆盖最后一次选择</h2>
+        <div class="grid">
+          <article class="doc-card">
+            <h3>当前工作区保持可用</h3>
+            <p>侧栏等待状态不会替换当前内容；指针悬停、键盘焦点与点击共享同一次准备请求，目标工作区就绪后再完成切换。</p>
+          </article>
+          <article class="doc-card">
+            <h3>按网络条件准备</h3>
+            <p>标准模式仅在页面可见、网络在线且未启用 Save-Data 或 2G 网络时分阶段准备其他模块；性能模式不做后台准备，但明确点击、键盘操作和深链仍可正常进入。</p>
+          </article>
+        </div>
+      </section>`;
+if (!html.includes('data-colipas-docs-intent-navigation="true"')) {
+  html = html.replace(
+    /(<section id="server-access")/,
+    `${intentReadyNavigationDocsSection}
+
+$1`,
+  );
+} else {
+  html = html.replace(
+    /<section class="section" data-colipas-docs-intent-navigation="true">[\s\S]*?<\/section>/,
+    intentReadyNavigationDocsSection,
   );
 }
 if (!html.includes('data-colipas-docs-command-palette="true"')) {

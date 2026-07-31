@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, type ComponentType, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   Bot,
@@ -22,7 +22,6 @@ import {
   Search,
   Server,
   ShieldCheck,
-  Sparkles,
   TerminalSquare,
   UserCog,
   X,
@@ -133,90 +132,133 @@ const sections: Array<{ id: SectionId; labelKey: string; icon: typeof LayoutDash
   { id: 'security', labelKey: 'nav.security', icon: ShieldCheck },
 ];
 
-const LazyMonitoringOverview = lazy(async () => {
-  const module = await import('../modules/overview/MonitoringOverview');
-  return { default: module.MonitoringOverview };
-});
-const LazyServerInventory = lazy(async () => {
-  const module = await import('../modules/servers/ServerInventory');
-  return { default: module.ServerInventory };
-});
-const LazyOperationsCenter = lazy(async () => {
-  const module = await import('../modules/operations/OperationsCenter');
-  return { default: module.OperationsCenter };
-});
-const LazyCustomApiLab = lazy(async () => {
-  const module = await import('../modules/custom-api/CustomApiLab');
-  return { default: module.CustomApiLab };
-});
-const LazySecurityPanel = lazy(async () => {
-  const module = await import('../modules/security/SecurityPanel');
-  return { default: module.SecurityPanel };
-});
-const LazyAIConsole = lazy(async () => {
-  const module = await import('../modules/ai/AIConsole');
-  return { default: module.AIConsole };
-});
+function createPreloadableComponent<Module, Props extends object>(
+  loader: () => Promise<Module>,
+  selectComponent: (module: Module) => ComponentType<Props>,
+) {
+  let loadedComponent: ComponentType<Props> | null = null;
+  let pending: Promise<void> | null = null;
+
+  function preload() {
+    if (loadedComponent) {
+      return Promise.resolve();
+    }
+    if (!pending) {
+      pending = loader()
+        .then((module) => {
+          loadedComponent = selectComponent(module);
+        })
+        .catch((error) => {
+          pending = null;
+          throw error;
+        });
+    }
+    return pending;
+  }
+
+  function PreloadableComponent(props: Props) {
+    if (!loadedComponent) {
+      throw preload();
+    }
+    const LoadedComponent = loadedComponent;
+    return <LoadedComponent {...props} />;
+  }
+
+  return { Component: PreloadableComponent, preload };
+}
+
+const monitoringOverviewModule = createPreloadableComponent(
+  () => import('../modules/overview/MonitoringOverview'),
+  (module) => module.MonitoringOverview,
+);
+const serverInventoryModule = createPreloadableComponent(
+  () => import('../modules/servers/ServerInventory'),
+  (module) => module.ServerInventory,
+);
+const operationsCenterModule = createPreloadableComponent(
+  () => import('../modules/operations/OperationsCenter'),
+  (module) => module.OperationsCenter,
+);
+const customApiLabModule = createPreloadableComponent(
+  () => import('../modules/custom-api/CustomApiLab'),
+  (module) => module.CustomApiLab,
+);
+const securityPanelModule = createPreloadableComponent(
+  () => import('../modules/security/SecurityPanel'),
+  (module) => module.SecurityPanel,
+);
+const aiConsoleModule = createPreloadableComponent(
+  () => import('../modules/ai/AIConsole'),
+  (module) => module.AIConsole,
+);
+
+const LazyMonitoringOverview = monitoringOverviewModule.Component;
+const LazyServerInventory = serverInventoryModule.Component;
+const LazyOperationsCenter = operationsCenterModule.Component;
+const LazyCustomApiLab = customApiLabModule.Component;
+const LazySecurityPanel = securityPanelModule.Component;
+const LazyAIConsole = aiConsoleModule.Component;
+
+const sectionModuleLoaders: Record<SectionId, () => Promise<void>> = {
+  overview: monitoringOverviewModule.preload,
+  servers: serverInventoryModule.preload,
+  operations: operationsCenterModule.preload,
+  ai: aiConsoleModule.preload,
+  api: customApiLabModule.preload,
+  security: securityPanelModule.preload,
+};
+const backgroundModuleWarmOrder: SectionId[] = ['servers', 'operations', 'api', 'security', 'ai'];
+const backgroundModuleWarmInitialDelayMs = 180;
+const backgroundModuleWarmGapMs = 160;
+const backgroundModuleWarmRetryMs = 1200;
+
+function loadSectionModule(section: SectionId) {
+  return sectionModuleLoaders[section]();
+}
 
 function preloadSectionModule(section: SectionId) {
-  if (section === 'overview') {
-    void import('../modules/overview/MonitoringOverview');
-    return;
-  }
-  if (section === 'servers') {
-    void import('../modules/servers/ServerInventory');
-    return;
-  }
-  if (section === 'operations') {
-    void import('../modules/operations/OperationsCenter');
-    return;
-  }
-  if (section === 'api') {
-    void import('../modules/custom-api/CustomApiLab');
-    return;
-  }
-  if (section === 'security') {
-    void import('../modules/security/SecurityPanel');
-    return;
-  }
-  preloadAiConsole();
+  void loadSectionModule(section).catch(() => undefined);
 }
 
 function preloadAiConsole() {
-  void import('../modules/ai/AIConsole');
+  preloadSectionModule('ai');
 }
 
-function warmIdleAdminModules(activeSection: SectionId, aiCollapsed: boolean) {
+function canBackgroundWarmModules() {
   if (document.visibilityState !== 'visible' || !navigator.onLine) {
-    return;
+    return false;
   }
-
-  const nextSectionBySection: Record<SectionId, SectionId> = {
-    overview: 'servers',
-    servers: 'operations',
-    operations: 'security',
-    ai: 'servers',
-    api: 'security',
-    security: 'operations',
-  };
-  preloadSectionModule(nextSectionBySection[activeSection]);
-  if (!aiCollapsed || activeSection === 'ai') {
-    preloadAiConsole();
-  }
+  const connection = (navigator as Navigator & {
+    connection?: { saveData?: boolean; effectiveType?: string };
+  }).connection;
+  return !connection?.saveData && !/^(?:slow-)?2g$/i.test(connection?.effectiveType ?? '');
 }
 
 function ModuleLoadingFallback({ title, compact = false }: { title: string; compact?: boolean }) {
   const { t } = useI18n();
   return (
-    <section className={compact ? 'module-loading-card compact' : 'module-loading-card'} aria-busy="true">
-      <div className="module-loading-orb" aria-hidden="true">
-        <Sparkles size={20} />
+    <section
+      className={compact ? 'module-loading-card compact' : 'module-loading-card'}
+      aria-busy="true"
+      role="status"
+      data-module-loading="true"
+    >
+      <div className="module-loading-head">
+        <div className="module-loading-mark" aria-hidden="true">
+          <RefreshCw size={18} />
+        </div>
+        <div>
+          <p>{t('app.moduleLoadingOptimize')}</p>
+          <h2>{t('app.moduleLoadingTitle', { title })}</h2>
+        </div>
       </div>
-      <div>
-        <p>{t('app.moduleLoadingOptimize')}</p>
-        <h2>{t('app.moduleLoadingTitle', { title })}</h2>
-        <span>{t('app.moduleLoadingDetail')}</span>
-      </div>
+      <div className="module-loading-track" aria-hidden="true"><i /></div>
+      {!compact && (
+        <div className="module-loading-skeleton" aria-hidden="true">
+          <i /><i /><i />
+        </div>
+      )}
+      <span className="module-loading-detail">{t('app.moduleLoadingDetail')}</span>
     </section>
   );
 }
@@ -404,6 +446,7 @@ export function App() {
   const avatarUploadRef = useRef<HTMLInputElement | null>(null);
   const commandSearchRef = useRef<HTMLInputElement | null>(null);
   const [activeSection, setActiveSection] = useState<SectionId>(initialHashRouteRef.current.section);
+  const [pendingSection, setPendingSection] = useState<SectionId | null>(null);
   const [releaseFixFocus, setReleaseFixFocus] = useState<ReleaseFixFocus | null>(null);
   const [securityTraceFocusId, setSecurityTraceFocusId] = useState(initialHashRouteRef.current.traceId);
   const [filters, setFilters] = useState<ServerFilters>(defaultFilters);
@@ -442,6 +485,7 @@ export function App() {
   const lastRefreshedAtRef = useRef<number | null>(null);
   const settingsMessageTimerRef = useRef<number | null>(null);
   const launchGuideMessageTimerRef = useRef<number | null>(null);
+  const navigationIntentRef = useRef(0);
 
   async function refreshOverview() {
     if ((!session?.authenticated && !sessionAuthenticatedRef.current) || overviewRefreshInFlightRef.current) {
@@ -606,33 +650,80 @@ export function App() {
     ) {
       preloadAiConsole();
     }
-    if (performanceMode) {
+    return undefined;
+  }, [activeSection, aiCollapsed, aiSeedQuestion, performanceMode, releaseFixFocus?.targetSection, session?.authenticated]);
+
+  useEffect(() => {
+    if (!session?.authenticated || performanceMode) {
       return undefined;
     }
 
+    let disposed = false;
+    let warmIndex = 0;
+    let warmTimer: number | null = null;
     let idleHandle: number | null = null;
-    const warmDelay = window.setTimeout(() => {
-      if (typeof window.requestIdleCallback === 'function') {
-        idleHandle = window.requestIdleCallback(
-          () => warmIdleAdminModules(activeSection, aiCollapsed),
-          { timeout: 3200 },
-        );
-        return;
-      }
-      warmIdleAdminModules(activeSection, aiCollapsed);
-    }, 1800);
+
+    function scheduleNext(delay: number) {
+      warmTimer = window.setTimeout(() => {
+        warmTimer = null;
+        if (disposed) {
+          return;
+        }
+        if (!canBackgroundWarmModules()) {
+          scheduleNext(backgroundModuleWarmRetryMs);
+          return;
+        }
+
+        const warmNext = () => {
+          idleHandle = null;
+          if (disposed) {
+            return;
+          }
+          if (!canBackgroundWarmModules()) {
+            scheduleNext(backgroundModuleWarmRetryMs);
+            return;
+          }
+
+          const section = backgroundModuleWarmOrder[warmIndex];
+          if (!section) {
+            return;
+          }
+          warmIndex += 1;
+          void loadSectionModule(section)
+            .catch(() => undefined)
+            .finally(() => {
+              if (!disposed && warmIndex < backgroundModuleWarmOrder.length) {
+                scheduleNext(backgroundModuleWarmGapMs);
+              }
+            });
+        };
+
+        if (typeof window.requestIdleCallback === 'function') {
+          idleHandle = window.requestIdleCallback(warmNext, { timeout: 900 });
+          return;
+        }
+        warmNext();
+      }, delay);
+    }
+
+    scheduleNext(backgroundModuleWarmInitialDelayMs);
 
     return () => {
-      window.clearTimeout(warmDelay);
+      disposed = true;
+      if (warmTimer !== null) {
+        window.clearTimeout(warmTimer);
+      }
       if (idleHandle !== null) {
         window.cancelIdleCallback(idleHandle);
       }
     };
-  }, [activeSection, aiCollapsed, aiSeedQuestion, performanceMode, releaseFixFocus?.targetSection, session?.authenticated]);
+  }, [performanceMode, session?.authenticated]);
 
   useEffect(() => {
     function syncRouteFromHash() {
       const route = readHashRoute();
+      navigationIntentRef.current += 1;
+      setPendingSection(null);
       setActiveSection(route.section);
       setSecurityTraceFocusId(route.traceId);
       setSidebarOpen(false);
@@ -1153,6 +1244,8 @@ export function App() {
   async function handleLogout() {
     await logout().catch(() => undefined);
     clearOverviewCache();
+    navigationIntentRef.current += 1;
+    setPendingSection(null);
     setSession(null);
     setProfile(fallbackProfile);
     setOverview(fallbackOverview);
@@ -1164,17 +1257,41 @@ export function App() {
     setOperationsInboxOpen(false);
   }
 
-  function navigateToSection(section: SectionId, focus?: ReleaseFixFocusPayload) {
-    setActiveSection(section);
-    setReleaseFixFocus(focus ? { ...focus, targetSection: section } : null);
-    if (focus?.anchor === 'ai-provider') {
-      setAiCollapsed(false);
-    }
-    if (section !== 'security') {
-      setSecurityTraceFocusId('');
-    }
-    writeHashRoute(section);
+  function navigateToSection(section: SectionId, focus?: ReleaseFixFocusPayload, traceId = '') {
+    const commitNavigation = () => {
+      setActiveSection(section);
+      setReleaseFixFocus(focus ? { ...focus, targetSection: section } : null);
+      if (focus?.anchor === 'ai-provider') {
+        setAiCollapsed(false);
+      }
+      if (section === 'security' && traceId) {
+        setSecurityTraceFocusId(traceId);
+      } else if (section !== 'security') {
+        setSecurityTraceFocusId('');
+      }
+      writeHashRoute(section, traceId);
+    };
+
     setSidebarOpen(false);
+    if (section === activeSection) {
+      navigationIntentRef.current += 1;
+      setPendingSection(null);
+      commitNavigation();
+      return;
+    }
+
+    const intent = navigationIntentRef.current + 1;
+    navigationIntentRef.current = intent;
+    setPendingSection(section);
+    void loadSectionModule(section)
+      .catch(() => undefined)
+      .then(() => {
+        if (!appMountedRef.current || !sessionAuthenticatedRef.current || navigationIntentRef.current !== intent) {
+          return;
+        }
+        setPendingSection(null);
+        commitNavigation();
+      });
   }
 
   function openServersForRegion(region: string | string[]) {
@@ -1323,10 +1440,7 @@ export function App() {
     if (!traceId) {
       return;
     }
-    setSecurityTraceFocusId(traceId);
-    setActiveSection('security');
-    writeHashRoute('security', traceId);
-    setSidebarOpen(false);
+    navigateToSection('security', undefined, traceId);
   }
 
   function handleSecurityTraceFilterChange(correlationId: string) {
@@ -1581,24 +1695,23 @@ export function App() {
         <nav className="nav-list" aria-label={t('app.navAria')}>
           {sections.map((section) => {
             const Icon = section.icon;
+            const isPending = pendingSection === section.id;
             return (
               <button
                 key={section.id}
                 type="button"
-                className={activeSection === section.id ? 'nav-item active' : 'nav-item'}
-                onMouseEnter={() => {
-                  if (!performanceMode) {
-                    preloadSectionModule(section.id);
-                  }
-                }}
-                onFocus={() => {
-                  if (!performanceMode) {
-                    preloadSectionModule(section.id);
-                  }
-                }}
+                className={`${activeSection === section.id ? 'nav-item active' : 'nav-item'}${isPending ? ' pending' : ''}`}
+                aria-busy={isPending || undefined}
+                aria-current={activeSection === section.id ? 'page' : undefined}
+                data-module-pending={isPending ? 'true' : 'false'}
+                onPointerEnter={() => preloadSectionModule(section.id)}
+                onPointerDown={() => preloadSectionModule(section.id)}
+                onFocus={() => preloadSectionModule(section.id)}
                 onClick={() => navigateToSection(section.id)}
               >
-                <Icon size={18} aria-hidden="true" />
+                {isPending
+                  ? <RefreshCw className="nav-item-loading" size={18} aria-hidden="true" />
+                  : <Icon size={18} aria-hidden="true" />}
                 <span>{t(section.labelKey)}</span>
               </button>
             );

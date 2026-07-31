@@ -20,6 +20,7 @@ import {
   MonitorSmartphone,
   PlayCircle,
   RefreshCw,
+  Route,
   Server,
   ShieldCheck,
   TerminalSquare,
@@ -166,6 +167,14 @@ const adaptiveRefreshUsageBlock = {
   body: '总览同步会根据页面可见性、网络状态、性能模式和连续失败次数自动调整；多标签页共享主同步快照，资产没有变化时浏览器复用最近一次已认证快照，操作员菜单会量化减少的轮询和载荷字节。',
   points: ['标准模式每 15 秒同步，性能模式每 30 秒同步', '标签页隐藏或网络离线时暂停，返回前台或恢复网络后按数据新鲜度立即续传', '多标签页通过 BroadcastChannel/localStorage 协调主备角色，备用标签页不重复轮询', '资产未变化时服务端返回 304，浏览器复用最近一次已认证快照，不重复下载完整资产 JSON', '同步健康面板展示当前角色、同步节奏、快照数、减少轮询、载荷复用次数和节省字节', '连续失败采用指数退避，最长 120 秒，并保留手动刷新入口'],
   featureId: 'adaptive-refresh',
+};
+
+const intentReadyNavigationUsageBlock = {
+  icon: Route,
+  title: '使用意图就绪导航',
+  body: '从侧栏切换模块时，当前工作区会保持可用，直到目标工作区准备完成；若连续选择多个模块，只会进入最后一次选择，较早的请求不会覆盖当前页面。',
+  points: ['指针悬停、键盘焦点和点击共享同一次准备请求', '等待期间侧栏显示稳定尺寸的忙碌状态，不会挤动导航文字', '标准模式仅在可见、在线且未启用省流量或 2G 网络时分阶段准备', '性能模式不做后台准备，但点击、键盘操作和深链仍可正常进入目标模块'],
+  featureId: 'intent-ready-navigation',
 };
 
 const commandPaletteUsageBlock = {
@@ -347,7 +356,7 @@ export function DocsPage({ onLogin }: DocsPageProps) {
               <p>建议按以下顺序使用。每个模块都会与资产、事件、审计和 AI 上下文联动。</p>
             </div>
             <div className="docs-usage-grid">
-              {[...usageBlocks, bulkImportUsageBlock, fleetViewUsageBlock, operationsInboxUsageBlock, operatorControlsUsageBlock, adaptiveRefreshUsageBlock, commandPaletteUsageBlock, accountAppearanceUsageBlock, accountSessionUsageBlock].map((block) => {
+              {[...usageBlocks, bulkImportUsageBlock, fleetViewUsageBlock, operationsInboxUsageBlock, operatorControlsUsageBlock, adaptiveRefreshUsageBlock, intentReadyNavigationUsageBlock, commandPaletteUsageBlock, accountAppearanceUsageBlock, accountSessionUsageBlock].map((block) => {
                 const Icon = block.icon;
                 const sectionId = 'sectionId' in block && typeof block.sectionId === 'string'
                   ? block.sectionId
