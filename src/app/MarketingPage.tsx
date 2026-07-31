@@ -151,8 +151,8 @@ const operatorControlsFeature = {
 const adaptiveRefreshFeature = {
   icon: RefreshCw,
   title: '智能刷新调度',
-  desc: '根据标签页可见性、网络状态、性能模式和请求失败次数自动暂停、恢复或退避总览同步，减少后台请求与无效渲染。',
-  tags: ['隐藏即暂停', '失败退避'],
+  desc: '根据标签页可见性、网络状态、性能模式和请求失败次数自动暂停、恢复或退避总览同步；多标签页会选出一个主同步标签页并向备用标签页广播快照，减少重复请求与无效渲染。',
+  tags: ['单主同步', '失败退避'],
   featureId: 'adaptive-refresh',
 };
 

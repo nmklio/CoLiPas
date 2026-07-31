@@ -2321,6 +2321,18 @@ button:disabled {
   box-shadow: 0 0 0 4px rgba(217, 119, 6, 0.14);
 }
 
+.operator-utility-trigger.tab-standby .operator-sync-dot {
+  background: #2563eb;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+}
+
+.operator-utility-trigger.tab-primary .operator-sync-dot {
+  background: #0f766e;
+  box-shadow:
+    0 0 0 4px rgba(15, 118, 110, 0.14),
+    0 0 0 8px rgba(15, 118, 110, 0.06);
+}
+
 .operator-utility-copy {
   min-width: 0;
   display: grid;
@@ -2443,14 +2455,15 @@ button:disabled {
 
 .operator-utility-action svg,
 .operator-utility-status svg {
-  grid-row: 1 / 3;
+  grid-row: 1 / 4;
   color: var(--brand-strong);
 }
 
 .operator-utility-action span,
 .operator-utility-action b,
 .operator-utility-status span,
-.operator-utility-status b {
+.operator-utility-status b,
+.operator-utility-status small {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2471,6 +2484,18 @@ button:disabled {
   font-weight: 750;
 }
 
+.operator-utility-status small {
+  display: -webkit-box;
+  color: #7a8d94;
+  font-size: 9px;
+  font-weight: 760;
+  letter-spacing: 0.01em;
+  line-height: 1.18;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .operator-utility-status b {
   display: -webkit-box;
   overflow: hidden;
@@ -2488,6 +2513,22 @@ button:disabled {
 .operator-utility-status.active {
   border-color: rgba(15, 118, 110, 0.3);
   background: linear-gradient(135deg, #effcf9, #ffffff);
+}
+
+.operator-utility-status.active.tab-standby {
+  border-color: rgba(37, 99, 235, 0.22);
+  background: linear-gradient(135deg, #eff6ff, #ffffff);
+}
+
+.operator-utility-status.active.tab-standby svg,
+.operator-utility-status.active.tab-standby span {
+  color: #1d4ed8;
+}
+
+.operator-utility-status.active.tab-primary {
+  background:
+    radial-gradient(circle at 92% 20%, rgba(20, 184, 166, 0.13), transparent 30%),
+    linear-gradient(135deg, #effcf9, #ffffff);
 }
 
 .operator-utility-status.paused {

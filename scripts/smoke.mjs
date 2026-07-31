@@ -4284,7 +4284,7 @@ function assertAccountUiGuards() {
   if (
     !appSource.includes('const accountDisplayLabel = sessionIdentity || sidebarDisplayLabel;')
     || !appSource.includes('<b>{accountDisplayLabel}</b>')
-    || !appSource.includes('title={sessionTooltip}')
+    || !appSource.includes('title={`${sessionTooltip} - ${tabSyncStatusLabel}`}')
   ) {
     throw new Error('Topbar account settings entry must display the authenticated login username, not the sidebar profile name');
   }
@@ -8246,6 +8246,7 @@ function assertAdaptiveOperatorControls() {
 
 function assertAdaptiveOverviewRefreshScheduler() {
   const schedulerSource = fs.readFileSync(new URL('../src/app/adaptiveRefresh.ts', import.meta.url), 'utf8');
+  const tabSyncSource = fs.readFileSync(new URL('../src/app/tabSyncCoordinator.ts', import.meta.url), 'utf8');
   const appSource = fs.readFileSync(new URL('../src/app/App.tsx', import.meta.url), 'utf8');
   const serverInventorySource = fs.readFileSync(new URL('../src/modules/servers/ServerInventory.tsx', import.meta.url), 'utf8');
   const globalCss = fs.readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
@@ -8319,7 +8320,10 @@ function assertAdaptiveOverviewRefreshScheduler() {
     '.operator-utility-trigger.sync-paused .operator-sync-dot',
     '.operator-utility-trigger.sync-offline .operator-sync-dot',
     '.operator-utility-trigger.sync-retrying .operator-sync-dot',
+    '.operator-utility-trigger.tab-standby .operator-sync-dot',
+    '.operator-utility-trigger.tab-primary .operator-sync-dot',
     '.operator-utility-status.active',
+    '.operator-utility-status.active.tab-standby',
     '.operator-utility-status.paused',
     '.operator-utility-status.offline',
     '.operator-utility-status.retrying',
@@ -8339,6 +8343,10 @@ function assertAdaptiveOverviewRefreshScheduler() {
     'app.adaptiveRefreshPausedDetail',
     'app.adaptiveRefreshOfflineDetail',
     'app.adaptiveRefreshRetryingDetail',
+    'app.tabSyncSolo',
+    'app.tabSyncPrimary',
+    'app.tabSyncStandby',
+    'app.tabSyncStandbyDetail',
   ]) {
     const count = (i18nSource.match(new RegExp(key.replaceAll('.', '\\.'), 'g')) ?? []).length;
     if (count < 3) {
@@ -8353,11 +8361,47 @@ function assertAdaptiveOverviewRefreshScheduler() {
     'setOffline(false)',
     'reconnectOverviewResponse',
     'data-adaptive-refresh-card="true"',
+    'data-tab-sync-card="true"',
+    'data-tab-sync-role="standby"',
+    'Cross-tab standby sync card did not explain duplicate polling reduction',
     'Adaptive refresh card did not render its foreground cadence',
   ];
   const missingBrowserFragments = browserFragments.filter((fragment) => !browserE2eSource.includes(fragment));
   if (missingBrowserFragments.length) {
     throw new Error(`Adaptive refresh browser coverage is incomplete: ${missingBrowserFragments.join(', ')}`);
+  }
+
+  const tabSyncFragments = [
+    'export type TabSyncRole',
+    'tabSyncChannelName',
+    'tabSyncLeaderStorageKey',
+    'BroadcastChannel',
+    'tabSyncLeaderLeaseMs',
+    'tabSyncHeartbeatMs',
+    'overview-snapshot',
+    'config-snapshot',
+    'leader-release',
+    'shouldRunSharedRefresh',
+    'broadcastOverview',
+    'broadcastConfig',
+  ];
+  const missingTabSyncFragments = tabSyncFragments.filter((fragment) => !tabSyncSource.includes(fragment));
+  if (missingTabSyncFragments.length) {
+    throw new Error(`Cross-tab sync coordinator is incomplete: ${missingTabSyncFragments.join(', ')}`);
+  }
+  for (const fragment of [
+    'createTabSyncCoordinator',
+    'tabSyncCoordinator.broadcastOverview',
+    'tabSyncCoordinator.broadcastConfig',
+    'tabSyncCoordinator.setEnvironmentActive',
+    'tabSyncCoordinator.setEnvironmentActive(false)',
+    'syncRole === \'standby\'',
+    'tabSyncStandbyCheckMs',
+    'data-tab-sync-role={tabSyncRole}',
+  ]) {
+    if (!appSource.includes(fragment)) {
+      throw new Error(`App shell cross-tab sync integration is incomplete: ${fragment}`);
+    }
   }
 
   for (const fragment of ['initialModuleChunks', 'unexpectedInitialChunks', 'Initial overview loaded unrelated admin modules before navigation']) {

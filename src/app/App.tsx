@@ -71,6 +71,11 @@ import {
   resolveAdaptiveRefreshStatus,
   type AdaptiveRefreshStatus,
 } from './adaptiveRefresh';
+import {
+  createTabSyncCoordinator,
+  tabSyncStandbyCheckMs,
+  type TabSyncRole,
+} from './tabSyncCoordinator';
 
 type SectionId = OperationsInboxSection;
 
@@ -417,6 +422,8 @@ export function App() {
       ? 'paused'
       : resolveAdaptiveRefreshStatus(document.visibilityState, navigator.onLine)
   ));
+  const tabSyncCoordinator = useMemo(() => createTabSyncCoordinator(), []);
+  const [tabSyncRole, setTabSyncRole] = useState<TabSyncRole>(() => tabSyncCoordinator.getRole());
   const [launchGuideOpen, setLaunchGuideOpen] = useState(() => {
     if (typeof window === 'undefined') {
       return true;
@@ -448,6 +455,11 @@ export function App() {
       setDataSource(source);
       setLastRefreshedAt(refreshedAt);
       lastRefreshedAtRef.current = refreshedAt.getTime();
+      tabSyncCoordinator.broadcastOverview({
+        data,
+        refreshedAt: refreshedAt.toISOString(),
+        source,
+      });
       return true;
     } catch (error) {
       if (appMountedRef.current && error instanceof AuthRequiredError) {
@@ -470,6 +482,10 @@ export function App() {
         return false;
       }
       setConfigSummary(nextConfig);
+      tabSyncCoordinator.broadcastConfig({
+        data: nextConfig,
+        refreshedAt: new Date().toISOString(),
+      });
       return true;
     } catch (error) {
       if (appMountedRef.current && error instanceof AuthRequiredError) {
@@ -521,6 +537,32 @@ export function App() {
       window.clearTimeout(launchGuideMessageTimerRef.current);
     }
   }, []);
+
+  useEffect(() => {
+    const unsubscribeRole = tabSyncCoordinator.subscribeRole(setTabSyncRole);
+    const unsubscribeOverview = tabSyncCoordinator.subscribeOverview((snapshot) => {
+      if (!appMountedRef.current || !sessionAuthenticatedRef.current) {
+        return;
+      }
+      const refreshedAt = new Date(snapshot.refreshedAt);
+      setOverview(snapshot.data);
+      setDataSource(snapshot.source);
+      setLastRefreshedAt(refreshedAt);
+      lastRefreshedAtRef.current = refreshedAt.getTime();
+    });
+    const unsubscribeConfig = tabSyncCoordinator.subscribeConfig((snapshot) => {
+      if (!appMountedRef.current || !sessionAuthenticatedRef.current) {
+        return;
+      }
+      setConfigSummary(snapshot.data);
+    });
+    return () => {
+      unsubscribeRole();
+      unsubscribeOverview();
+      unsubscribeConfig();
+      tabSyncCoordinator.dispose();
+    };
+  }, [tabSyncCoordinator]);
 
   useEffect(() => {
     sessionAuthenticatedRef.current = Boolean(session?.authenticated);
@@ -605,6 +647,7 @@ export function App() {
   useEffect(() => {
     if (!session?.authenticated) {
       setAdaptiveRefreshStatus('paused');
+      tabSyncCoordinator.setEnvironmentActive(false);
       return undefined;
     }
 
@@ -621,6 +664,13 @@ export function App() {
 
     function readEnvironmentStatus() {
       return resolveAdaptiveRefreshStatus(document.visibilityState, navigator.onLine);
+    }
+
+    function updateTabSyncRole(environmentStatus: AdaptiveRefreshStatus) {
+      tabSyncCoordinator.setEnvironmentActive(environmentStatus === 'active');
+      const nextRole = tabSyncCoordinator.getRole();
+      setTabSyncRole(nextRole);
+      return nextRole;
     }
 
     function schedule(delay: number) {
@@ -640,8 +690,16 @@ export function App() {
 
       const environmentStatus = readEnvironmentStatus();
       if (environmentStatus !== 'active') {
+        updateTabSyncRole(environmentStatus);
         setAdaptiveRefreshStatus(environmentStatus);
         clearTimer();
+        return;
+      }
+
+      const syncRole = updateTabSyncRole(environmentStatus);
+      if (syncRole === 'standby') {
+        setAdaptiveRefreshStatus('active');
+        schedule(tabSyncStandbyCheckMs);
         return;
       }
 
@@ -667,8 +725,14 @@ export function App() {
     function scheduleFromEnvironment(forceImmediate = false) {
       clearTimer();
       const environmentStatus = readEnvironmentStatus();
+      const syncRole = updateTabSyncRole(environmentStatus);
       setAdaptiveRefreshStatus(environmentStatus);
       if (environmentStatus !== 'active') {
+        return;
+      }
+
+      if (syncRole === 'standby') {
+        schedule(tabSyncStandbyCheckMs);
         return;
       }
 
@@ -705,7 +769,7 @@ export function App() {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [performanceMode, session?.authenticated]);
+  }, [performanceMode, session?.authenticated, tabSyncCoordinator, tabSyncRole]);
 
   useEffect(() => {
     if (!settingsError && !settingsSuccess) {
@@ -843,13 +907,25 @@ export function App() {
       : adaptiveRefreshStatus === 'offline'
         ? t('app.adaptiveRefreshOffline')
         : t('app.adaptiveRefreshRetrying');
+  const tabSyncStatusLabel = tabSyncRole === 'primary'
+    ? t('app.tabSyncPrimary')
+    : tabSyncRole === 'standby'
+      ? t('app.tabSyncStandby')
+      : t('app.tabSyncSolo');
   const adaptiveRefreshStatusDetail = adaptiveRefreshStatus === 'active'
-    ? t('app.adaptiveRefreshCadence', { seconds: adaptiveRefreshCadenceSeconds })
+    ? tabSyncRole === 'standby'
+      ? t('app.tabSyncStandbyDetail')
+      : t('app.adaptiveRefreshCadence', { seconds: adaptiveRefreshCadenceSeconds })
     : adaptiveRefreshStatus === 'paused'
       ? t('app.adaptiveRefreshPausedDetail')
       : adaptiveRefreshStatus === 'offline'
         ? t('app.adaptiveRefreshOfflineDetail')
         : t('app.adaptiveRefreshRetryingDetail');
+  const tabSyncStatusDetail = tabSyncRole === 'primary'
+    ? t('app.tabSyncPrimaryDetail')
+    : tabSyncRole === 'standby'
+      ? t('app.tabSyncStandbyDetail')
+      : t('app.tabSyncSoloDetail');
   const activeSectionConfig = sections.find((section) => section.id === activeSection) ?? sections[0];
   const ActiveSectionIcon = activeSectionConfig.icon;
   const commandShortcutLabel = isApplePlatform() ? '⌘K' : 'Ctrl K';
@@ -1595,14 +1671,15 @@ export function App() {
             </button>
             <button
               type="button"
-              className={`${dataSource === 'api' ? 'operator-utility-trigger is-live' : 'operator-utility-trigger is-fallback'} sync-${adaptiveRefreshStatus}`}
+              className={`${dataSource === 'api' ? 'operator-utility-trigger is-live' : 'operator-utility-trigger is-fallback'} sync-${adaptiveRefreshStatus} tab-${tabSyncRole}`}
               data-operator-utility-trigger="true"
               data-mobile-utility-trigger="true"
               data-adaptive-refresh-status={adaptiveRefreshStatus}
+              data-tab-sync-role={tabSyncRole}
               aria-label={t('app.operatorControls')}
               aria-expanded={operatorUtilityOpen}
               aria-controls="operator-utility-menu"
-              title={sessionTooltip}
+              title={`${sessionTooltip} - ${tabSyncStatusLabel}`}
               onClick={() => setOperatorUtilityOpen((value) => !value)}
             >
               <i className="operator-sync-dot" aria-hidden="true" />
@@ -1684,16 +1761,19 @@ export function App() {
                     <b>{lastRefreshedAt ? t('app.resourceAt', { time: lastRefreshedAt.toLocaleTimeString(timeLocale) }) : t('app.resourcePending')}</b>
                   </button>
                   <div
-                    className={`operator-utility-status ${adaptiveRefreshStatus}`}
+                    className={`operator-utility-status ${adaptiveRefreshStatus} tab-${tabSyncRole}`}
                     data-adaptive-refresh-card="true"
                     data-adaptive-refresh-state={adaptiveRefreshStatus}
+                    data-tab-sync-card="true"
+                    data-tab-sync-role={tabSyncRole}
                     role="status"
                     aria-live="polite"
-                    title={`${adaptiveRefreshStatusLabel} - ${adaptiveRefreshStatusDetail}`}
+                    title={`${adaptiveRefreshStatusLabel} - ${adaptiveRefreshStatusDetail}; ${tabSyncStatusLabel} - ${tabSyncStatusDetail}`}
                   >
                     <RefreshCw size={17} aria-hidden="true" />
                     <span>{t('app.adaptiveRefresh')}</span>
-                    <b>{adaptiveRefreshStatusLabel} · {adaptiveRefreshStatusDetail}</b>
+                    <b>{adaptiveRefreshStatusLabel} / {adaptiveRefreshStatusDetail}</b>
+                    <small>{tabSyncStatusLabel} / {tabSyncStatusDetail}</small>
                   </div>
                   <div className="language-switcher operator-utility-language" role="group" aria-label={t('language.label')}>
                     <span className="language-switcher-label">{t('language.label')}</span>

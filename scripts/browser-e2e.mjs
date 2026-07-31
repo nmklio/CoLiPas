@@ -59,8 +59,8 @@ try {
 }
 
 async function createE2ePage(options) {
-  const targetPage = await browser.newPage(options);
-  await targetPage.addInitScript(() => {
+  const context = await browser.newContext(options);
+  await context.addInitScript(() => {
     const nativeFetch = window.fetch.bind(window);
     const NativeWebSocket = window.WebSocket;
     window.__colipasE2eSshSockets = [];
@@ -135,6 +135,7 @@ async function createE2ePage(options) {
     window.localStorage.removeItem('colipas.launchGuide.view.v1');
     window.localStorage.removeItem('colipas.operationsInbox.review.v1');
   });
+  const targetPage = await context.newPage();
   targetPage.on('console', (message) => {
     if (message.type() === 'error' || message.type() === 'warning') {
       if (isExpectedBrowserConsoleNoise(message.text())) {
@@ -1371,6 +1372,30 @@ async function assertAccountSettingsAndAiChat(targetPage) {
   await targetPage.waitForFunction(() => (
     document.querySelector('[data-operator-utility-trigger="true"]')?.getAttribute('data-adaptive-refresh-status') === 'active'
   ), undefined, { timeout: 5000 });
+  await targetPage.waitForFunction(() => {
+    const role = document.querySelector('[data-operator-utility-trigger="true"]')?.getAttribute('data-tab-sync-role');
+    return role === 'primary' || role === 'solo';
+  }, undefined, { timeout: 8000 });
+  const crossTabProbePage = await targetPage.context().newPage();
+  try {
+    await crossTabProbePage.goto(baseUrl, { waitUntil: 'domcontentloaded' });
+    await crossTabProbePage.locator('[data-operator-utility-trigger="true"]').waitFor({ timeout: 10000 });
+    await targetPage.locator('[data-operator-utility-trigger="true"][data-tab-sync-role="primary"]').waitFor({ timeout: 10000 });
+    await crossTabProbePage.locator('[data-operator-utility-trigger="true"][data-tab-sync-role="standby"]').waitFor({ timeout: 10000 });
+    await crossTabProbePage.locator('[data-operator-utility-trigger="true"]').click();
+    const standbySyncCard = crossTabProbePage.locator('[data-tab-sync-card="true"][data-tab-sync-role="standby"]');
+    await standbySyncCard.waitFor({ timeout: 5000 });
+    const standbySyncText = await standbySyncCard.innerText();
+    if (!/Standby tab|Receives broadcasts/i.test(standbySyncText)) {
+      throw new Error(`Cross-tab standby sync card did not explain duplicate polling reduction: ${standbySyncText}`);
+    }
+    const standbyTitle = await crossTabProbePage.locator('[data-operator-utility-trigger="true"]').getAttribute('title');
+    if (!/Standby tab/i.test(standbyTitle ?? '')) {
+      throw new Error(`Cross-tab standby trigger did not expose its tab role: ${standbyTitle}`);
+    }
+  } finally {
+    await crossTabProbePage.close().catch(() => undefined);
+  }
   if (!new RegExp(username, 'i').test(await operatorUtilityTrigger.innerText())) {
     throw new Error('Operator controls trigger must keep the signed-in username visible');
   }
