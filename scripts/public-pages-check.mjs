@@ -12,7 +12,9 @@ const viewports = [
 ];
 const pages = mode === 'admin'
   ? [buildAdminCheck()]
-  : [buildLandingCheck(), buildDocsCheck(), buildAdminCheck()];
+  : mode === 'landing'
+    ? [buildLandingCheck()]
+    : [buildLandingCheck(), buildDocsCheck(), buildAdminCheck()];
 
 fs.rmSync(evidenceDir, { recursive: true, force: true });
 fs.mkdirSync(evidenceDir, { recursive: true });
@@ -109,14 +111,17 @@ function buildLandingCheck() {
     assert: async (page) => {
       await expectTitle(page, /CoLiPas云服务器管理面板/);
       await expectTitleAbsent(page, /CoLiPas - 多云服务器管理面板|多云服务器管理面板/);
-      await expectText(page.locator('h1').first(), /CoLiPas云服务器管理面板|CoLiPas Cloud Server Management Panel|multi-cloud/i, 'landing h1');
+      await expectText(page.locator('h1').first(), /CoLiPas\s*云服务器管理面板|CoLiPas Cloud Server Management Panel|multi-cloud/i, 'landing h1');
       await expectText(page.locator('body'), /云服务器管理与 AI 运维后台|cloud server management/i, 'landing footer product description');
       await expectTextAbsent(page, /多云服务器管理与 AI 运维后台/, 'landing legacy footer product description');
       await expectTextAbsent(page, /CoLiPas Console|本页只负责介绍项目能力|真正的服务器接入、账号设置、命令执行和 AI 对话都放在受保护后台|服务器管理、SSH、AI 和审计都在后台完成|\u4e91\u7ef4\u7f16\u6392/, 'landing awkward closing copy');
       await expectLocatorCountAtLeast(page.locator('link[rel="icon"][href="/colipas-icon.svg?v=20260530-brand3"]'), 1, 'landing versioned favicon');
       await expectLink(page, /GitHub/i, 'https://github.com/nmklio/CoLiPas');
-      await expectLink(page, /文档|Docs/i, '/docs.html');
+      await expectLinkTarget(page.locator('a[href="/docs.html"]').first(), '/docs.html', 'landing docs link');
       await expectLink(page, /后台|登录|Admin|进入/i, '/admin/');
+      await expectLocatorCount(page.locator('.hero .product-preview img[src^="/colipas-dashboard-preview.svg"]'), 1, 'landing product-stage preview');
+      await expectLocatorCount(page.locator('.feature-card.feature-card-wide'), 2, 'landing primary capability cards');
+      await assertLandingProductStage(page);
       await expectLocatorCountAtLeast(page.locator('section, article, .feature-card, .position-card, .deploy-card'), 6, 'landing content sections');
       await expectLocatorCount(page.locator('[data-colipas-feature="contextual-launch-summary"]'), 1, 'landing contextual launch guide feature card');
       await expectText(page.locator('[data-colipas-feature="contextual-launch-summary"]'), /上线检查|release checklist|workspace summary/i, 'landing contextual launch guide copy');
@@ -275,6 +280,14 @@ async function expectLink(page, namePattern, hrefFragment) {
   }
 }
 
+async function expectLinkTarget(locator, hrefFragment, label) {
+  await locator.waitFor({ state: 'attached', timeout: 10000 });
+  const href = await locator.getAttribute('href');
+  if (!href || !href.includes(hrefFragment)) {
+    throw new Error(`${label} href "${href}" did not include ${hrefFragment}`);
+  }
+}
+
 async function expectLocatorCountAtLeast(locator, minimum, label) {
   const count = await locator.count();
   if (count < minimum) {
@@ -342,6 +355,8 @@ async function assertNoBadBoxes(page, pageName, viewportName) {
       'h2',
       '.nav',
       '.marketing-nav',
+      '.product-preview',
+      '.feature-card-wide',
       '.docs-hero',
       '.docs-section',
       '.docs-quick-card',
@@ -376,6 +391,68 @@ async function assertNoBadBoxes(page, pageName, viewportName) {
 
   if (badBoxes.length > 0) {
     throw new Error(`${pageName} ${viewportName} has overflowing elements: ${JSON.stringify(badBoxes.slice(0, 6))}`);
+  }
+}
+
+async function assertLandingProductStage(page) {
+  const stage = await page.evaluate(() => {
+    const hero = document.querySelector('.hero');
+    const heading = hero?.querySelector('h1');
+    const preview = hero?.querySelector('.product-preview');
+    const image = preview?.querySelector('img');
+    const primary = hero?.querySelector('.hero-primary');
+    const securityItem = document.querySelector('.security-list > div');
+    if (!(hero instanceof HTMLElement) || !(heading instanceof HTMLElement) || !(preview instanceof HTMLElement) || !(image instanceof HTMLImageElement)) {
+      return null;
+    }
+
+    const heroStyle = window.getComputedStyle(hero, '::before');
+    const headingStyle = window.getComputedStyle(heading);
+    const previewBox = preview.getBoundingClientRect();
+    const imageBox = image.getBoundingClientRect();
+    const securityStyle = securityItem instanceof HTMLElement ? window.getComputedStyle(securityItem) : null;
+    return {
+      heroBackground: heroStyle.backgroundColor,
+      headingAlign: headingStyle.textAlign,
+      previewWidth: Math.round(previewBox.width),
+      imageTop: Math.round(imageBox.top),
+      imageBottom: Math.round(imageBox.bottom),
+      naturalWidth: image.naturalWidth,
+      naturalHeight: image.naturalHeight,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      primaryHref: primary instanceof HTMLAnchorElement ? primary.getAttribute('href') : '',
+      securityBackground: securityStyle?.backgroundColor ?? '',
+      securityColor: securityStyle?.color ?? '',
+    };
+  });
+
+  if (!stage) {
+    throw new Error('landing immersive product stage is missing');
+  }
+  if (!/^rgba?\((?:9|8|10),\s*(?:13|12|14),\s*(?:15|14|16)/.test(stage.heroBackground)) {
+    throw new Error(`landing hero must keep a quiet dark product stage, got ${stage.heroBackground}`);
+  }
+  if (stage.headingAlign !== 'center') {
+    throw new Error(`landing hero heading must be centered, got ${stage.headingAlign}`);
+  }
+  if (stage.previewWidth < stage.viewportWidth * (stage.viewportWidth <= 640 ? 0.9 : 0.62)) {
+    throw new Error(`landing product preview is undersized: ${stage.previewWidth}px in ${stage.viewportWidth}px viewport`);
+  }
+  if (stage.imageTop >= stage.viewportHeight || stage.imageBottom <= 0) {
+    throw new Error(`landing product preview is not hinted in the first viewport: ${JSON.stringify(stage)}`);
+  }
+  if (stage.naturalWidth < 1200 || stage.naturalHeight < 700) {
+    throw new Error(`landing product preview asset did not load at inspection quality: ${stage.naturalWidth}x${stage.naturalHeight}`);
+  }
+  if (stage.primaryHref !== '/admin/') {
+    throw new Error(`landing primary action must open the protected admin console, got ${stage.primaryHref}`);
+  }
+  if (stage.securityBackground === 'rgb(255, 255, 255)' || stage.securityBackground === 'rgba(255, 255, 255, 1)') {
+    throw new Error(`landing security list inherited an unreadable light card background: ${JSON.stringify(stage)}`);
+  }
+  if (!stage.securityColor || stage.securityColor === 'rgb(255, 255, 255)') {
+    throw new Error(`landing security list text color is not explicitly integrated with the dark band: ${JSON.stringify(stage)}`);
   }
 }
 

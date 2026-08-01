@@ -1,5 +1,6 @@
 import http from 'node:http';
 import fs from 'node:fs';
+import path from 'node:path';
 import { generateKeyPairSync } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { WebSocket } from 'ws';
@@ -63,6 +64,7 @@ assertBuildChunkingGuards();
 assertAdminModuleLazyLoadingGuards();
 assertStandalonePerformanceCheckGuards();
 assertRepositoryPreviewAssetGuards();
+assertLandingPatchIdempotence();
 assertInteractiveDeployDocsAndScriptGuards();
 assertContainerRegistryPublishGuards();
 await assertReleaseDeployTargetPlanGuards();
@@ -4593,6 +4595,27 @@ function assertAccountUiGuards() {
   if (missingBrandIcon.length) {
     throw new Error(`CoLiPas brand icon replacement is incomplete: ${missingBrandIcon.join(', ')}`);
   }
+  const landingProductStageFragments = [
+    'landingFeatureCard({ kind, title, description, tags, featureId = \'\', wide = false })',
+    'const landingHero = `<section class="hero wrap">',
+    '安全脱敏的产品实景',
+    '/colipas-dashboard-preview.svg?v=20260801-landing2',
+    'const landingFeatureGrid = [',
+    '实时 SSH 工作区',
+    '上下文 AI 运维助手',
+    'feature-card-wide',
+    'colipas landing immersive product ui v1',
+    '@media (prefers-reduced-motion: reduce)',
+    'install -m 0644 "$APP_DIR/.github/assets/colipas-dashboard-preview.svg"',
+    'location = /colipas-dashboard-preview.svg',
+    'assertLandingProductStage(page)',
+    '.hero .product-preview img[src^="/colipas-dashboard-preview.svg"]',
+  ];
+  const landingProductStageSource = `${serverUpdateSource}\n${publicPagesCheckSource}`;
+  const missingLandingProductStage = landingProductStageFragments.filter((fragment) => !landingProductStageSource.includes(fragment));
+  if (missingLandingProductStage.length) {
+    throw new Error(`Landing immersive product stage is incomplete: ${missingLandingProductStage.join(', ')}`);
+  }
   if (
     !loginSource.includes('href="https://github.com/nmklio/CoLiPas"')
     || !loginSource.includes('login-github-link')
@@ -5983,6 +6006,85 @@ function assertRepositoryPreviewAssetGuards() {
   }
 
   console.log('ok repository preview asset stays outside deployed public assets');
+}
+
+function assertLandingPatchIdempotence() {
+  const serverUpdateSource = fs.readFileSync(new URL('../deploy/server-update.sh', import.meta.url), 'utf8');
+  const patchSource = serverUpdateSource.match(/LANDING_FILE="\$landing_file" node <<'NODE'\r?\n([\s\S]*?)\r?\nNODE/)?.[1] ?? '';
+  if (!patchSource) {
+    throw new Error('Unable to extract the standalone landing page patch for idempotence testing');
+  }
+
+  const fixture = `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>CoLiPas云服务器管理面板</title>
+  <link rel="icon" href="/legacy.svg">
+  <style>
+    .nav-action { box-shadow: 0 16px 34px rgba(37, 99, 235, .22); }
+    .hero { display: grid; }
+    .button:hover { transform: translateY(-1px); }
+  </style>
+</head>
+<body>
+  <a href="https://github.com/nmklio/CoLiPas">GitHub</a>
+  <a href="/docs.html">文档</a>
+  <section class="hero wrap"><div><h1>旧标题</h1></div></section>
+  <section id="product" class="section wrap">
+    <div class="split"><div><p class="kicker">产品定位</p><h2>旧定位</h2></div><p class="section-copy">旧定位说明</p></div>
+    <div class="position-grid">
+      <article class="position-card"><strong>资产接入</strong></article>
+      <article class="position-card"><strong>实时运维</strong></article>
+      <article class="position-card"><strong>AI 分析</strong></article>
+      <article class="position-card"><strong>审计闭环</strong></article>
+    </div>
+  </section>
+  <section id="features" class="section wrap">
+    <div class="feature-head"><div><h2>旧功能</h2></div><p class="section-copy">旧功能说明</p></div>
+    <div class="feature-grid"><article class="feature-card"><span class="icon">01</span><h3>旧卡片</h3></article></div>
+  </section>
+  <section id="security" class="band"></section>
+  <section id="deploy" class="section wrap"><div class="deploy-grid"><article class="deploy-card"><h3>Linux systemd</h3></article><article class="deploy-card"><h3>Node 20+</h3></article><article class="deploy-card"><h3>Docker Compose</h3></article></div></section>
+  </body>
+</html>`;
+  const tempRoot = fs.mkdtempSync(new URL('../.tmp-landing-patch-', import.meta.url));
+  const fixturePath = path.join(tempRoot, 'index.html');
+
+  try {
+    fs.writeFileSync(fixturePath, fixture, 'utf8');
+    const runPatch = () => {
+      const result = spawnSync(process.execPath, ['--input-type=commonjs'], {
+        cwd: new URL('..', import.meta.url),
+        env: { ...process.env, LANDING_FILE: fixturePath },
+        input: patchSource,
+        encoding: 'utf8',
+        windowsHide: true,
+      });
+      if (result.status !== 0) {
+        throw new Error(`Landing patch fixture failed: ${(result.stderr || result.stdout || `exit ${result.status}`).trim()}`);
+      }
+    };
+
+    runPatch();
+    const first = fs.readFileSync(fixturePath, 'utf8');
+    runPatch();
+    const second = fs.readFileSync(fixturePath, 'utf8');
+    if (first !== second) {
+      throw new Error('Landing page patch must be byte-for-byte idempotent across repeated deployments');
+    }
+    if (
+      !second.includes('colipas landing immersive product ui v1')
+      || !second.includes('/colipas-dashboard-preview.svg?v=20260801-landing2')
+      || (second.match(/<article class="feature-card feature-card-wide"/g) ?? []).length !== 2
+    ) {
+      throw new Error('Landing page patch fixture did not produce the immersive product stage and two primary capability cards');
+    }
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+
+  console.log('ok landing page patch is immersive and byte-for-byte idempotent');
 }
 
 function assertInteractiveDeployDocsAndScriptGuards() {

@@ -185,6 +185,12 @@ function landingIcon(kind, className) {
   return `<span class="${className} icon-${kind}" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false">${paths[kind]}</svg></span>`;
 }
 
+function landingFeatureCard({ kind, title, description, tags, featureId = '', wide = false }) {
+  const idAttribute = featureId ? ` data-colipas-feature="${featureId}"` : '';
+  const wideClass = wide ? ' feature-card-wide' : '';
+  return `<article class="feature-card${wideClass}"${idAttribute}>${landingIcon(kind, 'icon feature-icon')}<h3>${title}</h3><p>${description}</p><div class="tags">${tags.map((tag) => `<span>${tag}</span>`).join('')}</div></article>`;
+}
+
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -214,7 +220,7 @@ function replacePositionCard(title, kind, description) {
 
 replaceAll(/\/\* colipas landing balanced ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\/style>)/g, '');
 replaceAll(/<title>[\s\S]*?<\/title>/g, '<title>CoLiPas云服务器管理面板</title>');
-replaceAll(/<link\s+rel="icon"[^>]*>/g, '');
+replaceAll(/[ \t]*<link\s+rel="icon"[^>]*>\s*/g, '\n');
 replaceOnce(/<title>CoLiPas云服务器管理面板<\/title>/, '<title>CoLiPas云服务器管理面板</title>\n<link rel="icon" type="image/svg+xml" href="/colipas-icon.svg?v=20260530-brand3">');
 replaceAll(/<a class="button github-button" href="https:\/\/github\.com\/nmklio\/CoLiPas"[^>]*>GitHub<\/a>/g, '');
 replaceAll(/<span class="brand-mark">CP<\/span>/g, '<img class="brand-mark" src="/colipas-icon.svg" alt="" aria-hidden="true">');
@@ -229,9 +235,29 @@ if (!html.includes('https://github.com/nmklio/CoLiPas')) {
   ));
 }
 
-replaceOnce(/(<section class="hero wrap">[\s\S]*?)<h1>[\s\S]*?<\/h1>/, (_match, prefix) => (
-  `${prefix}<h1><span class="hero-title-main">CoLiPas云服务器管理面板</span><span class="hero-title-accent">接入、监控、修复一体化</span></h1>`
-));
+const landingHero = `<section class="hero wrap">
+    <div class="hero-copy">
+      <p class="pill">自托管控制面 · SSH 实时终端 · AI 运维</p>
+      <h1><span class="hero-title-main">CoLiPas</span><span class="hero-title-accent">云服务器管理面板</span></h1>
+      <p class="lead">把分散的云服务器放回一个清晰的工作流：接入资产、观察状态、进入实时终端、让 AI 辅助诊断，并为每次关键操作保留审计证据。</p>
+      <div class="hero-buttons">
+        <a class="button hero-primary" href="/admin/">进入管理后台</a>
+        <a class="button hero-secondary" href="#product">查看工作流</a>
+      </div>
+      <div class="stats" aria-label="产品能力">
+        <div><strong>PTY</strong><span>实时 SSH 交互</span></div>
+        <div><strong>7 天</strong><span>可信资源历史</span></div>
+        <div><strong>3</strong><span>中文 / EN / 日本語</span></div>
+      </div>
+    </div>
+
+    <figure class="product-preview" aria-label="CoLiPas 脱敏后台预览">
+      <div class="preview-top"><i></i><i></i><i></i><span>安全脱敏的产品实景</span></div>
+      <img src="/colipas-dashboard-preview.svg?v=20260801-landing2" alt="CoLiPas 服务器总览、全球地图与资源状态界面" loading="eager" fetchpriority="high">
+      <figcaption><span>Overview</span><span>Servers</span><span>SSH</span><span>AI</span><span>Audit</span></figcaption>
+    </figure>
+  </section>`;
+replaceOnce(/<section class="hero wrap">[\s\S]*?<\/section>/, landingHero);
 
 replaceAll(/<div><strong>CoLiPas<\/strong><span>多云服务器管理与 AI 运维后台<\/span><\/div>/g, (
   '<div><strong>CoLiPas云服务器管理面板</strong><span>云服务器管理与 AI 运维后台</span></div>'
@@ -348,6 +374,27 @@ if (!html.includes('data-colipas-feature="intent-ready-navigation"')) {
 } else {
   replaceOnce(/<article class="feature-card" data-colipas-feature="intent-ready-navigation">[\s\S]*?<\/article>/, intentReadyNavigationFeatureCard);
 }
+
+const landingFeatureGrid = [
+  landingFeatureCard({ kind: 'terminal', title: '实时 SSH 工作区', description: '浏览器内直接进入 PTY 终端，连续读取输出、调整窗口、中断前台命令，并在关闭界面时释放远端会话。', tags: ['xterm', '低延迟输入'], wide: true }),
+  landingFeatureCard({ kind: 'ai', title: '上下文 AI 运维助手', description: '把当前服务器与终端上下文交给自定义 OpenAI 兼容模型分析；命令先确认，再交给真实 SSH 会话执行。', tags: ['流式对话', '执行确认'], wide: true }),
+  landingFeatureCard({ kind: 'checklist', title: '上下文上线检查', description: '总览保留完整上线清单，进入具体工作区后压缩为摘要，需要证据时再展开。', tags: ['渐进披露', '性能联动'], featureId: 'contextual-launch-summary' }),
+  landingFeatureCard({ kind: 'assets', title: '资产视图', description: '保存关键词、厂商、状态、地域和健康筛选，排障时一键恢复常用工作范围。', tags: ['本机保存', '快速恢复'], featureId: 'fleet-views' }),
+  landingFeatureCard({ kind: 'assets', title: '安全批量资产导入', description: 'CSV / JSON 先预览校验再登记，单次最多 500 台无凭据资产，并提供本地校验报告。', tags: ['2 MB 上限', '公式注入防护'], featureId: 'server-bulk-import' }),
+  landingFeatureCard({ kind: 'command', title: '上下文命令面板', description: '按当前优先级、最近使用和全部操作组织跨模块入口，减少重复搜索与页面跳转。', tags: ['最近使用', '跨模块'], featureId: 'command-palette-context' }),
+  landingFeatureCard({ kind: 'alert', title: '资源告警策略', description: '仅使用已验证、运行中且新鲜的 SSH 遥测判断 CPU、内存和磁盘越线。', tags: ['可信遥测', '周期提醒'], featureId: 'resource-alert-policy' }),
+  landingFeatureCard({ kind: 'trend', title: '可信资源历史', description: '成功采样后记录 CPU、内存和磁盘，按 1 小时到 7 天查看趋势、峰值和来源。', tags: ['有界历史', '来源可辨'], featureId: 'server-metric-history' }),
+  landingFeatureCard({ kind: 'inbox', title: '全局运维收件箱', description: '跨模块汇总资源越线、上线阻塞、SSH 覆盖缺口与开放事件，持续异常会再次提醒。', tags: ['值班入口', '本机审阅'], featureId: 'operations-inbox' }),
+  landingFeatureCard({ kind: 'shield', title: '登录会话控制', description: 'SQLite 只保存令牌哈希和脱敏设备信息；服务重启后会话仍可管理和撤销。', tags: ['令牌哈希', '容量控制'], featureId: 'account-session-control' }),
+  landingFeatureCard({ kind: 'controls', title: '自适应操作员控制', description: '桌面与手机端统一收纳刷新、语言、账户和退出，同时保留登录名称与同步状态。', tags: ['单行顶栏', '键盘可用'], featureId: 'operator-controls' }),
+  landingFeatureCard({ kind: 'refresh', title: '智能刷新调度', description: '可见时同步，隐藏或离线时暂停；多标签页复用快照，并用 ETag 和 304 避免重复载荷。', tags: ['退避恢复', '载荷复用'], featureId: 'adaptive-refresh' }),
+  landingFeatureCard({ kind: 'flow', title: '意图就绪导航', description: '目标工作区准备完成前保留当前页面，连续切换只响应最后一次选择，避免竞态闪烁。', tags: ['原子切换', '竞态保护'], featureId: 'intent-ready-navigation' }),
+  landingFeatureCard({ kind: 'shield', title: '安全审计闭环', description: '登录、AI、API、SSH 和编排动作进入统一审计链路，风险可定位、结果可复盘。', tags: ['敏感脱敏', '修复留痕'] }),
+].join('\n      ');
+replaceOnce(
+  /(<div class="feature-grid">)[\s\S]*?(<\/div>\s*<\/section>\s*<section id="security")/,
+  `$1\n      ${landingFeatureGrid}\n    $2`,
+);
 
 replaceAll(/<article class="deploy-card"><h3>Linux systemd<\/h3>/g, `<article class="deploy-card">${landingIcon('terminal', 'deploy-icon')}<h3>Linux systemd</h3>`);
 replaceAll(/<article class="deploy-card"><h3>Node 20\+<\/h3>/g, `<article class="deploy-card">${landingIcon('code', 'deploy-icon')}<h3>Node 20+</h3>`);
@@ -872,6 +919,611 @@ replaceOnce('</style>', `/* colipas landing balanced ui v8 */
 }
 </style>`);
 
+replaceOnce('</style>', `/* colipas landing immersive product ui v1 */
+:root {
+  --landing-dark: #090d0f;
+  --landing-dark-soft: #111718;
+  --landing-dark-line: #273132;
+  --landing-paper: #f4f6f4;
+  --landing-panel: #ffffff;
+  --landing-ink: #101817;
+  --landing-muted: #5f6c69;
+  --landing-mint: #72dec4;
+  --landing-mint-strong: #137c69;
+  --landing-amber: #e8b968;
+}
+body {
+  color: var(--landing-ink);
+  background: var(--landing-paper);
+}
+body::selection {
+  color: #07110f;
+  background: #9cebd8;
+}
+.top-line {
+  height: 3px;
+  background: rgba(114, 222, 196, .12);
+}
+.top-line span {
+  background: #72dec4;
+}
+.wrap,
+.nav-inner {
+  width: min(1200px, calc(100% - 64px));
+}
+.nav {
+  height: 72px;
+  border-bottom-color: rgba(255, 255, 255, .07);
+  background: rgba(9, 13, 15, .88);
+  backdrop-filter: blur(18px);
+}
+.brand {
+  color: #f7faf9;
+  font-size: 17px;
+}
+.brand-mark {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  box-shadow: none;
+}
+.nav-links {
+  color: #aab4b2;
+  font-weight: 760;
+}
+.nav-links a {
+  border-radius: 6px;
+}
+.nav-links a:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, .06);
+}
+.nav-github,
+.nav-action {
+  min-height: 40px;
+  border-radius: 7px;
+  padding: 0 17px;
+  box-shadow: none;
+}
+.nav-github {
+  color: #c4cecc;
+  border-color: rgba(255, 255, 255, .12);
+  background: rgba(255, 255, 255, .035);
+}
+.nav-action {
+  color: #0a1311;
+  border: 1px solid #f5f8f7;
+  background: #f5f8f7;
+}
+.nav-github:hover {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, .25);
+  background: rgba(255, 255, 255, .07);
+}
+.nav-action:hover {
+  color: #07110f;
+  background: #dff8f1;
+  border-color: #dff8f1;
+}
+.hero {
+  position: relative;
+  z-index: 0;
+  min-height: 0;
+  padding: 94px 0 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  text-align: center;
+  transform: none;
+}
+.hero::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0 50% 0 auto;
+  width: 100vw;
+  transform: translateX(50%);
+  background: var(--landing-dark);
+}
+.hero-copy {
+  width: min(1000px, 100%);
+  display: grid;
+  justify-items: center;
+  animation: landing-rise .65s ease-out both;
+}
+.pill {
+  min-height: 30px;
+  padding: 0 12px;
+  color: #b8c4c1;
+  border-color: rgba(255, 255, 255, .11);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .035);
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 720;
+}
+.pill::before {
+  background: var(--landing-mint);
+  box-shadow: 0 0 0 4px rgba(114, 222, 196, .09);
+}
+.hero h1,
+.hero h1 .hero-title-main,
+.hero h1 .hero-title-accent {
+  max-width: none;
+  color: #f4f7f6;
+}
+.hero h1 {
+  margin: 27px 0 20px;
+  font-size: 72px;
+  line-height: 1.02;
+  font-weight: 820;
+  letter-spacing: 0;
+  text-wrap: balance;
+}
+.hero h1 .hero-title-main,
+.hero h1 .hero-title-accent {
+  display: inline;
+}
+.hero h1 .hero-title-main::after {
+  content: ' ';
+}
+.hero h1 .hero-title-accent {
+  color: #aeb8b6;
+}
+.lead {
+  max-width: 720px;
+  color: #a8b2b0;
+  font-size: 17px;
+  line-height: 1.75;
+}
+.hero-buttons {
+  justify-content: center;
+  margin-top: 30px;
+  gap: 10px;
+}
+.hero .button {
+  min-width: 154px;
+  min-height: 48px;
+  border-radius: 7px;
+  padding: 0 20px;
+  box-shadow: none;
+}
+.hero .hero-primary {
+  color: #07110f;
+  border-color: #f4f7f6;
+  background: #f4f7f6;
+}
+.hero .hero-secondary {
+  color: #d6dddb;
+  border-color: rgba(255, 255, 255, .14);
+  background: rgba(255, 255, 255, .035);
+}
+.hero .hero-primary:hover {
+  color: #07110f;
+  border-color: #dff8f1;
+  background: #dff8f1;
+}
+.hero .hero-secondary:hover {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, .28);
+  background: rgba(255, 255, 255, .07);
+}
+.hero .stats {
+  width: min(600px, 100%);
+  max-width: none;
+  margin-top: 34px;
+  padding-top: 18px;
+  border-top-color: rgba(255, 255, 255, .09);
+}
+.hero .stats div {
+  min-height: 48px;
+  border-right-color: rgba(255, 255, 255, .09);
+}
+.hero .stats strong {
+  color: #eef5f3;
+  font-size: 19px;
+}
+.hero .stats span {
+  color: #7f8c89;
+  font-size: 11px;
+}
+.product-preview {
+  position: relative;
+  width: min(1040px, 100%);
+  max-width: none;
+  margin: 52px auto 0;
+  overflow: hidden;
+  justify-self: auto;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 8px;
+  background: #071016;
+  box-shadow: 0 36px 80px rgba(0, 0, 0, .38);
+  transform: none;
+  animation: landing-rise .75s .12s ease-out both;
+}
+.preview-top {
+  height: 42px;
+  border-bottom-color: rgba(255, 255, 255, .08);
+  background: #111719;
+}
+.preview-top span {
+  color: #7d8987;
+  font-size: 11px;
+}
+.product-preview > img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1600 / 980;
+  object-fit: cover;
+  object-position: top center;
+}
+.product-preview figcaption {
+  min-height: 42px;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  border-top: 1px solid rgba(255, 255, 255, .07);
+  color: #73807d;
+  background: #0d1315;
+  font: 700 10px ui-monospace, SFMono-Regular, Consolas, monospace;
+  text-transform: uppercase;
+}
+#product.section {
+  position: relative;
+  z-index: 0;
+  padding-top: 82px;
+  padding-bottom: 86px;
+  color: #edf3f1;
+}
+#product.section::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0 50% 0 auto;
+  width: 100vw;
+  transform: translateX(50%);
+  background: var(--landing-dark-soft);
+}
+#product .split {
+  grid-template-columns: minmax(0, .92fr) minmax(360px, .7fr);
+  gap: 64px;
+}
+#product .kicker,
+#security .kicker {
+  color: var(--landing-mint);
+}
+#product h2,
+#security h2 {
+  color: #f3f7f5;
+}
+#product .section-copy {
+  color: #a9b5b2;
+  border-left-color: var(--landing-mint);
+}
+.position-grid {
+  position: relative;
+  margin-top: 48px;
+  gap: 0;
+  border-top: 1px solid var(--landing-dark-line);
+  border-bottom: 1px solid var(--landing-dark-line);
+}
+.position-card,
+.position-card-modern {
+  min-height: 142px;
+  padding: 25px 22px;
+  border: 0;
+  border-right: 1px solid var(--landing-dark-line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.position-card:last-child {
+  border-right: 0;
+}
+.position-card::before,
+.position-card::after {
+  display: none;
+}
+.position-step {
+  color: #64716e;
+  font-size: 24px;
+}
+.position-card-modern strong {
+  color: #f0f5f3;
+  font-size: 17px;
+}
+.position-card-modern .position-copy > span {
+  color: #899692;
+}
+.position-card-modern .position-state {
+  color: #a4ecda;
+  border-color: rgba(114, 222, 196, .18);
+  background: rgba(114, 222, 196, .08);
+}
+#features.section {
+  position: relative;
+  z-index: 0;
+  padding-top: 96px;
+  padding-bottom: 104px;
+}
+#features.section::before,
+#deploy.section::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0 50% 0 auto;
+  width: 100vw;
+  transform: translateX(50%);
+  background: var(--landing-paper);
+}
+#features .feature-head {
+  max-width: none;
+  margin-bottom: 44px;
+  display: grid;
+  grid-template-columns: minmax(0, .85fr) minmax(360px, .55fr);
+  align-items: end;
+  gap: 54px;
+}
+#features h2,
+#deploy h2 {
+  color: var(--landing-ink);
+}
+#features .section-copy,
+#deploy .section-copy {
+  color: var(--landing-muted);
+}
+.feature-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.feature-card {
+  min-height: 232px;
+  padding: 22px;
+  border-color: #dfe5e2;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .78);
+  box-shadow: none;
+}
+.feature-card::before {
+  display: none;
+}
+.feature-card:hover {
+  border-color: #b7c8c3;
+  background: #ffffff;
+  box-shadow: 0 18px 42px rgba(16, 36, 31, .07);
+  transform: translateY(-2px);
+}
+.feature-card-wide {
+  grid-column: span 2;
+  min-height: 250px;
+  padding: 28px;
+  color: #edf5f2;
+  border-color: #263433;
+  background: #14201f;
+}
+.feature-card-wide:hover {
+  border-color: #3e5753;
+  background: #182624;
+  box-shadow: 0 22px 52px rgba(9, 19, 17, .15);
+}
+.feature-icon {
+  width: 44px;
+  height: 44px;
+  border: 1px solid #d6e2de;
+  border-radius: 7px;
+  color: var(--landing-mint-strong);
+  background: #edf7f4;
+  box-shadow: none;
+}
+.feature-icon svg {
+  width: 23px;
+  height: 23px;
+}
+.feature-card-wide .feature-icon {
+  color: var(--landing-mint);
+  border-color: rgba(114, 222, 196, .18);
+  background: rgba(114, 222, 196, .08);
+}
+.feature-card h3 {
+  margin-top: 20px;
+  color: #17201f;
+  font-size: 18px;
+}
+.feature-card-wide h3 {
+  color: #f0f6f4;
+  font-size: 23px;
+}
+.feature-card p {
+  color: #61706c;
+  font-size: 13px;
+  line-height: 1.68;
+}
+.feature-card-wide p {
+  max-width: 520px;
+  color: #a9b7b3;
+  font-size: 15px;
+}
+.tags span {
+  min-height: 24px;
+  padding: 0 8px;
+  color: #63746f;
+  border-color: #d9e5e1;
+  border-radius: 5px;
+  background: #f4f8f6;
+  font-size: 10px;
+}
+.feature-card-wide .tags span {
+  color: #9ee7d6;
+  border-color: rgba(114, 222, 196, .15);
+  background: rgba(114, 222, 196, .07);
+}
+.band {
+  padding: 92px 0;
+  color: #eef5f3;
+  background: #16211f;
+}
+.security-layout {
+  gap: 70px;
+}
+#security .section-copy {
+  color: #9faca8;
+}
+.security-list {
+  border-top: 1px solid #33413e;
+}
+.security-list div {
+  min-height: 60px;
+  padding: 0 12px;
+  border-left: 0;
+  border-right: 0;
+  border-radius: 0;
+  border-bottom-color: #33413e;
+  color: #dce5e2;
+  background: transparent;
+  box-shadow: none;
+}
+.security-list b {
+  background: var(--landing-mint);
+}
+#deploy.section {
+  position: relative;
+  z-index: 0;
+  padding-top: 96px;
+  padding-bottom: 104px;
+}
+.deploy-step {
+  border-radius: 7px;
+  border-color: #dfe6e3;
+  background: rgba(255, 255, 255, .7);
+  box-shadow: none;
+}
+.deploy-step b {
+  color: #0c1714;
+  background: var(--landing-mint);
+}
+.deploy-card {
+  min-height: 210px;
+  border-color: #dfe5e2;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: none;
+}
+.deploy-icon {
+  color: var(--landing-mint-strong);
+  border-color: #d6e2de;
+  border-radius: 7px;
+  background: #edf7f4;
+  box-shadow: none;
+}
+.deploy-card code {
+  color: #36554d;
+  border-color: #dce6e2;
+  background: #f3f7f5;
+}
+.footer {
+  border-top-color: rgba(255, 255, 255, .07);
+  background: var(--landing-dark);
+}
+.footer strong {
+  color: #f2f6f5;
+}
+.footer span,
+.footer p,
+.footer a {
+  color: #84918e;
+}
+a:focus-visible,
+button:focus-visible {
+  outline: 3px solid rgba(114, 222, 196, .5);
+  outline-offset: 3px;
+}
+@keyframes landing-rise {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (max-width: 1100px) {
+  .hero h1 { font-size: 60px; }
+  .feature-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .feature-card-wide { grid-column: span 3; }
+}
+@media (max-width: 980px) {
+  .wrap,
+  .nav-inner { width: min(100% - 40px, 760px); }
+  .hero { padding: 78px 0 62px; }
+  .hero h1 { font-size: 54px; }
+  .product-preview { margin-top: 44px; }
+  #product .split,
+  #features .feature-head { grid-template-columns: 1fr; gap: 22px; }
+  #product .section-copy { padding-left: 0; border-left: 0; }
+  .position-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .position-card:nth-child(2) { border-right: 0; }
+  .position-card:nth-child(-n + 2) { border-bottom: 1px solid var(--landing-dark-line); }
+  .feature-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .feature-card-wide { grid-column: span 2; }
+}
+@media (max-width: 640px) {
+  .wrap,
+  .nav-inner { width: calc(100% - 32px); }
+  .nav { height: 64px; }
+  .nav-inner { grid-template-columns: 1fr auto; gap: 12px; }
+  .brand { font-size: 16px; }
+  .brand-mark { width: 34px; height: 34px; }
+  .nav-links { display: none; }
+  .nav-actions { width: auto; }
+  .nav-github,
+  .nav-action { width: auto; min-height: 38px; padding: 0 11px; font-size: 12px; }
+  .hero { padding: 66px 0 48px; }
+  .hero-copy { width: 100%; }
+  .pill { min-height: 28px; padding: 0 10px; font-size: 10px; }
+  .hero h1 { margin: 23px 0 18px; font-size: 42px; line-height: 1.06; }
+  .hero h1 .hero-title-main,
+  .hero h1 .hero-title-accent { display: block; }
+  .hero h1 .hero-title-main::after { content: ''; }
+  .lead { font-size: 15px; line-height: 1.7; }
+  .hero-buttons { width: 100%; margin-top: 26px; }
+  .hero .button { width: 100%; min-height: 48px; }
+  .hero .stats { margin-top: 28px; }
+  .hero .stats div { padding: 0 6px; }
+  .hero .stats strong { font-size: 17px; }
+  .hero .stats span { font-size: 9px; line-height: 1.35; }
+  .product-preview { width: calc(100% + 8px); margin-top: 40px; }
+  .preview-top { height: 36px; padding: 0 12px; }
+  .preview-top span { margin-left: 6px; font-size: 9px; }
+  .product-preview figcaption { min-height: 36px; gap: 12px; padding: 0 10px; font-size: 8px; }
+  #product.section,
+  #features.section,
+  #deploy.section,
+  .band { padding-top: 64px; padding-bottom: 68px; }
+  #product h2,
+  #features h2,
+  #security h2,
+  #deploy h2 { font-size: 34px; }
+  .position-grid { margin-top: 34px; grid-template-columns: 1fr; }
+  .position-card,
+  .position-card-modern { min-height: 96px; padding: 18px 0; border-right: 0; border-bottom: 1px solid var(--landing-dark-line); }
+  .position-card:last-child { border-bottom: 0; }
+  .position-card:nth-child(-n + 2) { border-bottom: 1px solid var(--landing-dark-line); }
+  .feature-grid { grid-template-columns: 1fr; }
+  .feature-card,
+  .feature-card-wide { grid-column: auto; min-height: 0; padding: 20px; }
+  .feature-card-wide h3 { font-size: 21px; }
+  .security-layout { gap: 36px; }
+  .deploy-flow,
+  .deploy-grid { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .hero-copy,
+  .product-preview { animation: none; }
+  .feature-card,
+  .button { transition: none; }
+}
+</style>`);
+
 if (!html.includes('https://github.com/nmklio/CoLiPas')) {
   throw new Error(`Unable to add GitHub link to ${file}`);
 }
@@ -892,6 +1544,10 @@ NODE
 write_docs_page() {
   if [ ! -d "$LANDING_ROOT" ]; then
     return 0
+  fi
+
+  if [ -f "$APP_DIR/.github/assets/colipas-dashboard-preview.svg" ]; then
+    install -m 0644 "$APP_DIR/.github/assets/colipas-dashboard-preview.svg" "$LANDING_ROOT/colipas-dashboard-preview.svg"
   fi
 
   cat >"$LANDING_ROOT/colipas-icon.svg" <<'SVG'
@@ -2092,6 +2748,12 @@ server {
     add_header Cache-Control "no-store, max-age=0" always;
   }
 
+  location = /colipas-dashboard-preview.svg {
+    try_files /colipas-dashboard-preview.svg =404;
+    expires 1h;
+    add_header Cache-Control "public, max-age=3600" always;
+  }
+
   location = /favicon.ico {
     try_files /colipas-icon.svg =404;
     expires -1;
@@ -2179,6 +2841,12 @@ server {
     try_files /colipas-icon.svg =404;
     expires -1;
     add_header Cache-Control "no-store, max-age=0" always;
+  }
+
+  location = /colipas-dashboard-preview.svg {
+    try_files /colipas-dashboard-preview.svg =404;
+    expires 1h;
+    add_header Cache-Control "public, max-age=3600" always;
   }
 
   location = /favicon.ico {
