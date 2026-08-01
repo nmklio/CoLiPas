@@ -1791,6 +1791,33 @@ try {
   }
   console.log('ok /api/ai/stream returns safe SSE error event');
 
+  const interruptedStreamResponse = await fetch(`${baseUrl}/api/ai/stream`, {
+    method: 'POST',
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      question: 'verify interrupted upstream recovery',
+      provider: {
+        ...streamingProvider,
+        model: 'disconnect-model',
+      },
+      serverId: 'all',
+      forceRefresh: true,
+    }),
+  });
+  if (!interruptedStreamResponse.ok) {
+    throw new Error(`/api/ai/stream interrupted upstream returned HTTP ${interruptedStreamResponse.status}`);
+  }
+  const interruptedStreamText = await interruptedStreamResponse.text();
+  if (
+    !interruptedStreamText.includes('"type":"error"')
+    || !interruptedStreamText.includes('"code":"AI_UPSTREAM_UNREACHABLE"')
+    || !interruptedStreamText.includes('connection was interrupted')
+    || /network error|fetch failed|ECONNRESET/i.test(interruptedStreamText)
+  ) {
+    throw new Error(`/api/ai/stream did not convert an interrupted upstream into a safe recoverable error: ${interruptedStreamText}`);
+  }
+  console.log('ok /api/ai/stream classifies interrupted upstream responses as recoverable without leaking transport errors');
+
   const upstreamTestResponse = await fetch(`${baseUrl}/api/ai/test`, {
     method: 'POST',
     headers: { ...authHeaders, 'Content-Type': 'application/json' },
@@ -5928,9 +5955,13 @@ function assertAdminModuleLazyLoadingGuards() {
     'aria-current={activeSection === section.id',
     'onPointerEnter={() => preloadSectionModule(section.id)}',
     'onPointerDown={() => preloadSectionModule(section.id)}',
-    'shouldRenderAiConsole ? (',
+    "const aiWorkspaceActive = activeSection === 'ai';",
+    'const shouldRenderFloatingAiConsole = !aiWorkspaceActive && (',
+    "activeSection === 'ai' && (",
+    'mode="workspace"',
+    "activeSection !== 'ai' && (shouldRenderFloatingAiConsole ? (",
+    'mode="dock"',
     "<Suspense fallback={<ModuleLoadingFallback title={t('nav.servers')} />}>",
-    '<button type="button" className="ai-launcher"',
   ];
   const missingAppFragments = requiredAppFragments.filter((fragment) => !appSource.includes(fragment));
   if (missingAppFragments.length) {
@@ -9398,7 +9429,8 @@ function assertSecurityAuditRelationsAreSpecific() {
     'assertAccountSettingsAndAiChat',
     'save avatar and name',
     'avatar and display name updated',
-    'open ai chat',
+    '.ai-dock-workspace',
+    'AI route must render one embedded workspace without a duplicate floating assistant',
     '.ai-message.assistant.done .ai-message-content',
     'waitForFunction((expectedAnswer) => {',
     'lastAssistant.classList.contains(\'cached\')',
@@ -9408,9 +9440,9 @@ function assertSecurityAuditRelationsAreSpecific() {
     'allow execution',
     'getByRole(\'button\', { name: /^submit$/i })',
     '.ai-execution-result pre',
-    'assertDesktopAiDockLayout',
-    'desktop-ai-dock-chat',
-    'desktop-ai-dock-settings',
+    'assertDesktopAiWorkspaceLayout',
+    'desktop-ai-workspace-chat',
+    'desktop-ai-workspace-settings',
     'assertOperationsResultTraceRoundTrip',
     'waitForAuditEvents(targetPage, traceIdFromUrl)',
     'assertMobileConsoleAndMap',
@@ -10307,6 +10339,16 @@ function startMockStreamingAi() {
             message: `upstream body token ${request.headers.authorization ?? ''}`,
           },
         }));
+        return;
+      }
+      if (body.model === 'disconnect-model') {
+        response.writeHead(200, {
+          'Content-Type': 'text/event-stream; charset=utf-8',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+        });
+        response.write('data: {"choices":[{"delta":{"content":"partial"}}]}\n\n');
+        response.socket?.destroy();
         return;
       }
       response.writeHead(200, {

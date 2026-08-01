@@ -140,41 +140,52 @@ export async function streamAiAnalysis(
     return result;
   }
 
-  const response = await fetch(`${aiProvider.baseUrl.replace(/\/$/, '')}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${aiProvider.apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: aiProvider.model,
-      temperature: aiProvider.temperature,
-      stream: true,
-      messages: [
-        {
-          role: 'system',
-          content: [
-            'You are CoLiPas Cloud Server Management Panel AI, a real-time chat assistant embedded in a cloud server management panel.',
-            'Answer the user question directly and naturally.',
-            'Use the provided asset inventory, events, and SSH state only when the question is about operations, servers, cloud assets, troubleshooting, security, or orchestration.',
-            'For casual, meta, or general questions, do not force an operations-risk template.',
-            'Continue the conversation naturally. Use the prior chat messages only as conversational context.',
-            'Do not fabricate servers, execution results, cloud resources, credentials, or hidden context.',
-            'When the user asks for operations analysis, return concise prioritized risks, cause analysis, and executable next steps.',
-          ].join(' '),
-        },
-        ...chatHistory,
-        { role: 'user', content: prompt },
-      ],
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${aiProvider.baseUrl.replace(/\/$/, '')}/chat/completions`, {
+      method: 'POST',
+      signal: AbortSignal.timeout(config.ai.timeoutMs),
+      headers: {
+        Authorization: `Bearer ${aiProvider.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: aiProvider.model,
+        temperature: aiProvider.temperature,
+        stream: true,
+        messages: [
+          {
+            role: 'system',
+            content: [
+              'You are CoLiPas Cloud Server Management Panel AI, a real-time chat assistant embedded in a cloud server management panel.',
+              'Answer the user question directly and naturally.',
+              'Use the provided asset inventory, events, and SSH state only when the question is about operations, servers, cloud assets, troubleshooting, security, or orchestration.',
+              'For casual, meta, or general questions, do not force an operations-risk template.',
+              'Continue the conversation naturally. Use the prior chat messages only as conversational context.',
+              'Do not fabricate servers, execution results, cloud resources, credentials, or hidden context.',
+              'When the user asks for operations analysis, return concise prioritized risks, cause analysis, and executable next steps.',
+            ].join(' '),
+          },
+          ...chatHistory,
+          { role: 'user', content: prompt },
+        ],
+      }),
+    });
+  } catch (error) {
+    throw normalizeAiUpstreamError(error, config.ai.timeoutMs, 'stream');
+  }
 
   if (!response.ok || !response.body) {
     await response.body?.cancel().catch(() => undefined);
-    throw new HttpError(502, `AI service returned HTTP ${response.status}`, 'AI_UPSTREAM_ERROR');
+    throw createAiUpstreamStatusError(response.status, 'analysis');
   }
 
-  const answer = await readChatCompletionStream(response, send);
+  let answer: string;
+  try {
+    answer = await readChatCompletionStream(response, send);
+  } catch (error) {
+    throw normalizeAiUpstreamError(error, config.ai.timeoutMs, 'stream');
+  }
   const finalAnswer = answer || 'AI service returned an empty response.';
   if (!answer) {
     send(finalAnswer);
@@ -205,8 +216,9 @@ export async function listAiModels(input: { provider?: Partial<AIProviderConfig>
     };
   }
 
+  const endpointTimeoutMs = Math.min(config.ai.timeoutMs, 15000);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12000);
+  const timeout = setTimeout(() => controller.abort(), endpointTimeoutMs);
 
   try {
     const response = await fetch(`${aiProvider.baseUrl.replace(/\/$/, '')}/models`, {
@@ -220,7 +232,7 @@ export async function listAiModels(input: { provider?: Partial<AIProviderConfig>
 
     if (!response.ok) {
       await response.body?.cancel().catch(() => undefined);
-      throw new HttpError(502, `AI models endpoint returned HTTP ${response.status}`, 'AI_MODELS_FAILED');
+      throw createAiUpstreamStatusError(response.status, 'models');
     }
 
     const body = await response.json() as unknown;
@@ -235,14 +247,7 @@ export async function listAiModels(input: { provider?: Partial<AIProviderConfig>
         : 'No upstream models found; using fallback models',
     };
   } catch (error) {
-    if (error instanceof HttpError) {
-      throw error;
-    }
-
-    const message = error instanceof Error && error.name === 'AbortError'
-      ? 'AI models endpoint timed out'
-      : `AI models endpoint failed: ${error instanceof Error ? error.message : 'unknown error'}`;
-    throw new HttpError(502, message, 'AI_MODELS_FAILED');
+    throw normalizeAiUpstreamError(error, endpointTimeoutMs, 'models');
   } finally {
     clearTimeout(timeout);
   }
@@ -263,8 +268,9 @@ export async function testAiConnection(input: { provider?: Partial<AIProviderCon
   }
 
   const startedAt = Date.now();
+  const endpointTimeoutMs = Math.min(config.ai.timeoutMs, 15000);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12000);
+  const timeout = setTimeout(() => controller.abort(), endpointTimeoutMs);
 
   try {
     const response = await fetch(`${aiProvider.baseUrl.replace(/\/$/, '')}/chat/completions`, {
@@ -286,7 +292,7 @@ export async function testAiConnection(input: { provider?: Partial<AIProviderCon
     const latencyMs = Date.now() - startedAt;
     if (!response.ok) {
       await response.body?.cancel().catch(() => undefined);
-      throw new HttpError(502, `AI connectivity failed: HTTP ${response.status}`, 'AI_CONNECTION_FAILED');
+      throw createAiUpstreamStatusError(response.status, 'connection test');
     }
     if (!response.body) {
       throw new HttpError(502, 'AI connectivity failed: upstream did not return a streaming response body.', 'AI_CONNECTION_FAILED');
@@ -303,13 +309,7 @@ export async function testAiConnection(input: { provider?: Partial<AIProviderCon
       message: 'AI service is reachable with stream:true.',
     };
   } catch (error) {
-    if (error instanceof HttpError) {
-      throw error;
-    }
-    const message = error instanceof Error && error.name === 'AbortError'
-      ? 'AI connectivity test timed out.'
-      : `AI connectivity failed: ${error instanceof Error ? error.message : 'unknown error'}`;
-    throw new HttpError(502, message, 'AI_CONNECTION_FAILED');
+    throw normalizeAiUpstreamError(error, endpointTimeoutMs, 'connection test');
   } finally {
     clearTimeout(timeout);
   }
@@ -377,6 +377,48 @@ function publicProviderEndpoint(baseUrl: string) {
   } catch {
     return 'unknown';
   }
+}
+
+type AiUpstreamOperation = 'analysis' | 'stream' | 'models' | 'connection test';
+
+function createAiUpstreamStatusError(status: number, operation: AiUpstreamOperation) {
+  if (status === 401 || status === 403) {
+    return new HttpError(502, 'AI provider rejected the managed API key. Update the key and test the connection again.', 'AI_AUTH_FAILED');
+  }
+  if (status === 404) {
+    return new HttpError(502, 'AI provider endpoint or model was not found. Check the Base URL and model, then retry.', 'AI_MODEL_UNAVAILABLE');
+  }
+  if (status === 408 || status === 504) {
+    return new HttpError(504, 'AI provider timed out. Check provider availability and retry.', 'AI_UPSTREAM_TIMEOUT');
+  }
+  if (status === 429) {
+    return new HttpError(429, 'AI provider rate limit reached. Wait briefly, then retry this message.', 'AI_RATE_LIMITED');
+  }
+  if (status >= 500) {
+    return new HttpError(502, 'AI provider is temporarily unavailable. Test the connection or retry this message.', 'AI_UPSTREAM_UNAVAILABLE');
+  }
+  return new HttpError(502, `AI provider rejected the ${operation} request. Check provider settings and retry.`, 'AI_UPSTREAM_ERROR');
+}
+
+function normalizeAiUpstreamError(error: unknown, timeoutMs: number, operation: AiUpstreamOperation) {
+  if (error instanceof HttpError) {
+    return error;
+  }
+  const errorName = error instanceof Error ? error.name : '';
+  if (errorName === 'AbortError' || errorName === 'TimeoutError') {
+    return new HttpError(
+      504,
+      `AI provider did not complete the ${operation} within ${Math.ceil(timeoutMs / 1000)} seconds. Check provider availability and retry.`,
+      'AI_UPSTREAM_TIMEOUT',
+    );
+  }
+  return new HttpError(
+    502,
+    operation === 'stream'
+      ? 'AI provider connection was interrupted before the response completed. Retry this message or test the connection.'
+      : 'AI provider could not be reached. Check the Base URL, network path, and provider status, then retry.',
+    'AI_UPSTREAM_UNREACHABLE',
+  );
 }
 
 async function readChatCompletionStream(response: Response, onContent: (content: string) => void) {

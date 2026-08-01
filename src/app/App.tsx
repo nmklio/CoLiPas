@@ -1235,7 +1235,11 @@ export function App() {
   const visibleCommandPaletteActions = commandPaletteGroups.flatMap((group) => group.actions);
   const activeReleaseFixFocus = releaseFixFocus?.targetSection === activeSection ? releaseFixFocus : null;
   const activeReleaseFixAnchor = activeReleaseFixFocus?.anchor ?? '';
-  const shouldRenderAiConsole = !aiCollapsed || Boolean(aiSeedQuestion) || releaseFixFocus?.targetSection === 'ai';
+  const aiWorkspaceActive = activeSection === 'ai';
+  const floatingAiExpanded = !aiWorkspaceActive && !aiCollapsed;
+  const shouldRenderFloatingAiConsole = !aiWorkspaceActive && (
+    !aiCollapsed || Boolean(aiSeedQuestion) || releaseFixFocus?.targetSection === 'ai'
+  );
 
   function scrollReleaseFocusAnchor(anchor = activeReleaseFixAnchor) {
     if (!anchor || typeof document === 'undefined') {
@@ -1806,7 +1810,7 @@ export function App() {
         </div>
       </aside>
 
-      <div className={aiCollapsed ? 'content ai-collapsed' : 'content'}>
+      <div className={floatingAiExpanded ? 'content' : 'content ai-collapsed'}>
         <header className="topbar">
           <button
             type="button"
@@ -2332,30 +2336,33 @@ export function App() {
           )}
 
           {activeSection === 'ai' && (
-            <section className="module-section ai-main-panel ai-workbench" aria-labelledby="ai-main-title">
-              <div className="section-header">
+            <section className="module-section ai-main-panel ai-workbench ai-workspace-page" aria-labelledby="ai-main-title">
+              <div className="section-header ai-workspace-heading">
                 <div>
                   <p>{t('app.aiEyebrow')}</p>
                   <h2 id="ai-main-title">{t('app.aiTitle')}</h2>
+                  <span>{t('app.aiWorkspaceDesc')}</span>
                 </div>
-                <button type="button" className="tool-button primary" onClick={() => setAiCollapsed(false)}>
-                  <Bot size={16} />
-                  {t('app.openAi')}
-                </button>
+                <div className="ai-workspace-heading-status" aria-label={t('app.streamApi')}>
+                  <i aria-hidden="true" />
+                  <span>{t('app.streamApi')}</span>
+                  <strong>stream: true</strong>
+                </div>
               </div>
 
-              <div className="ai-workbench-grid">
-                <article className="ai-command-card">
-                  <div className="ai-command-title">
+              <div className="ai-workspace-layout">
+                <aside className="ai-workspace-context" aria-label={t('app.aiWorkspace')}>
+                  <div className="ai-workspace-context-head">
                     <div className="provider-logo">
                       <MessageSquareText size={19} />
                     </div>
                     <div>
                       <strong>{t('app.aiWorkspace')}</strong>
-                      <span>{t('app.aiWorkspaceDesc')}</span>
+                      <span>{busiestServer ? busiestServer.name : t('app.noAssets')}</span>
                     </div>
                   </div>
-                  <div className="ai-metric-strip">
+
+                  <div className="ai-workspace-metrics">
                     <div>
                       <span><Server size={15} /> {t('app.assets')}</span>
                       <strong>{onlineCount}/{overview.servers.length}</strong>
@@ -2373,31 +2380,44 @@ export function App() {
                       <strong>{openEventCount}</strong>
                     </div>
                   </div>
-                  <div className="ai-prompt-board">
+
+                  <div className="ai-workspace-prompts">
                     <button type="button" onClick={() => openAiWithQuestion(t('app.aiPromptRiskQuestion'))}>
-                      {t('app.aiPromptRisk')}
+                      <ShieldCheck size={16} />
+                      <span>{t('app.aiPromptRisk')}</span>
                     </button>
                     <button type="button" onClick={() => openAiWithQuestion(t('app.aiPromptSshQuestion'))}>
-                      {t('app.aiPromptSsh')}
+                      <TerminalSquare size={16} />
+                      <span>{t('app.aiPromptSsh')}</span>
                     </button>
                     <button type="button" onClick={() => openAiWithQuestion(t('app.aiPromptPriorityQuestion'))}>
-                      {t('app.aiPromptPriority')}
+                      <ListChecks size={16} />
+                      <span>{t('app.aiPromptPriority')}</span>
                     </button>
                   </div>
-                </article>
 
-                <div className="ai-insight-stack">
-                  <article className="ai-insight-card">
-                    <span><PlugZap size={16} /> {t('app.streamApi')}</span>
-                    <strong>stream: true</strong>
-                    <p>{t('app.streamApiDesc')}</p>
-                  </article>
-                  <article className="ai-insight-card">
-                    <span><ShieldCheck size={16} /> {t('app.currentFocus')}</span>
-                    <strong>{busiestServer ? busiestServer.name : t('app.noAssets')}</strong>
-                    <p>{busiestServer ? t('app.highestLoad', { load: Math.max(busiestServer.cpu, busiestServer.memory, busiestServer.disk) }) : t('app.focusAfterConnect')}</p>
-                  </article>
-                </div>
+                  <div className="ai-workspace-focus">
+                    <span><ShieldCheck size={15} /> {t('app.currentFocus')}</span>
+                    <strong>{busiestServer ? t('app.highestLoad', { load: Math.max(busiestServer.cpu, busiestServer.memory, busiestServer.disk) }) : t('app.focusAfterConnect')}</strong>
+                  </div>
+                </aside>
+
+                <Suspense fallback={<ModuleLoadingFallback title={t('nav.ai')} />}>
+                  <LazyAIConsole
+                    servers={overview.servers}
+                    events={overview.operationEvents}
+                    collapsed={false}
+                    mode="workspace"
+                    seedQuestion={aiSeedQuestion}
+                    onCollapse={() => setAiCollapsed(true)}
+                    onExpand={() => setAiCollapsed(false)}
+                    onSeedQuestionConsumed={() => setAiSeedQuestion('')}
+                    onTaskFinished={() => {
+                      void refreshOverview();
+                    }}
+                    releaseFocusAnchor={releaseFixFocus?.targetSection === 'ai' ? releaseFixFocus.anchor : undefined}
+                  />
+                </Suspense>
               </div>
             </section>
           )}
@@ -2427,12 +2447,13 @@ export function App() {
           )}
         </main>
 
-        {shouldRenderAiConsole ? (
+        {activeSection !== 'ai' && (shouldRenderFloatingAiConsole ? (
           <Suspense fallback={<ModuleLoadingFallback title={t('nav.ai')} compact />}>
             <LazyAIConsole
               servers={overview.servers}
               events={overview.operationEvents}
               collapsed={aiCollapsed}
+              mode="dock"
               seedQuestion={aiSeedQuestion}
               onCollapse={() => setAiCollapsed(true)}
               onExpand={() => setAiCollapsed(false)}
@@ -2448,7 +2469,7 @@ export function App() {
             <Bot size={18} />
             <span>AI</span>
           </button>
-        )}
+        ))}
 
         {commandPaletteOpen && (
           <div

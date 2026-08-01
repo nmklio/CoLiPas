@@ -596,7 +596,9 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
       if (streamStarted && !response.writableEnded) {
         writeEvent({
           type: 'error',
+          code: isHttpError(error) ? error.code : 'AI_STREAM_FAILED',
           message: error instanceof Error ? error.message : 'AI streaming request failed',
+          retryable: !isHttpError(error) || error.status >= 429,
         });
         response.end();
         return;

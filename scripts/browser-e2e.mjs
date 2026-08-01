@@ -2108,15 +2108,18 @@ async function assertAccountSettingsAndAiChat(targetPage) {
 
     await targetPage.getByRole('button', { name: /^AI System$/i }).click();
     await targetPage.waitForURL(/#ai$/, { timeout: 10000 });
-    await targetPage.getByRole('button', { name: /open ai chat/i }).click();
-    await targetPage.locator('.ai-dock').waitFor({ timeout: 10000 });
+    await targetPage.locator('.ai-dock-workspace').waitFor({ timeout: 10000 });
+    if (await targetPage.locator('.ai-launcher, .ai-dock:not(.ai-dock-workspace)').count() !== 0) {
+      throw new Error('AI route must render one embedded workspace without a duplicate floating assistant');
+    }
+    await assertElementHorizontallyWithinViewport(targetPage, '.ai-workspace-layout', 'desktop AI workspace');
     const starterPrompts = targetPage.locator('[data-ai-starter-prompts="true"]');
     await starterPrompts.waitFor({ timeout: 5000 });
     if (await starterPrompts.locator('[data-ai-starter-prompt]').count() !== 3) {
       throw new Error('AI first-run guidance must expose three safe starter prompts');
     }
     await assertElementHorizontallyWithinViewport(targetPage, '[data-ai-starter-prompts="true"]', 'desktop AI starter prompts');
-    await captureVisualEvidence(targetPage, 'desktop-ai-dock-first-run', ['.ai-dock', '[data-ai-starter-prompts="true"]']);
+    await captureVisualEvidence(targetPage, 'desktop-ai-workspace-first-run', ['.ai-workspace-context', '.ai-dock-workspace', '[data-ai-starter-prompts="true"]']);
     await starterPrompts.locator('[data-ai-starter-prompt="risk"]').click();
     const starterQuestion = await targetPage.getByRole('textbox', { name: /question/i }).inputValue();
     if (!/analyze.+risk|风险/i.test(starterQuestion)) {
@@ -2125,6 +2128,27 @@ async function assertAccountSettingsAndAiChat(targetPage) {
     if (await targetPage.locator('.ai-message.user').count() !== 0) {
       throw new Error('AI starter prompt must not auto-send or execute a request');
     }
+
+    await targetPage.route('**/api/ai/stream', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/event-stream; charset=utf-8',
+        body: 'data: {"type":"error","code":"AI_UPSTREAM_UNREACHABLE","message":"AI provider connection was interrupted before the response completed.","retryable":true}\n\n',
+      });
+    }, { times: 1 });
+    await targetPage.getByRole('button', { name: /^send$/i }).click();
+    const recoverableFailure = targetPage.locator('[data-ai-message-error="true"]');
+    await recoverableFailure.waitFor({ timeout: 10000 });
+    if (await recoverableFailure.count() !== 1 || await targetPage.locator('.ai-status-stack .error-box').count() !== 0) {
+      throw new Error('AI stream failure must render exactly once inside the failed assistant message');
+    }
+    await recoverableFailure.getByRole('button', { name: /retry message/i }).click();
+    await targetPage.locator('.ai-message.assistant.done .ai-message-content').last().waitFor({ timeout: 20000 });
+    if (await targetPage.locator('[data-ai-message-error="true"]').count() !== 0) {
+      throw new Error('AI retry must replace the failed turn instead of preserving a duplicate error card');
+    }
+
+    await targetPage.getByRole('button', { name: /new ai chat/i }).click();
     await targetPage.locator('#ai-server-select').selectOption(aiSshServer.id);
     await targetPage.getByRole('textbox', { name: /question/i }).fill('Run a safe SSH uptime check');
     await targetPage.getByRole('button', { name: /^send$/i }).click();
@@ -2189,9 +2213,9 @@ async function assertAccountSettingsAndAiChat(targetPage) {
       throw new Error(`AI high-impact execution card should default to cancel, got classes: ${highRiskCancelClass ?? 'none'}`);
     }
 
-    await assertDesktopAiDockLayout(targetPage);
+    await assertDesktopAiWorkspaceLayout(targetPage);
 
-    console.log('ok browser e2e covers account session control, profile save, AI executable SSH plan, cached chat, and AI dock layout');
+    console.log('ok browser e2e covers account session control, profile save, embedded AI workspace, recoverable stream failure, cached chat, and executable SSH plans');
   } finally {
     if (aiSshServerId) {
       await deleteTemporaryAssetServer(targetPage, aiSshServerId).catch(() => undefined);
@@ -4124,6 +4148,7 @@ async function assertOverviewHealthBaseline(targetPage) {
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b|sk-[A-Za-z0-9_-]{12,}|BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY/.test(storedTrend)) {
     throw new Error('Overview health trend storage leaked a raw IP address or secret');
   }
+  await baseline.scrollIntoViewIfNeeded();
   await assertElementWithinViewport(targetPage, '[data-health-baseline="true"]', 'desktop overview health baseline');
   await captureVisualEvidence(targetPage, 'desktop-overview-health-baseline', ['[data-health-baseline="true"]', '.monitor-kpis']);
 
@@ -4404,9 +4429,12 @@ async function assertMobileConsoleAndMap() {
     await mobilePage.getByRole('button', { name: /open navigation/i }).click();
     await mobilePage.getByRole('button', { name: /^AI System$/i }).click();
     await mobilePage.waitForURL(/#ai$/, { timeout: 10000 });
-    await mobilePage.getByRole('button', { name: /open ai chat/i }).click();
-    await mobilePage.locator('.ai-dock').waitFor({ timeout: 10000 });
-    await assertElementWithinViewport(mobilePage, '.ai-dock', 'mobile AI dock');
+    await mobilePage.locator('.ai-dock-workspace').waitFor({ timeout: 10000 });
+    await mobilePage.locator('.ai-dock-workspace').scrollIntoViewIfNeeded();
+    await assertElementHorizontallyWithinViewport(mobilePage, '.ai-dock-workspace', 'mobile AI workspace');
+    if (await mobilePage.locator('.ai-launcher, .ai-dock:not(.ai-dock-workspace)').count() !== 0) {
+      throw new Error('Mobile AI route must not overlay a duplicate floating assistant');
+    }
     const mobileStarterPrompts = mobilePage.locator('[data-ai-starter-prompts="true"]');
     await mobileStarterPrompts.waitFor({ timeout: 5000 });
     await mobileStarterPrompts.locator('[data-ai-starter-prompt="priority"]').click();
@@ -4422,9 +4450,15 @@ async function assertMobileConsoleAndMap() {
     await mobilePage.locator('.ai-message.user').first().waitFor({ timeout: 10000 });
     await mobilePage.locator('.ai-message.assistant.done .ai-message-content').first().waitFor({ timeout: 20000 });
     await assertMobileAiChatLayout(mobilePage);
-    await captureVisualEvidence(mobilePage, 'mobile-ai-dock-chat', ['.ai-dock', '.ai-chat-thread', '.ai-composer']);
+    await captureVisualEvidence(mobilePage, 'mobile-ai-workspace-chat', ['.ai-dock-workspace', '.ai-chat-thread', '.ai-composer']);
+    await mobilePage.getByRole('button', { name: /open navigation/i }).click();
+    await mobilePage.getByRole('button', { name: /^Overview$/i }).click();
+    await mobilePage.waitForURL(/#overview$/, { timeout: 10000 });
+    await mobilePage.locator('.ai-launcher').click();
+    const mobileFloatingAi = mobilePage.locator('.ai-dock:not(.ai-dock-workspace)');
+    await mobileFloatingAi.waitFor({ timeout: 10000 });
     await mobilePage.getByRole('button', { name: /hide ai assistant/i }).click();
-    await mobilePage.locator('.ai-dock').waitFor({ state: 'hidden', timeout: 5000 });
+    await mobileFloatingAi.waitFor({ state: 'hidden', timeout: 5000 });
 
     mobileServerId = (await createTemporaryAssetServer(mobilePage, 'browser-e2e-mobile-map')).id;
     await mobilePage.goto(`${baseUrl}/admin/#overview`, {
@@ -4638,13 +4672,13 @@ async function assertElementWithinViewport(targetPage, selector, label) {
   }
 }
 
-async function assertDesktopAiDockLayout(targetPage) {
-  await assertElementWithinViewport(targetPage, '.ai-dock', 'desktop AI dock');
-  await assertNoHorizontalOverflow(targetPage, 'desktop AI chat dock');
+async function assertDesktopAiWorkspaceLayout(targetPage) {
+  await assertElementWithinViewport(targetPage, '.ai-dock-workspace', 'desktop AI workspace');
+  await assertNoHorizontalOverflow(targetPage, 'desktop AI workspace');
 
-  let metrics = await readAiDockMetrics(targetPage);
+  let metrics = await readAiWorkspaceMetrics(targetPage);
   if (metrics.body.overflow !== 'hidden') {
-    throw new Error(`Desktop AI chat body should hide outer overflow, got ${metrics.body.overflow}`);
+    throw new Error(`Desktop AI workspace body should hide outer overflow, got ${metrics.body.overflow}`);
   }
   if (metrics.thread.overflow !== 'auto') {
     throw new Error(`Desktop AI chat thread should own message scrolling, got ${metrics.thread.overflow}`);
@@ -4659,14 +4693,17 @@ async function assertDesktopAiDockLayout(targetPage) {
     throw new Error(`Desktop AI status stack should sit below composer: ${JSON.stringify(metrics)}`);
   }
   if (metrics.composer.right > metrics.dock.right + 3 || metrics.toolbar.right > metrics.dock.right + 3) {
-    throw new Error(`Desktop AI composer escapes dock width: ${JSON.stringify(metrics)}`);
+    throw new Error(`Desktop AI composer escapes workspace width: ${JSON.stringify(metrics)}`);
+  }
+  if (metrics.composer.bottom > metrics.dock.bottom + 3 || metrics.toolbar.bottom > metrics.composer.bottom + 3) {
+    throw new Error(`Desktop AI composer toolbar escapes workspace height: ${JSON.stringify(metrics)}`);
   }
 
-  await captureVisualEvidence(targetPage, 'desktop-ai-dock-chat', ['.ai-dock', '.ai-chat-thread', '.ai-composer']);
+  await captureVisualEvidence(targetPage, 'desktop-ai-workspace-chat', ['.ai-dock-workspace', '.ai-chat-thread', '.ai-composer']);
   await targetPage.getByRole('button', { name: /ai settings/i }).click();
   await targetPage.locator('.ai-dock-settings').waitFor({ timeout: 5000 });
-  await assertElementWithinViewport(targetPage, '.ai-dock', 'desktop AI settings dock');
-  metrics = await readAiDockMetrics(targetPage);
+  await assertElementWithinViewport(targetPage, '.ai-dock-workspace', 'desktop AI settings workspace');
+  metrics = await readAiWorkspaceMetrics(targetPage);
   if (metrics.body.overflow !== 'hidden') {
     throw new Error(`Desktop AI settings body should hide outer overflow, got ${metrics.body.overflow}`);
   }
@@ -4674,16 +4711,16 @@ async function assertDesktopAiDockLayout(targetPage) {
     throw new Error(`Desktop AI settings form should own scrolling, got ${metrics.settings.overflow}`);
   }
   if (metrics.settings.right > metrics.dock.right + 3 || metrics.range.right > metrics.settings.right + 3 || metrics.button.right > metrics.settings.right + 3) {
-    throw new Error(`Desktop AI settings controls escape the dock: ${JSON.stringify(metrics)}`);
+    throw new Error(`Desktop AI settings controls escape the workspace: ${JSON.stringify(metrics)}`);
   }
   if (metrics.range.width < 120) {
     throw new Error(`Desktop AI temperature slider is too cramped: ${JSON.stringify(metrics.range)}`);
   }
-  await captureVisualEvidence(targetPage, 'desktop-ai-dock-settings', ['.ai-dock', '.ai-dock-settings', '.ai-dock-settings input[type="range"]']);
+  await captureVisualEvidence(targetPage, 'desktop-ai-workspace-settings', ['.ai-dock-workspace', '.ai-dock-settings', '.ai-dock-settings input[type="range"]']);
   await targetPage.getByRole('button', { name: /ai settings/i }).click();
 }
 
-async function readAiDockMetrics(targetPage) {
+async function readAiWorkspaceMetrics(targetPage) {
   return targetPage.evaluate(() => {
     const readBox = (selector) => {
       const element = document.querySelector(selector);
@@ -4710,13 +4747,13 @@ async function readAiDockMetrics(targetPage) {
       dock: readBox('.ai-dock'),
       body: readBox('.ai-dock-body'),
       thread: readBox('.ai-chat-thread'),
-    composer: readBox('.ai-composer'),
-    execution: readBox('.ai-execution-card'),
-    toolbar: readBox('.ai-composer-toolbar'),
-    status: readBox('.ai-status-stack'),
-    settings: readBox('.ai-dock-settings'),
-    range: readBox('.ai-dock-settings input[type="range"]'),
-    button: readBox('.ai-dock-settings .tool-button.wide'),
+      composer: readBox('.ai-composer'),
+      execution: readBox('.ai-execution-card'),
+      toolbar: readBox('.ai-composer-toolbar'),
+      status: readBox('.ai-status-stack'),
+      settings: readBox('.ai-dock-settings'),
+      range: readBox('.ai-dock-settings input[type="range"]'),
+      button: readBox('.ai-dock-settings .tool-button.wide'),
     };
   });
 }

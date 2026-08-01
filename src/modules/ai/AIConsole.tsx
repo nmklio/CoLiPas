@@ -44,6 +44,7 @@ interface AIConsoleProps {
   servers: ServerNode[];
   events: OperationEvent[];
   collapsed: boolean;
+  mode?: 'dock' | 'workspace';
   seedQuestion: string;
   onCollapse: () => void;
   onExpand: () => void;
@@ -210,8 +211,9 @@ const aiExecutionCopyByLanguage: Record<string, {
   },
 };
 
-export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse, onExpand, onSeedQuestionConsumed, onTaskFinished, releaseFocusAnchor }: AIConsoleProps) {
+export function AIConsole({ servers, events, collapsed, mode = 'dock', seedQuestion, onCollapse, onExpand, onSeedQuestionConsumed, onTaskFinished, releaseFocusAnchor }: AIConsoleProps) {
   const { language, t } = useI18n();
+  const workspaceMode = mode === 'workspace';
   const [initialState] = useState(() => loadStoredConsoleState(t('ai.newChatTitle')));
   const [initialProvider] = useState(() => loadStoredProvider());
   const [provider, setProvider] = useState<AIProviderConfig>(() => initialProvider);
@@ -539,13 +541,11 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
     } catch (requestError) {
       flushAssistantMessageChunks();
       const stopped = controller.signal.aborted;
+      const failureMessage = formatAiRequestFailure(requestError, t);
       updateAssistantMessage(sessionId, assistantMessage.id, {
         status: stopped ? 'stopped' : 'error',
-        content: stopped ? t('ai.stopped') : (requestError instanceof Error ? requestError.message : t('ai.analysisFailed')),
+        content: stopped ? t('ai.stopped') : failureMessage,
       });
-      if (!stopped && activeSessionId === sessionId) {
-        setError(requestError instanceof Error ? requestError.message : t('ai.analysisFailed'));
-      }
     } finally {
       if (abortControllerRef.current === controller) {
         abortControllerRef.current = null;
@@ -769,7 +769,27 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
     window.requestAnimationFrame(() => questionRef.current?.focus());
   }
 
-  if (collapsed) {
+  function handleRetryFailedMessage(messageId: string) {
+    if (runningSessionId) {
+      return;
+    }
+    const failedIndex = activeSession.messages.findIndex((message) => message.id === messageId && message.status === 'error');
+    if (failedIndex < 0) {
+      return;
+    }
+    let userIndex = failedIndex - 1;
+    while (userIndex >= 0 && activeSession.messages[userIndex]?.role !== 'user') {
+      userIndex -= 1;
+    }
+    const retryQuestion = userIndex >= 0 ? activeSession.messages[userIndex]?.content.trim() : '';
+    if (!retryQuestion) {
+      return;
+    }
+    setError('');
+    void handleAnalyze(true, retryQuestion, activeSession.messages.slice(0, userIndex));
+  }
+
+  if (!workspaceMode && collapsed) {
     return (
       <button type="button" className="ai-launcher" aria-label={t('ai.launch')} title={t('ai.launch')} onClick={onExpand}>
         <Bot size={18} />
@@ -779,7 +799,11 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
   }
 
   return (
-    <aside className="ai-dock" aria-labelledby="ai-title">
+    <aside
+      className={workspaceMode ? 'ai-dock ai-dock-workspace' : 'ai-dock'}
+      data-ai-console-mode={mode}
+      aria-labelledby="ai-title"
+    >
       <div className="ai-dock-header">
         <div>
           <strong id="ai-title"><MessageCircle size={17} /> {t('app.aiTitle')}</strong>
@@ -788,9 +812,11 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
           </span>
         </div>
         <div className="ai-dock-actions">
-          <button type="button" aria-label={t('ai.hide')} title={t('ai.hide')} onClick={onCollapse}>
-            <PanelRightClose size={16} />
-          </button>
+          {!workspaceMode && (
+            <button type="button" aria-label={t('ai.hide')} title={t('ai.hide')} onClick={onCollapse}>
+              <PanelRightClose size={16} />
+            </button>
+          )}
           <button
             type="button"
             className={sessionsOpen ? 'active' : ''}
@@ -892,6 +918,7 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
                 {validation.valid ? (modelMessage || t('ai.allCallsStreaming')) : validation.errors.join(' / ')}
               </span>
             </div>
+            {error && <div className="error-box">{error}</div>}
           </form>
         ) : (
           <>
@@ -989,7 +1016,11 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
                 </div>
               ) : (
                 activeSession.messages.map((message) => (
-                  <article key={message.id} className={`ai-message ${message.role} ${message.status}`}>
+                  <article
+                    key={message.id}
+                    className={`ai-message ${message.role} ${message.status}`}
+                    data-ai-message-error={message.status === 'error' ? 'true' : undefined}
+                  >
                     <div className="ai-message-avatar" aria-hidden="true">
                       {message.role === 'assistant' ? <Bot size={14} /> : t('ai.you').slice(0, 1)}
                     </div>
@@ -1001,6 +1032,28 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
                       <div className="ai-message-content">
                         {message.content || (message.status === 'streaming' ? t('ai.waitingStream') : '')}
                       </div>
+                      {message.role === 'assistant' && message.status === 'error' && (
+                        <div className="ai-message-recovery">
+                          <span><AlertTriangle size={14} /> {t('ai.failureRecovery')}</span>
+                          <div>
+                            <button type="button" onClick={() => handleRetryFailedMessage(message.id)} disabled={Boolean(runningSessionId)}>
+                              <RefreshCw size={14} />
+                              {t('ai.retryMessage')}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setError('');
+                                setConnectionTest(null);
+                                setSettingsOpen(true);
+                              }}
+                            >
+                              <Settings2 size={14} />
+                              {t('ai.checkConnection')}
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </article>
                 ))
@@ -1127,7 +1180,7 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
                 </div>
               </div>
             </div>
-            {(connectionTest || modelMessage || error) && (
+            {(connectionTest || modelMessage) && (
               <div className="ai-status-stack">
                 {connectionTest && (
                   <div className={connectionTest.ok ? 'ai-connection-chip ok' : 'ai-connection-chip'}>
@@ -1141,7 +1194,6 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
                     <span>{modelMessage}</span>
                   </div>
                 )}
-                {error && <div className="error-box">{error}</div>}
               </div>
             )}
           </>
@@ -1266,6 +1318,26 @@ export function AIConsole({ servers, events, collapsed, seedQuestion, onCollapse
       };
     }));
   }
+}
+
+function formatAiRequestFailure(error: unknown, translate: (key: string) => string) {
+  const message = error instanceof Error ? error.message.trim() : '';
+  if (!message) {
+    return translate('ai.analysisFailed');
+  }
+  if (/timed?\s*out|timeout|aborterror/i.test(message)) {
+    return translate('ai.timeoutFailure');
+  }
+  if (/network error|failed to fetch|fetch failed|connection (?:was )?interrupted|socket|terminated|econn|enotfound|eai_again/i.test(message)) {
+    return translate('ai.networkFailure');
+  }
+  if (/\b(?:401|403)\b|unauthori[sz]ed|authentication|api key/i.test(message)) {
+    return translate('ai.authFailure');
+  }
+  if (/\b404\b|model.+(?:not found|unavailable)|unknown model/i.test(message)) {
+    return translate('ai.modelFailure');
+  }
+  return message;
 }
 
 function createSession(title: string): AiChatSession {

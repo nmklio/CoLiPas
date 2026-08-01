@@ -9,6 +9,7 @@ const envSchema = z.object({
   AI_API_KEY: z.string().optional().default(''),
   AI_BASE_URL: z.string().url().default('https://api.openai.com/v1'),
   AI_MODEL: z.string().min(1).default('gpt-4.1-mini'),
+  AI_TIMEOUT_MS: z.coerce.number().int().min(5000).max(120000).default(45000),
   ADMIN_USERNAME: z.string().min(1).default('admin'),
   ADMIN_PASSWORD: z.string().min(8).default('admin123456'),
   SESSION_SECRET: z.string().min(16).default('colipas-local-session-secret'),
@@ -54,6 +55,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       apiKey: parsed.AI_API_KEY,
       baseUrl: parsed.AI_BASE_URL,
       model: parsed.AI_MODEL,
+      timeoutMs: parsed.AI_TIMEOUT_MS,
     },
     auth: {
       adminUsername: parsed.ADMIN_USERNAME,

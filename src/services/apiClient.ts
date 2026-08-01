@@ -774,7 +774,7 @@ export async function streamAiAnalysis(
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
-  const streamState: { result?: AiAnalysisResponse; error?: string } = {};
+  const streamState: { result?: AiAnalysisResponse; error?: { message: string; code: string; retryable: boolean } } = {};
 
   const consumeEvent = (eventText: string) => {
     const dataText = eventText
@@ -793,6 +793,8 @@ export async function streamAiAnalysis(
       content?: string;
       result?: AiAnalysisResponse;
       message?: string;
+      code?: string;
+      retryable?: boolean;
     };
 
     if (payload.type === 'chunk' && payload.content) {
@@ -804,7 +806,11 @@ export async function streamAiAnalysis(
     }
 
     if (payload.type === 'error') {
-      streamState.error = payload.message || 'AI stream failed';
+      streamState.error = {
+        message: payload.message || 'AI stream failed',
+        code: payload.code || 'AI_STREAM_FAILED',
+        retryable: payload.retryable !== false,
+      };
     }
   };
 
@@ -828,7 +834,7 @@ export async function streamAiAnalysis(
   }
 
   if (streamState.error) {
-    throw new Error(streamState.error);
+    throw new AiStreamRequestError(streamState.error.message, streamState.error.code, streamState.error.retryable);
   }
 
   if (!streamState.result) {
@@ -836,6 +842,17 @@ export async function streamAiAnalysis(
   }
 
   return streamState.result;
+}
+
+export class AiStreamRequestError extends Error {
+  constructor(
+    message: string,
+    public readonly code: string,
+    public readonly retryable: boolean,
+  ) {
+    super(message);
+    this.name = 'AiStreamRequestError';
+  }
 }
 
 export async function testAiConnection(provider: AIProviderConfig, fetcher: typeof fetch = fetch) {
