@@ -43,7 +43,7 @@
 
 CoLiPas Cloud Server Management Panel is a self-hosted operations console for teams that manage cloud servers, private nodes, and manually onboarded Linux machines. It is not a marketing landing page or a demo-only dashboard: it is built around the everyday loop of adding servers, verifying access, checking health, running guarded SSH tasks, asking AI for operational context, and keeping audit evidence.
 
-The runtime is intentionally simple. One Node.js process serves the Express API and the production React frontend on `PORT=8080`. SQLite stores account settings, server inventory, audit trails, AI provider settings, encrypted SSH metadata, and release evidence. No external database is required for a single-node deployment.
+The runtime is intentionally simple. One Node.js process serves the Express API and the production React frontend on `PORT=8080`. SQLite stores account settings, server inventory, bounded resource history, audit trails, AI provider settings, encrypted SSH metadata, and release evidence. No external database is required for a single-node deployment.
 
 ## Operator Flow
 
@@ -67,6 +67,7 @@ The runtime is intentionally simple. One Node.js process serves the Express API 
 | Fleet views | Save common inventory filters as up to eight browser-only views, then restore a focused operational scope without sending filter or asset data anywhere. |
 | Contextual launch guide | Full six-step release checklist on Overview; a compact, persistent workspace summary elsewhere or in Performance mode, with a one-click path back to complete evidence and the next remediation. |
 | Resource alert policy | Persists CPU, memory, and disk thresholds plus a 15-minute to 24-hour re-alert cadence in SQLite. Only verified running SSH assets with fresh trusted telemetry are evaluated; stale or unavailable samples are labeled and skipped instead of producing synthetic alerts. |
+| Trusted resource history | Records CPU, memory, and disk only after a successful SSH metric collection, labels real and simulated sources, and provides 1-hour, 6-hour, 24-hour, and 7-day trends with latest, average, peak, change, and continuity summaries. Inventory-only and failed samples are excluded; each response is sanitized and bounded to 240 points. |
 | Global operations inbox | Aggregates resource threshold breaches, release blockers, SSH and asset coverage gaps, and open events into priority groups with direct module routing. Review state stores only safe stable IDs and timestamps in the current browser, and unresolved resource breaches re-alert on the configured cadence. |
 | Adaptive operator controls | Keeps the signed-in name and synchronization state visible while moving refresh, language, account settings, and sign-out into one accessible overflow panel on desktop and mobile; compact breakpoints preserve the operations inbox, launch check, and command palette without a multi-row toolbar. |
 | Adaptive refresh scheduler | Refreshes Overview every 15 seconds in standard mode or 30 seconds in Performance mode, pauses polling while hidden or offline, elects one primary sync tab with BroadcastChannel/localStorage, and reuses private ETag snapshots with `304` responses when inventory is unchanged. The operator menu shows snapshot, saved-poll, payload-reuse, and avoided-byte counters; return-to-foreground recovery follows data freshness and failures back off up to 120 seconds. |
@@ -119,6 +120,7 @@ Create `.env` from `.env.example`. Before exposing the service, replace at least
 | `SESSION_MAX_ACTIVE` | Maximum active administrator sessions, from 2 to 64. Defaults to 12; the oldest session is retired when the limit is reached. |
 | `COLIPAS_DATA_DIR` | Runtime data directory. Defaults to `.data`. |
 | `COLIPAS_DB_PATH` | Optional SQLite database path. Defaults to `COLIPAS_DATA_DIR/colipas.sqlite`. |
+| `COLIPAS_METRIC_HISTORY_INTERVAL_MS` / `COLIPAS_METRIC_HISTORY_RETENTION_MS` / `COLIPAS_METRIC_HISTORY_MAX_POINTS_PER_SERVER` | Successful SSH metric history sampling interval, retention window, and per-server row cap. Defaults are 5 minutes, 7 days, and 2016 rows. |
 | `CREDENTIAL_ENCRYPTION_KEY` | Long random key used to encrypt stored SSH credentials. |
 | `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` | Optional default OpenAI-compatible provider settings. Keys can also be saved through the protected UI. |
 | `CUSTOM_API_ALLOWED_HOSTS` | Comma-separated host allowlist for the custom API proxy. |

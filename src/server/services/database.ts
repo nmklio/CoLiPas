@@ -32,6 +32,15 @@ export interface StoredAuthSessionRow {
   expires_at: number;
 }
 
+export interface StoredServerMetricHistoryRow {
+  server_id: string;
+  sampled_at: number;
+  cpu: number;
+  memory: number;
+  disk: number;
+  source: 'real' | 'simulate';
+}
+
 export function getDatabasePath() {
   ensureDatabase();
   return databasePath;
@@ -212,8 +221,92 @@ export function upsertServerRows(items: Array<{ id: string }>) {
 }
 
 export function deleteServerRow(id: string) {
-  prepareStatement('DELETE FROM servers WHERE id = ?').run(id);
-  checkpointDatabaseIfNeeded();
+  const db = ensureDatabase();
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    prepareStatement('DELETE FROM server_metric_history WHERE server_id = ?').run(id);
+    prepareStatement('DELETE FROM servers WHERE id = ?').run(id);
+    db.exec('COMMIT');
+    checkpointDatabaseIfNeeded();
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+}
+
+export function readLatestServerMetricHistorySampleAt(serverId: string) {
+  const row = prepareStatement(`
+    SELECT sampled_at
+    FROM server_metric_history
+    WHERE server_id = ?
+    ORDER BY sampled_at DESC
+    LIMIT 1
+  `).get(serverId) as { sampled_at: number } | undefined;
+  return row ? Number(row.sampled_at) : null;
+}
+
+export function loadServerMetricHistoryRows(serverId: string, sampledAfter: number) {
+  return prepareStatement(`
+    SELECT server_id, sampled_at, cpu, memory, disk, source
+    FROM server_metric_history
+    WHERE server_id = ? AND sampled_at >= ?
+    ORDER BY sampled_at ASC
+  `).all(serverId, sampledAfter) as unknown as StoredServerMetricHistoryRow[];
+}
+
+export function insertServerMetricHistoryRow(
+  row: StoredServerMetricHistoryRow,
+  retentionFloor: number,
+  maxPointsPerServer: number,
+) {
+  const db = ensureDatabase();
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const result = prepareStatement(`
+      INSERT OR IGNORE INTO server_metric_history (
+        server_id,
+        sampled_at,
+        cpu,
+        memory,
+        disk,
+        source
+      )
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      row.server_id,
+      row.sampled_at,
+      row.cpu,
+      row.memory,
+      row.disk,
+      row.source,
+    );
+
+    if (Number(result.changes) > 0) {
+      prepareStatement(`
+        DELETE FROM server_metric_history
+        WHERE server_id = ? AND sampled_at < ?
+      `).run(row.server_id, retentionFloor);
+      prepareStatement(`
+        DELETE FROM server_metric_history
+        WHERE server_id = ? AND sampled_at NOT IN (
+          SELECT sampled_at
+          FROM server_metric_history
+          WHERE server_id = ?
+          ORDER BY sampled_at DESC
+          LIMIT ?
+        )
+      `).run(row.server_id, row.server_id, maxPointsPerServer);
+    }
+
+    db.exec('COMMIT');
+    if (Number(result.changes) > 0) {
+      checkpointDatabaseIfNeeded();
+    }
+    return Number(result.changes) > 0;
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
 }
 
 export function replaceCredentialRows(items: Record<string, unknown>) {
@@ -375,9 +468,20 @@ function ensureDatabase() {
       expires_at INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS server_metric_history (
+      server_id TEXT NOT NULL,
+      sampled_at INTEGER NOT NULL,
+      cpu INTEGER NOT NULL CHECK(cpu BETWEEN 0 AND 100),
+      memory INTEGER NOT NULL CHECK(memory BETWEEN 0 AND 100),
+      disk INTEGER NOT NULL CHECK(disk BETWEEN 0 AND 100),
+      source TEXT NOT NULL CHECK(source IN ('real', 'simulate')),
+      PRIMARY KEY(server_id, sampled_at)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_audit_entries_created_at ON audit_entries(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_auth_sessions_username_created_at ON auth_sessions(username, created_at ASC);
     CREATE INDEX IF NOT EXISTS idx_auth_sessions_expires_at ON auth_sessions(expires_at);
+    CREATE INDEX IF NOT EXISTS idx_server_metric_history_server_sampled_at ON server_metric_history(server_id, sampled_at DESC);
   `);
 
   return database;

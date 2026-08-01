@@ -45,6 +45,7 @@ import {
   connectServer,
   deleteServer,
   getServerShellEvidence,
+  getServerMetricHistory,
   getServerShellStatus,
   inspectServerIdentity,
   listCloudAccounts,
@@ -389,6 +390,15 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
 
   app.get('/api/servers', (request, response) => {
     response.json(listServers(request.query));
+  });
+
+  app.get('/api/servers/:serverId/metric-history', (request, response, next) => {
+    try {
+      response.setHeader('Cache-Control', 'private, max-age=15');
+      response.json(getServerMetricHistory(request.params.serverId, request.query.window));
+    } catch (error) {
+      next(error);
+    }
   });
 
   app.post('/api/servers', async (request, response, next) => {

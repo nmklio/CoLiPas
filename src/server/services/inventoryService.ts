@@ -51,6 +51,11 @@ import {
   writeSshShellSession,
 } from './sshAccessService.js';
 import { inspectServerIdentity, resolveServerIdentity } from './serverIdentityService.js';
+import {
+  buildServerMetricHistory,
+  forgetServerMetricHistoryState,
+  recordServerMetricHistory,
+} from './serverMetricHistoryService.js';
 
 const dataDir = process.env.COLIPAS_DATA_DIR || '.data';
 const inventoryPath = path.resolve(process.cwd(), dataDir, 'inventory.json');
@@ -356,6 +361,14 @@ export function countOpenOperationEvents() {
 
 export function getServerById(serverId: string) {
   return serverById.get(serverId);
+}
+
+export function getServerMetricHistory(serverId: string, window: unknown) {
+  const server = getServerById(serverId);
+  if (!server) {
+    throw new HttpError(404, 'Server not found', 'SERVER_NOT_FOUND');
+  }
+  return buildServerMetricHistory(normalizeServerForResponse(server), window);
 }
 
 function findExistingServerByIdentity(name: string, publicIp: string) {
@@ -783,6 +796,7 @@ export function deleteServer(serverId: string) {
   unindexServer(server);
   persistedCredentials.delete(server.id);
   serverMetricSamples.delete(server.id);
+  forgetServerMetricHistoryState(server.id);
   markServerInventoryChanged();
   deleteServerRow(server.id);
   deleteCredentialRow(server.id);
@@ -1152,6 +1166,11 @@ async function refreshSingleServerMetrics(server: ServerNode) {
       ...server,
       ...metrics,
     }));
+    try {
+      recordServerMetricHistory(server, nextSample.sampledAt);
+    } catch {
+      // Keep the current SSH sample usable if bounded history persistence is temporarily unavailable.
+    }
     if (metricsChanged || !serverTelemetryEquals(
       resolveServerTelemetry(true, previousSample),
       resolveServerTelemetry(true, nextSample),

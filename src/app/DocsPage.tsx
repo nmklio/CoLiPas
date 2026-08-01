@@ -4,6 +4,7 @@ import {
   BookmarkCheck,
   Bot,
   CheckCircle2,
+  ChartNoAxesCombined,
   CloudCog,
   Command,
   Code2,
@@ -38,6 +39,7 @@ interface DocsPageProps {
 const quickNav = [
   { href: '#install', label: '安装部署' },
   { href: '#server-access', label: '接入服务器' },
+  { href: '#metric-history', label: '资源历史' },
   { href: '#resource-alerts', label: '资源告警' },
   { href: '#bulk-import', label: '批量导入' },
   { href: '#sessions', label: '会话管理' },
@@ -78,6 +80,7 @@ const configRows = [
   ['AI_BASE_URL / AI_API_KEY / AI_MODEL', 'OpenAI 兼容 API 地址、密钥和默认模型。'],
   ['CUSTOM_API_ALLOWED_HOSTS', '自定义 API 代理允许访问的域名白名单。'],
   ['COLIPAS_DATA_DIR / COLIPAS_DB_PATH', 'SQLite 数据库和运行数据存储位置。'],
+  ['COLIPAS_METRIC_HISTORY_INTERVAL_MS / COLIPAS_METRIC_HISTORY_RETENTION_MS / COLIPAS_METRIC_HISTORY_MAX_POINTS_PER_SERVER', '成功 SSH 指标的历史采样间隔、保留时长和单服务器行数上限；默认 5 分钟、7 天、2016 行。'],
   ['CREDENTIAL_ENCRYPTION_KEY', 'SSH 密码和私钥加密密钥。'],
 ];
 
@@ -164,6 +167,15 @@ const resourceAlertPolicyUsageBlock = {
   featureId: 'resource-alert-policy',
 };
 
+const serverMetricHistoryUsageBlock = {
+  icon: ChartNoAxesCombined,
+  title: '查看可信资源历史',
+  body: '在服务器列表点击桌面端遥测状态，或点击移动端 CPU 指标，即可打开资源时间线。系统只在 SSH 指标采集成功后写入 SQLite，并明确区分真实与模拟来源。',
+  points: ['支持 1 小时、6 小时、24 小时和 7 天范围', '默认每 5 分钟记录，保留 7 天且每台服务器最多 2016 行', '图表提供最新值、平均值、峰值、变化和连续性，键盘方向键也可逐点读取', '仅登记资产与采集失败不会写入，删除服务器时会同步清理该服务器历史', 'API 最多返回 240 点，且不返回服务器地址、SSH 凭据或命令内容'],
+  sectionId: 'metric-history',
+  featureId: 'server-metric-history',
+};
+
 const operatorControlsUsageBlock = {
   icon: UserRoundCog,
   title: '自适应操作员控制',
@@ -227,6 +239,7 @@ const apiRows = [
   ['GET /api/overview', '云账号、服务器、事件和总览指标。'],
   ['GET /api/monitoring/resource-alert-policy', '读取持久化的 CPU、内存、磁盘阈值与再次提醒周期。'],
   ['PUT /api/monitoring/resource-alert-policy', '校验并保存资源告警策略，同时写入脱敏审计记录。'],
+  ['GET /api/servers/:serverId/metric-history?window=24h', '读取脱敏且有界的 CPU、内存和磁盘历史；窗口支持 1h、6h、24h、7d。'],
   ['POST /api/servers', '新增资产或执行真实 SSH 验证接入。'],
   ['POST /api/servers/import', '批量导入最多 500 台无凭据资产，重复项自动跳过。'],
   ['POST /api/servers/shells', '创建实时 SSH shell 会话。'],
@@ -369,7 +382,7 @@ export function DocsPage({ onLogin }: DocsPageProps) {
               <p>建议按以下顺序使用。每个模块都会与资产、事件、审计和 AI 上下文联动。</p>
             </div>
             <div className="docs-usage-grid">
-              {[...usageBlocks, bulkImportUsageBlock, fleetViewUsageBlock, resourceAlertPolicyUsageBlock, operationsInboxUsageBlock, operatorControlsUsageBlock, adaptiveRefreshUsageBlock, intentReadyNavigationUsageBlock, commandPaletteUsageBlock, accountAppearanceUsageBlock, accountSessionUsageBlock].map((block) => {
+              {[...usageBlocks, bulkImportUsageBlock, fleetViewUsageBlock, resourceAlertPolicyUsageBlock, serverMetricHistoryUsageBlock, operationsInboxUsageBlock, operatorControlsUsageBlock, adaptiveRefreshUsageBlock, intentReadyNavigationUsageBlock, commandPaletteUsageBlock, accountAppearanceUsageBlock, accountSessionUsageBlock].map((block) => {
                 const Icon = block.icon;
                 const sectionId = 'sectionId' in block && typeof block.sectionId === 'string'
                   ? block.sectionId

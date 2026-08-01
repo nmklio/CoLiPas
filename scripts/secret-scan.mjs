@@ -45,8 +45,12 @@ const secretPatterns = [
 const keyValuePattern = /\b(?:password|passwd|pwd|token|secret|api[_-]?key|private[_-]?key|passphrase)\b\s*[:=]\s*(["'])([^"'\s`,;&|]{8,})\1/gi;
 const ipv4Pattern = /\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g;
 
-function listTrackedFiles() {
-  const output = execFileSync('git', ['ls-files', '-z'], { cwd: root });
+function listPublishableFiles() {
+  const output = execFileSync(
+    'git',
+    ['ls-files', '-z', '--cached', '--others', '--exclude-standard'],
+    { cwd: root },
+  );
   return output
     .toString('utf8')
     .split('\0')
@@ -193,7 +197,7 @@ function scanText(file, text) {
 }
 
 const findings = [];
-for (const file of listTrackedFiles()) {
+for (const file of listPublishableFiles()) {
   const text = readTextFile(file);
   if (!text) {
     continue;
@@ -202,7 +206,7 @@ for (const file of listTrackedFiles()) {
 }
 
 if (findings.length > 0) {
-  console.error('Sensitive data guard failed. Review tracked files before publishing:');
+  console.error('Sensitive data guard failed. Review publishable files before publishing:');
   for (const finding of findings.slice(0, 50)) {
     console.error(`- ${finding.file}:${finding.line} ${finding.type} ${finding.sample}`);
   }
@@ -212,4 +216,4 @@ if (findings.length > 0) {
   process.exit(1);
 }
 
-console.log('ok tracked files passed sensitive data guard');
+console.log('ok tracked and untracked publishable files passed sensitive data guard');

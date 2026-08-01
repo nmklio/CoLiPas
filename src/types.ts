@@ -36,6 +36,47 @@ export interface ServerTelemetry {
   sampledAt: string | null;
 }
 
+export type ServerMetricHistoryWindow = '1h' | '6h' | '24h' | '7d';
+export type ServerMetricHistorySource = Exclude<SshVerifyMode, 'assetOnly'>;
+export type ServerMetricHistoryTrend = 'rising' | 'falling' | 'stable' | 'insufficient';
+
+export interface ServerMetricValues {
+  cpu: number;
+  memory: number;
+  disk: number;
+}
+
+export interface ServerMetricHistoryPoint extends ServerMetricValues {
+  sampledAt: string;
+  source: ServerMetricHistorySource;
+}
+
+export interface ServerMetricHistoryResponse {
+  server: {
+    id: string;
+    name: string;
+  };
+  window: ServerMetricHistoryWindow;
+  range: {
+    from: string;
+    to: string;
+  };
+  telemetry: ServerTelemetry;
+  summary: {
+    rawPoints: number;
+    returnedPoints: number;
+    intervalMinutes: number;
+    continuityPercent: number | null;
+    latest: ServerMetricValues | null;
+    average: ServerMetricValues | null;
+    peak: ServerMetricValues | null;
+    change: ServerMetricValues | null;
+    trend: ServerMetricHistoryTrend;
+    sources: Record<ServerMetricHistorySource, number>;
+  };
+  points: ServerMetricHistoryPoint[];
+}
+
 export interface ServerNode {
   id: string;
   name: string;

@@ -6,6 +6,7 @@ import {
   Bot,
   BrainCircuit,
   CheckCircle2,
+  ChartNoAxesCombined,
   ChevronRight,
   CloudCog,
   Command,
@@ -140,6 +141,14 @@ const resourceAlertPolicyFeature = {
   desc: '为已验证且运行中的 SSH 资产设置 CPU、内存和磁盘阈值；仅用新鲜可信遥测生成告警，过期或不可用样本会明确标记并跳过。',
   tags: ['可信遥测', '周期提醒'],
   featureId: 'resource-alert-policy',
+};
+
+const serverMetricHistoryFeature = {
+  icon: ChartNoAxesCombined,
+  title: '可信资源历史',
+  desc: '只在 SSH 指标采集成功后记录 CPU、内存和磁盘，按 1 小时到 7 天查看趋势、峰值和连续性；失败与仅登记资产不会混入。',
+  tags: ['7 天趋势', '来源可辨'],
+  featureId: 'server-metric-history',
 };
 
 const accountSessionFeature = {
@@ -294,7 +303,7 @@ export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
           <h2>围绕“服务器接入到修复”构建的完整后台</h2>
         </div>
         <div className="marketing-feature-grid">
-          {[...featureCards, fleetViewFeature, bulkImportFeature, commandPaletteFeature, resourceAlertPolicyFeature, operationsInboxFeature, accountSessionFeature, operatorControlsFeature, adaptiveRefreshFeature, intentReadyNavigationFeature].map((feature) => {
+          {[...featureCards, fleetViewFeature, bulkImportFeature, commandPaletteFeature, resourceAlertPolicyFeature, serverMetricHistoryFeature, operationsInboxFeature, accountSessionFeature, operatorControlsFeature, adaptiveRefreshFeature, intentReadyNavigationFeature].map((feature) => {
             const Icon = feature.icon;
             const featureId = 'featureId' in feature && typeof feature.featureId === 'string'
               ? feature.featureId

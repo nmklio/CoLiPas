@@ -809,6 +809,23 @@ async function waitForResourceAlertPolicyDrawerStable(targetPage) {
   }, null, { timeout: 2000 });
 }
 
+async function waitForServerMetricHistoryDrawerStable(targetPage) {
+  await targetPage.waitForFunction(() => {
+    const element = document.querySelector('[data-server-metric-history-drawer="true"]');
+    if (!element) {
+      return false;
+    }
+    const box = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    return box.left >= -1
+      && box.right <= window.innerWidth + 1
+      && box.top >= -1
+      && box.bottom <= window.innerHeight + 1
+      && Number(style.opacity) >= 0.99
+      && style.transform === 'none';
+  }, null, { timeout: 2000 });
+}
+
 async function setRangeInputValue(locator, value) {
   await locator.evaluate((input, nextValue) => {
     const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
@@ -2284,6 +2301,196 @@ async function createTemporarySimulatedSshServer(targetPage, namePrefix = 'brows
   return server;
 }
 
+async function assertServerMetricHistoryDrawer(targetPage, server) {
+  const routePattern = '**/api/servers/*/metric-history*';
+  const originalViewport = targetPage.viewportSize() ?? { width: 1440, height: 980 };
+  const routeHandler = async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname !== `/api/servers/${server.id}/metric-history`) {
+      await route.continue();
+      return;
+    }
+
+    const historyWindow = url.searchParams.get('window') ?? '24h';
+    const durationByWindow = {
+      '1h': 60 * 60 * 1000,
+      '6h': 6 * 60 * 60 * 1000,
+      '24h': 24 * 60 * 60 * 1000,
+      '7d': 7 * 24 * 60 * 60 * 1000,
+    };
+    const duration = durationByWindow[historyWindow] ?? durationByWindow['24h'];
+    const to = Date.now();
+    const from = to - duration;
+    const points = historyWindow === '1h'
+      ? []
+      : Array.from({ length: 12 }, (_, index) => ({
+          sampledAt: new Date(from + (duration * index) / 11).toISOString(),
+          cpu: index === 7 ? 91 : 28 + index * 2,
+          memory: index === 9 ? 84 : 41 + index,
+          disk: 56 + Math.floor(index / 3),
+          source: 'real',
+        }));
+    const metricValues = (point) => point ? { cpu: point.cpu, memory: point.memory, disk: point.disk } : null;
+    const latest = points.at(-1) ?? null;
+    const first = points[0] ?? null;
+    const average = points.length > 0 ? {
+      cpu: Math.round(points.reduce((sum, point) => sum + point.cpu, 0) / points.length),
+      memory: Math.round(points.reduce((sum, point) => sum + point.memory, 0) / points.length),
+      disk: Math.round(points.reduce((sum, point) => sum + point.disk, 0) / points.length),
+    } : null;
+    const peak = points.length > 0 ? {
+      cpu: Math.max(...points.map((point) => point.cpu)),
+      memory: Math.max(...points.map((point) => point.memory)),
+      disk: Math.max(...points.map((point) => point.disk)),
+    } : null;
+    const change = first && latest ? {
+      cpu: latest.cpu - first.cpu,
+      memory: latest.memory - first.memory,
+      disk: latest.disk - first.disk,
+    } : null;
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'cache-control': 'private, max-age=15' },
+      body: JSON.stringify({
+        server: { id: server.id, name: server.name },
+        window: historyWindow,
+        range: { from: new Date(from).toISOString(), to: new Date(to).toISOString() },
+        telemetry: { status: 'fresh', sampledAt: new Date(to).toISOString() },
+        summary: {
+          rawPoints: points.length,
+          returnedPoints: points.length,
+          intervalMinutes: 5,
+          continuityPercent: points.length > 1 ? 100 : null,
+          latest: metricValues(latest),
+          average,
+          peak,
+          change,
+          trend: points.length > 1 ? 'rising' : 'insufficient',
+          sources: { real: points.length, simulate: 0 },
+        },
+        points,
+      }),
+    });
+  };
+
+  await targetPage.route(routePattern, routeHandler);
+  try {
+    await targetPage.goto(`${baseUrl}/admin/#servers`, { waitUntil: 'networkidle', timeout: 30000 });
+    const rowSelector = `[data-server-workspace-row-id="${server.id}"]`;
+    const desktopTrigger = targetPage.locator(`${rowSelector} .server-metric-telemetry`);
+    await desktopTrigger.waitFor({ timeout: 10000 });
+    await desktopTrigger.click();
+
+    const drawer = targetPage.locator('[data-server-metric-history-drawer="true"]');
+    await drawer.waitFor({ timeout: 5000 });
+    await drawer.locator('.server-metric-history-chart').waitFor({ timeout: 5000 });
+    await waitForServerMetricHistoryDrawerStable(targetPage);
+    await assertElementWithinViewport(targetPage, '[data-server-metric-history-drawer="true"]', 'desktop server metric history');
+    await assertNoHorizontalOverflow(targetPage, 'desktop server metric history');
+    if (await targetPage.evaluate(() => document.body.style.overflow) !== 'hidden') {
+      throw new Error('Server metric history drawer did not lock background scrolling');
+    }
+    const drawerText = await drawer.innerText();
+    if (!/Trusted resource timeline|Resource trend|Latest|Average|Peak|Real SSH/i.test(drawerText)) {
+      throw new Error(`Desktop server metric history drawer is incomplete: ${drawerText}`);
+    }
+
+    const chart = drawer.locator('.server-metric-history-chart');
+    await chart.focus();
+    const latestTooltip = await drawer.locator('[data-server-metric-history-tooltip="true"]').innerText();
+    await targetPage.keyboard.press('ArrowLeft');
+    const previousTooltip = await drawer.locator('[data-server-metric-history-tooltip="true"]').innerText();
+    if (latestTooltip === previousTooltip) {
+      throw new Error('Server metric history keyboard navigation did not move to the previous sample');
+    }
+    const chartBounds = await chart.boundingBox();
+    if (!chartBounds) {
+      throw new Error('Server metric history chart did not expose stable bounds');
+    }
+    await targetPage.mouse.move(chartBounds.x + chartBounds.width * 0.45, chartBounds.y + chartBounds.height * 0.5);
+    await drawer.locator('[data-server-metric-history-tooltip="true"]').waitFor({ timeout: 3000 });
+
+    const sixHourResponse = targetPage.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname.endsWith('/metric-history') && url.searchParams.get('window') === '6h';
+    });
+    await drawer.getByRole('button', { name: '6h', exact: true }).click();
+    await sixHourResponse;
+    await drawer.locator('.server-metric-history-chart').waitFor({ timeout: 5000 });
+
+    const oneHourResponse = targetPage.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname.endsWith('/metric-history') && url.searchParams.get('window') === '1h';
+    });
+    await drawer.getByRole('button', { name: '1h', exact: true }).click();
+    await oneHourResponse;
+    await drawer.locator('[data-server-metric-history-state="empty"]').waitFor({ timeout: 5000 });
+    if (!/No trusted history yet|Failed samples/i.test(await drawer.innerText())) {
+      throw new Error('Server metric history empty state did not explain its trusted-sample boundary');
+    }
+
+    await drawer.getByRole('button', { name: '24h', exact: true }).click();
+    await drawer.locator('.server-metric-history-chart').waitFor({ timeout: 5000 });
+    await captureVisualEvidence(targetPage, 'desktop-server-metric-history', [
+      '[data-server-metric-history-drawer="true"]',
+      '.server-metric-history-chart',
+      '.server-metric-history-ledger',
+    ]);
+    await targetPage.keyboard.press('Escape');
+    await drawer.waitFor({ state: 'hidden', timeout: 5000 });
+    await targetPage.waitForFunction((selector) => document.activeElement === document.querySelector(selector), `${rowSelector} .server-metric-telemetry`);
+    if (await targetPage.evaluate(() => document.body.style.overflow) === 'hidden') {
+      throw new Error('Server metric history drawer did not restore background scrolling after Escape');
+    }
+
+    await targetPage.setViewportSize({ width: 390, height: 844 });
+    await targetPage.goto(`${baseUrl}/admin/#servers`, { waitUntil: 'networkidle', timeout: 30000 });
+    const mobileTrigger = targetPage.locator(`${rowSelector} .server-mobile-metric-history`);
+    await mobileTrigger.waitFor({ timeout: 10000 });
+    await mobileTrigger.click();
+    const mobileDrawer = targetPage.locator('[data-server-metric-history-drawer="true"]');
+    await mobileDrawer.waitFor({ timeout: 5000 });
+    await mobileDrawer.locator('.server-metric-history-chart').waitFor({ timeout: 5000 });
+    await waitForServerMetricHistoryDrawerStable(targetPage);
+    await assertElementWithinViewport(targetPage, '[data-server-metric-history-drawer="true"]', 'mobile server metric history');
+    await assertNoHorizontalOverflow(targetPage, 'mobile server metric history');
+    const mobileMetrics = await mobileDrawer.evaluate((element) => ({
+      left: element.getBoundingClientRect().left,
+      right: element.getBoundingClientRect().right,
+      top: element.getBoundingClientRect().top,
+      bottom: element.getBoundingClientRect().bottom,
+      scrollWidth: element.scrollWidth,
+      clientWidth: element.clientWidth,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+    }));
+    if (
+      mobileMetrics.left < 5
+      || mobileMetrics.top < 5
+      || mobileMetrics.right > mobileMetrics.viewportWidth - 5
+      || mobileMetrics.bottom > mobileMetrics.viewportHeight - 5
+      || mobileMetrics.scrollWidth > mobileMetrics.clientWidth + 1
+    ) {
+      throw new Error(`Mobile server metric history did not keep its six-pixel viewport inset: ${JSON.stringify(mobileMetrics)}`);
+    }
+    await captureVisualEvidence(targetPage, 'mobile-server-metric-history', [
+      '[data-server-metric-history-drawer="true"]',
+      '.server-metric-history-chart',
+      '.server-metric-history-ledger',
+    ]);
+    await mobileDrawer.getByRole('button', { name: /^Close$/i }).click();
+    await mobileDrawer.waitFor({ state: 'hidden', timeout: 5000 });
+    await targetPage.waitForFunction((selector) => document.activeElement === document.querySelector(selector), `${rowSelector} .server-mobile-metric-history`);
+
+    console.log('ok browser e2e covers desktop and mobile trusted resource history, range changes, keyboard inspection, empty state, and focus restoration');
+  } finally {
+    await targetPage.setViewportSize(originalViewport).catch(() => undefined);
+    await targetPage.unroute(routePattern, routeHandler).catch(() => undefined);
+  }
+}
+
 async function deleteTemporaryAssetServer(targetPage, serverId) {
   const response = await targetPage.request.delete(`${baseUrl}/api/servers/${encodeURIComponent(serverId)}`);
   if (!response.ok()) {
@@ -2396,6 +2603,7 @@ async function assertSshTerminalPanel(targetPage) {
     await targetPage.locator('.server-workspace-row').filter({ hasText: sshServer.name }).waitFor({ timeout: 10000 });
 
     const sshServerRow = targetPage.locator('.server-workspace-row').filter({ hasText: sshServer.name });
+    await assertServerMetricHistoryDrawer(targetPage, sshServer);
     await targetPage.locator('[data-server-triage="true"]').waitFor({ timeout: 10000 });
     const serverTriageText = await targetPage.locator('[data-server-triage="true"]').innerText();
     if (!/Release health triage|Asset triage/i.test(serverTriageText) || !/Telemetry trust/i.test(serverTriageText) || !/Simulated SSH/i.test(serverTriageText) || !/SSH gaps/i.test(serverTriageText)) {

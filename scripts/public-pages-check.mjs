@@ -130,6 +130,8 @@ function buildLandingCheck() {
       await expectText(page.locator('[data-colipas-feature="operations-inbox"]'), /运维收件箱|operations inbox|资源越线|再次提醒|跨模块/i, 'landing operations inbox copy');
       await expectLocatorCount(page.locator('[data-colipas-feature="resource-alert-policy"]'), 1, 'landing resource alert policy feature card');
       await expectText(page.locator('[data-colipas-feature="resource-alert-policy"]'), /资源告警策略|CPU|内存|磁盘|SQLite|周期提醒/i, 'landing resource alert policy copy');
+      await expectLocatorCount(page.locator('[data-colipas-feature="server-metric-history"]'), 1, 'landing server metric history feature card');
+      await expectText(page.locator('[data-colipas-feature="server-metric-history"]'), /可信资源历史|CPU|内存|磁盘|7 天|有界历史|来源可辨/i, 'landing server metric history copy');
       await expectLocatorCount(page.locator('[data-colipas-feature="account-session-control"]'), 1, 'landing account session control feature card');
       await expectText(page.locator('[data-colipas-feature="account-session-control"]'), /登录会话控制|令牌哈希|SQLite|原始 Cookie|重启后|最旧会话/i, 'landing account session control copy');
       await expectLocatorCount(page.locator('[data-colipas-feature="operator-controls"]'), 1, 'landing adaptive operator controls feature card');
@@ -178,6 +180,9 @@ function buildDocsCheck() {
       await expectLocatorCount(page.locator('#resource-alerts[data-colipas-docs-feature="resource-alert-policy"]'), 1, 'docs resource alert policy section');
       await expectText(page.locator('#resource-alerts'), /资源告警策略|50%|95%|15 分钟|24 小时|P0|SQLite/i, 'docs resource alert policy copy');
       await expectText(page.locator('body'), /GET \/api\/monitoring\/resource-alert-policy|PUT \/api\/monitoring\/resource-alert-policy/i, 'docs resource alert policy API copy');
+      await expectLocatorCount(page.locator('#metric-history[data-colipas-docs-feature="server-metric-history"]'), 1, 'docs server metric history section');
+      await expectText(page.locator('#metric-history'), /可信资源历史|1 小时|6 小时|24 小时|7 天|2016|240|SSH/i, 'docs server metric history copy');
+      await expectText(page.locator('body'), /GET \/api\/servers\/:serverId\/metric-history/i, 'docs server metric history API copy');
       await expectLocatorCount(page.locator('[data-colipas-docs-fleet-views="true"]'), 1, 'docs fleet views section');
       await expectText(page.locator('[data-colipas-docs-fleet-views="true"]'), /资产视图|fleet views|browser/i, 'docs fleet views copy');
       await expectLocatorCount(page.locator('[data-colipas-docs-feature="server-bulk-import"]'), 1, 'docs server bulk import section');

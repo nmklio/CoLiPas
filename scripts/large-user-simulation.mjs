@@ -6,6 +6,10 @@ import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { chromium } from 'playwright';
 import { buildResourceAlertEvaluation } from '../build/shared/resourceAlerts.js';
+import {
+  downsampleServerMetricHistory,
+  serverMetricHistoryResponsePointLimit,
+} from '../build/server/services/serverMetricHistoryService.js';
 
 const root = process.cwd();
 const serverCount = clampNumber(process.env.LARGE_SIM_SERVER_COUNT, 100, 3000, 1000);
@@ -33,6 +37,7 @@ const baseUrl = `http://127.0.0.1:${port}`;
 const timings = {};
 const assertions = [];
 let resourceAlertEvidence = null;
+let metricHistoryEvidence = null;
 let browser;
 let appServer;
 
@@ -77,6 +82,7 @@ try {
   const sessions = await timed('loginUsersMs', () => loginUsers(baseUrl, userCount));
   adminHeaders = sessions.at(-1) ?? adminHeaders;
   await timed('apiReadWriteSimulationMs', () => runConcurrentUserSimulation(baseUrl, sessions));
+  await timed('metricHistorySimulationMs', () => runMetricHistorySimulation(baseUrl, sessions));
   await timed('resourceAlertPolicySimulationMs', () => runResourceAlertPolicySimulation(baseUrl, sessions));
   await timed('operationsSimulationMs', () => runOperationsSimulation(baseUrl, adminHeaders));
   await timed('aiSimulationMs', () => runAiSimulation(baseUrl, adminHeaders));
@@ -245,6 +251,53 @@ async function runResourceAlertPolicySimulation(targetBaseUrl, sessions) {
     returnedSignals: evaluation.signals.length,
     signalsTruncated: evaluation.summary.truncated,
     evaluationDurationMs,
+  };
+}
+
+async function runMetricHistorySimulation(targetBaseUrl, sessions) {
+  const connectedIds = await findConnectedServerIds(targetBaseUrl, sessions[0], Math.min(24, sessions.length));
+  assert(connectedIds.length > 0, 'resource history simulation found SSH-connected servers');
+  const readStartedAt = performance.now();
+  const historyReads = await Promise.all(sessions.map((headers, index) => {
+    const serverId = connectedIds[index % connectedIds.length];
+    const historyWindow = ['1h', '6h', '24h', '7d'][index % 4];
+    return getJson(targetBaseUrl, `/api/servers/${encodeURIComponent(serverId)}/metric-history?window=${historyWindow}`, headers);
+  }));
+  const concurrentReadDurationMs = Number((performance.now() - readStartedAt).toFixed(2));
+  assert(historyReads.every((response) => response.status === 200), 'all concurrent resource history reads returned HTTP 200');
+  assert(historyReads.every((response) => response.body.points?.length <= serverMetricHistoryResponsePointLimit), 'all resource history responses stayed within the 240-point contract');
+  assert(historyReads.some((response) => response.body.summary?.rawPoints > 0), 'successful simulated SSH samples produced resource history');
+  const serializedReads = JSON.stringify(historyReads.map((response) => response.body));
+  assert(!/publicIp|privateIp|password|privateKey|passphrase|apiKey|credential|command|"ssh"/i.test(serializedReads), 'resource history concurrency responses omitted addresses, credentials, commands, and SSH records');
+  assert(concurrentReadDurationMs < 2000, `${historyReads.length} concurrent resource history reads completed in ${concurrentReadDurationMs}ms under the 2000ms budget`);
+
+  const historyStartedAt = Date.UTC(2026, 0, 1, 0, 0, 0);
+  const rawPoints = Array.from({ length: 2016 }, (_, index) => ({
+    sampledAt: new Date(historyStartedAt + index * 5 * 60_000).toISOString(),
+    cpu: index === 341 ? 100 : 26 + (index % 9),
+    memory: index === 907 ? 99 : 43 + (index % 6),
+    disk: index === 1543 ? 98 : 58 + (index % 4),
+    source: 'real',
+  }));
+  const downsampleStartedAt = performance.now();
+  const sampledPoints = downsampleServerMetricHistory(rawPoints, serverMetricHistoryResponsePointLimit);
+  const downsampleDurationMs = Number((performance.now() - downsampleStartedAt).toFixed(2));
+  assert(sampledPoints.length === serverMetricHistoryResponsePointLimit, 'seven-day resource history downsamples exactly to the 240-point limit');
+  assert(sampledPoints[0] === rawPoints[0] && sampledPoints.at(-1) === rawPoints.at(-1), 'resource history downsampling preserved range endpoints');
+  assert(
+    sampledPoints.some((point) => point.cpu === 100)
+      && sampledPoints.some((point) => point.memory === 99)
+      && sampledPoints.some((point) => point.disk === 98),
+    'resource history downsampling preserved isolated CPU, memory, and disk peaks',
+  );
+  assert(downsampleDurationMs < 100, `2016-point resource history downsample completed in ${downsampleDurationMs}ms under the 100ms budget`);
+
+  metricHistoryEvidence = {
+    concurrentUsers: historyReads.length,
+    concurrentReadDurationMs,
+    rawDownsamplePoints: rawPoints.length,
+    returnedDownsamplePoints: sampledPoints.length,
+    downsampleDurationMs,
   };
 }
 
@@ -563,6 +616,7 @@ function buildSummary(overview, serverList) {
       topRegions,
     },
     resourceAlerts: resourceAlertEvidence,
+    metricHistory: metricHistoryEvidence,
     timingsMs: timings,
     assertions,
   };

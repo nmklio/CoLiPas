@@ -22,6 +22,8 @@ import {
   ReleaseGatePolicy,
   ResourceAlertPolicyResponse,
   ResourceAlertPolicyUpdate,
+  ServerMetricHistoryResponse,
+  ServerMetricHistoryWindow,
   ServerNode,
   SshRunbookCommand,
   SshAuthType,
@@ -217,6 +219,11 @@ export interface MaintenanceWindowDeleteResponse {
   ok: boolean;
   id: string;
   windows: MaintenanceWindow[];
+}
+
+export interface ServerMetricHistoryFetchOptions {
+  signal?: AbortSignal;
+  force?: boolean;
 }
 
 export interface MaintenanceWindowPayload {
@@ -657,6 +664,23 @@ export async function fetchResourceAlertPolicy(fetcher: typeof fetch = fetch) {
   }
 
   return (await response.json()) as ResourceAlertPolicyResponse;
+}
+
+export async function fetchServerMetricHistory(
+  serverId: string,
+  window: ServerMetricHistoryWindow,
+  options: ServerMetricHistoryFetchOptions = {},
+  fetcher: typeof fetch = fetch,
+) {
+  const response = await fetcher(`/api/servers/${encodeURIComponent(serverId)}/metric-history?window=${encodeURIComponent(window)}`, {
+    credentials: 'include',
+    cache: options.force ? 'no-store' : 'default',
+    signal: options.signal,
+  });
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+  return (await response.json()) as ServerMetricHistoryResponse;
 }
 
 export async function saveResourceAlertPolicy(

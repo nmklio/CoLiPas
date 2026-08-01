@@ -177,6 +177,7 @@ function landingIcon(kind, className) {
     controls: '<path d="M4.5 7h8.2M16.4 7h3.1M4.5 12h3.1M11.3 12h8.2M4.5 17h6.2M14.4 17h5.1"/><circle cx="14.5" cy="7" r="1.7"/><circle cx="9.5" cy="12" r="1.7"/><circle cx="12.6" cy="17" r="1.7"/>',
     refresh: '<path d="M19.2 8.3A7.6 7.6 0 0 0 6.4 6.1L4.2 8.3"/><path d="M4.2 4.8v3.5h3.5"/><path d="M4.8 15.7a7.6 7.6 0 0 0 12.8 2.2l2.2-2.2"/><path d="M19.8 19.2v-3.5h-3.5"/>',
     alert: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/><path d="M12 3V1"/>',
+    trend: '<path d="M4 19V5M4 19h16"/><path d="m7 15 3-4 3 2 4-6"/><circle cx="7" cy="15" r=".7"/><circle cx="10" cy="11" r=".7"/><circle cx="13" cy="13" r=".7"/><circle cx="17" cy="7" r=".7"/>',
     inbox: '<path d="M5.2 5.1h13.6l1.4 8.1v4.4a1.8 1.8 0 0 1-1.8 1.8H5.6a1.8 1.8 0 0 1-1.8-1.8v-4.4l1.4-8.1Z"/><path d="M4.1 13.2h4.2l1.2 2h5l1.2-2h4.2"/><path d="M8.1 8.7h7.8"/>',
     code: '<path d="m9 8-4 4 4 4M15 8l4 4-4 4"/><path d="m13.2 6.8-2.4 10.4"/>',
     database: '<ellipse cx="12" cy="6.4" rx="6.8" ry="2.8"/><path d="M5.2 6.4v7.2c0 1.6 3 2.8 6.8 2.8s6.8-1.2 6.8-2.8V6.4"/><path d="M5.2 10c0 1.6 3 2.8 6.8 2.8s6.8-1.2 6.8-2.8"/>',
@@ -298,6 +299,14 @@ if (!html.includes('data-colipas-feature="resource-alert-policy"')) {
       ${resourceAlertPolicyFeatureCard}`);
 } else {
   replaceOnce(/<article class="feature-card" data-colipas-feature="resource-alert-policy">[\s\S]*?<\/article>/, resourceAlertPolicyFeatureCard);
+}
+
+const serverMetricHistoryFeatureCard = `<article class="feature-card" data-colipas-feature="server-metric-history">${landingIcon('trend', 'icon feature-icon')}<h3>可信资源历史</h3><p>只在 SSH 指标采集成功后记录 CPU、内存和磁盘，支持 1 小时至 7 天趋势；失败与仅登记资产不会混入。</p><div class="tags"><span>有界历史</span><span>来源可辨</span></div></article>`;
+if (!html.includes('data-colipas-feature="server-metric-history"')) {
+  replaceOnce(/(<div class="feature-grid">)/, `$1
+      ${serverMetricHistoryFeatureCard}`);
+} else {
+  replaceOnce(/<article class="feature-card" data-colipas-feature="server-metric-history">[\s\S]*?<\/article>/, serverMetricHistoryFeatureCard);
 }
 
 const operationsInboxFeatureCard = `<article class="feature-card" data-colipas-feature="operations-inbox">${landingIcon('inbox', 'icon feature-icon')}<h3>全局运维收件箱</h3><p>汇总资源越线、上线阻塞、SSH 与资产覆盖缺口和开放事件；持续越线会按策略周期再次提醒，本机只保存安全事项 ID 与时间。</p><div class="tags"><span>跨模块聚合</span><span>本机审阅</span></div></article>`;
@@ -1466,6 +1475,7 @@ SVG
       <a href="#config">环境变量 <span>→</span></a>
       <a href="#first-run">首次使用 <span>→</span></a>
       <a href="#launch-checklist">上线检查 <span>→</span></a>
+      <a href="#metric-history">资源历史 <span>→</span></a>
       <a href="#resource-alerts">资源告警 <span>→</span></a>
       <a href="#operations-inbox">运维收件箱 <span>→</span></a>
       <a href="#account-sessions">会话管理 <span>→</span></a>
@@ -1482,6 +1492,7 @@ SVG
       <a href="#config">环境变量</a>
       <a href="#first-run">首次使用</a>
       <a href="#launch-checklist">上线检查</a>
+      <a href="#metric-history">资源历史</a>
       <a href="#resource-alerts">资源告警</a>
       <a href="#operations-inbox">运维收件箱</a>
       <a href="#account-sessions">会话管理</a>
@@ -1532,6 +1543,7 @@ SVG
           <div><code>SESSION_MAX_ACTIVE</code><p>管理员最大活跃会话数，可设置为 2–64，默认 12；达到上限后自动退出最旧会话。</p></div>
           <div><code>CREDENTIAL_ENCRYPTION_KEY</code><p>SSH 密码和私钥的加密密钥，不能提交到 Git。</p></div>
           <div><code>COLIPAS_DATA_DIR / COLIPAS_DB_PATH</code><p>SQLite 数据库和运行数据目录，默认位于 .data。</p></div>
+          <div><code>COLIPAS_METRIC_HISTORY_INTERVAL_MS / COLIPAS_METRIC_HISTORY_RETENTION_MS / COLIPAS_METRIC_HISTORY_MAX_POINTS_PER_SERVER</code><p>成功 SSH 指标的历史采样间隔、保留时长和单服务器行数上限，默认 5 分钟、7 天和 2016 行。</p></div>
           <div><code>AI_BASE_URL / AI_API_KEY / AI_MODEL</code><p>OpenAI 兼容 API 配置；不配置密钥时只使用本地规则分析。</p></div>
           <div><code>CUSTOM_API_ALLOWED_HOSTS</code><p>自定义 API 代理允许访问的域名白名单。</p></div>
         </div>
@@ -1566,6 +1578,28 @@ SVG
 工作区：按摘要处理下一步
 性能模式：保持摘要，减少首屏负担
 上线前：展开完整证据并复检</pre>
+        </aside>
+      </section>
+
+      <section id="metric-history" class="section split" data-colipas-docs-feature="server-metric-history">
+        <div>
+          <p class="kicker">可信资源历史</p>
+          <h2>从成功采样回看 CPU、内存和磁盘趋势</h2>
+          <p>在服务器列表点击桌面端遥测状态，或点击移动端 CPU 指标打开时间线。历史只在 SSH 指标采集成功后写入 SQLite，并明确区分真实与模拟来源。</p>
+          <div class="check-list">
+            <p class="check-line"><span>✓</span> 支持 1 小时、6 小时、24 小时和 7 天范围，默认每 5 分钟记录。</p>
+            <p class="check-line"><span>✓</span> 默认保留 7 天且每台服务器最多 2016 行；API 降采样后最多返回 240 点。</p>
+            <p class="check-line"><span>✓</span> 最新值、平均值、峰值、变化和连续性集中展示，键盘方向键可逐点读取。</p>
+            <p class="check-line"><span>✓</span> 仅登记资产和失败采样不会写入，响应不包含 IP、SSH 凭据或命令内容。</p>
+          </div>
+        </div>
+        <aside class="terminal-card">
+          <strong>历史读取接口</strong>
+          <pre>GET /api/servers/:serverId/metric-history?window=24h
+
+window: 1h | 6h | 24h | 7d
+retention: 7 days
+response limit: 240 points</pre>
         </aside>
       </section>
 
@@ -1725,6 +1759,7 @@ systemctl status ssh --no-pager
           <div><code>GET /api/overview</code><p>登录后读取账号、服务器、事件和总览指标。</p></div>
           <div><code>GET /api/monitoring/resource-alert-policy</code><p>读取持久化的 CPU、内存、磁盘阈值与再次提醒周期。</p></div>
           <div><code>PUT /api/monitoring/resource-alert-policy</code><p>校验并保存资源告警策略，同时写入脱敏审计记录。</p></div>
+          <div><code>GET /api/servers/:serverId/metric-history</code><p>按 1h、6h、24h 或 7d 读取脱敏且有界的 CPU、内存和磁盘历史。</p></div>
           <div><code>GET / PUT /api/ai/provider</code><p>读取和保存 AI Provider 设置；API Key 只返回是否已托管，不回显明文。</p></div>
           <div><code>POST /api/custom-apis/test</code><p>通过后端代理测试外部接口，阻止内网地址、敏感 Header 和重定向 SSRF。</p></div>
           <div><code>POST /api/servers/import</code><p>批量导入最多 500 台无凭据资产，重复名称或公网 IP 自动跳过，不覆盖已有用户数据。</p></div>

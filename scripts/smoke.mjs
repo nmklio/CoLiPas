@@ -47,11 +47,12 @@ assertProductionSshProbeGuards();
 assertSshKeyAuthenticationGuards();
 assertAdaptiveOperatorControls();
 assertAdaptiveOverviewRefreshScheduler();
-assertSecretScanHandlesDeletedTrackedFiles();
+assertSecretScanCoversPublishableFiles();
 assertSecurityAuditRelationsAreSpecific();
 assertOperationsTargetSelectionGuards();
 assertMaintenanceWindowGuards();
 await assertResourceAlertPolicyGuards();
+await assertServerMetricHistoryGuards();
 assertInventorySnapshotCacheGuards();
 assertOverviewConditionalSnapshotGuards();
 assertLocalizedFormatCacheGuards();
@@ -83,6 +84,10 @@ if (unauthenticatedShellStatusResponse.status !== 401) {
 const unauthenticatedRunbookResponse = await fetch(`${baseUrl}/api/servers/ssh-runbook`);
 if (unauthenticatedRunbookResponse.status !== 401) {
   throw new Error(`/api/servers/ssh-runbook expected 401 before login, got ${unauthenticatedRunbookResponse.status}`);
+}
+const unauthenticatedMetricHistoryResponse = await fetch(`${baseUrl}/api/servers/unauthorized-probe/metric-history`);
+if (unauthenticatedMetricHistoryResponse.status !== 401) {
+  throw new Error(`/api/servers/:serverId/metric-history expected 401 before login, got ${unauthenticatedMetricHistoryResponse.status}`);
 }
 const unauthenticatedBulkImportResponse = await fetch(`${baseUrl}/api/servers/import`, {
   method: 'POST',
@@ -2423,6 +2428,73 @@ if (
 }
 console.log('ok /api/overview refreshes SSH metrics and labels fresh versus unavailable telemetry');
 
+const defaultMetricHistoryResponse = await fetch(`${baseUrl}/api/servers/${connectedServer.id}/metric-history`, { headers: authHeaders });
+if (!defaultMetricHistoryResponse.ok) {
+  throw new Error(`/api/servers/:serverId/metric-history returned HTTP ${defaultMetricHistoryResponse.status}`);
+}
+const defaultMetricHistory = await defaultMetricHistoryResponse.json();
+const metricHistoryPayload = JSON.stringify(defaultMetricHistory);
+if (
+  defaultMetricHistory.window !== '24h'
+  || defaultMetricHistory.server?.id !== connectedServer.id
+  || Object.keys(defaultMetricHistory.server ?? {}).sort().join(',') !== 'id,name'
+  || defaultMetricHistory.telemetry?.status !== 'fresh'
+  || defaultMetricHistory.summary?.rawPoints < 1
+  || defaultMetricHistory.summary?.returnedPoints !== defaultMetricHistory.points?.length
+  || defaultMetricHistory.points?.length < 1
+  || defaultMetricHistory.points.some((point) => (
+    !Number.isFinite(Date.parse(point.sampledAt))
+    || !['real', 'simulate'].includes(point.source)
+    || [point.cpu, point.memory, point.disk].some((value) => !Number.isInteger(value) || value < 0 || value > 100)
+  ))
+) {
+  throw new Error(`/api/servers/:serverId/metric-history returned an invalid trusted history contract: ${metricHistoryPayload}`);
+}
+if (
+  !/private/i.test(defaultMetricHistoryResponse.headers.get('cache-control') ?? '')
+  || !/max-age=15/i.test(defaultMetricHistoryResponse.headers.get('cache-control') ?? '')
+) {
+  throw new Error('/api/servers/:serverId/metric-history did not expose the bounded private cache policy');
+}
+if (
+  /publicIp|privateIp|password|privateKey|passphrase|apiKey|credential|command|"ssh"/i.test(metricHistoryPayload)
+  || metricHistoryPayload.includes(connectedServer.publicIp)
+  || metricHistoryPayload.includes(connectedServer.privateIp)
+) {
+  throw new Error('/api/servers/:serverId/metric-history leaked address, credential, or command material');
+}
+
+for (const historyWindow of ['1h', '6h', '24h', '7d']) {
+  const windowResponse = await fetch(`${baseUrl}/api/servers/${connectedServer.id}/metric-history?window=${historyWindow}`, { headers: authHeaders });
+  const windowBody = await windowResponse.json();
+  if (!windowResponse.ok || windowBody.window !== historyWindow || windowBody.points?.length > 240) {
+    throw new Error(`/api/servers/:serverId/metric-history rejected or exceeded the ${historyWindow} contract`);
+  }
+}
+
+const invalidMetricHistoryWindowResponse = await fetch(`${baseUrl}/api/servers/${connectedServer.id}/metric-history?window=30d`, { headers: authHeaders });
+const invalidMetricHistoryWindowBody = await invalidMetricHistoryWindowResponse.json();
+if (invalidMetricHistoryWindowResponse.status !== 400 || invalidMetricHistoryWindowBody.error?.code !== 'INVALID_METRIC_HISTORY_WINDOW') {
+  throw new Error('/api/servers/:serverId/metric-history did not reject an unsupported window');
+}
+
+const missingMetricHistoryResponse = await fetch(`${baseUrl}/api/servers/missing-history-server/metric-history`, { headers: authHeaders });
+const missingMetricHistoryBody = await missingMetricHistoryResponse.json();
+if (missingMetricHistoryResponse.status !== 404 || missingMetricHistoryBody.error?.code !== 'SERVER_NOT_FOUND') {
+  throw new Error('/api/servers/:serverId/metric-history did not reject a missing server');
+}
+
+const inventoryOnlyMetricHistoryResponse = await fetch(`${baseUrl}/api/servers/${inventoryOnlyServer.id}/metric-history?window=7d`, { headers: authHeaders });
+const inventoryOnlyMetricHistoryBody = await inventoryOnlyMetricHistoryResponse.json();
+if (
+  !inventoryOnlyMetricHistoryResponse.ok
+  || inventoryOnlyMetricHistoryBody.summary?.rawPoints !== 0
+  || inventoryOnlyMetricHistoryBody.points?.length !== 0
+) {
+  throw new Error('/api/servers/:serverId/metric-history recorded an inventory-only or unsuccessful sample');
+}
+console.log('ok /api/servers/:serverId/metric-history returns bounded, trusted, sanitized samples');
+
 const diagnosticResponse = await fetch(`${baseUrl}/api/servers/${connectedServer.id}/diagnostics`, {
   method: 'POST',
   headers: { ...authHeaders, 'Content-Type': 'application/json' },
@@ -3430,6 +3502,14 @@ if (!deleteConnectedServerResponse.ok) {
 const deleteConnectedServerBody = await deleteConnectedServerResponse.json();
 if (deleteConnectedServerBody.deleted !== true || deleteConnectedServerBody.id !== connectedServer.id) {
   throw new Error('/api/servers/:serverId DELETE connected smoke server returned unexpected payload');
+}
+const deletedMetricHistoryResponse = await fetch(`${baseUrl}/api/servers/${connectedServer.id}/metric-history`, { headers: authHeaders });
+if (deletedMetricHistoryResponse.status !== 404) {
+  throw new Error('/api/servers/:serverId DELETE left the deleted metric history API addressable');
+}
+const { loadServerMetricHistoryRows } = await import('../build/server/services/database.js');
+if (loadServerMetricHistoryRows(connectedServer.id, 0).length !== 0) {
+  throw new Error('/api/servers/:serverId DELETE did not remove persisted metric history rows');
 }
 console.log('ok /api/servers/:serverId DELETE connected smoke server');
 
@@ -8652,15 +8732,34 @@ function assertAdaptiveOverviewRefreshScheduler() {
   console.log('ok adaptive refresh pauses hidden/offline work and guarded intent-ready module navigation stays race-safe');
 }
 
-function assertSecretScanHandlesDeletedTrackedFiles() {
+function assertSecretScanCoversPublishableFiles() {
   const secretScanSource = fs.readFileSync(new URL('../scripts/secret-scan.mjs', import.meta.url), 'utf8');
   if (
     !secretScanSource.includes('if (!fs.existsSync(absolutePath))')
     || !secretScanSource.includes("return '';")
+    || !secretScanSource.includes("['ls-files', '-z', '--cached', '--others', '--exclude-standard']")
   ) {
-    throw new Error('Secret scanning must skip tracked paths that are deleted in the current working tree');
+    throw new Error('Secret scanning must cover tracked and untracked publishable files while tolerating tracked deletions');
   }
-  console.log('ok secret scan tolerates tracked file deletions without weakening content inspection');
+
+  const probeName = `.secret-scan-untracked-probe-${process.pid}-${Date.now()}.txt`;
+  const probeUrl = new URL(`../${probeName}`, import.meta.url);
+  const syntheticToken = ['ghp', '_', 'A'.repeat(24)].join('');
+  try {
+    fs.writeFileSync(probeUrl, ['credential-probe:', syntheticToken, '\n'].join(''), 'utf8');
+    const scan = spawnSync(process.execPath, ['scripts/secret-scan.mjs'], {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+    });
+    const output = `${scan.stdout ?? ''}\n${scan.stderr ?? ''}`;
+    if (scan.status === 0 || !output.includes(probeName) || !output.includes('github-token')) {
+      throw new Error('Secret scanning did not reject a publishable untracked credential probe');
+    }
+  } finally {
+    fs.rmSync(probeUrl, { force: true });
+  }
+
+  console.log('ok secret scan covers tracked and untracked publishable files while tolerating tracked deletions');
 }
 
 function assertSecurityAuditRelationsAreSpecific() {
@@ -9732,6 +9831,145 @@ function buildResourceAlertTestServer(id, metrics) {
       verifyMode: 'simulate',
     },
   };
+}
+
+async function assertServerMetricHistoryGuards() {
+  const databaseSource = fs.readFileSync(new URL('../src/server/services/database.ts', import.meta.url), 'utf8');
+  const historyServiceSource = fs.readFileSync(new URL('../src/server/services/serverMetricHistoryService.ts', import.meta.url), 'utf8');
+  const inventorySource = fs.readFileSync(new URL('../src/server/services/inventoryService.ts', import.meta.url), 'utf8');
+  const serverAppSource = fs.readFileSync(new URL('../src/server/app.ts', import.meta.url), 'utf8');
+  const apiClientSource = fs.readFileSync(new URL('../src/services/apiClient.ts', import.meta.url), 'utf8');
+  const inventoryUiSource = fs.readFileSync(new URL('../src/modules/servers/ServerInventory.tsx', import.meta.url), 'utf8');
+  const historyUiSource = fs.readFileSync(new URL('../src/modules/servers/ServerMetricHistoryDrawer.tsx', import.meta.url), 'utf8');
+  const styleSource = fs.readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
+  const i18nSource = fs.readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
+  const envExampleSource = fs.readFileSync(new URL('../.env.example', import.meta.url), 'utf8');
+  const readmeSource = fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+  const readmeCnSource = fs.readFileSync(new URL('../README_CN.md', import.meta.url), 'utf8');
+  const readmeJpSource = fs.readFileSync(new URL('../README_JP.md', import.meta.url), 'utf8');
+  const marketingSource = fs.readFileSync(new URL('../src/app/MarketingPage.tsx', import.meta.url), 'utf8');
+  const docsSource = fs.readFileSync(new URL('../src/app/DocsPage.tsx', import.meta.url), 'utf8');
+  const releasePageSource = fs.readFileSync(new URL('../deploy/server-update.sh', import.meta.url), 'utf8');
+  const publicPagesCheckSource = fs.readFileSync(new URL('./public-pages-check.mjs', import.meta.url), 'utf8');
+
+  const persistenceFragments = [
+    'CREATE TABLE IF NOT EXISTS server_metric_history',
+    'PRIMARY KEY(server_id, sampled_at)',
+    'idx_server_metric_history_server_sampled_at',
+    'INSERT OR IGNORE INTO server_metric_history',
+    'ORDER BY sampled_at DESC',
+    'LIMIT ?',
+    "DELETE FROM server_metric_history WHERE server_id = ?",
+  ];
+  const missingPersistence = persistenceFragments.filter((fragment) => !databaseSource.includes(fragment));
+  if (missingPersistence.length) {
+    throw new Error(`Server metric history persistence is not bounded or deletion-safe: ${missingPersistence.join(', ')}`);
+  }
+
+  const serviceFragments = [
+    "'COLIPAS_METRIC_HISTORY_INTERVAL_MS'",
+    "'COLIPAS_METRIC_HISTORY_RETENTION_MS'",
+    "'COLIPAS_METRIC_HISTORY_MAX_POINTS_PER_SERVER'",
+    'serverMetricHistoryResponsePointLimit = 240',
+    "z.enum(['1h', '6h', '24h', '7d'])",
+    "source !== 'real' && source !== 'simulate'",
+    'downsampleServerMetricHistory(rawPoints, serverMetricHistoryResponsePointLimit)',
+    "'INVALID_METRIC_HISTORY_WINDOW'",
+  ];
+  const missingService = serviceFragments.filter((fragment) => !historyServiceSource.includes(fragment));
+  if (missingService.length) {
+    throw new Error(`Server metric history trust or sampling guard is incomplete: ${missingService.join(', ')}`);
+  }
+
+  const refreshBodyStart = inventorySource.indexOf('async function refreshSingleServerMetrics(server: ServerNode)');
+  const refreshBodyEnd = inventorySource.indexOf('async function runWithConcurrency', refreshBodyStart);
+  const refreshBody = refreshBodyStart >= 0 && refreshBodyEnd > refreshBodyStart
+    ? inventorySource.slice(refreshBodyStart, refreshBodyEnd)
+    : '';
+  const collectIndex = refreshBody.indexOf('await collectSshMetrics');
+  const historyIndex = refreshBody.indexOf('recordServerMetricHistory(server, nextSample.sampledAt)');
+  const failureIndex = refreshBody.indexOf('recordServerTelemetryFailure');
+  if (
+    collectIndex < 0
+    || historyIndex <= collectIndex
+    || failureIndex <= historyIndex
+    || (refreshBody.match(/recordServerMetricHistory\(/g) ?? []).length !== 1
+  ) {
+    throw new Error('Server metric history must write only after successful SSH collection and never from the failure branch');
+  }
+
+  for (const fragment of [
+    "app.get('/api/servers/:serverId/metric-history'",
+    'getServerMetricHistory(request.params.serverId, request.query.window)',
+    'fetchServerMetricHistory(',
+    'credentials: \'include\'',
+    'data-server-metric-history-open="true"',
+    'data-server-metric-history-drawer="true"',
+    'data-server-metric-history-state="empty"',
+    'createPortal',
+    '.server-metric-history-chart',
+    '.server-metric-history-ledger',
+  ]) {
+    if (!`${serverAppSource}\n${apiClientSource}\n${inventoryUiSource}\n${historyUiSource}\n${styleSource}`.includes(fragment)) {
+      throw new Error(`Server metric history API or UI integration is incomplete: ${fragment}`);
+    }
+  }
+  for (const key of [
+    'servers.metricHistory.open',
+    'servers.metricHistory.chartTitle',
+    'servers.metricHistory.emptyTitle',
+    'servers.metricHistory.changeValue',
+    'servers.metricHistory.source.real',
+  ]) {
+    const count = (i18nSource.match(new RegExp(`'${key.replaceAll('.', '\\.')}':`, 'g')) ?? []).length;
+    if (count !== 3) {
+      throw new Error(`Server metric history i18n key is not defined exactly once in each language: ${key}`);
+    }
+  }
+
+  const documentationRequirements = [
+    ['.env.example', envExampleSource, ['COLIPAS_METRIC_HISTORY_INTERVAL_MS=300000', 'COLIPAS_METRIC_HISTORY_RETENTION_MS=604800000', 'COLIPAS_METRIC_HISTORY_MAX_POINTS_PER_SERVER=2016']],
+    ['README.md', readmeSource, ['| Trusted resource history |', 'COLIPAS_METRIC_HISTORY_INTERVAL_MS']],
+    ['README_CN.md', readmeCnSource, ['| 可信资源历史 |', 'COLIPAS_METRIC_HISTORY_INTERVAL_MS']],
+    ['README_JP.md', readmeJpSource, ['| 信頼できるリソース履歴 |', 'COLIPAS_METRIC_HISTORY_INTERVAL_MS']],
+    ['MarketingPage.tsx', marketingSource, ["featureId: 'server-metric-history'", '可信资源历史']],
+    ['DocsPage.tsx', docsSource, ["sectionId: 'metric-history'", "featureId: 'server-metric-history'", 'GET /api/servers/:serverId/metric-history?window=24h']],
+    ['server-update.sh', releasePageSource, ['data-colipas-feature="server-metric-history"', 'data-colipas-docs-feature="server-metric-history"', 'GET /api/servers/:serverId/metric-history']],
+    ['public-pages-check.mjs', publicPagesCheckSource, ['#metric-history[data-colipas-docs-feature="server-metric-history"]', '[data-colipas-feature="server-metric-history"]']],
+  ];
+  for (const [name, source, fragments] of documentationRequirements) {
+    const missing = fragments.filter((fragment) => !source.includes(fragment));
+    if (missing.length) {
+      throw new Error(`Server metric history public documentation is incomplete in ${name}: ${missing.join(', ')}`);
+    }
+  }
+
+  const { downsampleServerMetricHistory, serverMetricHistoryResponsePointLimit } = await import('../build/server/services/serverMetricHistoryService.js');
+  const startedAt = Date.UTC(2026, 0, 1, 0, 0, 0);
+  const spikeIndexes = { cpu: 341, memory: 907, disk: 1543 };
+  const rawPoints = Array.from({ length: 2016 }, (_, index) => ({
+    sampledAt: new Date(startedAt + index * 5 * 60_000).toISOString(),
+    cpu: index === spikeIndexes.cpu ? 100 : 28 + (index % 7),
+    memory: index === spikeIndexes.memory ? 99 : 42 + (index % 5),
+    disk: index === spikeIndexes.disk ? 98 : 57 + (index % 3),
+    source: 'real',
+  }));
+  const downsampleStartedAt = performance.now();
+  const sampledPoints = downsampleServerMetricHistory(rawPoints, serverMetricHistoryResponsePointLimit);
+  const downsampleDurationMs = performance.now() - downsampleStartedAt;
+  if (
+    sampledPoints.length !== serverMetricHistoryResponsePointLimit
+    || sampledPoints[0] !== rawPoints[0]
+    || sampledPoints.at(-1) !== rawPoints.at(-1)
+    || !sampledPoints.some((point) => point.cpu === 100)
+    || !sampledPoints.some((point) => point.memory === 99)
+    || !sampledPoints.some((point) => point.disk === 98)
+    || downsampleDurationMs > 100
+  ) {
+    throw new Error(`Server metric history downsampling lost bounds, endpoints, peaks, or performance: ${JSON.stringify({ returned: sampledPoints.length, downsampleDurationMs })}`);
+  }
+
+  console.log(`ok server metric history keeps trusted bounded samples and downsamples 2016 points in ${downsampleDurationMs.toFixed(2)}ms`);
 }
 
 function assertInventorySnapshotCacheGuards() {

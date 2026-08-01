@@ -1,7 +1,7 @@
 import { FormEvent, memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Terminal as XTerm, IDisposable } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
-import { BookmarkCheck, BookmarkPlus, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Cpu, Database, Edit3, Eraser, FileKey2, FileText, FileUp, Globe2, KeyRound, Network, Plus, Power, PowerOff, RotateCcw, Search, Server, ShieldCheck, SlidersHorizontal, Sparkles, Star, Terminal, Trash2, X } from 'lucide-react';
+import { BookmarkCheck, BookmarkPlus, ChartNoAxesCombined, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Cpu, Database, Edit3, Eraser, FileKey2, FileText, FileUp, Globe2, KeyRound, Network, Plus, Power, PowerOff, RotateCcw, Search, Server, ShieldCheck, SlidersHorizontal, Sparkles, Star, Terminal, Trash2, X } from 'lucide-react';
 import { Language, useI18n } from '../../i18n';
 import {
   closeServerShell,
@@ -61,6 +61,7 @@ import {
   type SshTerminalSupportSnapshot,
 } from '../../shared/sshTerminalSupportSnapshot';
 import { ServerBulkImport } from './ServerBulkImport';
+import { ServerMetricHistoryDrawer } from './ServerMetricHistoryDrawer';
 
 interface ServerInventoryProps {
   allServers: ServerNode[];
@@ -74,7 +75,7 @@ interface ServerInventoryProps {
   releaseFocusAnchor?: string;
 }
 
-type ServerWorkspaceRowAction = 'powerOn' | 'shutdown' | 'reboot' | 'edit' | 'ssh' | 'diagnose' | 'delete';
+type ServerWorkspaceRowAction = 'powerOn' | 'shutdown' | 'reboot' | 'edit' | 'ssh' | 'diagnose' | 'history' | 'delete';
 
 interface ServerWorkspaceRowProps {
   server: ServerNode;
@@ -645,10 +646,19 @@ const ServerWorkspaceRow = memo(function ServerWorkspaceRow({ server, diagnosing
         <ResourceMeter label="CPU" value={server.cpu} available={metricAvailable} stale={telemetryStatus === 'stale'} />
         <ResourceMeter label="MEM" value={server.memory} available={metricAvailable} stale={telemetryStatus === 'stale'} />
         <ResourceMeter label="DISK" value={server.disk} available={metricAvailable} stale={telemetryStatus === 'stale'} />
-        <div className={`server-metric-telemetry ${telemetryStatus}`} data-server-telemetry-status={telemetryStatus}>
+        <button
+          type="button"
+          className={`server-metric-telemetry ${telemetryStatus}`}
+          data-server-telemetry-status={telemetryStatus}
+          data-server-metric-history-open="true"
+          title={t('servers.metricHistory.open')}
+          aria-label={t('servers.metricHistory.openFor', { name: server.name })}
+          onClick={() => dispatch('history')}
+        >
           <i aria-hidden="true" />
           <span>{formatServerTelemetryStatus(server, language, t)}</span>
-        </div>
+          <ChartNoAxesCombined size={13} aria-hidden="true" />
+        </button>
       </div>
       <div className="server-row-ssh">
         {connected ? (
@@ -672,10 +682,16 @@ const ServerWorkspaceRow = memo(function ServerWorkspaceRow({ server, diagnosing
             <small>{t('common.region')}</small>
             <strong>{formatRegionName(server.region, language)}</strong>
           </span>
-          <span>
+          <button
+            type="button"
+            className="server-mobile-metric-history"
+            data-server-metric-history-open="true"
+            aria-label={t('servers.metricHistory.openFor', { name: server.name })}
+            onClick={() => dispatch('history')}
+          >
             <small>CPU{telemetryStatus === 'fresh' ? '' : ` · ${t(`servers.metricTelemetryShort.${telemetryStatus}`)}`}</small>
             <strong>{metricAvailable ? `${server.cpu}%` : '--'}</strong>
-          </span>
+          </button>
           <span>
             <small>SSH</small>
             <strong>{connected ? (sshAccess?.authType === 'password' ? t('servers.passwordAuth') : t('servers.keyAuth')) : t('servers.unconnected')}</strong>
@@ -773,6 +789,7 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
   const [providerMode, setProviderMode] = useState<string>(customProviderOption);
   const [customProviderName, setCustomProviderName] = useState(customProvider);
   const [editingServerId, setEditingServerId] = useState('');
+  const [metricHistoryServerId, setMetricHistoryServerId] = useState('');
   const [sshPanelServerId, setSshPanelServerId] = useState('');
   const [sshConsoleOpen, setSshConsoleOpen] = useState(false);
   const sshConsoleReplayHistoryRef = useRef(true);
@@ -889,6 +906,10 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
   const fleetViewsEmpty = fleetViews.length === 0;
   const activeFleetFilterCount = useMemo(() => countFleetViewFilters(filters), [filters]);
   const allServersById = useMemo(() => buildServerById(allServers), [allServers]);
+  const metricHistoryServer = useMemo(
+    () => allServersById.get(metricHistoryServerId) ?? null,
+    [allServersById, metricHistoryServerId],
+  );
   const activeSshServer = useMemo(() => allServersById.get(sshPanelServerId) ?? null, [allServersById, sshPanelServerId]);
   const sshDoctorServer = useMemo(() => (sshDoctorReport ? allServersById.get(sshDoctorReport.serverId) ?? null : null), [allServersById, sshDoctorReport]);
   const sshDoctorTrend = useMemo(() => (sshDoctorReport ? buildSshDoctorTrend(sshDoctorReport, sshDoctorHistory, t) : null), [sshDoctorReport, sshDoctorHistory, t]);
@@ -1520,6 +1541,10 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
       }
       if (action === 'diagnose') {
         runSshConnectionDoctor(server);
+        return;
+      }
+      if (action === 'history') {
+        setMetricHistoryServerId(server.id);
         return;
       }
       handleDelete(server);
@@ -2190,6 +2215,12 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
           </div>
         </>
       )}
+
+      <ServerMetricHistoryDrawer
+        open={Boolean(metricHistoryServerId && metricHistoryServer)}
+        server={metricHistoryServer}
+        onClose={() => setMetricHistoryServerId('')}
+      />
 
       {sshConsoleOpen && activeSshServer?.ssh?.connected && (
         <div className="ssh-console-backdrop" role="dialog" aria-modal="true" aria-labelledby="ssh-console-title" onClick={closeSshConsole}>
