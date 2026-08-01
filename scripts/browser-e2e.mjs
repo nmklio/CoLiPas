@@ -22,6 +22,7 @@ try {
   await assertSyntheticTraceDeepLink(page, traceId);
   await assertLaunchGuide(page);
   await assertOperationsInbox(page);
+  await assertResourceAlertPolicy(page);
 
   console.log('ok browser e2e preserves security trace deep link after login');
 
@@ -257,7 +258,7 @@ async function assertOperationsInbox(targetPage) {
 
   const firstUnread = items.filter({ has: targetPage.locator('.operations-inbox-review-button') }).first();
   const firstItemId = await firstUnread.getAttribute('data-operations-inbox-item');
-  if (!firstItemId || !/^ops-(?:launch-[a-z0-9-]+|event-[a-z0-9]{8,20})$/.test(firstItemId)) {
+  if (!firstItemId || !/^ops-(?:launch-[a-z0-9-]+|event-[a-z0-9]{8,20}|resource-[a-z0-9]{8,24})$/.test(firstItemId)) {
     throw new Error(`Operations inbox item did not use a safe stable ID: ${firstItemId}`);
   }
   await firstUnread.locator('.operations-inbox-review-button').click();
@@ -279,7 +280,7 @@ async function assertOperationsInbox(targetPage) {
     && parsedReview.reviewed.every((entry) => (
       entry
       && Object.keys(entry).sort().join(',') === 'at,id'
-      && /^ops-(?:launch-[a-z0-9-]+|event-[a-z0-9]{8,20})$/.test(entry.id)
+      && /^ops-(?:launch-[a-z0-9-]+|event-[a-z0-9]{8,20}|resource-[a-z0-9]{8,24})$/.test(entry.id)
       && Number.isSafeInteger(entry.at)
     ))
   );
@@ -315,6 +316,213 @@ async function assertOperationsInbox(targetPage) {
   }
   await reopenedDrawer.getByRole('button', { name: /close operations inbox/i }).click();
   console.log('ok browser e2e covers operations inbox aggregation, safe persistence, review controls, and deep routing');
+}
+
+async function assertResourceAlertPolicy(targetPage) {
+  let temporaryResourceServerId = '';
+  let originalPolicy = null;
+  let overviewRoute = null;
+
+  try {
+    const initialPolicyResponse = await targetPage.request.get(`${baseUrl}/api/monitoring/resource-alert-policy`);
+    if (!initialPolicyResponse.ok()) {
+      throw new Error(`/api/monitoring/resource-alert-policy browser setup returned HTTP ${initialPolicyResponse.status()}`);
+    }
+    originalPolicy = (await initialPolicyResponse.json()).policy;
+
+    const resourceServer = await createTemporarySimulatedSshServer(
+      targetPage,
+      'browser-e2e-resource-alert',
+      ['browser-e2e', 'resource-alert'],
+    );
+    temporaryResourceServerId = resourceServer.id;
+    overviewRoute = async (route) => {
+      const requestHeaders = { ...route.request().headers() };
+      delete requestHeaders['if-none-match'];
+      const upstream = await route.fetch({ headers: requestHeaders });
+      if (!upstream.ok()) {
+        await route.fulfill({ response: upstream });
+        return;
+      }
+      const payload = await upstream.json();
+      const target = payload.servers?.find((server) => server.id === resourceServer.id);
+      if (target) {
+        target.cpu = 97;
+        target.memory = 88;
+        target.disk = 71;
+        target.status = 'running';
+        if (target.ssh) {
+          target.ssh.connected = true;
+        }
+      }
+      const responseHeaders = { ...upstream.headers() };
+      delete responseHeaders['content-length'];
+      delete responseHeaders['content-encoding'];
+      delete responseHeaders.etag;
+      responseHeaders['cache-control'] = 'no-store';
+      await route.fulfill({
+        status: 200,
+        headers: responseHeaders,
+        contentType: 'application/json',
+        body: JSON.stringify(payload),
+      });
+    };
+    await targetPage.route('**/api/overview', overviewRoute);
+
+    await targetPage.goto(`${baseUrl}/admin/#overview`, { waitUntil: 'networkidle', timeout: 30000 });
+    const trigger = targetPage.locator('[data-resource-alert-policy-open="true"]');
+    await trigger.waitFor({ timeout: 10000 });
+    await trigger.click();
+    const drawer = targetPage.locator('[data-resource-alert-policy-drawer="true"]');
+    await drawer.waitFor({ timeout: 5000 });
+    await waitForResourceAlertPolicyDrawerStable(targetPage);
+    await assertElementWithinViewport(targetPage, '[data-resource-alert-policy-drawer="true"]', 'desktop resource alert policy');
+    await assertNoHorizontalOverflow(targetPage, 'desktop resource alert policy');
+    const policyText = await drawer.innerText();
+    if (!/Resource alert policy|Breach thresholds|Re-alert cadence|P0/i.test(policyText)) {
+      throw new Error(`Resource alert policy drawer is incomplete: ${policyText}`);
+    }
+    if (await targetPage.evaluate(() => document.body.style.overflow) !== 'hidden') {
+      throw new Error('Resource alert policy drawer did not lock background scrolling');
+    }
+
+    await setRangeInputValue(drawer.locator('[data-resource-alert-threshold="cpu"] input'), 50);
+    await setRangeInputValue(drawer.locator('[data-resource-alert-threshold="memory"] input'), 55);
+    await setRangeInputValue(drawer.locator('[data-resource-alert-threshold="disk"] input'), 60);
+    await drawer.locator('.resource-alert-policy-reminder select').selectOption('15');
+    await drawer.getByRole('button', { name: /^Save policy$/i }).click();
+    await drawer.waitFor({ state: 'hidden', timeout: 5000 });
+
+    await targetPage.reload({ waitUntil: 'networkidle', timeout: 30000 });
+    await targetPage.locator('[data-resource-alert-policy-open="true"]').click();
+    const persistedDrawer = targetPage.locator('[data-resource-alert-policy-drawer="true"]');
+    await persistedDrawer.waitFor({ timeout: 5000 });
+    await waitForResourceAlertPolicyDrawerStable(targetPage);
+    const persistedValues = await Promise.all([
+      persistedDrawer.locator('[data-resource-alert-threshold="cpu"] input').inputValue(),
+      persistedDrawer.locator('[data-resource-alert-threshold="memory"] input').inputValue(),
+      persistedDrawer.locator('[data-resource-alert-threshold="disk"] input').inputValue(),
+      persistedDrawer.locator('.resource-alert-policy-reminder select').inputValue(),
+    ]);
+    if (persistedValues.join(',') !== '50,55,60,15') {
+      throw new Error(`Resource alert policy did not persist through reload: ${persistedValues.join(',')}`);
+    }
+    await captureVisualEvidence(targetPage, 'desktop-resource-alert-policy', [
+      '[data-health-baseline="true"]',
+      '[data-resource-alert-policy-drawer="true"]',
+    ]);
+    await targetPage.keyboard.press('Escape');
+    await persistedDrawer.waitFor({ state: 'hidden', timeout: 5000 });
+    if (await targetPage.evaluate(() => document.body.style.overflow) === 'hidden') {
+      throw new Error('Resource alert policy drawer did not restore background scrolling after Escape');
+    }
+
+    await targetPage.locator('[data-operations-inbox-open="true"]').click();
+    const inbox = targetPage.locator('[data-operations-inbox-drawer="true"]');
+    await inbox.waitFor({ timeout: 5000 });
+    const resourceItems = inbox.locator('[data-operations-inbox-item^="ops-resource-"]').filter({ hasText: resourceServer.name });
+    if (await resourceItems.count() !== 3) {
+      throw new Error(`Resource alert inbox should expose three breached metrics for ${resourceServer.name}`);
+    }
+    const resourceItem = resourceItems.first();
+    const resourceItemId = await resourceItem.getAttribute('data-operations-inbox-item');
+    const resourceItemText = await resourceItem.innerText();
+    if (
+      !resourceItemId
+      || !/^ops-resource-[a-z0-9]{8,24}$/.test(resourceItemId)
+      || !/P0|threshold breached|Resource policy/i.test(resourceItemText)
+      || /\b(?:\d{1,3}\.){3}\d{1,3}\b|password|private key|api key/i.test(resourceItemText)
+    ) {
+      throw new Error(`Resource alert inbox item is incomplete or unsafe: ${resourceItemText}`);
+    }
+    await resourceItem.locator('.operations-inbox-review-button').click();
+    const reviewedResourceItem = targetPage.locator(`[data-operations-inbox-item="${resourceItemId}"]`);
+    await reviewedResourceItem.waitFor({ timeout: 5000 });
+    if (await reviewedResourceItem.getAttribute('data-inbox-reviewed') !== 'true') {
+      throw new Error('Resource alert did not move to reviewed state');
+    }
+    await targetPage.evaluate(({ itemId }) => {
+      const key = 'colipas.operationsInbox.review.v1';
+      const parsed = JSON.parse(window.localStorage.getItem(key) ?? 'null');
+      const item = parsed?.reviewed?.find((entry) => entry.id === itemId);
+      if (item) {
+        item.at = Date.now() - 16 * 60 * 1000;
+        window.localStorage.setItem(key, JSON.stringify(parsed));
+      }
+    }, { itemId: resourceItemId });
+    await inbox.getByRole('button', { name: /close operations inbox/i }).click();
+    await targetPage.reload({ waitUntil: 'networkidle', timeout: 30000 });
+    await targetPage.locator('[data-operations-inbox-open="true"]').click();
+    const reAlertedItem = targetPage.locator(`[data-operations-inbox-item="${resourceItemId}"]`);
+    await reAlertedItem.waitFor({ timeout: 5000 });
+    if (await reAlertedItem.getAttribute('data-inbox-reviewed') !== 'false') {
+      throw new Error('Persistent resource breach did not re-alert after the configured cadence');
+    }
+    await reAlertedItem.locator('.operations-inbox-review-button').click();
+    if (await reAlertedItem.getAttribute('data-inbox-reviewed') !== 'true') {
+      throw new Error('Re-alerted resource breach could not be reviewed a second time');
+    }
+    await captureVisualEvidence(targetPage, 'desktop-resource-alert-inbox', [
+      '.topbar',
+      `[data-operations-inbox-item="${resourceItemId}"]`,
+    ]);
+    await reAlertedItem.locator('.operations-inbox-item-action').click();
+    await targetPage.waitForURL(/#servers$/, { timeout: 10000 });
+    const serverQuery = targetPage.locator('.server-filter-row input').first();
+    await serverQuery.waitFor({ timeout: 10000 });
+    if ((await serverQuery.inputValue()) !== resourceServer.name) {
+      throw new Error('Resource alert did not scope the server workspace to the affected server');
+    }
+    await targetPage.locator('.server-workspace-row').filter({ hasText: resourceServer.name }).waitFor({ timeout: 10000 });
+    console.log('ok browser e2e covers persisted resource alert policy, recurring inbox alerts, and server deep routing');
+  } finally {
+    if (originalPolicy) {
+      await targetPage.request.put(`${baseUrl}/api/monitoring/resource-alert-policy`, {
+        data: {
+          enabled: originalPolicy.enabled,
+          cpuThreshold: originalPolicy.cpuThreshold,
+          memoryThreshold: originalPolicy.memoryThreshold,
+          diskThreshold: originalPolicy.diskThreshold,
+          reminderMinutes: originalPolicy.reminderMinutes,
+        },
+      }).catch(() => undefined);
+    }
+    if (overviewRoute) {
+      await targetPage.unroute('**/api/overview', overviewRoute).catch(() => undefined);
+    }
+    if (temporaryResourceServerId) {
+      await deleteTemporaryAssetServer(targetPage, temporaryResourceServerId);
+      await targetPage.goto(`${baseUrl}/admin/#servers`, {
+        waitUntil: 'networkidle',
+        timeout: 30000,
+      });
+      await targetPage.reload({ waitUntil: 'networkidle', timeout: 30000 });
+    }
+  }
+}
+
+async function waitForResourceAlertPolicyDrawerStable(targetPage) {
+  await targetPage.waitForFunction(() => {
+    const element = document.querySelector('[data-resource-alert-policy-drawer="true"]');
+    if (!element) {
+      return false;
+    }
+    const box = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    return box.left >= -1
+      && box.right <= window.innerWidth + 1
+      && Number(style.opacity) >= 0.99
+      && style.transform === 'none';
+  }, null, { timeout: 2000 });
+}
+
+async function setRangeInputValue(locator, value) {
+  await locator.evaluate((input, nextValue) => {
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    valueSetter?.call(input, String(nextValue));
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }, value);
 }
 
 function isExpectedBrowserConsoleNoise(text) {
@@ -1147,7 +1355,16 @@ async function assertServerBulkImportPanel(targetPage) {
   const importedIds = [];
   const toggle = targetPage.locator('[data-server-bulk-import-toggle="true"]');
   const panel = targetPage.locator('[data-server-bulk-import="true"]');
-  const initialTotal = Number(await targetPage.locator('.server-summary-grid article').first().locator('strong').innerText());
+  const initialInventoryResponse = await targetPage.request.get(`${baseUrl}/api/servers`);
+  if (!initialInventoryResponse.ok()) {
+    throw new Error(`/api/servers bulk import baseline returned HTTP ${initialInventoryResponse.status()}`);
+  }
+  const initialInventory = await initialInventoryResponse.json();
+  const initialTotal = Number(initialInventory.meta?.total ?? initialInventory.items?.length ?? 0);
+  await targetPage.waitForFunction((expectedTotal) => {
+    const value = document.querySelector('.server-summary-grid article strong')?.textContent ?? '';
+    return Number(value) === expectedTotal;
+  }, initialTotal, { timeout: 10000 });
 
   try {
     await toggle.click();
@@ -3587,6 +3804,44 @@ async function assertMobileConsoleAndMap() {
     await mobilePage.getByRole('button', { name: /open navigation/i }).waitFor({ timeout: 5000 });
     await assertNoHorizontalOverflow(mobilePage, 'mobile console after login');
     await assertElementHorizontallyWithinViewport(mobilePage, '[data-launch-guide="true"]', 'mobile compact launch guide');
+
+    await mobilePage.locator('[data-resource-alert-policy-open="true"]').click();
+    const mobilePolicyDrawer = mobilePage.locator('[data-resource-alert-policy-drawer="true"]');
+    await mobilePolicyDrawer.waitFor({ timeout: 5000 });
+    await waitForResourceAlertPolicyDrawerStable(mobilePage);
+    await assertElementWithinViewport(mobilePage, '[data-resource-alert-policy-drawer="true"]', 'mobile resource alert policy');
+    await assertNoHorizontalOverflow(mobilePage, 'mobile resource alert policy');
+    const mobilePolicyMetrics = await mobilePolicyDrawer.evaluate((element) => ({
+      right: element.getBoundingClientRect().right,
+      left: element.getBoundingClientRect().left,
+      scrollWidth: element.scrollWidth,
+      clientWidth: element.clientWidth,
+      viewportWidth: window.innerWidth,
+    }));
+    if (
+      mobilePolicyMetrics.left < -1
+      || mobilePolicyMetrics.right > mobilePolicyMetrics.viewportWidth + 1
+      || mobilePolicyMetrics.scrollWidth > mobilePolicyMetrics.clientWidth + 1
+    ) {
+      throw new Error(`Mobile resource alert policy overflowed the viewport: ${JSON.stringify(mobilePolicyMetrics)}`);
+    }
+    await captureVisualEvidence(mobilePage, 'mobile-resource-alert-policy', [
+      '[data-resource-alert-policy-drawer="true"]',
+    ]);
+    const mobilePolicyActions = mobilePolicyDrawer.locator('.resource-alert-policy-actions');
+    await assertElementWithinViewport(mobilePage, '.resource-alert-policy-actions', 'mobile resource alert policy actions');
+    if (
+      !(await mobilePolicyActions.getByRole('button', { name: /cancel/i }).isVisible())
+      || !(await mobilePolicyActions.getByRole('button', { name: /save policy/i }).isVisible())
+    ) {
+      throw new Error('Mobile resource alert policy actions were not persistently reachable');
+    }
+    await captureVisualEvidence(mobilePage, 'mobile-resource-alert-policy-actions', [
+      '[data-resource-alert-policy-drawer="true"]',
+      '.resource-alert-policy-actions',
+    ]);
+    await mobilePage.keyboard.press('Escape');
+    await mobilePolicyDrawer.waitFor({ state: 'hidden', timeout: 5000 });
 
     const compactTopbarMetrics = await mobilePage.locator('.topbar').evaluate((element) => ({
       height: element.getBoundingClientRect().height,

@@ -6,6 +6,8 @@ import { feature } from 'topojson-client';
 import { useI18n } from '../../i18n';
 import { OperationEvent, ServerNode } from '../../types';
 import { formatCountryName, formatRegionName, percentClass, statusLabel } from '../../utils/format';
+import type { ResourceAlertEvaluation, ResourceAlertPolicy, ResourceAlertPolicyUpdate } from '../../types';
+import { ResourceAlertPolicyControl } from './ResourceAlertPolicyControl';
 import type { Feature, FeatureCollection, Geometry } from 'geojson';
 
 interface MonitoringOverviewProps {
@@ -15,6 +17,10 @@ interface MonitoringOverviewProps {
   avgCpu: number;
   performanceMode?: boolean;
   opsPreflightSnapshot?: OverviewPreflightSnapshot | null;
+  resourceAlertPolicy: ResourceAlertPolicy;
+  resourceAlertEvaluation: ResourceAlertEvaluation;
+  resourceAlertPolicyLoading?: boolean;
+  onResourceAlertPolicySave: (policy: ResourceAlertPolicyUpdate) => Promise<ResourceAlertPolicy>;
   onRegionServersOpen?: (region: string | string[]) => void;
   onHealthSignalOpen?: (signal: HealthBaselineSignalId) => void;
   onOperationsDraftOpen?: () => void;
@@ -220,7 +226,22 @@ const normalizedRegionLocations = regionLocations.map(({ aliases, location }) =>
 
 const fallbackLocation: RegionLocation = { lat: 18, lng: 0, countryId: '', matched: false };
 
-export function MonitoringOverview({ servers, events, onlineCount, avgCpu, performanceMode = false, opsPreflightSnapshot, onRegionServersOpen, onHealthSignalOpen, onOperationsDraftOpen, onOpsPreflightTraceOpen }: MonitoringOverviewProps) {
+export function MonitoringOverview({
+  servers,
+  events,
+  onlineCount,
+  avgCpu,
+  performanceMode = false,
+  opsPreflightSnapshot,
+  resourceAlertPolicy,
+  resourceAlertEvaluation,
+  resourceAlertPolicyLoading = false,
+  onResourceAlertPolicySave,
+  onRegionServersOpen,
+  onHealthSignalOpen,
+  onOperationsDraftOpen,
+  onOpsPreflightTraceOpen,
+}: MonitoringOverviewProps) {
   const { language, t } = useI18n();
   const providerName = (provider: string) => formatProviderName(provider, t);
   const regionName = (region: string) => formatRegionName(region, language);
@@ -434,6 +455,12 @@ export function MonitoringOverview({ servers, events, onlineCount, avgCpu, perfo
           {healthBaseline.actions.map((action) => (
             <small key={action}>{action}</small>
           ))}
+          <ResourceAlertPolicyControl
+            policy={resourceAlertPolicy}
+            evaluation={resourceAlertEvaluation}
+            loading={resourceAlertPolicyLoading}
+            onSave={onResourceAlertPolicySave}
+          />
           <button type="button" className="health-baseline-draft-button" onClick={onOperationsDraftOpen}>
             {t('overview.opsDraftButton')}
           </button>

@@ -35,6 +35,7 @@ import { createReleaseEvidenceShare, listReleaseEvidenceShares, readPublicReleas
 import { buildReleaseReadiness, buildReleaseReadinessReport, getReleaseGatePolicy, recordReleaseReadinessSnapshot, updateReleaseGatePolicy } from './services/releaseReadinessService.js';
 import { checkReleaseSyncHealth } from './services/releaseSyncHealthService.js';
 import { buildReleaseVerification, isReleaseVerificationAuthorized, isReleaseVerificationEnabled } from './services/releaseVerificationService.js';
+import { getResourceAlertPolicy, updateResourceAlertPolicy } from './services/resourceAlertPolicyService.js';
 import { claimSshProductionProbeScheduleRun, getSshProductionProbeSchedule, recordSshProductionProbe, updateSshProductionProbeSchedule } from './services/sshProductionProbeService.js';
 import { createSshRunbookCommand, deleteSshRunbookCommand, importSshRunbookCommands, listSshRunbookCommands, markSshRunbookCommandUsed, reorderSshRunbookCommands, updateSshRunbookCommand, updateSshRunbookCommandPin } from './services/sshRunbookService.js';
 import {
@@ -319,6 +320,36 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
     }
 
     response.type('application/json').send(snapshot.body);
+  });
+
+  app.get('/api/monitoring/resource-alert-policy', (_request, response) => {
+    response.setHeader('Cache-Control', 'no-store');
+    response.json(getResourceAlertPolicy());
+  });
+
+  app.put('/api/monitoring/resource-alert-policy', (request, response, next) => {
+    try {
+      const session = requireSession(request, config);
+      const result = updateResourceAlertPolicy(request.body);
+      recordAudit({
+        action: 'RESOURCE_ALERT_POLICY_UPDATE',
+        actor: session.user.username,
+        target: 'monitoring-resource-alert-policy',
+        status: 'success',
+        detail: `Resource alerts ${result.policy.enabled ? 'enabled' : 'paused'}; CPU ${result.policy.cpuThreshold}%, memory ${result.policy.memoryThreshold}%, disk ${result.policy.diskThreshold}%, reminder ${result.policy.reminderMinutes} minutes`,
+      });
+      response.setHeader('Cache-Control', 'no-store');
+      response.json(result);
+    } catch (error) {
+      recordAudit({
+        action: 'RESOURCE_ALERT_POLICY_UPDATE',
+        actor: getCurrentSession(request, config)?.user.username ?? 'anonymous',
+        target: 'monitoring-resource-alert-policy',
+        status: 'failed',
+        detail: 'Resource alert policy update was rejected',
+      });
+      next(error);
+    }
   });
 
   app.get('/api/config', (_request, response) => {

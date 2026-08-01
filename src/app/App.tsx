@@ -60,11 +60,19 @@ import {
   fetchAuthSession,
   fetchConfigSummary,
   fetchOverview,
+  fetchResourceAlertPolicy,
   login,
   logout,
+  saveResourceAlertPolicy as persistResourceAlertPolicy,
   updateAccountProfile,
 } from '../services/apiClient';
-import type { OperationTaskPreflightResponse, ServerNode } from '../types';
+import type {
+  OperationTaskPreflightResponse,
+  ResourceAlertPolicy,
+  ResourceAlertPolicyUpdate,
+  ServerNode,
+} from '../types';
+import { buildResourceAlertEvaluation, defaultResourceAlertPolicy } from '../shared/resourceAlerts';
 import {
   getOverviewRefreshDelay,
   getOverviewRefreshInterval,
@@ -460,6 +468,8 @@ export function App() {
   const [aiSeedQuestion, setAiSeedQuestion] = useState('');
   const [overview, setOverview] = useState<OverviewResponse>(fallbackOverview);
   const [configSummary, setConfigSummary] = useState<ConfigSummaryResponse | null>(null);
+  const [resourceAlertPolicy, setResourceAlertPolicy] = useState<ResourceAlertPolicy>(() => ({ ...defaultResourceAlertPolicy }));
+  const [resourceAlertPolicyLoading, setResourceAlertPolicyLoading] = useState(false);
   const [dataSource, setDataSource] = useState<'api' | 'fallback'>('fallback');
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
   const [adaptiveRefreshStatus, setAdaptiveRefreshStatus] = useState<AdaptiveRefreshStatus>(() => (
@@ -544,6 +554,39 @@ export function App() {
       }
       return false;
     }
+  }
+
+  async function refreshResourceAlertPolicy() {
+    if (!session?.authenticated && !sessionAuthenticatedRef.current) {
+      return false;
+    }
+    setResourceAlertPolicyLoading(true);
+    try {
+      const result = await fetchResourceAlertPolicy();
+      if (!appMountedRef.current || !sessionAuthenticatedRef.current) {
+        return false;
+      }
+      setResourceAlertPolicy(result.policy);
+      return true;
+    } catch (error) {
+      if (appMountedRef.current && error instanceof AuthRequiredError) {
+        setSession(null);
+        setAiCollapsed(true);
+      }
+      return false;
+    } finally {
+      if (appMountedRef.current) {
+        setResourceAlertPolicyLoading(false);
+      }
+    }
+  }
+
+  async function saveResourceAlertPolicy(policy: ResourceAlertPolicyUpdate) {
+    const result = await persistResourceAlertPolicy(policy);
+    if (appMountedRef.current && sessionAuthenticatedRef.current) {
+      setResourceAlertPolicy(result.policy);
+    }
+    return result.policy;
   }
 
   useEffect(() => {
@@ -740,6 +783,7 @@ export function App() {
 
     void refreshOverview();
     void refreshConfigSummary();
+    void refreshResourceAlertPolicy();
     return undefined;
   }, [session?.authenticated]);
 
@@ -1054,11 +1098,17 @@ export function App() {
     opsPreflightSnapshot: overviewPreflightSnapshot,
     t,
   }), [configSummary, connectedCount, dataSource, onlineCount, openEventCount, overview.servers.length, overviewPreflightSnapshot, t]);
+  const resourceAlertEvaluation = useMemo(
+    () => buildResourceAlertEvaluation(overview.servers, resourceAlertPolicy),
+    [overview.servers, resourceAlertPolicy],
+  );
   const operationsInboxItems = useMemo(() => buildOperationsInboxItems({
     launchSteps: launchChecklist.remediationSteps,
     events: overview.operationEvents,
+    resourceAlerts: resourceAlertEvaluation,
+    resourceAlertReminderMinutes: resourceAlertPolicy.reminderMinutes,
     t,
-  }), [launchChecklist.remediationSteps, overview.operationEvents, t]);
+  }), [launchChecklist.remediationSteps, overview.operationEvents, resourceAlertEvaluation, resourceAlertPolicy.reminderMinutes, t]);
   const operationsInboxReview = useOperationsInboxReview(operationsInboxItems);
   const launchGuideCompact = launchGuideViewPreference === 'compact'
     || (launchGuideViewPreference === 'auto' && (performanceMode || activeSection !== 'overview'));
@@ -1112,6 +1162,8 @@ export function App() {
       keywords: `refresh sync api assets ${t('app.refresh')} ${t('app.retryApi')}`,
       run: () => {
         void refreshOverview();
+        void refreshConfigSummary();
+        void refreshResourceAlertPolicy();
       },
     },
     {
@@ -1250,6 +1302,8 @@ export function App() {
     setProfile(fallbackProfile);
     setOverview(fallbackOverview);
     setConfigSummary(null);
+    setResourceAlertPolicy({ ...defaultResourceAlertPolicy });
+    setResourceAlertPolicyLoading(false);
     setDataSource('fallback');
     setLastRefreshedAt(null);
     setAiCollapsed(true);
@@ -1536,7 +1590,10 @@ export function App() {
 
   function openOperationsInboxItem(item: OperationsInboxItem) {
     if (item.section === 'servers') {
-      setFilters(defaultFilters);
+      setFilters({
+        ...defaultFilters,
+        query: item.serverName ?? '',
+      });
     }
     navigateToSection(item.section);
   }
@@ -1893,6 +1950,7 @@ export function App() {
                     onClick={() => {
                       void refreshOverview();
                       void refreshConfigSummary();
+                      void refreshResourceAlertPolicy();
                     }}
                   >
                     <RefreshCw size={17} aria-hidden="true" />
@@ -2200,6 +2258,10 @@ export function App() {
                 avgCpu={avgCpu}
                 performanceMode={performanceMode}
                 opsPreflightSnapshot={overviewPreflightSnapshot}
+                resourceAlertPolicy={resourceAlertPolicy}
+                resourceAlertEvaluation={resourceAlertEvaluation}
+                resourceAlertPolicyLoading={resourceAlertPolicyLoading}
+                onResourceAlertPolicySave={saveResourceAlertPolicy}
                 onRegionServersOpen={openServersForRegion}
                 onHealthSignalOpen={openHealthSignal}
                 onOperationsDraftOpen={openOverviewOperationsDraft}

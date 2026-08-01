@@ -45,6 +45,51 @@ export interface ServerNode {
   ssh?: ServerSshAccess;
 }
 
+export type ResourceAlertMetric = 'cpu' | 'memory' | 'disk';
+
+export interface ResourceAlertPolicy {
+  enabled: boolean;
+  cpuThreshold: number;
+  memoryThreshold: number;
+  diskThreshold: number;
+  reminderMinutes: number;
+  updatedAt: string | null;
+}
+
+export interface ResourceAlertPolicyUpdate {
+  enabled: boolean;
+  cpuThreshold: number;
+  memoryThreshold: number;
+  diskThreshold: number;
+  reminderMinutes: number;
+}
+
+export interface ResourceAlertPolicyResponse {
+  policy: ResourceAlertPolicy;
+}
+
+export interface ResourceAlertSignal {
+  id: string;
+  serverId: string;
+  serverName: string;
+  metric: ResourceAlertMetric;
+  value: number;
+  threshold: number;
+  overage: number;
+  severity: 'warning' | 'critical';
+}
+
+export interface ResourceAlertEvaluation {
+  summary: {
+    activeAlerts: number;
+    affectedServers: number;
+    criticalAlerts: number;
+    evaluatedServers: number;
+    truncated: boolean;
+  };
+  signals: ResourceAlertSignal[];
+}
+
 export interface SshRunbookCommand {
   id: string;
   title: string;

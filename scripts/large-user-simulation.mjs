@@ -5,6 +5,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { chromium } from 'playwright';
+import { buildResourceAlertEvaluation } from '../build/shared/resourceAlerts.js';
 
 const root = process.cwd();
 const serverCount = clampNumber(process.env.LARGE_SIM_SERVER_COUNT, 100, 3000, 1000);
@@ -31,6 +32,7 @@ const port = await getAvailablePort(Number(process.env.LARGE_SIM_PORT || 18180))
 const baseUrl = `http://127.0.0.1:${port}`;
 const timings = {};
 const assertions = [];
+let resourceAlertEvidence = null;
 let browser;
 let appServer;
 
@@ -75,6 +77,7 @@ try {
   const sessions = await timed('loginUsersMs', () => loginUsers(baseUrl, userCount));
   adminHeaders = sessions.at(-1) ?? adminHeaders;
   await timed('apiReadWriteSimulationMs', () => runConcurrentUserSimulation(baseUrl, sessions));
+  await timed('resourceAlertPolicySimulationMs', () => runResourceAlertPolicySimulation(baseUrl, sessions));
   await timed('operationsSimulationMs', () => runOperationsSimulation(baseUrl, adminHeaders));
   await timed('aiSimulationMs', () => runAiSimulation(baseUrl, adminHeaders));
   await timed('securityAndReleaseSimulationMs', () => runSecurityAndReleaseSimulation(baseUrl, adminHeaders));
@@ -157,6 +160,87 @@ async function runConcurrentUserSimulation(targetBaseUrl, sessions) {
     authToken: '',
   }, sessions[0], [400, 403]);
   assert(blocked.status === 400 || blocked.status === 403, 'custom API SSRF guard blocked metadata address');
+}
+
+async function runResourceAlertPolicySimulation(targetBaseUrl, sessions) {
+  const policy = {
+    enabled: true,
+    cpuThreshold: 84,
+    memoryThreshold: 83,
+    diskThreshold: 82,
+    reminderMinutes: 15,
+  };
+  const saved = await putJson(targetBaseUrl, '/api/monitoring/resource-alert-policy', policy, sessions[0], 200);
+  assert(Object.entries(policy).every(([key, value]) => saved.body.policy?.[key] === value), 'resource alert policy persisted during concurrent simulation');
+
+  const policyReads = await Promise.all(sessions.map((headers) => getJson(targetBaseUrl, '/api/monitoring/resource-alert-policy', headers)));
+  assert(policyReads.every((response) => response.status === 200), 'all concurrent resource alert policy reads returned HTTP 200');
+  assert(
+    policyReads.every((response) => Object.entries(policy).every(([key, value]) => response.body.policy?.[key] === value)),
+    'all concurrent users observed one consistent resource alert policy',
+  );
+
+  const evaluationInput = Array.from({ length: serverCount }, (_, index) => ({
+    id: `resource-load-${index}`,
+    name: `Resource load ${index + 1}`,
+    provider: 'Load test',
+    region: 'Synthetic',
+    status: 'running',
+    publicIp: '192.0.2.1',
+    privateIp: '-',
+    os: 'Linux',
+    cpu: (index * 37) % 101,
+    memory: (index * 53 + 11) % 101,
+    disk: (index * 29 + 23) % 101,
+    tags: [],
+    ssh: {
+      host: 'synthetic.invalid',
+      port: 22,
+      username: 'operator',
+      authType: 'password',
+      connected: true,
+      lastVerifiedAt: new Date(0).toISOString(),
+      verifyMode: 'simulate',
+    },
+  }));
+  const evaluationStartedAt = performance.now();
+  const evaluation = buildResourceAlertEvaluation(evaluationInput, { ...policy, updatedAt: null });
+  const evaluationDurationMs = Number((performance.now() - evaluationStartedAt).toFixed(2));
+  let expectedAlerts = 0;
+  let expectedCritical = 0;
+  const expectedAffected = new Set();
+  for (const server of evaluationInput) {
+    for (const [metric, threshold] of [['cpu', policy.cpuThreshold], ['memory', policy.memoryThreshold], ['disk', policy.diskThreshold]]) {
+      if (server[metric] < threshold) {
+        continue;
+      }
+      expectedAlerts += 1;
+      expectedAffected.add(server.id);
+      expectedCritical += server[metric] >= Math.min(95, threshold + 10) ? 1 : 0;
+    }
+  }
+  assert(evaluation.summary.evaluatedServers === serverCount, `resource alert evaluator processed all ${serverCount} synthetic connected servers`);
+  assert(evaluation.summary.activeAlerts === expectedAlerts, 'resource alert evaluator returned the expected breach count');
+  assert(evaluation.summary.affectedServers === expectedAffected.size, 'resource alert evaluator returned the expected affected server count');
+  assert(evaluation.summary.criticalAlerts === expectedCritical, 'resource alert evaluator returned the expected P0 count');
+  assert(evaluation.signals.length <= 24 && evaluation.summary.truncated === (expectedAlerts > 24), 'resource alert evaluator bounded detailed signals to 24');
+  assert(evaluationDurationMs < 250, `resource alert evaluator completed in ${evaluationDurationMs}ms under the 250ms budget`);
+  const serializedEvaluation = JSON.stringify(evaluation);
+  assert(!/publicIp|privateIp|192\.0\.2\.|synthetic\.invalid|password/i.test(serializedEvaluation), 'resource alert evaluation omitted addresses and credentials');
+  assert(
+    evaluation.signals.every((signal) => Object.keys(signal).sort().join(',') === 'id,metric,overage,serverId,serverName,severity,threshold,value'),
+    'resource alert signals exposed only the bounded operational schema',
+  );
+  resourceAlertEvidence = {
+    policy,
+    evaluatedServers: evaluation.summary.evaluatedServers,
+    activeAlerts: evaluation.summary.activeAlerts,
+    affectedServers: evaluation.summary.affectedServers,
+    criticalAlerts: evaluation.summary.criticalAlerts,
+    returnedSignals: evaluation.signals.length,
+    signalsTruncated: evaluation.summary.truncated,
+    evaluationDurationMs,
+  };
 }
 
 async function runOperationsSimulation(targetBaseUrl, headers) {
@@ -473,6 +557,7 @@ function buildSummary(overview, serverList) {
       regionCount: Object.keys(byRegion).length,
       topRegions,
     },
+    resourceAlerts: resourceAlertEvidence,
     timingsMs: timings,
     assertions,
   };
@@ -595,6 +680,15 @@ async function postJson(targetBaseUrl, route, body, headers, expectedStatus = nu
 async function patchJson(targetBaseUrl, route, body, headers, expectedStatus = 200) {
   const response = await fetch(`${targetBaseUrl}${route}`, {
     method: 'PATCH',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return assertExpectedStatus(response, route, await safeJson(response), expectedStatus);
+}
+
+async function putJson(targetBaseUrl, route, body, headers, expectedStatus = 200) {
+  const response = await fetch(`${targetBaseUrl}${route}`, {
+    method: 'PUT',
     headers: { ...headers, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });

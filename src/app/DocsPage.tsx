@@ -1,5 +1,6 @@
 import {
   ArrowRight,
+  BellRing,
   BookmarkCheck,
   Bot,
   CheckCircle2,
@@ -37,6 +38,7 @@ interface DocsPageProps {
 const quickNav = [
   { href: '#install', label: '安装部署' },
   { href: '#server-access', label: '接入服务器' },
+  { href: '#resource-alerts', label: '资源告警' },
   { href: '#bulk-import', label: '批量导入' },
   { href: '#sessions', label: '会话管理' },
   { href: '#ai', label: 'AI 设置' },
@@ -149,8 +151,17 @@ const bulkImportUsageBlock = {
 const operationsInboxUsageBlock = {
   icon: Inbox,
   title: '使用全局运维收件箱',
-  body: '桌面端可从顶栏打开运维收件箱，移动端则从快捷控制进入。它会聚合上线修复队列、SSH 与资产覆盖缺口以及开放事件，并把每个事项直接路由到对应模块。',
-  points: ['阻塞、需处理和已审阅事项分组显示', '支持单项审阅、全部已读和清除本机审阅状态', '浏览器只保存稳定事项 ID 与审阅时间，不保存事件正文、服务器地址或凭据'],
+  body: '桌面端可从顶栏打开运维收件箱，移动端则从快捷控制进入。它会聚合资源越线、上线修复队列、SSH 与资产覆盖缺口以及开放事件，并把每个事项直接路由到对应模块。',
+  points: ['阻塞、需处理和已审阅事项分组显示', '资源越线持续存在时按策略周期重新进入未审阅状态', '支持单项审阅、全部已读和清除本机审阅状态', '浏览器只保存稳定事项 ID 与审阅时间，不保存事件正文、服务器地址或凭据'],
+};
+
+const resourceAlertPolicyUsageBlock = {
+  icon: BellRing,
+  title: '配置资源告警策略',
+  body: '在总览的健康基线中打开资源告警抽屉，为 CPU、内存和磁盘设置独立阈值，并选择未解消越线的再次提醒周期。策略保存在 SQLite，刷新页面或服务重启后仍然有效。',
+  points: ['阈值范围为 50%–95%，再次提醒可选 15 分钟至 24 小时', '只评估 SSH 已验证、当前未停止的服务器', '达到阈值记为 P1，高出阈值 10 个百分点后升级为 P0，最高按 95% 判定', '点击收件箱告警会按服务器名称定位资产，不在浏览器存储地址、指标正文或凭据'],
+  sectionId: 'resource-alerts',
+  featureId: 'resource-alert-policy',
 };
 
 const operatorControlsUsageBlock = {
@@ -214,6 +225,8 @@ const apiRows = [
   ['DELETE /api/account/sessions/:id', '撤销指定的其他登录会话；当前会话需要通过退出登录关闭。'],
   ['POST /api/account/sessions/revoke-others', '保留当前会话并撤销同一管理员账号的其他全部登录。'],
   ['GET /api/overview', '云账号、服务器、事件和总览指标。'],
+  ['GET /api/monitoring/resource-alert-policy', '读取持久化的 CPU、内存、磁盘阈值与再次提醒周期。'],
+  ['PUT /api/monitoring/resource-alert-policy', '校验并保存资源告警策略，同时写入脱敏审计记录。'],
   ['POST /api/servers', '新增资产或执行真实 SSH 验证接入。'],
   ['POST /api/servers/import', '批量导入最多 500 台无凭据资产，重复项自动跳过。'],
   ['POST /api/servers/shells', '创建实时 SSH shell 会话。'],
@@ -356,7 +369,7 @@ export function DocsPage({ onLogin }: DocsPageProps) {
               <p>建议按以下顺序使用。每个模块都会与资产、事件、审计和 AI 上下文联动。</p>
             </div>
             <div className="docs-usage-grid">
-              {[...usageBlocks, bulkImportUsageBlock, fleetViewUsageBlock, operationsInboxUsageBlock, operatorControlsUsageBlock, adaptiveRefreshUsageBlock, intentReadyNavigationUsageBlock, commandPaletteUsageBlock, accountAppearanceUsageBlock, accountSessionUsageBlock].map((block) => {
+              {[...usageBlocks, bulkImportUsageBlock, fleetViewUsageBlock, resourceAlertPolicyUsageBlock, operationsInboxUsageBlock, operatorControlsUsageBlock, adaptiveRefreshUsageBlock, intentReadyNavigationUsageBlock, commandPaletteUsageBlock, accountAppearanceUsageBlock, accountSessionUsageBlock].map((block) => {
                 const Icon = block.icon;
                 const sectionId = 'sectionId' in block && typeof block.sectionId === 'string'
                   ? block.sectionId

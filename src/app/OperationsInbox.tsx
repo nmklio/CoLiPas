@@ -11,7 +11,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import type { OperationEvent } from '../types';
+import type { OperationEvent, ResourceAlertEvaluation, ResourceAlertSignal } from '../types';
 
 export type OperationsInboxSection = 'overview' | 'servers' | 'operations' | 'ai' | 'api' | 'security';
 export type OperationsInboxTone = 'critical' | 'warning' | 'info';
@@ -40,6 +40,9 @@ export interface OperationsInboxItem {
   priorityLabel: string;
   occurredAt?: string;
   sortOrder: number;
+  reviewTtlMs?: number;
+  serverId?: string;
+  serverName?: string;
 }
 
 export interface OperationsInboxSummary {
@@ -56,15 +59,17 @@ const operationsInboxStorageKey = 'colipas.operationsInbox.review.v1';
 const operationsInboxStorageVersion = 1;
 const operationsInboxStorageLimit = 120;
 const operationsInboxReviewTtlMs = 45 * 24 * 60 * 60 * 1000;
-const operationsInboxIdPattern = /^ops-(?:launch-[a-z0-9-]{1,32}|event-[a-z0-9]{8,20})$/;
+const operationsInboxIdPattern = /^ops-(?:launch-[a-z0-9-]{1,32}|event-[a-z0-9]{8,20}|resource-[a-z0-9]{8,24})$/;
 const operationsInboxEventLimit = 24;
 
 export function buildOperationsInboxItems(input: {
   launchSteps: OperationsInboxLaunchStep[];
   events: OperationEvent[];
+  resourceAlerts?: ResourceAlertEvaluation | null;
+  resourceAlertReminderMinutes?: number;
   t: Translate;
 }): OperationsInboxItem[] {
-  const { launchSteps, events, t } = input;
+  const { launchSteps, events, resourceAlerts, resourceAlertReminderMinutes = 60, t } = input;
   const launchItems = launchSteps.map<OperationsInboxItem>((step) => ({
     id: `ops-launch-${step.item.id}`,
     tone: step.item.tone === 'fail' ? 'critical' : 'warning',
@@ -76,6 +81,9 @@ export function buildOperationsInboxItems(input: {
     priorityLabel: step.priority,
     sortOrder: step.rank,
   }));
+  const resourceAlertItems = (resourceAlerts?.signals ?? []).map<OperationsInboxItem>((signal, index) => (
+    buildResourceAlertInboxItem(signal, index, resourceAlertReminderMinutes, t)
+  ));
   const severityRank: Record<OperationEvent['severity'], number> = {
     critical: 0,
     warning: 1,
@@ -106,20 +114,63 @@ export function buildOperationsInboxItems(input: {
     info: 2,
   };
 
-  return [...launchItems, ...eventItems].sort((left, right) => (
+  return [...launchItems, ...resourceAlertItems, ...eventItems].sort((left, right) => (
     toneRank[left.tone] - toneRank[right.tone]
     || left.sortOrder - right.sortOrder
   ));
 }
 
+function buildResourceAlertInboxItem(
+  signal: ResourceAlertSignal,
+  index: number,
+  reminderMinutes: number,
+  t: Translate,
+): OperationsInboxItem {
+  const metricLabel = t(`overview.resourceAlertMetric.${signal.metric}`);
+  return {
+    id: `ops-resource-${signal.id}`,
+    tone: signal.severity,
+    section: 'servers',
+    title: t('operationsInbox.resourceAlertTitle', { server: signal.serverName, metric: metricLabel }),
+    detail: t('operationsInbox.resourceAlertDetail', {
+      value: signal.value,
+      threshold: signal.threshold,
+      metric: metricLabel,
+    }),
+    action: t('operationsInbox.openResourceAlert'),
+    sourceLabel: t('operationsInbox.sourceResourceAlert'),
+    priorityLabel: t(`operationsInbox.eventPriority.${signal.severity}`),
+    sortOrder: 40 + index,
+    reviewTtlMs: Math.max(15, Math.round(reminderMinutes)) * 60 * 1000,
+    serverId: signal.serverId,
+    serverName: signal.serverName,
+  };
+}
+
 export function useOperationsInboxReview(items: OperationsInboxItem[]) {
   const [reviewedAtById, setReviewedAtById] = useState<ReviewedAtById>(readOperationsInboxReview);
+  const [reviewClock, setReviewClock] = useState(() => Date.now());
+  const effectiveReviewedAtById = useMemo<ReviewedAtById>(() => {
+    const now = reviewClock;
+    const next: ReviewedAtById = {};
+    for (const item of items) {
+      const reviewedAt = reviewedAtById[item.id];
+      if (!reviewedAt) {
+        continue;
+      }
+      if (item.reviewTtlMs && now - reviewedAt >= item.reviewTtlMs) {
+        continue;
+      }
+      next[item.id] = reviewedAt;
+    }
+    return next;
+  }, [items, reviewedAtById, reviewClock]);
   const summary = useMemo<OperationsInboxSummary>(() => {
     let unreadCount = 0;
     let reviewedCount = 0;
     let criticalUnreadCount = 0;
     for (const item of items) {
-      if (reviewedAtById[item.id]) {
+      if (effectiveReviewedAtById[item.id]) {
         reviewedCount += 1;
       } else {
         unreadCount += 1;
@@ -134,11 +185,27 @@ export function useOperationsInboxReview(items: OperationsInboxItem[]) {
       criticalUnreadCount,
       tone: criticalUnreadCount > 0 ? 'critical' : unreadCount > 0 ? 'warning' : 'clear',
     };
-  }, [items, reviewedAtById]);
+  }, [effectiveReviewedAtById, items]);
 
   useEffect(() => {
     writeOperationsInboxReview(reviewedAtById);
   }, [reviewedAtById]);
+
+  useEffect(() => {
+    const now = Date.now();
+    const nextExpiry = items
+      .map((item) => {
+        const reviewedAt = reviewedAtById[item.id];
+        return reviewedAt && item.reviewTtlMs ? reviewedAt + item.reviewTtlMs : 0;
+      })
+      .filter((value) => value > now)
+      .sort((left, right) => left - right)[0];
+    if (!nextExpiry) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setReviewClock(Date.now()), Math.max(1000, nextExpiry - now + 20));
+    return () => window.clearTimeout(timer);
+  }, [items, reviewedAtById]);
 
   useEffect(() => {
     function syncReviewState(event: StorageEvent) {
@@ -154,11 +221,19 @@ export function useOperationsInboxReview(items: OperationsInboxItem[]) {
     if (!operationsInboxIdPattern.test(itemId)) {
       return;
     }
-    setReviewedAtById((current) => (
-      current[itemId]
+    setReviewedAtById((current) => {
+      const reviewedAt = current[itemId];
+      const item = items.find((candidate) => candidate.id === itemId);
+      const now = Date.now();
+      const reviewExpired = Boolean(
+        reviewedAt
+        && item?.reviewTtlMs
+        && now - reviewedAt >= item.reviewTtlMs,
+      );
+      return reviewedAt && !reviewExpired
         ? current
-        : { ...current, [itemId]: Date.now() }
-    ));
+        : { ...current, [itemId]: now };
+    });
   }
 
   function markAllReviewed() {
@@ -182,7 +257,7 @@ export function useOperationsInboxReview(items: OperationsInboxItem[]) {
   }
 
   return {
-    reviewedAtById,
+    reviewedAtById: effectiveReviewedAtById,
     summary,
     markReviewed,
     markAllReviewed,

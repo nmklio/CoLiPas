@@ -127,7 +127,9 @@ function buildLandingCheck() {
       await expectLocatorCount(page.locator('[data-colipas-feature="command-palette-context"]'), 1, 'landing contextual command palette feature card');
       await expectText(page.locator('[data-colipas-feature="command-palette-context"]'), /上下文命令面板|command palette|最近使用/i, 'landing contextual command palette copy');
       await expectLocatorCount(page.locator('[data-colipas-feature="operations-inbox"]'), 1, 'landing operations inbox feature card');
-      await expectText(page.locator('[data-colipas-feature="operations-inbox"]'), /运维收件箱|operations inbox|跨模块/i, 'landing operations inbox copy');
+      await expectText(page.locator('[data-colipas-feature="operations-inbox"]'), /运维收件箱|operations inbox|资源越线|再次提醒|跨模块/i, 'landing operations inbox copy');
+      await expectLocatorCount(page.locator('[data-colipas-feature="resource-alert-policy"]'), 1, 'landing resource alert policy feature card');
+      await expectText(page.locator('[data-colipas-feature="resource-alert-policy"]'), /资源告警策略|CPU|内存|磁盘|SQLite|周期提醒/i, 'landing resource alert policy copy');
       await expectLocatorCount(page.locator('[data-colipas-feature="account-session-control"]'), 1, 'landing account session control feature card');
       await expectText(page.locator('[data-colipas-feature="account-session-control"]'), /登录会话控制|令牌哈希|SQLite|原始 Cookie|重启后|最旧会话/i, 'landing account session control copy');
       await expectLocatorCount(page.locator('[data-colipas-feature="operator-controls"]'), 1, 'landing adaptive operator controls feature card');
@@ -172,7 +174,10 @@ function buildDocsCheck() {
       await expectLocatorCount(page.locator('#launch-checklist'), 1, 'docs contextual launch guide section');
       await expectText(page.locator('#launch-checklist'), /上线检查|workspace summary|release checklist/i, 'docs contextual launch guide copy');
       await expectLocatorCount(page.locator('#operations-inbox'), 1, 'docs operations inbox section');
-      await expectText(page.locator('#operations-inbox'), /运维收件箱|稳定事项 ID|值班入口/i, 'docs operations inbox copy');
+      await expectText(page.locator('#operations-inbox'), /运维收件箱|稳定事项 ID|值班入口|资源越线|策略周期/i, 'docs operations inbox copy');
+      await expectLocatorCount(page.locator('#resource-alerts[data-colipas-docs-feature="resource-alert-policy"]'), 1, 'docs resource alert policy section');
+      await expectText(page.locator('#resource-alerts'), /资源告警策略|50%|95%|15 分钟|24 小时|P0|SQLite/i, 'docs resource alert policy copy');
+      await expectText(page.locator('body'), /GET \/api\/monitoring\/resource-alert-policy|PUT \/api\/monitoring\/resource-alert-policy/i, 'docs resource alert policy API copy');
       await expectLocatorCount(page.locator('[data-colipas-docs-fleet-views="true"]'), 1, 'docs fleet views section');
       await expectText(page.locator('[data-colipas-docs-fleet-views="true"]'), /资产视图|fleet views|browser/i, 'docs fleet views copy');
       await expectLocatorCount(page.locator('[data-colipas-docs-feature="server-bulk-import"]'), 1, 'docs server bulk import section');

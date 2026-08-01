@@ -51,6 +51,7 @@ assertSecretScanHandlesDeletedTrackedFiles();
 assertSecurityAuditRelationsAreSpecific();
 assertOperationsTargetSelectionGuards();
 assertMaintenanceWindowGuards();
+await assertResourceAlertPolicyGuards();
 assertInventorySnapshotCacheGuards();
 assertOverviewConditionalSnapshotGuards();
 assertLocalizedFormatCacheGuards();
@@ -104,6 +105,10 @@ if (unauthenticatedBulkImportResponse.status !== 401) {
 const unauthenticatedMaintenanceWindowsResponse = await fetch(`${baseUrl}/api/operations/maintenance-windows`);
 if (unauthenticatedMaintenanceWindowsResponse.status !== 401) {
   throw new Error(`/api/operations/maintenance-windows expected 401 before login, got ${unauthenticatedMaintenanceWindowsResponse.status}`);
+}
+const unauthenticatedResourceAlertPolicyResponse = await fetch(`${baseUrl}/api/monitoring/resource-alert-policy`);
+if (unauthenticatedResourceAlertPolicyResponse.status !== 401) {
+  throw new Error(`/api/monitoring/resource-alert-policy expected 401 before login, got ${unauthenticatedResourceAlertPolicyResponse.status}`);
 }
 const unauthenticatedEvidenceSharesResponse = await fetch(`${baseUrl}/api/audit/readiness/shares`);
 if (unauthenticatedEvidenceSharesResponse.status !== 401) {
@@ -286,6 +291,77 @@ if (
 }
 console.log(`ok /api/overview reuses ${initialOverviewSnapshotBytes} byte snapshots with HTTP 304`);
 
+const defaultResourceAlertPolicyResponse = await fetch(`${baseUrl}/api/monitoring/resource-alert-policy`, { headers: authHeaders });
+const defaultResourceAlertPolicyBody = await defaultResourceAlertPolicyResponse.json();
+if (
+  !defaultResourceAlertPolicyResponse.ok
+  || defaultResourceAlertPolicyResponse.headers.get('cache-control') !== 'no-store'
+  || defaultResourceAlertPolicyBody.policy?.enabled !== true
+  || defaultResourceAlertPolicyBody.policy?.cpuThreshold !== 85
+  || defaultResourceAlertPolicyBody.policy?.memoryThreshold !== 85
+  || defaultResourceAlertPolicyBody.policy?.diskThreshold !== 80
+  || defaultResourceAlertPolicyBody.policy?.reminderMinutes !== 60
+  || defaultResourceAlertPolicyBody.policy?.updatedAt !== null
+) {
+  throw new Error('/api/monitoring/resource-alert-policy did not return safe defaults');
+}
+
+const savedResourceAlertPolicy = {
+  enabled: true,
+  cpuThreshold: 73,
+  memoryThreshold: 74,
+  diskThreshold: 75,
+  reminderMinutes: 30,
+};
+const saveResourceAlertPolicyResponse = await fetch(`${baseUrl}/api/monitoring/resource-alert-policy`, {
+  method: 'PUT',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify(savedResourceAlertPolicy),
+});
+const saveResourceAlertPolicyBody = await saveResourceAlertPolicyResponse.json();
+if (
+  !saveResourceAlertPolicyResponse.ok
+  || Object.entries(savedResourceAlertPolicy).some(([key, value]) => saveResourceAlertPolicyBody.policy?.[key] !== value)
+  || !Number.isFinite(Date.parse(saveResourceAlertPolicyBody.policy?.updatedAt))
+) {
+  throw new Error('/api/monitoring/resource-alert-policy did not persist the validated policy');
+}
+
+const sensitivePolicyProbe = ['sk', 'resource-policy-probe', '1234567890'].join('-');
+const rejectedResourceAlertPolicyResponse = await fetch(`${baseUrl}/api/monitoring/resource-alert-policy`, {
+  method: 'PUT',
+  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    ...savedResourceAlertPolicy,
+    cpuThreshold: 49,
+    apiKey: sensitivePolicyProbe,
+  }),
+});
+const rejectedResourceAlertPolicyText = await rejectedResourceAlertPolicyResponse.text();
+if (rejectedResourceAlertPolicyResponse.status !== 400 || rejectedResourceAlertPolicyText.includes(sensitivePolicyProbe)) {
+  throw new Error('/api/monitoring/resource-alert-policy did not reject invalid or unexpected sensitive fields safely');
+}
+
+const persistedResourceAlertPolicyResponse = await fetch(`${baseUrl}/api/monitoring/resource-alert-policy`, { headers: authHeaders });
+const persistedResourceAlertPolicyBody = await persistedResourceAlertPolicyResponse.json();
+if (
+  !persistedResourceAlertPolicyResponse.ok
+  || Object.entries(savedResourceAlertPolicy).some(([key, value]) => persistedResourceAlertPolicyBody.policy?.[key] !== value)
+  || JSON.stringify(persistedResourceAlertPolicyBody).includes(sensitivePolicyProbe)
+) {
+  throw new Error('/api/monitoring/resource-alert-policy lost the last valid policy after a rejected write');
+}
+const resourceAlertPolicyAuditResponse = await fetch(`${baseUrl}/api/audit/events`, { headers: authHeaders });
+const resourceAlertPolicyAuditBody = await resourceAlertPolicyAuditResponse.json();
+if (
+  !resourceAlertPolicyAuditResponse.ok
+  || !resourceAlertPolicyAuditBody.items?.some((entry) => entry.action === 'RESOURCE_ALERT_POLICY_UPDATE' && entry.status === 'success')
+  || JSON.stringify(resourceAlertPolicyAuditBody).includes(sensitivePolicyProbe)
+) {
+  throw new Error('/api/monitoring/resource-alert-policy did not record sanitized audit evidence');
+}
+console.log('ok resource alert policy validates, persists, audits, and rejects unexpected sensitive fields');
+
 const sessionResponse = await fetch(`${baseUrl}/api/auth/session`, { headers: authHeaders });
 if (!sessionResponse.ok) {
   throw new Error(`/api/auth/session returned HTTP ${sessionResponse.status}`);
@@ -365,6 +441,15 @@ if (!defaultProfileReloginCookie) {
   throw new Error('/api/auth/login after default profile save did not set a session cookie');
 }
 authHeaders.Cookie = defaultProfileReloginCookie;
+const reloginResourceAlertPolicyResponse = await fetch(`${baseUrl}/api/monitoring/resource-alert-policy`, { headers: authHeaders });
+const reloginResourceAlertPolicyBody = await reloginResourceAlertPolicyResponse.json();
+if (
+  !reloginResourceAlertPolicyResponse.ok
+  || Object.entries(savedResourceAlertPolicy).some(([key, value]) => reloginResourceAlertPolicyBody.policy?.[key] !== value)
+) {
+  throw new Error('/api/monitoring/resource-alert-policy did not persist across logout and login');
+}
+console.log('ok resource alert policy persists across logout and login');
 console.log('ok /api/account/profile preserves CoLiPas default across logout/login without fallback text');
 
 const profileUpdateResponse = await fetch(`${baseUrl}/api/account/profile`, {
@@ -9402,6 +9487,184 @@ function assertMaintenanceWindowGuards() {
   }
 
   console.log('ok maintenance windows persist safely and feed operations preflight coverage');
+}
+
+async function assertResourceAlertPolicyGuards() {
+  const policyServiceSource = fs.readFileSync(new URL('../src/server/services/resourceAlertPolicyService.ts', import.meta.url), 'utf8');
+  const resourceAlertSource = fs.readFileSync(new URL('../src/shared/resourceAlerts.ts', import.meta.url), 'utf8');
+  const serverAppSource = fs.readFileSync(new URL('../src/server/app.ts', import.meta.url), 'utf8');
+  const apiClientSource = fs.readFileSync(new URL('../src/services/apiClient.ts', import.meta.url), 'utf8');
+  const appSource = fs.readFileSync(new URL('../src/app/App.tsx', import.meta.url), 'utf8');
+  const overviewSource = fs.readFileSync(new URL('../src/modules/overview/MonitoringOverview.tsx', import.meta.url), 'utf8');
+  const policyUiSource = fs.readFileSync(new URL('../src/modules/overview/ResourceAlertPolicyControl.tsx', import.meta.url), 'utf8');
+  const inboxSource = fs.readFileSync(new URL('../src/app/OperationsInbox.tsx', import.meta.url), 'utf8');
+  const marketingSource = fs.readFileSync(new URL('../src/app/MarketingPage.tsx', import.meta.url), 'utf8');
+  const docsSource = fs.readFileSync(new URL('../src/app/DocsPage.tsx', import.meta.url), 'utf8');
+  const styleSource = fs.readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
+  const i18nSource = fs.readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
+  const readmeSource = fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+  const readmeCnSource = fs.readFileSync(new URL('../README_CN.md', import.meta.url), 'utf8');
+  const readmeJpSource = fs.readFileSync(new URL('../README_JP.md', import.meta.url), 'utf8');
+  const releasePageSource = fs.readFileSync(new URL('../deploy/server-update.sh', import.meta.url), 'utf8');
+  const publicPagesCheckSource = fs.readFileSync(new URL('./public-pages-check.mjs', import.meta.url), 'utf8');
+
+  for (const fragment of [
+    "const resourceAlertPolicySettingId = 'monitoring-resource-alert-policy.v1'",
+    'resourceAlertPolicyInputSchema',
+    '.strict()',
+    'resourceAlertThresholdMinimum',
+    'resourceAlertThresholdMaximum',
+    'resourceAlertReminderOptions',
+    'writeAppSetting(resourceAlertPolicySettingId',
+    'updatedAt: new Date().toISOString()',
+  ]) {
+    if (!policyServiceSource.includes(fragment)) {
+      throw new Error(`Resource alert policy persistence guard is incomplete: ${fragment}`);
+    }
+  }
+
+  for (const fragment of [
+    "app.get('/api/monitoring/resource-alert-policy'",
+    "app.put('/api/monitoring/resource-alert-policy'",
+    "action: 'RESOURCE_ALERT_POLICY_UPDATE'",
+    "fetcher('/api/monitoring/resource-alert-policy'",
+    'export async function saveResourceAlertPolicy(',
+  ]) {
+    if (!`${serverAppSource}\n${apiClientSource}`.includes(fragment)) {
+      throw new Error(`Resource alert policy API guard is incomplete: ${fragment}`);
+    }
+  }
+
+  for (const fragment of [
+    'buildResourceAlertEvaluation(overview.servers, resourceAlertPolicy)',
+    'resourceAlerts: resourceAlertEvaluation',
+    'onResourceAlertPolicySave={saveResourceAlertPolicy}',
+    '<ResourceAlertPolicyControl',
+    'data-resource-alert-policy-open="true"',
+    'data-resource-alert-policy-drawer="true"',
+    'data-resource-alert-threshold={metric}',
+    'type="range"',
+    'role="switch"',
+    'resourceAlertReminderOptions.map',
+    'createPortal',
+  ]) {
+    if (!`${appSource}\n${overviewSource}\n${policyUiSource}`.includes(fragment)) {
+      throw new Error(`Resource alert policy UI guard is incomplete: ${fragment}`);
+    }
+  }
+
+  for (const fragment of [
+    'resourceAlertItems',
+    'ops-resource-',
+    'reviewTtlMs',
+    'nextExpiry',
+    'resourceAlertPolicy.reminderMinutes',
+    'serverName: signal.serverName',
+  ]) {
+    if (!`${appSource}\n${inboxSource}`.includes(fragment)) {
+      throw new Error(`Resource alert inbox linkage is incomplete: ${fragment}`);
+    }
+  }
+
+  for (const fragment of [
+    '.resource-alert-policy-trigger',
+    '.resource-alert-policy-drawer',
+    '.resource-alert-threshold',
+    "'overview.resourceAlertPolicyTitle'",
+    "'operationsInbox.resourceAlertTitle'",
+  ]) {
+    if (!`${styleSource}\n${i18nSource}`.includes(fragment)) {
+      throw new Error(`Resource alert policy styling or i18n guard is incomplete: ${fragment}`);
+    }
+  }
+
+  if ((i18nSource.match(/'overview\.resourceAlertPolicyTitle'/g) ?? []).length !== 3) {
+    throw new Error('Resource alert policy title is not translated across all three languages');
+  }
+  for (const fragment of [
+    'data-colipas-feature="resource-alert-policy"',
+    "sectionId: 'resource-alerts'",
+    "featureId: 'resource-alert-policy'",
+    'GET /api/monitoring/resource-alert-policy',
+    'PUT /api/monitoring/resource-alert-policy',
+    'resource-alerts[data-colipas-docs-feature="resource-alert-policy"]',
+  ]) {
+    if (!`${marketingSource}\n${docsSource}\n${releasePageSource}\n${publicPagesCheckSource}`.includes(fragment)) {
+      throw new Error(`Resource alert public documentation guard is incomplete: ${fragment}`);
+    }
+  }
+  if (
+    !readmeSource.includes('| Resource alert policy |')
+    || !readmeCnSource.includes('| 资源告警策略 |')
+    || !readmeJpSource.includes('| リソースアラートポリシー |')
+  ) {
+    throw new Error('Resource alert policy is not documented in all three README languages');
+  }
+  if (resourceAlertSource.includes('publicIp') || resourceAlertSource.includes('privateIp')) {
+    throw new Error('Resource alert evaluation must not copy server addresses into alert signals');
+  }
+
+  const { buildResourceAlertEvaluation } = await import('../build/shared/resourceAlerts.js');
+  const policy = {
+    enabled: true,
+    cpuThreshold: 70,
+    memoryThreshold: 80,
+    diskThreshold: 90,
+    reminderMinutes: 30,
+    updatedAt: null,
+  };
+  const evaluation = buildResourceAlertEvaluation([
+    buildResourceAlertTestServer('resource-a', { cpu: 82, memory: 40, disk: 50 }),
+    buildResourceAlertTestServer('resource-b', { cpu: 65, memory: 91, disk: 96 }),
+    { ...buildResourceAlertTestServer('resource-c', { cpu: 100, memory: 100, disk: 100 }), status: 'unconnected', ssh: undefined },
+  ], policy, 2);
+  if (
+    evaluation.summary.activeAlerts !== 3
+    || evaluation.summary.affectedServers !== 2
+    || evaluation.summary.criticalAlerts !== 3
+    || evaluation.summary.evaluatedServers !== 2
+    || evaluation.summary.truncated !== true
+    || evaluation.signals.length !== 2
+    || evaluation.signals.some((signal) => !/^[a-z0-9]{8,20}$/.test(signal.id))
+    || JSON.stringify(evaluation).includes('192.0.2.')
+  ) {
+    throw new Error(`Resource alert evaluation returned an unsafe or incorrect bounded result: ${JSON.stringify(evaluation)}`);
+  }
+  const pausedEvaluation = buildResourceAlertEvaluation([buildResourceAlertTestServer('paused', { cpu: 100, memory: 100, disk: 100 })], {
+    ...policy,
+    enabled: false,
+  });
+  if (pausedEvaluation.summary.activeAlerts !== 0 || pausedEvaluation.signals.length !== 0) {
+    throw new Error('Disabled resource alert policy still emitted alert signals');
+  }
+
+  console.log('ok resource alert policy is persisted, bounded, address-free, responsive, and linked to recurring inbox review');
+}
+
+function buildResourceAlertTestServer(id, metrics) {
+  return {
+    id,
+    name: `Test ${id}`,
+    provider: 'Smoke',
+    region: 'Test',
+    status: 'running',
+    publicIp: '192.0.2.10',
+    privateIp: '-',
+    os: 'Linux',
+    cpu: metrics.cpu,
+    memory: metrics.memory,
+    disk: metrics.disk,
+    tags: [],
+    ssh: {
+      host: '192.0.2.10',
+      port: 22,
+      username: 'root',
+      authType: 'password',
+      connected: true,
+      lastVerifiedAt: new Date(0).toISOString(),
+      verifyMode: 'simulate',
+    },
+  };
 }
 
 function assertInventorySnapshotCacheGuards() {

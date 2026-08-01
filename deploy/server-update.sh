@@ -176,6 +176,7 @@ function landingIcon(kind, className) {
     command: '<rect x="4.2" y="5" width="15.6" height="14" rx="2.7"/><path d="M4.2 9.1h15.6"/><path d="m8 12.2 2.5 1.8L8 15.8"/><path d="M13.3 15.7h3.6"/><circle cx="7" cy="7.1" r=".55"/><circle cx="8.9" cy="7.1" r=".55"/>',
     controls: '<path d="M4.5 7h8.2M16.4 7h3.1M4.5 12h3.1M11.3 12h8.2M4.5 17h6.2M14.4 17h5.1"/><circle cx="14.5" cy="7" r="1.7"/><circle cx="9.5" cy="12" r="1.7"/><circle cx="12.6" cy="17" r="1.7"/>',
     refresh: '<path d="M19.2 8.3A7.6 7.6 0 0 0 6.4 6.1L4.2 8.3"/><path d="M4.2 4.8v3.5h3.5"/><path d="M4.8 15.7a7.6 7.6 0 0 0 12.8 2.2l2.2-2.2"/><path d="M19.8 19.2v-3.5h-3.5"/>',
+    alert: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/><path d="M12 3V1"/>',
     inbox: '<path d="M5.2 5.1h13.6l1.4 8.1v4.4a1.8 1.8 0 0 1-1.8 1.8H5.6a1.8 1.8 0 0 1-1.8-1.8v-4.4l1.4-8.1Z"/><path d="M4.1 13.2h4.2l1.2 2h5l1.2-2h4.2"/><path d="M8.1 8.7h7.8"/>',
     code: '<path d="m9 8-4 4 4 4M15 8l4 4-4 4"/><path d="m13.2 6.8-2.4 10.4"/>',
     database: '<ellipse cx="12" cy="6.4" rx="6.8" ry="2.8"/><path d="M5.2 6.4v7.2c0 1.6 3 2.8 6.8 2.8s6.8-1.2 6.8-2.8V6.4"/><path d="M5.2 10c0 1.6 3 2.8 6.8 2.8s6.8-1.2 6.8-2.8"/>',
@@ -291,9 +292,20 @@ if (!html.includes('data-colipas-feature="command-palette-context"')) {
       <article class="feature-card" data-colipas-feature="command-palette-context">${landingIcon('command', 'icon feature-icon')}<h3>上下文命令面板</h3><p>按当前最高优先级事项、最近使用和全部操作分层展示跨模块入口；最近历史只保存在浏览器中，可随时清除。</p><div class="tags"><span>当前优先级</span><span>本机历史</span></div></article>`);
 }
 
+const resourceAlertPolicyFeatureCard = `<article class="feature-card" data-colipas-feature="resource-alert-policy">${landingIcon('alert', 'icon feature-icon')}<h3>资源告警策略</h3><p>为已验证且运行中的 SSH 资产设置 CPU、内存和磁盘阈值，并把再次提醒周期保存到 SQLite；越线事项可从收件箱直达服务器。</p><div class="tags"><span>阈值策略</span><span>周期提醒</span></div></article>`;
+if (!html.includes('data-colipas-feature="resource-alert-policy"')) {
+  replaceOnce(/(<div class="feature-grid">)/, `$1
+      ${resourceAlertPolicyFeatureCard}`);
+} else {
+  replaceOnce(/<article class="feature-card" data-colipas-feature="resource-alert-policy">[\s\S]*?<\/article>/, resourceAlertPolicyFeatureCard);
+}
+
+const operationsInboxFeatureCard = `<article class="feature-card" data-colipas-feature="operations-inbox">${landingIcon('inbox', 'icon feature-icon')}<h3>全局运维收件箱</h3><p>汇总资源越线、上线阻塞、SSH 与资产覆盖缺口和开放事件；持续越线会按策略周期再次提醒，本机只保存安全事项 ID 与时间。</p><div class="tags"><span>跨模块聚合</span><span>本机审阅</span></div></article>`;
 if (!html.includes('data-colipas-feature="operations-inbox"')) {
   replaceOnce(/(<div class="feature-grid">)/, `$1
-      <article class="feature-card" data-colipas-feature="operations-inbox">${landingIcon('inbox', 'icon feature-icon')}<h3>全局运维收件箱</h3><p>汇总上线阻塞、SSH 与资产覆盖缺口和开放事件，按优先级直接跳转处理模块；本机只保存安全事项 ID 与审阅时间。</p><div class="tags"><span>跨模块聚合</span><span>本机审阅</span></div></article>`);
+      ${operationsInboxFeatureCard}`);
+} else {
+  replaceOnce(/<article class="feature-card" data-colipas-feature="operations-inbox">[\s\S]*?<\/article>/, operationsInboxFeatureCard);
 }
 
 const accountSessionFeatureCard = `<article class="feature-card" data-colipas-feature="account-session-control">${landingIcon('shield', 'icon feature-icon')}<h3>登录会话控制</h3><p>只把令牌哈希与脱敏设备信息写入 SQLite，不保存原始 Cookie、IP 或 User-Agent；服务重启后会话仍保持且可撤销。账户设置仅在前台且在线时同步，隐藏或离线自动暂停。</p><div class="tags"><span>令牌哈希入库</span><span>前台在线同步</span><span>隐藏即暂停</span></div></article>`;
@@ -1454,6 +1466,7 @@ SVG
       <a href="#config">环境变量 <span>→</span></a>
       <a href="#first-run">首次使用 <span>→</span></a>
       <a href="#launch-checklist">上线检查 <span>→</span></a>
+      <a href="#resource-alerts">资源告警 <span>→</span></a>
       <a href="#operations-inbox">运维收件箱 <span>→</span></a>
       <a href="#account-sessions">会话管理 <span>→</span></a>
       <a href="#server-access">服务器接入 <span>→</span></a>
@@ -1469,6 +1482,7 @@ SVG
       <a href="#config">环境变量</a>
       <a href="#first-run">首次使用</a>
       <a href="#launch-checklist">上线检查</a>
+      <a href="#resource-alerts">资源告警</a>
       <a href="#operations-inbox">运维收件箱</a>
       <a href="#account-sessions">会话管理</a>
       <a href="#server-access">服务器接入</a>
@@ -1555,15 +1569,35 @@ SVG
         </aside>
       </section>
 
+      <section id="resource-alerts" class="section split" data-colipas-docs-feature="resource-alert-policy">
+        <div>
+          <p class="kicker">资源告警策略</p>
+          <h2>把资源越线变成可持续跟进的值班事项</h2>
+          <p>在总览健康基线中打开策略抽屉，为 CPU、内存和磁盘设置独立阈值，并选择未解消越线的再次提醒周期。策略保存在 SQLite，刷新页面或服务重启后仍有效。</p>
+          <div class="check-list">
+            <p class="check-line"><span>✓</span> 阈值范围为 50%–95%，再次提醒可选 15 分钟至 24 小时。</p>
+            <p class="check-line"><span>✓</span> 只评估 SSH 已验证且未停止的服务器；达到阈值为 P1，高出 10 个百分点后升级为 P0。</p>
+            <p class="check-line"><span>✓</span> 点击告警会按服务器名称定位资产，浏览器不会保存地址、指标正文或凭据。</p>
+          </div>
+        </div>
+        <aside class="terminal-card">
+          <strong>默认策略</strong>
+          <pre>CPU：85%
+内存：85%
+磁盘：80%
+再次提醒：60 分钟</pre>
+        </aside>
+      </section>
+
       <section id="operations-inbox" class="section split">
         <div>
           <p class="kicker">全局运维收件箱</p>
           <h2>把跨模块待办收拢到同一个值班入口</h2>
-          <p>桌面端从后台顶栏打开，移动端从快捷控制进入。收件箱会汇总上线阻塞、SSH 与资产覆盖缺口和开放事件，并按上线阻塞、需处理、已审阅分组；点击事项可直接进入服务器、运维、AI 或安全模块。</p>
+          <p>桌面端从后台顶栏打开，移动端从快捷控制进入。收件箱会汇总资源越线、上线阻塞、SSH 与资产覆盖缺口和开放事件，并按上线阻塞、需处理、已审阅分组；点击事项可直接进入服务器、运维、AI 或安全模块。</p>
           <div class="check-list">
             <p class="check-line"><span>✓</span> 单项审阅、全部已读和清除本机审阅状态都不会修改服务器或用户数据。</p>
             <p class="check-line"><span>✓</span> 浏览器仅保存稳定事项 ID 与审阅时间，不保存事件正文、IP、密码、API Key 或私钥。</p>
-            <p class="check-line"><span>✓</span> 开放事项发生变化后会随总览资源刷新自动更新。</p>
+            <p class="check-line"><span>✓</span> 持续资源越线会按策略周期重新进入未审阅状态，其他开放事项随总览刷新更新。</p>
           </div>
         </div>
         <aside class="terminal-card">
@@ -1688,6 +1722,8 @@ systemctl status ssh --no-pager
           <div><code>DELETE /api/account/sessions/:id</code><p>撤销指定的其他登录会话，不允许误删当前会话。</p></div>
           <div><code>POST /api/account/sessions/revoke-others</code><p>保留当前浏览器并撤销其他全部登录会话。</p></div>
           <div><code>GET /api/overview</code><p>登录后读取账号、服务器、事件和总览指标。</p></div>
+          <div><code>GET /api/monitoring/resource-alert-policy</code><p>读取持久化的 CPU、内存、磁盘阈值与再次提醒周期。</p></div>
+          <div><code>PUT /api/monitoring/resource-alert-policy</code><p>校验并保存资源告警策略，同时写入脱敏审计记录。</p></div>
           <div><code>GET / PUT /api/ai/provider</code><p>读取和保存 AI Provider 设置；API Key 只返回是否已托管，不回显明文。</p></div>
           <div><code>POST /api/custom-apis/test</code><p>通过后端代理测试外部接口，阻止内网地址、敏感 Header 和重定向 SSRF。</p></div>
           <div><code>POST /api/servers/import</code><p>批量导入最多 500 台无凭据资产，重复名称或公网 IP 自动跳过，不覆盖已有用户数据。</p></div>

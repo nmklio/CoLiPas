@@ -20,6 +20,8 @@ import {
   ReleaseEvidenceShareListResponse,
   ReleaseSyncHealthResponse,
   ReleaseGatePolicy,
+  ResourceAlertPolicyResponse,
+  ResourceAlertPolicyUpdate,
   ServerNode,
   SshRunbookCommand,
   SshAuthType,
@@ -638,6 +640,34 @@ export async function fetchConfigSummary(fetcher: typeof fetch = fetch) {
   }
 
   return (await response.json()) as ConfigSummaryResponse;
+}
+
+export async function fetchResourceAlertPolicy(fetcher: typeof fetch = fetch) {
+  const response = await fetcher('/api/monitoring/resource-alert-policy', {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as ResourceAlertPolicyResponse;
+}
+
+export async function saveResourceAlertPolicy(
+  policy: ResourceAlertPolicyUpdate,
+  fetcher: typeof fetch = fetch,
+) {
+  const response = await fetcher('/api/monitoring/resource-alert-policy', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(policy),
+  });
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as ResourceAlertPolicyResponse;
 }
 
 export async function fetchAiProviderSettings(fetcher: typeof fetch = fetch) {

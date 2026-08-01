@@ -1,6 +1,7 @@
 import { FormEvent, useState } from 'react';
 import {
   Activity,
+  BellRing,
   BookmarkCheck,
   Bot,
   BrainCircuit,
@@ -129,8 +130,16 @@ const commandPaletteFeature = {
 const operationsInboxFeature = {
   icon: Inbox,
   title: '全局运维收件箱',
-  desc: '把上线阻塞、SSH 覆盖缺口和开放事件汇总到同一个值班入口，按优先级跳转对应模块；审阅状态只保存安全的本机事项 ID 与时间。',
+  desc: '把资源越线、上线阻塞、SSH 覆盖缺口和开放事件汇总到同一个值班入口；持续越线会按策略周期再次提醒，本机只保存安全事项 ID 与时间。',
   tags: ['跨模块聚合', '本机审阅'],
+};
+
+const resourceAlertPolicyFeature = {
+  icon: BellRing,
+  title: '资源告警策略',
+  desc: '为已验证且运行中的 SSH 资产设置 CPU、内存和磁盘阈值，并把再次提醒周期持久化到 SQLite；越线事项可从收件箱直达对应服务器。',
+  tags: ['阈值策略', '周期提醒'],
+  featureId: 'resource-alert-policy',
 };
 
 const accountSessionFeature = {
@@ -285,7 +294,7 @@ export function MarketingPage({ loading, error, onLogin }: MarketingPageProps) {
           <h2>围绕“服务器接入到修复”构建的完整后台</h2>
         </div>
         <div className="marketing-feature-grid">
-          {[...featureCards, fleetViewFeature, bulkImportFeature, commandPaletteFeature, operationsInboxFeature, accountSessionFeature, operatorControlsFeature, adaptiveRefreshFeature, intentReadyNavigationFeature].map((feature) => {
+          {[...featureCards, fleetViewFeature, bulkImportFeature, commandPaletteFeature, resourceAlertPolicyFeature, operationsInboxFeature, accountSessionFeature, operatorControlsFeature, adaptiveRefreshFeature, intentReadyNavigationFeature].map((feature) => {
             const Icon = feature.icon;
             const featureId = 'featureId' in feature && typeof feature.featureId === 'string'
               ? feature.featureId
