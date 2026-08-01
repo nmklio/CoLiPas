@@ -152,6 +152,7 @@ export async function streamAiAnalysis(
       body: JSON.stringify({
         model: aiProvider.model,
         temperature: aiProvider.temperature,
+        max_tokens: config.ai.maxTokens,
         stream: true,
         messages: [
           {

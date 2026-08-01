@@ -1733,10 +1733,10 @@ try {
     && request.body.messages.some((message) => message.role === 'assistant' && message.content === 'previous assistant chat context')
     && request.body.messages.some((message) => message.role === 'user' && String(message.content).includes('continue from the prior assistant answer'))
   ));
-  if (!multiTurnRequest || multiTurnRequest.body.stream !== true) {
-    throw new Error('/api/ai/stream did not forward multi-turn chat history with stream:true');
+  if (!multiTurnRequest || multiTurnRequest.body.stream !== true || multiTurnRequest.body.max_tokens !== 768) {
+    throw new Error('/api/ai/stream did not forward multi-turn chat history with stream:true and a bounded output budget');
   }
-  console.log('ok /api/ai/stream forwards multi-turn chat history');
+  console.log('ok /api/ai/stream forwards multi-turn chat history with a bounded output budget');
 
   const nakedProviderStreamResponse = await fetch(`${baseUrl}/api/ai/stream`, {
     method: 'POST',
