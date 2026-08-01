@@ -2343,10 +2343,10 @@ export function App() {
                   <h2 id="ai-main-title">{t('app.aiTitle')}</h2>
                   <span>{t('app.aiWorkspaceDesc')}</span>
                 </div>
-                <div className="ai-workspace-heading-status" aria-label={t('app.streamApi')}>
+                <div className="ai-workspace-heading-status" aria-label={t('app.streamApi')} title={t('app.streamApiDesc')}>
                   <i aria-hidden="true" />
                   <span>{t('app.streamApi')}</span>
-                  <strong>stream: true</strong>
+                  <strong>{t('ai.streamReady')}</strong>
                 </div>
               </div>
 
@@ -2357,7 +2357,7 @@ export function App() {
                       <MessageSquareText size={19} />
                     </div>
                     <div>
-                      <strong>{t('app.aiWorkspace')}</strong>
+                      <strong>{t('ai.operationContext')}</strong>
                       <span>{busiestServer ? busiestServer.name : t('app.noAssets')}</span>
                     </div>
                   </div>
@@ -2384,15 +2384,24 @@ export function App() {
                   <div className="ai-workspace-prompts">
                     <button type="button" onClick={() => openAiWithQuestion(t('app.aiPromptRiskQuestion'))}>
                       <ShieldCheck size={16} />
-                      <span>{t('app.aiPromptRisk')}</span>
+                      <span className="ai-workspace-prompt-copy">
+                        <strong>{t('app.aiPromptRisk')}</strong>
+                        <small>{t('ai.starterRiskDetail')}</small>
+                      </span>
                     </button>
                     <button type="button" onClick={() => openAiWithQuestion(t('app.aiPromptSshQuestion'))}>
                       <TerminalSquare size={16} />
-                      <span>{t('app.aiPromptSsh')}</span>
+                      <span className="ai-workspace-prompt-copy">
+                        <strong>{t('app.aiPromptSsh')}</strong>
+                        <small>{t('ai.starterSshDetail')}</small>
+                      </span>
                     </button>
                     <button type="button" onClick={() => openAiWithQuestion(t('app.aiPromptPriorityQuestion'))}>
                       <ListChecks size={16} />
-                      <span>{t('app.aiPromptPriority')}</span>
+                      <span className="ai-workspace-prompt-copy">
+                        <strong>{t('app.aiPromptPriority')}</strong>
+                        <small>{t('ai.starterPriorityDetail')}</small>
+                      </span>
                     </button>
                   </div>
 

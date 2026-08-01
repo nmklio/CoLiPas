@@ -2112,12 +2112,36 @@ async function assertAccountSettingsAndAiChat(targetPage) {
     if (await targetPage.locator('.ai-launcher, .ai-dock:not(.ai-dock-workspace)').count() !== 0) {
       throw new Error('AI route must render one embedded workspace without a duplicate floating assistant');
     }
+    const workspaceStatusText = await targetPage.locator('.ai-workspace-heading-status').innerText();
+    if (!/Streaming API/i.test(workspaceStatusText) || !/Ready/i.test(workspaceStatusText) || /stream:\s*true/i.test(workspaceStatusText)) {
+      throw new Error(`AI workspace stream status must use operator-facing copy: ${workspaceStatusText}`);
+    }
+    if (await targetPage.locator('.ai-workspace-prompts .ai-workspace-prompt-copy small').count() !== 3) {
+      throw new Error('AI operations context must explain all three quick tasks');
+    }
     await assertElementHorizontallyWithinViewport(targetPage, '.ai-workspace-layout', 'desktop AI workspace');
     const starterPrompts = targetPage.locator('[data-ai-starter-prompts="true"]');
     await starterPrompts.waitFor({ timeout: 5000 });
     if (await starterPrompts.locator('[data-ai-starter-prompt]').count() !== 3) {
       throw new Error('AI first-run guidance must expose three safe starter prompts');
     }
+    if (await starterPrompts.locator('.ai-starter-copy small').count() !== 3) {
+      throw new Error('AI first-run prompts must expose concise task outcomes');
+    }
+    if (await targetPage.locator('.ai-composer-tools .ai-composer-icon').count() !== 2) {
+      throw new Error('AI composer must keep only connection test and retry controls visible');
+    }
+    if (await targetPage.locator('.ai-composer-more').count() !== 1) {
+      throw new Error('AI composer must preserve secondary cache and model controls in one overflow menu');
+    }
+    await targetPage.locator('.ai-composer-more summary').click();
+    await targetPage.locator('.ai-composer-more-menu').waitFor({ timeout: 5000 });
+    if (await targetPage.locator('.ai-composer').evaluate((element) => getComputedStyle(element).overflow) !== 'visible') {
+      throw new Error('AI composer overflow menu must not be clipped by the composer boundary');
+    }
+    await assertElementWithinViewport(targetPage, '.ai-composer-more-menu', 'desktop AI composer tools');
+    await captureVisualEvidence(targetPage, 'desktop-ai-composer-tools', ['.ai-composer', '.ai-composer-more-menu']);
+    await targetPage.locator('.ai-composer-more summary').click();
     await assertElementHorizontallyWithinViewport(targetPage, '[data-ai-starter-prompts="true"]', 'desktop AI starter prompts');
     await captureVisualEvidence(targetPage, 'desktop-ai-workspace-first-run', ['.ai-workspace-context', '.ai-dock-workspace', '[data-ai-starter-prompts="true"]']);
     await starterPrompts.locator('[data-ai-starter-prompt="risk"]').click();
@@ -4430,6 +4454,13 @@ async function assertMobileConsoleAndMap() {
     await mobilePage.getByRole('button', { name: /^AI System$/i }).click();
     await mobilePage.waitForURL(/#ai$/, { timeout: 10000 });
     await mobilePage.locator('.ai-dock-workspace').waitFor({ timeout: 10000 });
+    const mobileWorkspaceOrder = await mobilePage.evaluate(() => ({
+      dockTop: document.querySelector('.ai-dock-workspace')?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY,
+      contextTop: document.querySelector('.ai-workspace-context')?.getBoundingClientRect().top ?? Number.NEGATIVE_INFINITY,
+    }));
+    if (mobileWorkspaceOrder.dockTop >= mobileWorkspaceOrder.contextTop) {
+      throw new Error(`Mobile AI route must present the conversation before supporting context: ${JSON.stringify(mobileWorkspaceOrder)}`);
+    }
     await mobilePage.locator('.ai-dock-workspace').scrollIntoViewIfNeeded();
     await assertElementHorizontallyWithinViewport(mobilePage, '.ai-dock-workspace', 'mobile AI workspace');
     if (await mobilePage.locator('.ai-launcher, .ai-dock:not(.ai-dock-workspace)').count() !== 0) {
@@ -4437,6 +4468,18 @@ async function assertMobileConsoleAndMap() {
     }
     const mobileStarterPrompts = mobilePage.locator('[data-ai-starter-prompts="true"]');
     await mobileStarterPrompts.waitFor({ timeout: 5000 });
+    const mobileEmptyThreadScrollTop = await mobilePage.locator('.ai-chat-thread').evaluate((element) => element.scrollTop);
+    if (mobileEmptyThreadScrollTop > 1) {
+      throw new Error(`Mobile AI first-run guidance must start at its title, got scrollTop ${mobileEmptyThreadScrollTop}`);
+    }
+    await mobilePage.locator('.ai-composer').scrollIntoViewIfNeeded();
+    await mobilePage.locator('.ai-composer-more summary').click();
+    await mobilePage.locator('.ai-composer-more-menu').waitFor({ timeout: 5000 });
+    await assertElementWithinViewport(mobilePage, '.ai-composer-more-menu', 'mobile AI composer tools');
+    if (await mobilePage.locator('.ai-composer').evaluate((element) => getComputedStyle(element).overflow) !== 'visible') {
+      throw new Error('Mobile AI composer overflow menu must not be clipped by the composer boundary');
+    }
+    await mobilePage.locator('.ai-composer-more summary').click();
     await mobileStarterPrompts.locator('[data-ai-starter-prompt="priority"]').click();
     if (await mobilePage.locator('.ai-message.user').count() !== 0) {
       throw new Error('Mobile AI starter prompt must not auto-send or execute a request');

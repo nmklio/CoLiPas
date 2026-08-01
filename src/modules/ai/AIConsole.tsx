@@ -8,6 +8,7 @@ import {
   History,
   AlertTriangle,
   MessageCircle,
+  MoreHorizontal,
   PlayCircle,
   PanelRightClose,
   PlugZap,
@@ -436,7 +437,7 @@ export function AIConsole({ servers, events, collapsed, mode = 'dock', seedQuest
   useEffect(() => {
     const chatThread = chatThreadRef.current;
     if (chatThread) {
-      chatThread.scrollTop = chatThread.scrollHeight;
+      chatThread.scrollTop = activeSession.messages.length === 0 ? 0 : chatThread.scrollHeight;
     }
   }, [activeSession.messages, runningSessionId]);
 
@@ -806,7 +807,7 @@ export function AIConsole({ servers, events, collapsed, mode = 'dock', seedQuest
     >
       <div className="ai-dock-header">
         <div>
-          <strong id="ai-title"><MessageCircle size={17} /> {t('app.aiTitle')}</strong>
+          <strong id="ai-title"><MessageCircle size={17} /> {workspaceMode ? t('ai.currentConversation') : t('app.aiTitle')}</strong>
           <span className={runningSessionId ? 'stream-state active' : newChatReady ? 'stream-state ready' : 'stream-state'} aria-live="polite">
             {runningSessionId ? t('ai.streaming') : newChatReady ? t('ai.ready') : t('ai.unlimited', { model: provider.model })}
           </span>
@@ -992,7 +993,10 @@ export function AIConsole({ servers, events, collapsed, mode = 'dock', seedQuest
                       title={t('ai.starterRiskDetail')}
                     >
                       <ShieldCheck size={16} />
-                      <span>{t('ai.starterRisk')}</span>
+                      <span className="ai-starter-copy">
+                        <strong>{t('ai.starterRisk')}</strong>
+                        <small>{t('ai.starterRiskDetail')}</small>
+                      </span>
                     </button>
                     <button
                       type="button"
@@ -1001,7 +1005,10 @@ export function AIConsole({ servers, events, collapsed, mode = 'dock', seedQuest
                       title={t('ai.starterSshDetail')}
                     >
                       <Terminal size={16} />
-                      <span>{t('ai.starterSsh')}</span>
+                      <span className="ai-starter-copy">
+                        <strong>{t('ai.starterSsh')}</strong>
+                        <small>{t('ai.starterSshDetail')}</small>
+                      </span>
                     </button>
                     <button
                       type="button"
@@ -1010,7 +1017,10 @@ export function AIConsole({ servers, events, collapsed, mode = 'dock', seedQuest
                       title={t('ai.starterPriorityDetail')}
                     >
                       <Sparkles size={16} />
-                      <span>{t('ai.starterPriority')}</span>
+                      <span className="ai-starter-copy">
+                        <strong>{t('ai.starterPriority')}</strong>
+                        <small>{t('ai.starterPriorityDetail')}</small>
+                      </span>
                     </button>
                   </div>
                 </div>
@@ -1151,18 +1161,41 @@ export function AIConsole({ servers, events, collapsed, mode = 'dock', seedQuest
                     <ChevronDown size={13} aria-hidden="true" />
                   </label>
                   <div className="ai-composer-tools">
-                    <button type="button" className="ai-composer-icon" aria-label={t('ai.refreshModels')} title={t('ai.refreshModels')} onClick={() => refreshModels()} disabled={modelsLoading || !validation.valid}>
-                      <RefreshCw size={15} className={modelsLoading ? 'spin-icon' : ''} />
-                    </button>
                     <button type="button" className="ai-composer-icon" aria-label={t('ai.testStreaming')} title={t('ai.testStreaming')} onClick={handleTestConnection} disabled={testing || !validation.valid}>
                       <PlugZap size={15} />
-                    </button>
-                    <button type="button" className="ai-composer-icon" aria-label={t('ai.forceRegenerate')} title={t('ai.forceRegenerate')} onClick={() => handleAnalyze(true)} disabled={Boolean(runningSessionId) || !activeSession.question.trim()}>
-                      <RefreshCw size={15} />
                     </button>
                     <button type="button" className="ai-composer-icon" aria-label={t('ai.regenerateLast')} title={t('ai.regenerateLast')} onClick={handleRegenerateLast} disabled={Boolean(runningSessionId) || !lastUserQuestion}>
                       <RotateCcw size={15} />
                     </button>
+                    <details className="ai-composer-more">
+                      <summary aria-label={t('ai.moreTools')} title={t('ai.moreTools')}>
+                        <MoreHorizontal size={16} />
+                      </summary>
+                      <div className="ai-composer-more-menu">
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.currentTarget.closest('details')?.removeAttribute('open');
+                            void refreshModels();
+                          }}
+                          disabled={modelsLoading || !validation.valid}
+                        >
+                          <RefreshCw size={15} className={modelsLoading ? 'spin-icon' : ''} />
+                          <span>{t('ai.refreshModels')}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.currentTarget.closest('details')?.removeAttribute('open');
+                            void handleAnalyze(true);
+                          }}
+                          disabled={Boolean(runningSessionId) || !activeSession.question.trim()}
+                        >
+                          <RefreshCw size={15} />
+                          <span>{t('ai.forceRegenerate')}</span>
+                        </button>
+                      </div>
+                    </details>
                   </div>
                 </div>
                 <div className="ai-composer-actions">
