@@ -193,6 +193,10 @@ async function runResourceAlertPolicySimulation(targetBaseUrl, sessions) {
     memory: (index * 53 + 11) % 101,
     disk: (index * 29 + 23) % 101,
     tags: [],
+    telemetry: {
+      status: 'fresh',
+      sampledAt: new Date(0).toISOString(),
+    },
     ssh: {
       host: 'synthetic.invalid',
       port: 22,
@@ -220,6 +224,7 @@ async function runResourceAlertPolicySimulation(targetBaseUrl, sessions) {
     }
   }
   assert(evaluation.summary.evaluatedServers === serverCount, `resource alert evaluator processed all ${serverCount} synthetic connected servers`);
+  assert(evaluation.summary.connectedServers === serverCount && evaluation.summary.freshSamples === serverCount && evaluation.summary.skippedServers === 0, 'resource alert evaluator measured complete fresh-telemetry coverage');
   assert(evaluation.summary.activeAlerts === expectedAlerts, 'resource alert evaluator returned the expected breach count');
   assert(evaluation.summary.affectedServers === expectedAffected.size, 'resource alert evaluator returned the expected affected server count');
   assert(evaluation.summary.criticalAlerts === expectedCritical, 'resource alert evaluator returned the expected P0 count');

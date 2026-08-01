@@ -4,6 +4,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { cloudAccounts, operationEvents, servers } from '../../data/mockData.js';
 import { ServerFilters, buildServerFilterMatcher, customProviderFilterValue, filterServers, isCustomCloudProvider } from '../../shared/serverFilters.js';
+import {
+  hasFreshServerTelemetry,
+  recordServerTelemetryFailure,
+  recordServerTelemetrySuccess,
+  resolveServerTelemetry,
+  type ServerMetricSampleState,
+} from '../../shared/serverTelemetry.js';
 import { z } from 'zod';
 import type { CloudProvider, ServerNode, ServerStatus } from '../../types.js';
 import { HttpError } from '../httpErrors.js';
@@ -56,7 +63,7 @@ const serverMetricsCacheTtlMs = readEnvInteger('COLIPAS_METRICS_CACHE_TTL_MS', 3
 const serverMetricsFailureBackoffMs = readEnvInteger('COLIPAS_METRICS_FAILURE_BACKOFF_MS', 60_000, 5_000, 600_000);
 const serverMetricsConcurrency = readEnvInteger('COLIPAS_METRICS_CONCURRENCY', 4, 1, 8);
 const serverMetricsRefreshBudgetMs = readEnvInteger('COLIPAS_METRICS_REFRESH_BUDGET_MS', 160, 0, 2_000);
-const serverMetricSamples = new Map<string, { sampledAt: number; failedAt: number }>();
+const serverMetricSamples = new Map<string, ServerMetricSampleState>();
 let metricsRefreshInFlight: Promise<void> | null = null;
 let serverInventoryRevision = 0;
 let cachedServerInventorySnapshot: { revision: number; snapshot: ServerInventorySnapshot } | null = null;
@@ -73,6 +80,9 @@ export interface ServerInventorySummary {
   regions: number;
   customProviders: number;
   avgCpu: number;
+  telemetryFresh: number;
+  telemetryStale: number;
+  telemetryUnavailable: number;
   openEvents: number;
   busiestServer?: ServerNode;
 }
@@ -254,6 +264,9 @@ function collectServerInventory(inputServers: ServerNode[], includeItems: boolea
   let provisioning = 0;
   let sshConnected = 0;
   let cpuTotal = 0;
+  let freshMetricSamples = 0;
+  let staleMetricSamples = 0;
+  let unavailableMetricSamples = 0;
   let busiestServer: ServerNode | undefined;
   let busiestLoad = -1;
   const items = includeItems ? [] as ServerNode[] : undefined;
@@ -288,11 +301,18 @@ function collectServerInventory(inputServers: ServerNode[], includeItems: boolea
       customProviders.add(normalized.provider);
     }
 
-    cpuTotal += normalized.cpu;
-    const load = Math.max(normalized.cpu, normalized.memory, normalized.disk);
-    if (load > busiestLoad) {
-      busiestLoad = load;
-      busiestServer = normalized;
+    if (hasFreshServerTelemetry(normalized)) {
+      cpuTotal += normalized.cpu;
+      freshMetricSamples += 1;
+      const load = Math.max(normalized.cpu, normalized.memory, normalized.disk);
+      if (load > busiestLoad) {
+        busiestLoad = load;
+        busiestServer = normalized;
+      }
+    } else if (normalized.telemetry?.status === 'stale') {
+      staleMetricSamples += 1;
+    } else {
+      unavailableMetricSamples += 1;
     }
   }
 
@@ -308,7 +328,10 @@ function collectServerInventory(inputServers: ServerNode[], includeItems: boolea
     sshConnected,
     regions: regions.size,
     customProviders: customProviders.size,
-    avgCpu: inputServers.length > 0 ? Math.round(cpuTotal / inputServers.length) : 0,
+    avgCpu: freshMetricSamples > 0 ? Math.round(cpuTotal / freshMetricSamples) : 0,
+    telemetryFresh: freshMetricSamples,
+    telemetryStale: staleMetricSamples,
+    telemetryUnavailable: unavailableMetricSamples,
     openEvents,
     ...(busiestServer ? { busiestServer } : {}),
   };
@@ -496,12 +519,10 @@ export async function refreshServerMetrics() {
   for (const server of servers) {
     if (!hasConnectedCredential(server)) {
       serverMetricSamples.delete(server.id);
-      driftServerMetrics(server);
       continue;
     }
 
     if (shouldRefreshServerMetrics(server, now)) {
-      driftServerMetrics(server);
       staleServers.push(server);
     }
   }
@@ -581,6 +602,7 @@ export async function connectServer(input: unknown) {
   if (ssh) {
     persistedCredentials.set(server.id, buildStoredSshCredential(parsed.ssh, ssh.host));
   }
+  serverMetricSamples.delete(server.id);
   markServerInventoryChanged();
   persistServer(server);
 
@@ -731,6 +753,10 @@ export async function updateServer(serverId: string, input: unknown) {
     deleteCredentialRow(server.id);
   }
 
+  if (parsed.ssh) {
+    serverMetricSamples.delete(server.id);
+  }
+
   markServerInventoryChanged();
   persistServer(server);
   recordAudit({
@@ -756,6 +782,7 @@ export function deleteServer(serverId: string) {
   const [server] = servers.splice(index, 1);
   unindexServer(server);
   persistedCredentials.delete(server.id);
+  serverMetricSamples.delete(server.id);
   markServerInventoryChanged();
   deleteServerRow(server.id);
   deleteCredentialRow(server.id);
@@ -1106,7 +1133,6 @@ async function refreshStaleServerMetrics(staleServers: ServerNode[]) {
 async function refreshSingleServerMetrics(server: ServerNode) {
   if (!hasConnectedCredential(server)) {
     serverMetricSamples.delete(server.id);
-    driftServerMetrics(server);
     return;
   }
 
@@ -1114,23 +1140,34 @@ async function refreshSingleServerMetrics(server: ServerNode) {
   const ssh = server.ssh;
   if (!credential || !ssh) {
     serverMetricSamples.delete(server.id);
-    driftServerMetrics(server);
     return;
   }
 
   try {
     const metrics = await collectSshMetrics(credential, ssh.verifyMode);
-    applyServerMetricState(server, metrics.cpu, metrics.memory, metrics.disk, normalizeServerRuntimeStatus({
+    const previousSample = serverMetricSamples.get(server.id);
+    const nextSample = recordServerTelemetrySuccess(Date.now());
+    serverMetricSamples.set(server.id, nextSample);
+    const metricsChanged = applyServerMetricState(server, metrics.cpu, metrics.memory, metrics.disk, normalizeServerRuntimeStatus({
       ...server,
       ...metrics,
     }));
-    serverMetricSamples.set(server.id, { sampledAt: Date.now(), failedAt: 0 });
+    if (metricsChanged || !serverTelemetryEquals(
+      resolveServerTelemetry(true, previousSample),
+      resolveServerTelemetry(true, nextSample),
+    )) {
+      markServerInventoryChanged();
+    }
   } catch {
-    serverMetricSamples.set(server.id, {
-      sampledAt: Date.now(),
-      failedAt: Date.now(),
-    });
-    driftServerMetrics(server);
+    const previousSample = serverMetricSamples.get(server.id);
+    const nextSample = recordServerTelemetryFailure(previousSample, Date.now());
+    serverMetricSamples.set(server.id, nextSample);
+    if (!serverTelemetryEquals(
+      resolveServerTelemetry(true, previousSample),
+      resolveServerTelemetry(true, nextSample),
+    )) {
+      markServerInventoryChanged();
+    }
   }
 }
 
@@ -1153,41 +1190,16 @@ function wait(timeoutMs: number) {
   });
 }
 
-function driftServerMetrics(server: ServerNode) {
-  if (!hasConnectedCredential(server)) {
-    applyServerMetricState(server, 0, 0, 0, 'unconnected');
-    return;
-  }
-
-  const phase = Date.now() / 1000 + hashText(server.id);
-  applyServerMetricState(
-    server,
-    driftMetric(server.cpu, Math.sin(phase / 19) * 8),
-    driftMetric(server.memory, Math.cos(phase / 23) * 5),
-    driftMetric(server.disk, Math.sin(phase / 37) * 2),
-    normalizeServerRuntimeStatus(server),
-  );
-}
-
 function applyServerMetricState(server: ServerNode, cpu: number, memory: number, disk: number, status: ServerStatus) {
   if (server.cpu === cpu && server.memory === memory && server.disk === disk && server.status === status) {
-    return;
+    return false;
   }
 
   server.cpu = cpu;
   server.memory = memory;
   server.disk = disk;
   server.status = status;
-  markServerInventoryChanged();
-}
-
-function driftMetric(current: number, delta: number) {
-  const base = current > 0 ? current : 12;
-  return Math.max(0, Math.min(100, Math.round(base + delta)));
-}
-
-function hashText(value: string) {
-  return value.split('').reduce((total, char) => total + char.charCodeAt(0), 0);
+  return true;
 }
 
 async function buildVerifiedSshSummary(input: z.infer<typeof sshCredentialSchema>, publicIp: string, verifiedAt: string) {
@@ -1235,7 +1247,12 @@ function normalizeServerForResponse(server: ServerNode): ServerNode {
     ...server,
     status: normalizedStatus,
     ssh: hasCredential ? server.ssh : undefined,
+    telemetry: resolveServerTelemetry(hasCredential, serverMetricSamples.get(server.id)),
   };
+}
+
+function serverTelemetryEquals(left: ServerNode['telemetry'], right: ServerNode['telemetry']) {
+  return left?.status === right?.status && left?.sampledAt === right?.sampledAt;
 }
 
 function normalizePersistedServer(server: ServerNode): ServerNode {

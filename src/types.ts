@@ -29,6 +29,13 @@ export interface ServerSshAccess {
   fingerprint?: string;
 }
 
+export type ServerTelemetryStatus = 'fresh' | 'stale' | 'unavailable';
+
+export interface ServerTelemetry {
+  status: ServerTelemetryStatus;
+  sampledAt: string | null;
+}
+
 export interface ServerNode {
   id: string;
   name: string;
@@ -43,6 +50,7 @@ export interface ServerNode {
   disk: number;
   tags: string[];
   ssh?: ServerSshAccess;
+  telemetry?: ServerTelemetry;
 }
 
 export type ResourceAlertMetric = 'cpu' | 'memory' | 'disk';
@@ -68,6 +76,8 @@ export interface ResourceAlertPolicyResponse {
   policy: ResourceAlertPolicy;
 }
 
+export type ResourceAlertPolicyLoadStatus = 'loading' | 'ready' | 'error';
+
 export interface ResourceAlertSignal {
   id: string;
   serverId: string;
@@ -85,6 +95,9 @@ export interface ResourceAlertEvaluation {
     affectedServers: number;
     criticalAlerts: number;
     evaluatedServers: number;
+    connectedServers: number;
+    freshSamples: number;
+    skippedServers: number;
     truncated: boolean;
   };
   signals: ResourceAlertSignal[];

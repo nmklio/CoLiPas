@@ -1,4 +1,5 @@
 import type { CloudProvider, ServerNode, ServerStatus } from '../types.js';
+import { hasFreshServerTelemetry } from './serverTelemetry.js';
 
 export const baseCloudProviders = ['AWS', 'Azure', 'GCP', 'Aliyun', 'Tencent Cloud'] as const;
 export const customProviderFilterValue = 'Custom';
@@ -11,7 +12,7 @@ export interface ServerFilters {
   status: ServerStatus | 'all';
   region: string | 'all';
   regionScope?: string[];
-  health?: 'resourcePressure' | 'sshMissing' | 'sshSimulated';
+  health?: 'resourcePressure' | 'telemetryUnavailable' | 'sshMissing' | 'sshSimulated';
 }
 
 const serverSearchTextCache = new WeakMap<ServerNode, { signature: string; searchText: string }>();
@@ -74,11 +75,21 @@ export function buildServerFilterMatcher(filters: ServerFilters) {
       }
     }
 
-    if (healthFilter === 'resourcePressure' && Math.max(server.cpu, server.memory, server.disk) < 70) {
+    if (healthFilter === 'resourcePressure' && (
+      !hasFreshServerTelemetry(server)
+      || Math.max(server.cpu, server.memory, server.disk) < 70
+    )) {
       return false;
     }
 
     if (healthFilter === 'sshMissing' && server.ssh?.connected) {
+      return false;
+    }
+
+    if (healthFilter === 'telemetryUnavailable' && (
+      !server.ssh?.connected
+      || hasFreshServerTelemetry(server)
+    )) {
       return false;
     }
 

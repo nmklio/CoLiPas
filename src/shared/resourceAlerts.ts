@@ -6,6 +6,7 @@ import type {
   ResourceAlertSignal,
   ServerNode,
 } from '../types.js';
+import { hasFreshServerTelemetry } from './serverTelemetry.js';
 
 export const resourceAlertThresholdMinimum = 50;
 export const resourceAlertThresholdMaximum = 95;
@@ -38,19 +39,29 @@ export function buildResourceAlertEvaluation(
   policy: ResourceAlertPolicy,
   signalLimit = resourceAlertSignalLimit,
 ): ResourceAlertEvaluation {
-  if (!policy.enabled) {
-    return emptyResourceAlertEvaluation();
-  }
-
   const affectedServerIds = new Set<string>();
   const signals: ResourceAlertSignal[] = [];
   const boundedLimit = normalizeResourceAlertSignalLimit(signalLimit);
   let activeAlerts = 0;
   let criticalAlerts = 0;
   let evaluatedServers = 0;
+  let connectedServers = 0;
+  let freshSamples = 0;
+  let skippedServers = 0;
 
   for (const server of servers) {
-    if (!server.ssh?.connected || server.status === 'stopped' || server.status === 'unconnected') {
+    if (!server.ssh?.connected) {
+      continue;
+    }
+
+    connectedServers += 1;
+    const telemetryFresh = hasFreshServerTelemetry(server);
+    freshSamples += telemetryFresh ? 1 : 0;
+    const alertEligible = server.status !== 'stopped' && server.status !== 'unconnected';
+    if (alertEligible && !telemetryFresh) {
+      skippedServers += 1;
+    }
+    if (!policy.enabled || !alertEligible || !telemetryFresh) {
       continue;
     }
 
@@ -85,22 +96,12 @@ export function buildResourceAlertEvaluation(
       affectedServers: affectedServerIds.size,
       criticalAlerts,
       evaluatedServers,
+      connectedServers,
+      freshSamples,
+      skippedServers,
       truncated: activeAlerts > signals.length,
     },
     signals,
-  };
-}
-
-function emptyResourceAlertEvaluation(): ResourceAlertEvaluation {
-  return {
-    summary: {
-      activeAlerts: 0,
-      affectedServers: 0,
-      criticalAlerts: 0,
-      evaluatedServers: 0,
-      truncated: false,
-    },
-    signals: [],
   };
 }
 

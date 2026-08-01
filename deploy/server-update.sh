@@ -292,7 +292,7 @@ if (!html.includes('data-colipas-feature="command-palette-context"')) {
       <article class="feature-card" data-colipas-feature="command-palette-context">${landingIcon('command', 'icon feature-icon')}<h3>上下文命令面板</h3><p>按当前最高优先级事项、最近使用和全部操作分层展示跨模块入口；最近历史只保存在浏览器中，可随时清除。</p><div class="tags"><span>当前优先级</span><span>本机历史</span></div></article>`);
 }
 
-const resourceAlertPolicyFeatureCard = `<article class="feature-card" data-colipas-feature="resource-alert-policy">${landingIcon('alert', 'icon feature-icon')}<h3>资源告警策略</h3><p>为已验证且运行中的 SSH 资产设置 CPU、内存和磁盘阈值，并把再次提醒周期保存到 SQLite；越线事项可从收件箱直达服务器。</p><div class="tags"><span>阈值策略</span><span>周期提醒</span></div></article>`;
+const resourceAlertPolicyFeatureCard = `<article class="feature-card" data-colipas-feature="resource-alert-policy">${landingIcon('alert', 'icon feature-icon')}<h3>资源告警策略</h3><p>仅用已验证、运行中且遥测新鲜的 SSH 资产生成资源告警；过期或不可用样本会明确标记并跳过。</p><div class="tags"><span>可信遥测</span><span>周期提醒</span></div></article>`;
 if (!html.includes('data-colipas-feature="resource-alert-policy"')) {
   replaceOnce(/(<div class="feature-grid">)/, `$1
       ${resourceAlertPolicyFeatureCard}`);
@@ -1573,10 +1573,11 @@ SVG
         <div>
           <p class="kicker">资源告警策略</p>
           <h2>把资源越线变成可持续跟进的值班事项</h2>
-          <p>在总览健康基线中打开策略抽屉，为 CPU、内存和磁盘设置独立阈值，并选择未解消越线的再次提醒周期。策略保存在 SQLite，刷新页面或服务重启后仍有效。</p>
+          <p>在总览健康基线中打开策略抽屉，为 CPU、内存和磁盘设置独立阈值，并选择未解消越线的再次提醒周期。策略保存在 SQLite，告警只消费最近一次成功采集的可信遥测。</p>
           <div class="check-list">
             <p class="check-line"><span>✓</span> 阈值范围为 50%–95%，再次提醒可选 15 分钟至 24 小时。</p>
-            <p class="check-line"><span>✓</span> 只评估 SSH 已验证且未停止的服务器；达到阈值为 P1，高出 10 个百分点后升级为 P0。</p>
+            <p class="check-line"><span>✓</span> 只评估 SSH 已验证、未停止且遥测新鲜的服务器；过期或不可用样本会跳过。</p>
+            <p class="check-line"><span>✓</span> 策略读取完成前或读取失败时保持告警暂停，重试成功后再恢复评估。</p>
             <p class="check-line"><span>✓</span> 点击告警会按服务器名称定位资产，浏览器不会保存地址、指标正文或凭据。</p>
           </div>
         </div>

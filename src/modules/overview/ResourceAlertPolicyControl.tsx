@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { BellRing, CheckCircle2, LoaderCircle, RotateCcw, Save, SlidersHorizontal, X } from 'lucide-react';
+import { AlertCircle, BellRing, CheckCircle2, LoaderCircle, RefreshCw, RotateCcw, Save, SlidersHorizontal, X } from 'lucide-react';
 import { useI18n } from '../../i18n';
 import type {
   ResourceAlertEvaluation,
   ResourceAlertMetric,
   ResourceAlertPolicy,
+  ResourceAlertPolicyLoadStatus,
   ResourceAlertPolicyUpdate,
 } from '../../types';
 import {
@@ -17,9 +18,10 @@ import {
 } from '../../shared/resourceAlerts';
 
 interface ResourceAlertPolicyControlProps {
-  policy: ResourceAlertPolicy;
-  evaluation: ResourceAlertEvaluation;
-  loading?: boolean;
+  policy: ResourceAlertPolicy | null;
+  evaluation: ResourceAlertEvaluation | null;
+  status: ResourceAlertPolicyLoadStatus;
+  onRetry: () => Promise<boolean>;
   onSave: (policy: ResourceAlertPolicyUpdate) => Promise<ResourceAlertPolicy>;
 }
 
@@ -29,29 +31,37 @@ interface ResourceThresholdControlProps {
   onChange: (value: number) => void;
 }
 
-export function ResourceAlertPolicyControl({ policy, evaluation, loading = false, onSave }: ResourceAlertPolicyControlProps) {
+export function ResourceAlertPolicyControl({ policy, evaluation, status, onRetry, onSave }: ResourceAlertPolicyControlProps) {
   const { language, t } = useI18n();
+  const displayPolicy = policy ?? defaultResourceAlertPolicy;
+  const ready = status === 'ready' && policy !== null && evaluation !== null;
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState<ResourceAlertPolicyUpdate>(() => toResourceAlertPolicyUpdate(policy));
+  const [draft, setDraft] = useState<ResourceAlertPolicyUpdate>(() => toResourceAlertPolicyUpdate(displayPolicy));
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const closeTimerRef = useRef<number | null>(null);
   const savingRef = useRef(false);
-  const currentPolicy = useMemo(() => toResourceAlertPolicyUpdate(policy), [policy]);
-  const dirty = !resourceAlertPolicyEquals(draft, currentPolicy);
-  const tone = !policy.enabled
-    ? 'paused'
-    : evaluation.summary.criticalAlerts > 0
-      ? 'critical'
-      : evaluation.summary.activeAlerts > 0
-        ? 'warning'
-        : 'clear';
+  const currentPolicy = useMemo(() => toResourceAlertPolicyUpdate(displayPolicy), [displayPolicy]);
+  const dirty = ready && !resourceAlertPolicyEquals(draft, currentPolicy);
+  const tone = status === 'error'
+    ? 'error'
+    : status === 'loading'
+      ? 'loading'
+      : !displayPolicy.enabled
+        ? 'paused'
+        : (evaluation?.summary.criticalAlerts ?? 0) > 0
+          ? 'critical'
+          : (evaluation?.summary.activeAlerts ?? 0) > 0
+            ? 'warning'
+            : 'clear';
   const locale = language === 'en' ? 'en-US' : language === 'ja' ? 'ja-JP' : 'zh-CN';
-  const updatedAt = policy.updatedAt
-    ? new Date(policy.updatedAt).toLocaleString(locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-    : t('overview.resourceAlertPolicyDefault');
+  const updatedAt = status !== 'ready'
+    ? '--'
+    : displayPolicy.updatedAt
+      ? new Date(displayPolicy.updatedAt).toLocaleString(locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+      : t('overview.resourceAlertPolicyDefault');
 
   useEffect(() => {
     if (!open) {
@@ -81,6 +91,12 @@ export function ResourceAlertPolicyControl({ policy, evaluation, loading = false
     }
   }, []);
 
+  useEffect(() => {
+    if (open && status === 'ready') {
+      setDraft(currentPolicy);
+    }
+  }, [currentPolicy, open, status]);
+
   function closePolicy() {
     if (savingRef.current) {
       return;
@@ -105,7 +121,7 @@ export function ResourceAlertPolicyControl({ policy, evaluation, loading = false
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!dirty || saving || loading) {
+    if (!dirty || saving || !ready) {
       return;
     }
     setSaving(true);
@@ -137,21 +153,30 @@ export function ResourceAlertPolicyControl({ policy, evaluation, loading = false
         type="button"
         className={`resource-alert-policy-trigger ${tone}`}
         data-resource-alert-policy-open="true"
+        data-resource-alert-policy-status={status}
         aria-haspopup="dialog"
         onClick={openPolicy}
       >
         <BellRing size={15} aria-hidden="true" />
         <span>
           <strong>{t('overview.resourceAlertPolicyOpen')}</strong>
-          <small>{policy.enabled
-            ? t('overview.resourceAlertPolicyThresholdSummary', {
-              cpu: policy.cpuThreshold,
-              memory: policy.memoryThreshold,
-              disk: policy.diskThreshold,
-            })
-            : t('overview.resourceAlertPolicyPaused')}</small>
+          <small>{status === 'loading'
+            ? t('overview.resourceAlertPolicyLoading')
+            : status === 'error'
+              ? t('overview.resourceAlertPolicyLoadFailedShort')
+              : displayPolicy.enabled
+                ? t('overview.resourceAlertPolicyThresholdSummary', {
+                  cpu: displayPolicy.cpuThreshold,
+                  memory: displayPolicy.memoryThreshold,
+                  disk: displayPolicy.diskThreshold,
+                })
+                : t('overview.resourceAlertPolicyPaused')}</small>
         </span>
-        <b aria-live="polite">{loading ? <LoaderCircle size={14} className="spin" aria-hidden="true" /> : evaluation.summary.activeAlerts}</b>
+        <b aria-live="polite">{status === 'loading'
+          ? <LoaderCircle size={14} className="spin" aria-hidden="true" />
+          : status === 'error'
+            ? <AlertCircle size={14} aria-hidden="true" />
+            : evaluation?.summary.activeAlerts ?? 0}</b>
       </button>
 
       {open && typeof document !== 'undefined' ? createPortal((
@@ -194,17 +219,45 @@ export function ResourceAlertPolicyControl({ policy, evaluation, loading = false
             <div className="resource-alert-policy-summary" aria-label={t('overview.resourceAlertPolicyLiveStatus')}>
               <div>
                 <span>{t('overview.resourceAlertPolicyActive')}</span>
-                <strong>{evaluation.summary.activeAlerts}</strong>
+                <strong>{evaluation?.summary.activeAlerts ?? '--'}</strong>
               </div>
               <div>
                 <span>{t('overview.resourceAlertPolicyAffected')}</span>
-                <strong>{evaluation.summary.affectedServers}</strong>
+                <strong>{evaluation?.summary.affectedServers ?? '--'}</strong>
               </div>
               <div>
                 <span>{t('overview.resourceAlertPolicyCritical')}</span>
-                <strong>{evaluation.summary.criticalAlerts}</strong>
+                <strong>{evaluation?.summary.criticalAlerts ?? '--'}</strong>
+              </div>
+              <div>
+                <span>{t('overview.resourceAlertPolicyConnected')}</span>
+                <strong>{evaluation?.summary.connectedServers ?? '--'}</strong>
+              </div>
+              <div>
+                <span>{t('overview.resourceAlertPolicyFresh')}</span>
+                <strong>{evaluation?.summary.freshSamples ?? '--'}</strong>
+              </div>
+              <div>
+                <span>{t('overview.resourceAlertPolicySkipped')}</span>
+                <strong>{evaluation?.summary.skippedServers ?? '--'}</strong>
               </div>
             </div>
+
+            {status !== 'ready' ? (
+              <div className={`resource-alert-policy-load-state ${status}`} data-resource-alert-policy-load-state={status} role={status === 'error' ? 'alert' : 'status'}>
+                {status === 'loading' ? <LoaderCircle size={17} className="spin" aria-hidden="true" /> : <AlertCircle size={17} aria-hidden="true" />}
+                <span>
+                  <strong>{status === 'loading' ? t('overview.resourceAlertPolicyLoading') : t('overview.resourceAlertPolicyLoadFailed')}</strong>
+                  <small>{status === 'loading' ? t('overview.resourceAlertPolicyLoadingDetail') : t('overview.resourceAlertPolicyLoadFailedDetail')}</small>
+                </span>
+                {status === 'error' ? (
+                  <button type="button" className="tool-button" data-resource-alert-policy-retry="true" onClick={() => void onRetry()}>
+                    <RefreshCw size={14} aria-hidden="true" />
+                    {t('app.retryApi')}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
 
             <form className="resource-alert-policy-form" onSubmit={handleSubmit}>
               <div className="resource-alert-policy-fields">
@@ -216,13 +269,14 @@ export function ResourceAlertPolicyControl({ policy, evaluation, loading = false
                   <input
                     type="checkbox"
                     role="switch"
-                    checked={draft.enabled}
+                    checked={ready && draft.enabled}
+                    disabled={!ready || saving}
                     onChange={(event) => updateDraft({ enabled: event.target.checked })}
                   />
                   <i aria-hidden="true" />
                 </label>
 
-                <fieldset disabled={!draft.enabled || saving}>
+                <fieldset disabled={!ready || !draft.enabled || saving}>
                   <legend><SlidersHorizontal size={15} aria-hidden="true" /> {t('overview.resourceAlertPolicyThresholds')}</legend>
                   <ResourceThresholdControl
                     metric="cpu"
@@ -248,7 +302,7 @@ export function ResourceAlertPolicyControl({ policy, evaluation, loading = false
                   </span>
                   <select
                     value={draft.reminderMinutes}
-                    disabled={!draft.enabled || saving}
+                    disabled={!ready || !draft.enabled || saving}
                     onChange={(event) => updateDraft({ reminderMinutes: Number(event.target.value) })}
                   >
                     {resourceAlertReminderOptions.map((minutes) => (
@@ -278,7 +332,7 @@ export function ResourceAlertPolicyControl({ policy, evaluation, loading = false
                   <button
                     type="button"
                     className="tool-button"
-                    disabled={saving}
+                    disabled={!ready || saving}
                     onClick={() => updateDraft(toResourceAlertPolicyUpdate(defaultResourceAlertPolicy))}
                   >
                     <RotateCcw size={14} aria-hidden="true" />
@@ -287,7 +341,7 @@ export function ResourceAlertPolicyControl({ policy, evaluation, loading = false
                   <button type="button" className="tool-button" disabled={saving} onClick={closePolicy}>
                     {t('common.cancel')}
                   </button>
-                  <button type="submit" className="tool-button primary" disabled={!dirty || saving || loading}>
+                  <button type="submit" className="tool-button primary" disabled={!dirty || saving || !ready}>
                     {saving ? <LoaderCircle size={14} className="spin" aria-hidden="true" /> : <Save size={14} aria-hidden="true" />}
                     {saving ? t('common.processing') : t('overview.resourceAlertPolicySave')}
                   </button>

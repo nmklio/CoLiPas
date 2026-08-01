@@ -69,10 +69,12 @@ import {
 import type {
   OperationTaskPreflightResponse,
   ResourceAlertPolicy,
+  ResourceAlertPolicyLoadStatus,
   ResourceAlertPolicyUpdate,
   ServerNode,
 } from '../types';
-import { buildResourceAlertEvaluation, defaultResourceAlertPolicy } from '../shared/resourceAlerts';
+import { buildResourceAlertEvaluation } from '../shared/resourceAlerts';
+import { hasFreshServerTelemetry } from '../shared/serverTelemetry';
 import {
   getOverviewRefreshDelay,
   getOverviewRefreshInterval,
@@ -468,8 +470,8 @@ export function App() {
   const [aiSeedQuestion, setAiSeedQuestion] = useState('');
   const [overview, setOverview] = useState<OverviewResponse>(fallbackOverview);
   const [configSummary, setConfigSummary] = useState<ConfigSummaryResponse | null>(null);
-  const [resourceAlertPolicy, setResourceAlertPolicy] = useState<ResourceAlertPolicy>(() => ({ ...defaultResourceAlertPolicy }));
-  const [resourceAlertPolicyLoading, setResourceAlertPolicyLoading] = useState(false);
+  const [resourceAlertPolicy, setResourceAlertPolicy] = useState<ResourceAlertPolicy | null>(null);
+  const [resourceAlertPolicyStatus, setResourceAlertPolicyStatus] = useState<ResourceAlertPolicyLoadStatus>('loading');
   const [dataSource, setDataSource] = useState<'api' | 'fallback'>('fallback');
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
   const [adaptiveRefreshStatus, setAdaptiveRefreshStatus] = useState<AdaptiveRefreshStatus>(() => (
@@ -560,24 +562,24 @@ export function App() {
     if (!session?.authenticated && !sessionAuthenticatedRef.current) {
       return false;
     }
-    setResourceAlertPolicyLoading(true);
+    setResourceAlertPolicy(null);
+    setResourceAlertPolicyStatus('loading');
     try {
       const result = await fetchResourceAlertPolicy();
       if (!appMountedRef.current || !sessionAuthenticatedRef.current) {
         return false;
       }
       setResourceAlertPolicy(result.policy);
+      setResourceAlertPolicyStatus('ready');
       return true;
     } catch (error) {
       if (appMountedRef.current && error instanceof AuthRequiredError) {
         setSession(null);
         setAiCollapsed(true);
+      } else if (appMountedRef.current) {
+        setResourceAlertPolicyStatus('error');
       }
       return false;
-    } finally {
-      if (appMountedRef.current) {
-        setResourceAlertPolicyLoading(false);
-      }
     }
   }
 
@@ -585,6 +587,7 @@ export function App() {
     const result = await persistResourceAlertPolicy(policy);
     if (appMountedRef.current && sessionAuthenticatedRef.current) {
       setResourceAlertPolicy(result.policy);
+      setResourceAlertPolicyStatus('ready');
     }
     return result.policy;
   }
@@ -661,6 +664,10 @@ export function App() {
 
   useEffect(() => {
     sessionAuthenticatedRef.current = Boolean(session?.authenticated);
+    if (!session?.authenticated) {
+      setResourceAlertPolicy(null);
+      setResourceAlertPolicyStatus('loading');
+    }
   }, [session?.authenticated]);
 
   useEffect(() => {
@@ -994,10 +1001,11 @@ export function App() {
       && Number.isInteger(overview.summary.openEvents)
       && Number.isInteger(overview.summary.connectedSsh)
       && Number.isInteger(overview.summary.avgCpu)
+      && Number.isInteger(overview.summary.telemetryFresh)
     ) {
       return {
         onlineCount: overview.summary.onlineServers,
-        avgCpu: overview.summary.avgCpu ?? 0,
+        avgCpu: (overview.summary.telemetryFresh ?? 0) > 0 ? overview.summary.avgCpu ?? 0 : null,
         connectedCount: overview.summary.connectedSsh ?? 0,
         openEventCount: overview.summary.openEvents,
         busiestServer: overview.summary.busiestServer,
@@ -1007,6 +1015,7 @@ export function App() {
     let online = 0;
     let connected = 0;
     let cpuTotal = 0;
+    let cpuSamples = 0;
     let busiest: ServerNode | undefined;
     let busiestLoad = -1;
 
@@ -1017,18 +1026,23 @@ export function App() {
       if (server.ssh?.connected) {
         connected += 1;
       }
-      cpuTotal += server.cpu;
+      if (hasFreshServerTelemetry(server)) {
+        cpuTotal += server.cpu;
+        cpuSamples += 1;
+      }
 
-      const load = Math.max(server.cpu, server.memory, server.disk);
-      if (load > busiestLoad) {
-        busiest = server;
-        busiestLoad = load;
+      if (hasFreshServerTelemetry(server)) {
+        const load = Math.max(server.cpu, server.memory, server.disk);
+        if (load > busiestLoad) {
+          busiest = server;
+          busiestLoad = load;
+        }
       }
     }
 
     return {
       onlineCount: online,
-      avgCpu: overview.servers.length > 0 ? Math.round(cpuTotal / overview.servers.length) : 0,
+      avgCpu: cpuSamples > 0 ? Math.round(cpuTotal / cpuSamples) : null,
       connectedCount: connected,
       openEventCount: overview.operationEvents.reduce((count, event) => count + (event.status === 'open' ? 1 : 0), 0),
       busiestServer: busiest,
@@ -1099,16 +1113,18 @@ export function App() {
     t,
   }), [configSummary, connectedCount, dataSource, onlineCount, openEventCount, overview.servers.length, overviewPreflightSnapshot, t]);
   const resourceAlertEvaluation = useMemo(
-    () => buildResourceAlertEvaluation(overview.servers, resourceAlertPolicy),
-    [overview.servers, resourceAlertPolicy],
+    () => resourceAlertPolicyStatus === 'ready' && resourceAlertPolicy
+      ? buildResourceAlertEvaluation(overview.servers, resourceAlertPolicy)
+      : null,
+    [overview.servers, resourceAlertPolicy, resourceAlertPolicyStatus],
   );
   const operationsInboxItems = useMemo(() => buildOperationsInboxItems({
     launchSteps: launchChecklist.remediationSteps,
     events: overview.operationEvents,
     resourceAlerts: resourceAlertEvaluation,
-    resourceAlertReminderMinutes: resourceAlertPolicy.reminderMinutes,
+    resourceAlertReminderMinutes: resourceAlertPolicy?.reminderMinutes,
     t,
-  }), [launchChecklist.remediationSteps, overview.operationEvents, resourceAlertEvaluation, resourceAlertPolicy.reminderMinutes, t]);
+  }), [launchChecklist.remediationSteps, overview.operationEvents, resourceAlertEvaluation, resourceAlertPolicy?.reminderMinutes, t]);
   const operationsInboxReview = useOperationsInboxReview(operationsInboxItems);
   const launchGuideCompact = launchGuideViewPreference === 'compact'
     || (launchGuideViewPreference === 'auto' && (performanceMode || activeSection !== 'overview'));
@@ -1302,8 +1318,8 @@ export function App() {
     setProfile(fallbackProfile);
     setOverview(fallbackOverview);
     setConfigSummary(null);
-    setResourceAlertPolicy({ ...defaultResourceAlertPolicy });
-    setResourceAlertPolicyLoading(false);
+    setResourceAlertPolicy(null);
+    setResourceAlertPolicyStatus('loading');
     setDataSource('fallback');
     setLastRefreshedAt(null);
     setAiCollapsed(true);
@@ -1374,7 +1390,11 @@ export function App() {
 
     setFilters({
       ...defaultFilters,
-      health: signal === 'resources' ? 'resourcePressure' : 'sshMissing',
+      health: signal === 'resources'
+        ? overview.servers.some((server) => hasFreshServerTelemetry(server) && Math.max(server.cpu, server.memory, server.disk) >= 70)
+          ? 'resourcePressure'
+          : 'telemetryUnavailable'
+        : 'sshMissing',
     });
     navigateToSection('servers');
   }
@@ -1382,7 +1402,7 @@ export function App() {
   function openOverviewOperationsDraft() {
     const connectedServers = overview.servers.filter((server) => resolveServerLifecycleStatus(server) !== 'unconnected');
     const pressureServers = connectedServers
-      .filter((server) => Math.max(server.cpu, server.memory, server.disk) >= 70)
+      .filter((server) => hasFreshServerTelemetry(server) && Math.max(server.cpu, server.memory, server.disk) >= 70)
       .sort((left, right) => Math.max(right.cpu, right.memory, right.disk) - Math.max(left.cpu, left.memory, left.disk))
       .slice(0, 50);
     const missingSshCount = overview.servers.filter((server) => !server.ssh?.connected).length;
@@ -1413,9 +1433,10 @@ export function App() {
   function openServerTriageOperationsDraft(triageId: ServerFleetTriageCardId) {
     const connectedServers = overview.servers.filter((server) => resolveServerLifecycleStatus(server) !== 'unconnected');
     const pressureServers = overview.servers
-      .filter((server) => Math.max(server.cpu, server.memory, server.disk) >= 70)
+      .filter((server) => hasFreshServerTelemetry(server) && Math.max(server.cpu, server.memory, server.disk) >= 70)
       .sort((left, right) => Math.max(right.cpu, right.memory, right.disk) - Math.max(left.cpu, left.memory, left.disk));
     const connectedPressureServers = pressureServers.filter((server) => resolveServerLifecycleStatus(server) !== 'unconnected');
+    const telemetryUnavailableServers = overview.servers.filter((server) => server.ssh?.connected && !hasFreshServerTelemetry(server));
     const missingSshServers = overview.servers.filter((server) => !server.ssh?.connected);
     const simulatedServers = overview.servers.filter((server) => server.ssh?.verifyMode === 'simulate');
     const stoppedServers = overview.servers.filter((server) => resolveServerLifecycleStatus(server) === 'stopped');
@@ -1424,6 +1445,11 @@ export function App() {
         servers: connectedPressureServers.length > 0 ? connectedPressureServers : pressureServers,
         type: connectedPressureServers.length > 0 ? 'sshCommand' : 'assetSync',
         command: connectedPressureServers.length > 0 ? overviewTriageCommand : undefined,
+      },
+      telemetryUnavailable: {
+        servers: telemetryUnavailableServers,
+        type: 'healthCheck',
+        command: undefined,
       },
       sshMissing: {
         servers: missingSshServers,
@@ -2260,7 +2286,8 @@ export function App() {
                 opsPreflightSnapshot={overviewPreflightSnapshot}
                 resourceAlertPolicy={resourceAlertPolicy}
                 resourceAlertEvaluation={resourceAlertEvaluation}
-                resourceAlertPolicyLoading={resourceAlertPolicyLoading}
+                resourceAlertPolicyStatus={resourceAlertPolicyStatus}
+                onResourceAlertPolicyRetry={refreshResourceAlertPolicy}
                 onResourceAlertPolicySave={saveResourceAlertPolicy}
                 onRegionServersOpen={openServersForRegion}
                 onHealthSignalOpen={openHealthSignal}
@@ -2335,7 +2362,7 @@ export function App() {
                     </div>
                     <div>
                       <span><Cpu size={15} /> {t('app.avgCpu')}</span>
-                      <strong>{avgCpu}%</strong>
+                      <strong>{avgCpu === null ? '--' : `${avgCpu}%`}</strong>
                     </div>
                     <div>
                       <span><HardDrive size={15} /> SSH</span>

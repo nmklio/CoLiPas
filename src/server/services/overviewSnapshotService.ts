@@ -31,6 +31,9 @@ export function buildOverviewHttpSnapshot(): OverviewHttpSnapshot {
       openEvents: inventory.summary.openEvents,
       connectedSsh: inventory.summary.sshConnected,
       avgCpu: inventory.summary.avgCpu,
+      telemetryFresh: inventory.summary.telemetryFresh,
+      telemetryStale: inventory.summary.telemetryStale,
+      telemetryUnavailable: inventory.summary.telemetryUnavailable,
       busiestServer: inventory.summary.busiestServer,
     },
   });

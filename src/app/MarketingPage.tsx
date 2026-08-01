@@ -137,8 +137,8 @@ const operationsInboxFeature = {
 const resourceAlertPolicyFeature = {
   icon: BellRing,
   title: '资源告警策略',
-  desc: '为已验证且运行中的 SSH 资产设置 CPU、内存和磁盘阈值，并把再次提醒周期持久化到 SQLite；越线事项可从收件箱直达对应服务器。',
-  tags: ['阈值策略', '周期提醒'],
+  desc: '为已验证且运行中的 SSH 资产设置 CPU、内存和磁盘阈值；仅用新鲜可信遥测生成告警，过期或不可用样本会明确标记并跳过。',
+  tags: ['可信遥测', '周期提醒'],
   featureId: 'resource-alert-policy',
 };
 

@@ -21,6 +21,7 @@ try {
   await openAndLogin(page, `${baseUrl}/admin/#security?trace=${encodeURIComponent(traceId)}`);
   await assertSyntheticTraceDeepLink(page, traceId);
   await assertLaunchGuide(page);
+  await assertResourceAlertPolicyReadiness(page);
   await assertOperationsInbox(page);
   await assertResourceAlertPolicy(page);
 
@@ -291,7 +292,7 @@ async function assertOperationsInbox(targetPage) {
   await drawer.getByRole('button', { name: /close operations inbox/i }).click();
   await drawer.waitFor({ state: 'hidden', timeout: 5000 });
 
-  await targetPage.reload({ waitUntil: 'networkidle', timeout: 30000 });
+  await targetPage.reload({ waitUntil: 'domcontentloaded', timeout: 30000 });
   await targetPage.locator('.topbar').waitFor({ timeout: 10000 });
   await targetPage.locator('[data-operations-inbox-open="true"]').click();
   const persistedItem = targetPage.locator(`[data-operations-inbox-item="${firstItemId}"]`);
@@ -351,6 +352,10 @@ async function assertResourceAlertPolicy(targetPage) {
         target.memory = 88;
         target.disk = 71;
         target.status = 'running';
+        target.telemetry = {
+          status: 'fresh',
+          sampledAt: new Date().toISOString(),
+        };
         if (target.ssh) {
           target.ssh.connected = true;
         }
@@ -497,6 +502,294 @@ async function assertResourceAlertPolicy(targetPage) {
         timeout: 30000,
       });
       await targetPage.reload({ waitUntil: 'networkidle', timeout: 30000 });
+    }
+  }
+}
+
+async function assertResourceAlertPolicyReadiness(targetPage) {
+  let freshServerName = '';
+  let staleServerName = '';
+  let unavailableServerName = '';
+  let releaseDelayedPolicy = () => undefined;
+  const delayedPolicyGate = new Promise((resolve) => {
+    releaseDelayedPolicy = resolve;
+  });
+  const delayedPolicyRoute = async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await delayedPolicyGate;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        policy: {
+          enabled: false,
+          cpuThreshold: 95,
+          memoryThreshold: 95,
+          diskThreshold: 95,
+          reminderMinutes: 60,
+          updatedAt: null,
+        },
+      }),
+    });
+  };
+  const highMetricOverviewRoute = async (route) => {
+    const requestHeaders = { ...route.request().headers() };
+    delete requestHeaders['if-none-match'];
+    const upstream = await route.fetch({ headers: requestHeaders });
+    const payload = await upstream.json();
+    const syntheticTelemetryServers = [
+      ['fresh', 'Fresh telemetry fixture', '192.0.2.31'],
+      ['stale', 'Stale telemetry fixture', '192.0.2.32'],
+      ['unavailable', 'Unavailable telemetry fixture', '192.0.2.33'],
+    ].map(([status, name, publicIp], index) => ({
+      id: `e2e-telemetry-${status}`,
+      name,
+      provider: 'Browser E2E',
+      region: 'Test lab',
+      status: 'running',
+      publicIp,
+      privateIp: '',
+      os: 'Linux',
+      cpu: 99,
+      memory: 99,
+      disk: 99,
+      tags: ['browser-e2e'],
+      ssh: {
+        host: `telemetry-${index + 1}.invalid`,
+        port: 22,
+        username: 'operator',
+        authType: 'password',
+        connected: true,
+        lastVerifiedAt: new Date(0).toISOString(),
+        verifyMode: 'simulate',
+      },
+      telemetry: {
+        status,
+        sampledAt: status === 'fresh' ? new Date().toISOString() : status === 'stale' ? new Date(0).toISOString() : null,
+      },
+    }));
+    payload.servers = [
+      ...syntheticTelemetryServers,
+      ...(Array.isArray(payload.servers) ? payload.servers : []),
+    ];
+    if (payload.summary) {
+      payload.summary.totalServers = payload.servers.length;
+      payload.summary.onlineServers = payload.servers.filter((server) => server.status === 'running').length;
+    }
+    const target = payload.servers?.[0];
+    if (target) {
+      freshServerName = target.name;
+      target.status = 'running';
+      target.cpu = 99;
+      target.memory = 99;
+      target.disk = 99;
+      target.ssh = target.ssh ?? {
+        host: 'synthetic.invalid',
+        port: 22,
+        username: 'operator',
+        authType: 'password',
+        connected: true,
+        lastVerifiedAt: new Date(0).toISOString(),
+        verifyMode: 'simulate',
+      };
+      target.ssh.connected = true;
+      target.telemetry = { status: 'fresh', sampledAt: new Date().toISOString() };
+    }
+    const staleTarget = payload.servers?.[1];
+    if (staleTarget) {
+      staleServerName = staleTarget.name;
+      staleTarget.status = 'running';
+      staleTarget.cpu = 99;
+      staleTarget.memory = 99;
+      staleTarget.disk = 99;
+      staleTarget.ssh = staleTarget.ssh ?? {
+        host: 'stale-synthetic.invalid',
+        port: 22,
+        username: 'operator',
+        authType: 'password',
+        connected: true,
+        lastVerifiedAt: new Date(0).toISOString(),
+        verifyMode: 'simulate',
+      };
+      staleTarget.ssh.connected = true;
+      staleTarget.telemetry = { status: 'stale', sampledAt: new Date(0).toISOString() };
+    }
+    const unavailableTarget = payload.servers?.[2];
+    if (unavailableTarget) {
+      unavailableServerName = unavailableTarget.name;
+      unavailableTarget.status = 'running';
+      unavailableTarget.cpu = 99;
+      unavailableTarget.memory = 99;
+      unavailableTarget.disk = 99;
+      unavailableTarget.ssh = unavailableTarget.ssh ?? {
+        host: 'unavailable-synthetic.invalid',
+        port: 22,
+        username: 'operator',
+        authType: 'password',
+        connected: true,
+        lastVerifiedAt: new Date(0).toISOString(),
+        verifyMode: 'simulate',
+      };
+      unavailableTarget.ssh.connected = true;
+      unavailableTarget.telemetry = { status: 'unavailable', sampledAt: null };
+    }
+    const responseHeaders = { ...upstream.headers() };
+    delete responseHeaders['content-length'];
+    delete responseHeaders['content-encoding'];
+    delete responseHeaders.etag;
+    responseHeaders['cache-control'] = 'no-store';
+    await route.fulfill({
+      status: 200,
+      headers: responseHeaders,
+      contentType: 'application/json',
+      body: JSON.stringify(payload),
+    });
+  };
+  const failedPolicyRoute = async (route) => {
+    await route.fulfill({
+      status: 503,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'temporary policy read failure', code: 'TEST_POLICY_UNAVAILABLE' }),
+    });
+  };
+
+  try {
+    await targetPage.route('**/api/overview', highMetricOverviewRoute);
+    await targetPage.route('**/api/monitoring/resource-alert-policy', delayedPolicyRoute);
+    const delayedPolicyRequest = targetPage.waitForRequest((request) => (
+      request.method() === 'GET'
+      && request.url().includes('/api/monitoring/resource-alert-policy')
+    ));
+    await targetPage.goto(`${baseUrl}/admin/?e2e=policy-readiness#overview`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await delayedPolicyRequest;
+    await targetPage.locator('.topbar').waitFor({ timeout: 10000 });
+    const trigger = targetPage.locator('[data-resource-alert-policy-open="true"]');
+    await trigger.waitFor({ timeout: 10000 });
+    if (await trigger.getAttribute('data-resource-alert-policy-status') !== 'loading') {
+      throw new Error('Resource alert policy did not remain loading while the persisted policy request was pending');
+    }
+    await trigger.click();
+    const loadingDrawer = targetPage.locator('[data-resource-alert-policy-drawer="true"]');
+    await loadingDrawer.waitFor({ timeout: 5000 });
+    await loadingDrawer.locator('[data-resource-alert-policy-load-state="loading"]').waitFor({ timeout: 5000 });
+    await waitForResourceAlertPolicyDrawerStable(targetPage);
+    const loadingPolicySwitch = loadingDrawer.getByRole('switch');
+    if (!(await loadingPolicySwitch.isDisabled()) || await loadingPolicySwitch.isChecked()) {
+      throw new Error('Pending resource alert policy rendered an enabled or editable fallback switch');
+    }
+    await captureVisualEvidence(targetPage, 'desktop-resource-alert-policy-loading', [
+      '[data-resource-alert-policy-drawer="true"]',
+      '[data-resource-alert-policy-load-state="loading"]',
+    ]);
+    await targetPage.keyboard.press('Escape');
+    await loadingDrawer.waitFor({ state: 'hidden', timeout: 5000 });
+
+    await targetPage.locator('[data-operations-inbox-open="true"]').click();
+    const inbox = targetPage.locator('[data-operations-inbox-drawer="true"]');
+    await inbox.waitFor({ timeout: 5000 });
+    if (await inbox.locator('[data-operations-inbox-item^="ops-resource-"]').count() !== 0) {
+      throw new Error('Resource alerts were emitted from default thresholds before the saved policy became ready');
+    }
+    await inbox.getByRole('button', { name: /close operations inbox/i }).click();
+
+    releaseDelayedPolicy();
+    await targetPage.waitForFunction(() => (
+      document.querySelector('[data-resource-alert-policy-open="true"]')?.getAttribute('data-resource-alert-policy-status') === 'ready'
+    ), null, { timeout: 10000 });
+    if (await targetPage.locator('[data-operations-inbox-item^="ops-resource-"]').count() !== 0) {
+      throw new Error('Disabled persisted resource alert policy still emitted high-metric inbox alerts');
+    }
+
+    await targetPage.goto(`${baseUrl}/admin/#servers`, { waitUntil: 'networkidle', timeout: 30000 });
+    if (!freshServerName || !staleServerName || !unavailableServerName) {
+      throw new Error('Telemetry freshness browser coverage requires at least three inventory rows');
+    }
+    const freshRow = targetPage.locator('.server-workspace-row').filter({ hasText: freshServerName }).first();
+    const staleRow = targetPage.locator('.server-workspace-row').filter({ hasText: staleServerName }).first();
+    const unavailableRow = targetPage.locator('.server-workspace-row').filter({ hasText: unavailableServerName }).first();
+    await freshRow.locator('[data-server-telemetry-status="fresh"]').waitFor({ timeout: 10000 });
+    await staleRow.locator('[data-server-telemetry-status="stale"]').waitFor({ timeout: 10000 });
+    await unavailableRow.locator('[data-server-telemetry-status="unavailable"]').waitFor({ timeout: 10000 });
+    if (
+      !/Live sample/i.test(await freshRow.innerText())
+      || !/Stale sample/i.test(await staleRow.innerText())
+      || !/No trusted metrics/i.test(await unavailableRow.innerText())
+      || !/--/.test(await unavailableRow.innerText())
+    ) {
+      throw new Error('Server inventory did not label fresh, stale, and unavailable telemetry clearly');
+    }
+    await assertNoHorizontalOverflow(targetPage, 'desktop server telemetry freshness states');
+    await captureVisualEvidence(targetPage, 'desktop-server-telemetry-freshness', [
+      `[data-server-workspace-row-id="${await freshRow.getAttribute('data-server-workspace-row-id')}"]`,
+      `[data-server-workspace-row-id="${await staleRow.getAttribute('data-server-workspace-row-id')}"]`,
+      `[data-server-workspace-row-id="${await unavailableRow.getAttribute('data-server-workspace-row-id')}"]`,
+    ]);
+    await targetPage.locator('[data-server-triage-filter="telemetryUnavailable"]').click();
+    const telemetryScopeChip = targetPage.locator('[data-health-scope-chip="true"]');
+    await telemetryScopeChip.waitFor({ timeout: 5000 });
+    if (!/Assets awaiting telemetry/i.test(await telemetryScopeChip.innerText())) {
+      throw new Error('Telemetry triage did not expose the trusted-metrics filter scope');
+    }
+    await unavailableRow.waitFor({ timeout: 5000 });
+    await telemetryScopeChip.getByRole('button', { name: /clear health filter/i }).click();
+    await telemetryScopeChip.waitFor({ state: 'detached', timeout: 5000 });
+
+    await targetPage.unroute('**/api/monitoring/resource-alert-policy', delayedPolicyRoute);
+    await targetPage.unroute('**/api/overview', highMetricOverviewRoute);
+    await targetPage.route('**/api/monitoring/resource-alert-policy', failedPolicyRoute);
+    const policyFailureConsoleStart = consoleProblems.length;
+    const failedPolicyResponse = targetPage.waitForResponse((response) => (
+      response.status() === 503
+      && response.url().includes('/api/monitoring/resource-alert-policy')
+    ));
+    await targetPage.goto(`${baseUrl}/admin/?e2e=policy-error#overview`, { waitUntil: 'networkidle', timeout: 30000 });
+    await failedPolicyResponse;
+    const failedTrigger = targetPage.locator('[data-resource-alert-policy-open="true"]');
+    await failedTrigger.waitFor({ timeout: 10000 });
+    if (await failedTrigger.getAttribute('data-resource-alert-policy-status') !== 'error') {
+      throw new Error('Resource alert policy failure did not expose an error state');
+    }
+    await failedTrigger.click();
+    const failedDrawer = targetPage.locator('[data-resource-alert-policy-drawer="true"]');
+    await failedDrawer.locator('[data-resource-alert-policy-load-state="error"]').waitFor({ timeout: 5000 });
+    await waitForResourceAlertPolicyDrawerStable(targetPage);
+    const failedPolicySwitch = failedDrawer.getByRole('switch');
+    if (!(await failedPolicySwitch.isDisabled()) || await failedPolicySwitch.isChecked()) {
+      throw new Error('Unavailable resource alert policy rendered an enabled or editable fallback switch');
+    }
+    await captureVisualEvidence(targetPage, 'desktop-resource-alert-policy-error', [
+      '[data-resource-alert-policy-drawer="true"]',
+      '[data-resource-alert-policy-load-state="error"]',
+    ]);
+    await targetPage.unroute('**/api/monitoring/resource-alert-policy', failedPolicyRoute);
+    await failedDrawer.locator('[data-resource-alert-policy-retry="true"]').click();
+    await targetPage.waitForFunction(() => (
+      document.querySelector('[data-resource-alert-policy-open="true"]')?.getAttribute('data-resource-alert-policy-status') === 'ready'
+    ), null, { timeout: 10000 });
+    await targetPage.waitForTimeout(50);
+    const expectedPolicyConsoleProblems = consoleProblems
+      .slice(policyFailureConsoleStart)
+      .filter((problem) => /^error: Failed to load resource: the server responded with a status of 503 \(Service Unavailable\)$/i.test(problem));
+    if (expectedPolicyConsoleProblems.length > 1) {
+      throw new Error(`Policy failure injection emitted duplicate browser errors: ${expectedPolicyConsoleProblems.length}`);
+    }
+    if (expectedPolicyConsoleProblems.length === 1) {
+      const expectedProblemIndex = consoleProblems.indexOf(expectedPolicyConsoleProblems[0], policyFailureConsoleStart);
+      consoleProblems.splice(expectedProblemIndex, 1);
+    }
+    await targetPage.keyboard.press('Escape');
+    console.log('ok browser e2e blocks default-policy alerts during loading and exposes recoverable policy failures');
+  } finally {
+    releaseDelayedPolicy();
+    await targetPage.unroute('**/api/monitoring/resource-alert-policy', delayedPolicyRoute).catch(() => undefined);
+    await targetPage.unroute('**/api/monitoring/resource-alert-policy', failedPolicyRoute).catch(() => undefined);
+    await targetPage.unroute('**/api/overview', highMetricOverviewRoute).catch(() => undefined);
+    if (!targetPage.isClosed()) {
+      await targetPage.goto(`${baseUrl}/admin/#security?trace=${encodeURIComponent(traceId)}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await targetPage.locator('.topbar').waitFor({ timeout: 10000 });
     }
   }
 }
@@ -2105,15 +2398,15 @@ async function assertSshTerminalPanel(targetPage) {
     const sshServerRow = targetPage.locator('.server-workspace-row').filter({ hasText: sshServer.name });
     await targetPage.locator('[data-server-triage="true"]').waitFor({ timeout: 10000 });
     const serverTriageText = await targetPage.locator('[data-server-triage="true"]').innerText();
-    if (!/Release health triage|Asset triage/i.test(serverTriageText) || !/Simulated SSH/i.test(serverTriageText) || !/SSH gaps/i.test(serverTriageText)) {
+    if (!/Release health triage|Asset triage/i.test(serverTriageText) || !/Telemetry trust/i.test(serverTriageText) || !/Simulated SSH/i.test(serverTriageText) || !/SSH gaps/i.test(serverTriageText)) {
       throw new Error(`Server fleet triage did not render actionable cards: ${serverTriageText}`);
     }
     if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(serverTriageText) || /\bsk-[A-Za-z0-9_-]{12,}\b/.test(serverTriageText) || /BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY|password=|passphrase=/i.test(serverTriageText)) {
       throw new Error('Server fleet triage rendered raw host or secret material');
     }
     const serverTriageCardCount = await targetPage.locator('[data-server-triage-card]').count();
-    if (serverTriageCardCount !== 4) {
-      throw new Error(`Server fleet triage should expose four cards, got ${serverTriageCardCount}`);
+    if (serverTriageCardCount !== 5) {
+      throw new Error(`Server fleet triage should expose five cards, got ${serverTriageCardCount}`);
     }
     await targetPage.locator('[data-server-triage-filter="sshSimulated"]').click();
     const simulatedScopeChip = targetPage.locator('[data-health-scope-chip="true"]');

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { buildOpsPrompt } from '../../shared/aiPrompt.js';
 import { getSshCommandConfirmationReason } from '../../shared/sshCommandRisk.js';
+import { hasFreshServerTelemetry } from '../../shared/serverTelemetry.js';
 import { AIProviderConfig, OperationEvent, ServerNode } from '../../types.js';
 import { RuntimeConfig } from '../config.js';
 import { HttpError } from '../httpErrors.js';
@@ -685,7 +686,9 @@ function buildSimulatedAnswer(
 }
 
 function riskScore(server: ServerNode, eventRisk: number) {
-  const loadScore = Math.max(server.cpu - 75, 0) + Math.max(server.memory - 80, 0) + Math.max(server.disk - 85, 0);
+  const loadScore = hasFreshServerTelemetry(server)
+    ? Math.max(server.cpu - 75, 0) + Math.max(server.memory - 80, 0) + Math.max(server.disk - 85, 0)
+    : 0;
   const statusScore = server.status === 'running' ? 0 : server.status === 'stopped' ? 18 : 12;
   const sshScore = server.ssh?.connected ? 0 : 10;
   return loadScore + statusScore + sshScore + eventRisk;
@@ -693,13 +696,13 @@ function riskScore(server: ServerNode, eventRisk: number) {
 
 function riskReasons(server: ServerNode, hasCriticalOpenEvent: boolean) {
   const reasons: string[] = [];
-  if (server.cpu > 75) {
+  if (hasFreshServerTelemetry(server) && server.cpu > 75) {
     reasons.push(`CPU ${server.cpu}% exceeds 75%`);
   }
-  if (server.memory > 80) {
+  if (hasFreshServerTelemetry(server) && server.memory > 80) {
     reasons.push(`memory ${server.memory}% exceeds 80%`);
   }
-  if (server.disk > 85) {
+  if (hasFreshServerTelemetry(server) && server.disk > 85) {
     reasons.push(`disk ${server.disk}% exceeds 85%`);
   }
   if (server.status === 'stopped') {

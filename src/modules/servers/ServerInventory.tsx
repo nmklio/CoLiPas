@@ -38,6 +38,7 @@ import { CloudProvider, ServerNode, ServerStatus, SshAuthType, SshRunbookCommand
 import { formatRegionName, percentClass, statusLabel } from '../../utils/format';
 import type { ServerFilters } from '../../shared/serverFilters';
 import { baseCloudProviders, customProviderFilterValue, resolveServerLifecycleStatus } from '../../shared/serverFilters';
+import { hasFreshServerTelemetry } from '../../shared/serverTelemetry';
 import {
   captureFleetViewFilters,
   countFleetViewFilters,
@@ -506,7 +507,7 @@ interface SshRunbookRecommendation {
   detail: string;
 }
 
-export type ServerFleetTriageCardId = 'resourcePressure' | 'sshMissing' | 'sshSimulated' | 'stopped';
+export type ServerFleetTriageCardId = 'resourcePressure' | 'telemetryUnavailable' | 'sshMissing' | 'sshSimulated' | 'stopped';
 
 interface ServerFleetTriageCard {
   id: ServerFleetTriageCardId;
@@ -605,6 +606,8 @@ const ServerWorkspaceRow = memo(function ServerWorkspaceRow({ server, diagnosing
   const connected = Boolean(sshAccess?.connected);
   const canOpenTerminal = connected;
   const lifecycleStatus = resolveServerLifecycleStatus(server);
+  const telemetryStatus = server.telemetry?.status ?? 'unavailable';
+  const metricAvailable = telemetryStatus !== 'unavailable';
   const dispatch = (action: ServerWorkspaceRowAction) => onAction(action, server);
 
   return (
@@ -639,9 +642,13 @@ const ServerWorkspaceRow = memo(function ServerWorkspaceRow({ server, diagnosing
         <span>{formatRegionName(server.region, language)}</span>
       </div>
       <div className="server-row-metrics">
-        <ResourceMeter label="CPU" value={server.cpu} />
-        <ResourceMeter label="MEM" value={server.memory} />
-        <ResourceMeter label="DISK" value={server.disk} />
+        <ResourceMeter label="CPU" value={server.cpu} available={metricAvailable} stale={telemetryStatus === 'stale'} />
+        <ResourceMeter label="MEM" value={server.memory} available={metricAvailable} stale={telemetryStatus === 'stale'} />
+        <ResourceMeter label="DISK" value={server.disk} available={metricAvailable} stale={telemetryStatus === 'stale'} />
+        <div className={`server-metric-telemetry ${telemetryStatus}`} data-server-telemetry-status={telemetryStatus}>
+          <i aria-hidden="true" />
+          <span>{formatServerTelemetryStatus(server, language, t)}</span>
+        </div>
       </div>
       <div className="server-row-ssh">
         {connected ? (
@@ -666,8 +673,8 @@ const ServerWorkspaceRow = memo(function ServerWorkspaceRow({ server, diagnosing
             <strong>{formatRegionName(server.region, language)}</strong>
           </span>
           <span>
-            <small>CPU</small>
-            <strong>{server.cpu}%</strong>
+            <small>CPU{telemetryStatus === 'fresh' ? '' : ` · ${t(`servers.metricTelemetryShort.${telemetryStatus}`)}`}</small>
+            <strong>{metricAvailable ? `${server.cpu}%` : '--'}</strong>
           </span>
           <span>
             <small>SSH</small>
@@ -724,6 +731,8 @@ function areServerWorkspaceRowsEqual(previous: ServerNode, next: ServerNode) {
     && previous.cpu === next.cpu
     && previous.memory === next.memory
     && previous.disk === next.disk
+    && previous.telemetry?.status === next.telemetry?.status
+    && previous.telemetry?.sampledAt === next.telemetry?.sampledAt
     && previous.tags.length === next.tags.length
     && previous.tags.every((tag, index) => tag === next.tags[index])
     && areServerWorkspaceSshRowsEqual(previous.ssh, next.ssh);
@@ -1081,6 +1090,7 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
     let maxLoadServer: ServerNode | undefined;
     let maxLoad = -1;
     let loadTotal = 0;
+    let loadSamples = 0;
     const providers = new Set<string>();
     const serverRegions = new Set<string>();
 
@@ -1088,11 +1098,14 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
       providers.add(server.provider);
       serverRegions.add(server.region);
 
-      const load = maxServerLoad(server);
-      loadTotal += load;
-      if (load > maxLoad) {
-        maxLoad = load;
-        maxLoadServer = server;
+      if (hasFreshServerTelemetry(server)) {
+        const load = maxServerLoad(server);
+        loadTotal += load;
+        loadSamples += 1;
+        if (load > maxLoad) {
+          maxLoad = load;
+          maxLoadServer = server;
+        }
       }
     }
 
@@ -1100,13 +1113,15 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
       maxLoadServer,
       providerCount: providers.size,
       regionCount: serverRegions.size,
-      avgLoad: servers.length > 0 ? Math.round(loadTotal / servers.length) : 0,
+      avgLoad: loadSamples > 0 ? Math.round(loadTotal / loadSamples) : null,
+      loadSamples,
     };
   }, [servers]);
   const visibleMaxLoadServer = visibleSummary.maxLoadServer;
   const visibleProviderCount = visibleSummary.providerCount;
   const visibleRegionCount = visibleSummary.regionCount;
   const visibleAvgLoad = visibleSummary.avgLoad;
+  const visibleLoadSamples = visibleSummary.loadSamples;
   const regionScopeKey = scopedRegions.join('|');
   const sshReleaseFocusActive = releaseFocusAnchor === 'server-ssh';
 
@@ -1575,8 +1590,10 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
         </article>
         <article>
           <span><Cpu size={16} /> {t('servers.summaryLoad')}</span>
-          <strong>{visibleAvgLoad}%</strong>
-          <small>{visibleMaxLoadServer ? visibleMaxLoadServer.name : t('common.none')}</small>
+          <strong>{visibleAvgLoad === null ? '--' : `${visibleAvgLoad}%`}</strong>
+          <small>{visibleMaxLoadServer
+            ? t('servers.summaryTelemetryCoverage', { name: visibleMaxLoadServer.name, fresh: visibleLoadSamples, total: servers.length })
+            : t('servers.summaryTelemetryUnavailable')}</small>
         </article>
         <article>
           <span><Globe2 size={16} /> {t('servers.summaryScope')}</span>
@@ -5201,8 +5218,11 @@ function buildServerFleetTriageCards(
     return [];
   }
   const counts = servers.reduce<Record<ServerFleetTriageCardId, number>>((result, server) => {
-    if (Math.max(server.cpu, server.memory, server.disk) >= 70) {
+    if (hasFreshServerTelemetry(server) && Math.max(server.cpu, server.memory, server.disk) >= 70) {
       result.resourcePressure += 1;
+    }
+    if (server.ssh?.connected && !hasFreshServerTelemetry(server)) {
+      result.telemetryUnavailable += 1;
     }
     if (!server.ssh?.connected) {
       result.sshMissing += 1;
@@ -5216,6 +5236,7 @@ function buildServerFleetTriageCards(
     return result;
   }, {
     resourcePressure: 0,
+    telemetryUnavailable: 0,
     sshMissing: 0,
     sshSimulated: 0,
     stopped: 0,
@@ -5223,6 +5244,7 @@ function buildServerFleetTriageCards(
 
   return ([
     ['resourcePressure', counts.resourcePressure, counts.resourcePressure > 0 ? 'warn' : 'good'],
+    ['telemetryUnavailable', counts.telemetryUnavailable, counts.telemetryUnavailable > 0 ? 'warn' : 'good'],
     ['sshMissing', counts.sshMissing, counts.sshMissing > 0 ? 'slow' : 'good'],
     ['sshSimulated', counts.sshSimulated, counts.sshSimulated > 0 ? 'warn' : 'good'],
     ['stopped', counts.stopped, counts.stopped > 0 ? 'pending' : 'good'],
@@ -7945,14 +7967,32 @@ function ActionButton({ label, icon, disabled, onClick }: { label: string; icon:
   );
 }
 
-function ResourceMeter({ label, value }: { label: string; value: number }) {
+function ResourceMeter({ label, value, available = true, stale = false }: { label: string; value: number; available?: boolean; stale?: boolean }) {
   return (
-    <div className="resource-meter">
+    <div className={`resource-meter${available ? '' : ' unavailable'}${stale ? ' stale' : ''}`}>
       <span>{label}</span>
       <div className="meter-track" aria-hidden="true">
-        <i className={percentClass(value)} style={{ width: `${value}%` }} />
+        <i className={available ? percentClass(value) : ''} style={{ width: available ? `${value}%` : '0%' }} />
       </div>
-      <b>{value}%</b>
+      <b>{available ? `${value}%` : '--'}</b>
     </div>
   );
+}
+
+function formatServerTelemetryStatus(
+  server: ServerNode,
+  language: Language,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+) {
+  const status = server.telemetry?.status ?? 'unavailable';
+  if (!server.telemetry?.sampledAt) {
+    return t(`servers.metricTelemetry.${status}`);
+  }
+
+  const locale = language === 'en' ? 'en-US' : language === 'ja' ? 'ja-JP' : 'zh-CN';
+  const sampledAt = new Date(server.telemetry.sampledAt);
+  const time = Number.isNaN(sampledAt.getTime())
+    ? '--'
+    : sampledAt.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+  return t(`servers.metricTelemetry.${status}`, { time });
 }

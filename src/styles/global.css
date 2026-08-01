@@ -4794,6 +4794,26 @@ main {
   background: rgba(148, 163, 184, 0.13);
 }
 
+.resource-alert-policy-trigger.loading {
+  border-color: rgba(37, 99, 235, 0.22);
+  background: #f8fbff;
+}
+
+.resource-alert-policy-trigger.loading > svg,
+.resource-alert-policy-trigger.loading > b {
+  color: #2563eb;
+}
+
+.resource-alert-policy-trigger.error {
+  border-color: rgba(220, 38, 38, 0.28);
+  background: #fff8f8;
+}
+
+.resource-alert-policy-trigger.error > svg,
+.resource-alert-policy-trigger.error > b {
+  color: #b91c1c;
+}
+
 .resource-alert-policy-backdrop {
   position: fixed;
   inset: 0;
@@ -4907,6 +4927,24 @@ main {
   background: #94a3b8;
 }
 
+.resource-alert-policy-signal.loading {
+  border-color: rgba(37, 99, 235, 0.24);
+  color: #2563eb;
+}
+
+.resource-alert-policy-signal.loading span {
+  background: #3b82f6;
+}
+
+.resource-alert-policy-signal.error {
+  border-color: rgba(220, 38, 38, 0.28);
+  color: #b91c1c;
+}
+
+.resource-alert-policy-signal.error span {
+  background: #ef4444;
+}
+
 .resource-alert-policy-summary {
   margin: 12px 18px 0;
   border: 1px solid rgba(132, 179, 183, 0.3);
@@ -4928,6 +4966,14 @@ main {
   border-left: 1px solid rgba(132, 179, 183, 0.24);
 }
 
+.resource-alert-policy-summary > div:nth-child(n + 4) {
+  border-top: 1px solid rgba(132, 179, 183, 0.24);
+}
+
+.resource-alert-policy-summary > div:nth-child(3n + 1) {
+  border-left: 0;
+}
+
 .resource-alert-policy-summary span {
   color: #6d8388;
   font-size: 9px;
@@ -4939,6 +4985,46 @@ main {
 .resource-alert-policy-summary strong {
   color: #17373c;
   font-size: 18px;
+}
+
+.resource-alert-policy-load-state {
+  margin: 10px 18px 0;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  border-radius: 8px;
+  padding: 10px;
+  background: #f5f9ff;
+  color: #1d4ed8;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+}
+
+.resource-alert-policy-load-state.error {
+  border-color: rgba(220, 38, 38, 0.2);
+  background: #fff7f7;
+  color: #b91c1c;
+}
+
+.resource-alert-policy-load-state > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.resource-alert-policy-load-state strong,
+.resource-alert-policy-load-state small {
+  letter-spacing: 0;
+}
+
+.resource-alert-policy-load-state strong {
+  font-size: 11px;
+}
+
+.resource-alert-policy-load-state small {
+  color: #64748b;
+  font-size: 10px;
+  line-height: 1.4;
 }
 
 .resource-alert-policy-form {
@@ -8107,6 +8193,48 @@ main {
   min-width: 0;
 }
 
+.server-metric-telemetry {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #527176;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.server-metric-telemetry i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #16a34a;
+  flex: 0 0 auto;
+}
+
+.server-metric-telemetry span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.server-metric-telemetry.stale {
+  color: #a16207;
+}
+
+.server-metric-telemetry.stale i {
+  background: #f59e0b;
+}
+
+.server-metric-telemetry.unavailable {
+  color: #64748b;
+}
+
+.server-metric-telemetry.unavailable i {
+  background: #94a3b8;
+}
+
 .server-row-actions {
   justify-content: flex-end;
   gap: 5px;
@@ -8276,6 +8404,22 @@ td span,
 
 .meter-track i.danger {
   background: var(--red);
+}
+
+.resource-meter.stale .meter-track {
+  opacity: 0.58;
+}
+
+.resource-meter.stale b {
+  color: #a16207;
+}
+
+.resource-meter.unavailable .meter-track {
+  background: #eef2f4;
+}
+
+.resource-meter.unavailable b {
+  color: #64748b;
 }
 
 .tag-list,

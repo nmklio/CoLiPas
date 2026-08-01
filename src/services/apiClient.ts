@@ -38,6 +38,9 @@ export interface OverviewResponse {
     openEvents: number;
     connectedSsh?: number;
     avgCpu?: number;
+    telemetryFresh?: number;
+    telemetryStale?: number;
+    telemetryUnavailable?: number;
     busiestServer?: ServerNode;
   };
 }
@@ -439,6 +442,9 @@ const fallbackOverview: OverviewResponse = {
     totalServers: servers.length,
     onlineServers: servers.filter((server) => server.status === 'running').length,
     openEvents: operationEvents.filter((event) => event.status === 'open').length,
+    telemetryFresh: 0,
+    telemetryStale: 0,
+    telemetryUnavailable: servers.length,
   },
 };
 

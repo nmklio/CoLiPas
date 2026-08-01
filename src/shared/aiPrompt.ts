@@ -1,4 +1,5 @@
 import type { OperationEvent, ServerNode } from '../types.js';
+import { hasFreshServerTelemetry } from './serverTelemetry.js';
 
 const promptServerSampleLimit = 24;
 const promptHighLoadLimit = 12;
@@ -25,9 +26,10 @@ export function buildOpsPrompt(servers: ServerNode[], events: OperationEvent[]) 
       `status=${server.status}`,
       `publicIp=${server.publicIp || 'none'}`,
       `os=${server.os || 'unknown'}`,
-      `cpu=${server.cpu}%`,
-      `memory=${server.memory}%`,
-      `disk=${server.disk}%`,
+      `telemetry=${server.telemetry?.status ?? 'unavailable'}`,
+      `cpu=${formatPromptMetric(server, 'cpu')}`,
+      `memory=${formatPromptMetric(server, 'memory')}`,
+      `disk=${formatPromptMetric(server, 'disk')}`,
       `ssh=${server.ssh?.connected ? `${server.ssh.verifyMode}/${server.ssh.username}@${server.ssh.host}:${server.ssh.port}` : 'not connected'}`,
       `tags=${server.tags.join(',') || 'none'}`,
     ].join(' | ')).join('\n')
@@ -49,7 +51,7 @@ export function buildOpsPrompt(servers: ServerNode[], events: OperationEvent[]) 
     'Do not invent servers, credentials, commands that were executed, or cloud-provider data.',
     'Large inventories are summarized to keep the UI, API request, and model prompt responsive.',
     '',
-    `Fleet summary: total=${summary.total}, sshConnected=${summary.sshConnected}, running=${summary.running}, stopped=${summary.stopped}, warning=${summary.warning}, unconnected=${summary.unconnected}, avgCpu=${summary.avgCpu}%, avgMemory=${summary.avgMemory}%, avgDisk=${summary.avgDisk}%.`,
+    `Fleet summary: total=${summary.total}, sshConnected=${summary.sshConnected}, running=${summary.running}, stopped=${summary.stopped}, warning=${summary.warning}, unconnected=${summary.unconnected}, freshTelemetry=${summary.freshTelemetry}, telemetrySkipped=${summary.total - summary.freshTelemetry}, avgCpu=${formatPromptAverage(summary.avgCpu)}, avgMemory=${formatPromptAverage(summary.avgMemory)}, avgDisk=${formatPromptAverage(summary.avgDisk)}.`,
     `Providers: ${formatCountGroups(summary.providers)}`,
     `Regions: ${formatCountGroups(summary.regions)}`,
     '',
@@ -70,6 +72,7 @@ function summarizeServersForPrompt(servers: ServerNode[]) {
   let cpuTotal = 0;
   let memoryTotal = 0;
   let diskTotal = 0;
+  let freshTelemetry = 0;
   const providerCounts = new Map<string, number>();
   const regionCounts = new Map<string, number>();
   const sampleServers: ServerNode[] = [];
@@ -97,14 +100,17 @@ function summarizeServersForPrompt(servers: ServerNode[]) {
       unconnected += 1;
     }
 
-    cpuTotal += server.cpu;
-    memoryTotal += server.memory;
-    diskTotal += server.disk;
+    if (hasFreshServerTelemetry(server)) {
+      cpuTotal += server.cpu;
+      memoryTotal += server.memory;
+      diskTotal += server.disk;
+      freshTelemetry += 1;
+    }
     incrementCount(providerCounts, server.provider || 'unknown');
     incrementCount(regionCounts, server.region || 'unknown');
 
-    const load = Math.max(server.cpu, server.memory, server.disk);
-    if (load > 75 || server.status === 'warning' || server.status === 'stopped') {
+    const load = hasFreshServerTelemetry(server) ? Math.max(server.cpu, server.memory, server.disk) : 0;
+    if (hasFreshServerTelemetry(server) && load > 75) {
       insertTopServer(highLoadServers, { server, load }, promptHighLoadLimit);
     }
   }
@@ -116,9 +122,10 @@ function summarizeServersForPrompt(servers: ServerNode[]) {
     warning,
     unconnected,
     sshConnected,
-    avgCpu: average(cpuTotal, servers.length),
-    avgMemory: average(memoryTotal, servers.length),
-    avgDisk: average(diskTotal, servers.length),
+    freshTelemetry,
+    avgCpu: average(cpuTotal, freshTelemetry),
+    avgMemory: average(memoryTotal, freshTelemetry),
+    avgDisk: average(diskTotal, freshTelemetry),
     providers: topCountGroups(providerCounts, promptGroupLimit),
     regions: topCountGroups(regionCounts, promptGroupLimit),
     sampleServers,
@@ -167,5 +174,13 @@ function formatCountGroups(groups: CountGroup[]) {
 }
 
 function average(total: number, count: number) {
-  return count > 0 ? Math.round(total / count) : 0;
+  return count > 0 ? Math.round(total / count) : null;
+}
+
+function formatPromptMetric(server: ServerNode, metric: 'cpu' | 'memory' | 'disk') {
+  return hasFreshServerTelemetry(server) ? `${server[metric]}%` : 'unavailable';
+}
+
+function formatPromptAverage(value: number | null) {
+  return value === null ? 'unavailable' : `${value}%`;
 }

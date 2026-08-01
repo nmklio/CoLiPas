@@ -6,20 +6,22 @@ import { feature } from 'topojson-client';
 import { useI18n } from '../../i18n';
 import { OperationEvent, ServerNode } from '../../types';
 import { formatCountryName, formatRegionName, percentClass, statusLabel } from '../../utils/format';
-import type { ResourceAlertEvaluation, ResourceAlertPolicy, ResourceAlertPolicyUpdate } from '../../types';
+import type { ResourceAlertEvaluation, ResourceAlertPolicy, ResourceAlertPolicyLoadStatus, ResourceAlertPolicyUpdate } from '../../types';
 import { ResourceAlertPolicyControl } from './ResourceAlertPolicyControl';
+import { hasFreshServerTelemetry } from '../../shared/serverTelemetry';
 import type { Feature, FeatureCollection, Geometry } from 'geojson';
 
 interface MonitoringOverviewProps {
   servers: ServerNode[];
   events: OperationEvent[];
   onlineCount: number;
-  avgCpu: number;
+  avgCpu: number | null;
   performanceMode?: boolean;
   opsPreflightSnapshot?: OverviewPreflightSnapshot | null;
-  resourceAlertPolicy: ResourceAlertPolicy;
-  resourceAlertEvaluation: ResourceAlertEvaluation;
-  resourceAlertPolicyLoading?: boolean;
+  resourceAlertPolicy: ResourceAlertPolicy | null;
+  resourceAlertEvaluation: ResourceAlertEvaluation | null;
+  resourceAlertPolicyStatus: ResourceAlertPolicyLoadStatus;
+  onResourceAlertPolicyRetry: () => Promise<boolean>;
   onResourceAlertPolicySave: (policy: ResourceAlertPolicyUpdate) => Promise<ResourceAlertPolicy>;
   onRegionServersOpen?: (region: string | string[]) => void;
   onHealthSignalOpen?: (signal: HealthBaselineSignalId) => void;
@@ -44,6 +46,7 @@ interface RegionNode {
   running: number;
   warning: number;
   avgCpu: number;
+  telemetrySamples: number;
   providers: string[];
   serverNames: string[];
   lat: number;
@@ -235,7 +238,8 @@ export function MonitoringOverview({
   opsPreflightSnapshot,
   resourceAlertPolicy,
   resourceAlertEvaluation,
-  resourceAlertPolicyLoading = false,
+  resourceAlertPolicyStatus,
+  onResourceAlertPolicyRetry,
   onResourceAlertPolicySave,
   onRegionServersOpen,
   onHealthSignalOpen,
@@ -368,7 +372,7 @@ export function MonitoringOverview({
           </div>
           <div>
             <span><Activity size={15} /> {t('overview.kpiAvgCpu')}</span>
-            <strong>{avgCpu}%</strong>
+            <strong>{avgCpu === null ? '--' : `${avgCpu}%`}</strong>
           </div>
           <div>
             <span><AlertTriangle size={15} /> {t('overview.kpiCritical')}</span>
@@ -458,7 +462,8 @@ export function MonitoringOverview({
           <ResourceAlertPolicyControl
             policy={resourceAlertPolicy}
             evaluation={resourceAlertEvaluation}
-            loading={resourceAlertPolicyLoading}
+            status={resourceAlertPolicyStatus}
+            onRetry={onResourceAlertPolicyRetry}
             onSave={onResourceAlertPolicySave}
           />
           <button type="button" className="health-baseline-draft-button" onClick={onOperationsDraftOpen}>
@@ -681,7 +686,7 @@ export function MonitoringOverview({
                     <span>{region.providers.map(providerName).join(' / ')}</span>
                   </div>
                   <div>
-                    <b>{region.avgCpu}%</b>
+                    <b>{region.telemetrySamples > 0 ? `${region.avgCpu}%` : '--'}</b>
                     <small>{region.running}/{region.total}</small>
                   </div>
                 </button>
@@ -907,6 +912,7 @@ function buildRegionNodes(servers: ServerNode[], renderableCountryIds: Set<strin
     running: number;
     warning: number;
     cpuTotal: number;
+    telemetrySamples: number;
     providers: Set<string>;
     serverNames: string[];
   }>();
@@ -918,6 +924,7 @@ function buildRegionNodes(servers: ServerNode[], renderableCountryIds: Set<strin
         running: 0,
         warning: 0,
         cpuTotal: 0,
+        telemetrySamples: 0,
         providers: new Set<string>(),
         serverNames: [],
       };
@@ -926,7 +933,10 @@ function buildRegionNodes(servers: ServerNode[], renderableCountryIds: Set<strin
     group.total += 1;
     group.running += server.status === 'running' ? 1 : 0;
     group.warning += server.status === 'warning' ? 1 : 0;
-    group.cpuTotal += server.cpu;
+    if (hasFreshServerTelemetry(server)) {
+      group.cpuTotal += server.cpu;
+      group.telemetrySamples += 1;
+    }
     group.providers.add(server.provider);
     if (group.serverNames.length < tooltipServerNameLimit) {
       group.serverNames.push(server.name);
@@ -942,7 +952,8 @@ function buildRegionNodes(servers: ServerNode[], renderableCountryIds: Set<strin
       total: group.total,
       running: group.running,
       warning: group.warning,
-      avgCpu: Math.round(group.cpuTotal / group.total),
+      avgCpu: group.telemetrySamples > 0 ? Math.round(group.cpuTotal / group.telemetrySamples) : 0,
+      telemetrySamples: group.telemetrySamples,
       providers: Array.from(group.providers).slice(0, 3),
       serverNames: group.serverNames,
       lat: location.lat,
@@ -993,6 +1004,9 @@ function buildOverviewStats(servers: ServerNode[], events: OperationEvent[]) {
       connectedServers += 1;
     }
 
+    if (!hasFreshServerTelemetry(server)) {
+      continue;
+    }
     const load = Math.max(server.cpu, server.memory, server.disk);
     const insertAt = busiestServers.findIndex((item) => load > item.load);
     if (insertAt >= 0) {
@@ -1030,13 +1044,15 @@ function buildHealthBaselineSummary(
   const openEvents = events.filter((event) => event.status === 'open');
   const criticalEvents = openEvents.filter((event) => event.severity === 'critical').length;
   const warningEvents = openEvents.filter((event) => event.severity === 'warning').length;
-  const resourceAverages = calculateResourceAverages(servers);
-  const overloadedServers = servers.filter((server) => maxServerLoad(server) >= 85);
-  const warmServers = servers.filter((server) => maxServerLoad(server) >= 70 && maxServerLoad(server) < 85);
-  const diskPressureServers = servers.filter((server) => server.disk >= 80);
+  const metricServers = servers.filter(hasFreshServerTelemetry);
+  const missingTelemetryServers = servers.filter((server) => server.ssh?.connected && !hasFreshServerTelemetry(server));
+  const resourceAverages = calculateResourceAverages(metricServers);
+  const overloadedServers = metricServers.filter((server) => maxServerLoad(server) >= 85);
+  const warmServers = metricServers.filter((server) => maxServerLoad(server) >= 70 && maxServerLoad(server) < 85);
+  const diskPressureServers = metricServers.filter((server) => server.disk >= 80);
   const sshCoverage = totalServers > 0 ? Math.round((connectedSsh / totalServers) * 100) : 100;
   const runningRatio = totalServers > 0 ? Math.round((runningServers / totalServers) * 100) : 100;
-  const hottestServer = servers.reduce<ServerNode | null>((current, server) => (
+  const hottestServer = metricServers.reduce<ServerNode | null>((current, server) => (
     !current || maxServerLoad(server) > maxServerLoad(current) ? server : current
   ), null);
 
@@ -1051,14 +1067,15 @@ function buildHealthBaselineSummary(
       - Math.max(0, 75 - sshCoverage) * 0.25
       - Math.max(0, 80 - runningRatio) * 0.1
       - criticalEvents * 12
-      - warningEvents * 4,
+      - warningEvents * 4
+      - missingTelemetryServers.length * 3,
     0,
     100,
   );
 
   const tone = criticalEvents > 0 || overloadedServers.length > 0 || diskPressureServers.length > 0
     ? 'critical'
-    : score < 88 || warningEvents > 0 || sshCoverage < 75 || runningRatio < 80
+    : score < 88 || warningEvents > 0 || sshCoverage < 75 || runningRatio < 80 || missingTelemetryServers.length > 0
       ? 'watch'
       : 'good';
 
@@ -1066,15 +1083,21 @@ function buildHealthBaselineSummary(
     {
       id: 'resources',
       label: t('overview.healthSignalResources'),
-      value: t('overview.healthSignalResourcesValue', {
-        cpu: resourceAverages.cpu,
-        memory: resourceAverages.memory,
-        disk: resourceAverages.disk,
-      }),
+      value: metricServers.length > 0
+        ? t('overview.healthSignalResourcesValue', {
+          cpu: resourceAverages.cpu,
+          memory: resourceAverages.memory,
+          disk: resourceAverages.disk,
+        })
+        : t('overview.healthSignalResourcesUnavailableValue'),
       detail: hottestServer
         ? t('overview.healthSignalResourcesDetail', { name: hottestServer.name, load: maxServerLoad(hottestServer) })
         : t('overview.healthSignalResourcesEmpty'),
-      tone: overloadedServers.length > 0 || resourceAverages.disk >= 80 ? 'critical' : warmServers.length > 0 ? 'watch' : 'good',
+      tone: overloadedServers.length > 0 || resourceAverages.disk >= 80
+        ? 'critical'
+        : warmServers.length > 0 || missingTelemetryServers.length > 0
+          ? 'watch'
+          : 'good',
     },
     {
       id: 'ssh',
@@ -1393,6 +1416,7 @@ function buildEmptyRegionNode(regionLabel: string, providerLabel: string, render
     running: 0,
     warning: 0,
     avgCpu: 0,
+    telemetrySamples: 0,
     providers: [providerLabel],
     serverNames: [],
     lat: location.lat,

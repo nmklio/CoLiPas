@@ -2407,10 +2407,21 @@ if (!metricsOverviewResponse.ok) {
 }
 const metricsOverview = await metricsOverviewResponse.json();
 const metricsServer = metricsOverview.servers.find((server) => server.id === connectedServer.id);
-if (!metricsServer || metricsServer.cpu === 0 || metricsServer.memory === 0 || metricsServer.disk === 0) {
-  throw new Error('/api/overview did not refresh server metrics');
+const unavailableMetricsServer = metricsOverview.servers.find((server) => !server.ssh?.connected);
+if (
+  !metricsServer
+  || metricsServer.cpu === 0
+  || metricsServer.memory === 0
+  || metricsServer.disk === 0
+  || metricsServer.telemetry?.status !== 'fresh'
+  || !Number.isFinite(Date.parse(metricsServer.telemetry.sampledAt ?? ''))
+  || unavailableMetricsServer?.telemetry?.status !== 'unavailable'
+  || unavailableMetricsServer?.telemetry?.sampledAt !== null
+  || metricsOverview.summary.telemetryFresh < 1
+) {
+  throw new Error(`/api/overview did not expose trustworthy telemetry state: ${JSON.stringify({ metricsServer, unavailableMetricsServer, summary: metricsOverview.summary })}`);
 }
-console.log('ok /api/overview refreshes server metrics');
+console.log('ok /api/overview refreshes SSH metrics and labels fresh versus unavailable telemetry');
 
 const diagnosticResponse = await fetch(`${baseUrl}/api/servers/${connectedServer.id}/diagnostics`, {
   method: 'POST',
@@ -6551,15 +6562,19 @@ function assertOverviewMapInteractionGuards() {
 
 
   assertFileContains('src/shared/serverFilters.ts', [
-    "health?: 'resourcePressure' | 'sshMissing' | 'sshSimulated'",
+    "health?: 'resourcePressure' | 'telemetryUnavailable' | 'sshMissing' | 'sshSimulated'",
     "healthFilter === 'resourcePressure'",
+    "healthFilter === 'telemetryUnavailable'",
     "healthFilter === 'sshMissing'",
     "healthFilter === 'sshSimulated'",
   ], 'server health filters');
 
   assertFileContains('src/app/App.tsx', [
     "function openHealthSignal(signal: 'resources' | 'ssh' | 'events')",
-    "health: signal === 'resources' ? 'resourcePressure' : 'sshMissing'",
+    "overview.servers.some((server) => hasFreshServerTelemetry(server) && Math.max(server.cpu, server.memory, server.disk) >= 70)",
+    "? 'resourcePressure'",
+    ": 'telemetryUnavailable'",
+    ": 'sshMissing'",
     'onHealthSignalOpen={openHealthSignal}',
     'const overviewTriageCommand',
     'const [operationDraft, setOperationDraft] = useState<OperationsDraft | null>(null)',
@@ -9492,6 +9507,8 @@ function assertMaintenanceWindowGuards() {
 async function assertResourceAlertPolicyGuards() {
   const policyServiceSource = fs.readFileSync(new URL('../src/server/services/resourceAlertPolicyService.ts', import.meta.url), 'utf8');
   const resourceAlertSource = fs.readFileSync(new URL('../src/shared/resourceAlerts.ts', import.meta.url), 'utf8');
+  const telemetrySource = fs.readFileSync(new URL('../src/shared/serverTelemetry.ts', import.meta.url), 'utf8');
+  const inventorySource = fs.readFileSync(new URL('../src/server/services/inventoryService.ts', import.meta.url), 'utf8');
   const serverAppSource = fs.readFileSync(new URL('../src/server/app.ts', import.meta.url), 'utf8');
   const apiClientSource = fs.readFileSync(new URL('../src/services/apiClient.ts', import.meta.url), 'utf8');
   const appSource = fs.readFileSync(new URL('../src/app/App.tsx', import.meta.url), 'utf8');
@@ -9558,7 +9575,7 @@ async function assertResourceAlertPolicyGuards() {
     'ops-resource-',
     'reviewTtlMs',
     'nextExpiry',
-    'resourceAlertPolicy.reminderMinutes',
+    'resourceAlertPolicy?.reminderMinutes',
     'serverName: signal.serverName',
   ]) {
     if (!`${appSource}\n${inboxSource}`.includes(fragment)) {
@@ -9569,6 +9586,7 @@ async function assertResourceAlertPolicyGuards() {
   for (const fragment of [
     '.resource-alert-policy-trigger',
     '.resource-alert-policy-drawer',
+    '.resource-alert-policy-load-state',
     '.resource-alert-threshold',
     "'overview.resourceAlertPolicyTitle'",
     "'operationsInbox.resourceAlertTitle'",
@@ -9604,6 +9622,46 @@ async function assertResourceAlertPolicyGuards() {
     throw new Error('Resource alert evaluation must not copy server addresses into alert signals');
   }
 
+  for (const fragment of [
+    'recordServerTelemetrySuccess',
+    'recordServerTelemetryFailure',
+    'resolveServerTelemetry',
+    "status: sample.failedAt > sample.sampledAt ? 'stale' : 'fresh'",
+    'telemetry: resolveServerTelemetry(hasCredential, serverMetricSamples.get(server.id))',
+    'hasFreshServerTelemetry(server)',
+    "data-resource-alert-policy-status={status}",
+    'data-resource-alert-policy-retry="true"',
+  ]) {
+    if (!`${telemetrySource}\n${inventorySource}\n${resourceAlertSource}\n${appSource}\n${policyUiSource}`.includes(fragment)) {
+      throw new Error(`Fresh telemetry guard is incomplete: ${fragment}`);
+    }
+  }
+  if (inventorySource.includes('driftServerMetrics') || inventorySource.includes('driftMetric(')) {
+    throw new Error('SSH metric failures must not synthesize drifting CPU, memory, or disk values');
+  }
+
+  const {
+    recordServerTelemetryFailure,
+    recordServerTelemetrySuccess,
+    resolveServerTelemetry,
+  } = await import('../build/shared/serverTelemetry.js');
+  const firstSuccess = recordServerTelemetrySuccess(Date.UTC(2026, 0, 1, 0, 0, 0));
+  const freshTelemetry = resolveServerTelemetry(true, firstSuccess);
+  const staleSample = recordServerTelemetryFailure(firstSuccess, Date.UTC(2026, 0, 1, 0, 1, 0));
+  const staleTelemetry = resolveServerTelemetry(true, staleSample);
+  const initialFailure = recordServerTelemetryFailure(undefined, Date.UTC(2026, 0, 1, 0, 2, 0));
+  const unavailableTelemetry = resolveServerTelemetry(true, initialFailure);
+  if (
+    freshTelemetry.status !== 'fresh'
+    || freshTelemetry.sampledAt !== '2026-01-01T00:00:00.000Z'
+    || staleTelemetry.status !== 'stale'
+    || staleTelemetry.sampledAt !== freshTelemetry.sampledAt
+    || unavailableTelemetry.status !== 'unavailable'
+    || unavailableTelemetry.sampledAt !== null
+  ) {
+    throw new Error(`Telemetry state transitions lost freshness or last-good evidence: ${JSON.stringify({ freshTelemetry, staleTelemetry, unavailableTelemetry })}`);
+  }
+
   const { buildResourceAlertEvaluation } = await import('../build/shared/resourceAlerts.js');
   const policy = {
     enabled: true,
@@ -9617,12 +9675,17 @@ async function assertResourceAlertPolicyGuards() {
     buildResourceAlertTestServer('resource-a', { cpu: 82, memory: 40, disk: 50 }),
     buildResourceAlertTestServer('resource-b', { cpu: 65, memory: 91, disk: 96 }),
     { ...buildResourceAlertTestServer('resource-c', { cpu: 100, memory: 100, disk: 100 }), status: 'unconnected', ssh: undefined },
+    { ...buildResourceAlertTestServer('resource-stale', { cpu: 100, memory: 100, disk: 100 }), telemetry: { status: 'stale', sampledAt: new Date(0).toISOString() } },
+    { ...buildResourceAlertTestServer('resource-unavailable', { cpu: 100, memory: 100, disk: 100 }), telemetry: { status: 'unavailable', sampledAt: null } },
   ], policy, 2);
   if (
     evaluation.summary.activeAlerts !== 3
     || evaluation.summary.affectedServers !== 2
     || evaluation.summary.criticalAlerts !== 3
     || evaluation.summary.evaluatedServers !== 2
+    || evaluation.summary.connectedServers !== 4
+    || evaluation.summary.freshSamples !== 2
+    || evaluation.summary.skippedServers !== 2
     || evaluation.summary.truncated !== true
     || evaluation.signals.length !== 2
     || evaluation.signals.some((signal) => !/^[a-z0-9]{8,20}$/.test(signal.id))
@@ -9638,7 +9701,7 @@ async function assertResourceAlertPolicyGuards() {
     throw new Error('Disabled resource alert policy still emitted alert signals');
   }
 
-  console.log('ok resource alert policy is persisted, bounded, address-free, responsive, and linked to recurring inbox review');
+  console.log('ok resource alerts use persisted policy and fresh telemetry only, preserve last-good samples, and skip untrusted metrics');
 }
 
 function buildResourceAlertTestServer(id, metrics) {
@@ -9655,6 +9718,10 @@ function buildResourceAlertTestServer(id, metrics) {
     memory: metrics.memory,
     disk: metrics.disk,
     tags: [],
+    telemetry: {
+      status: 'fresh',
+      sampledAt: new Date(0).toISOString(),
+    },
     ssh: {
       host: '192.0.2.10',
       port: 22,
