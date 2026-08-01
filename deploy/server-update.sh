@@ -180,6 +180,7 @@ function landingIcon(kind, className) {
     trend: '<path d="M4 19V5M4 19h16"/><path d="m7 15 3-4 3 2 4-6"/><circle cx="7" cy="15" r=".7"/><circle cx="10" cy="11" r=".7"/><circle cx="13" cy="13" r=".7"/><circle cx="17" cy="7" r=".7"/>',
     inbox: '<path d="M5.2 5.1h13.6l1.4 8.1v4.4a1.8 1.8 0 0 1-1.8 1.8H5.6a1.8 1.8 0 0 1-1.8-1.8v-4.4l1.4-8.1Z"/><path d="M4.1 13.2h4.2l1.2 2h5l1.2-2h4.2"/><path d="M8.1 8.7h7.8"/>',
     code: '<path d="m9 8-4 4 4 4M15 8l4 4-4 4"/><path d="m13.2 6.8-2.4 10.4"/>',
+    copy: '<rect x="8.2" y="8.2" width="10.8" height="11.2" rx="2"/><path d="M15.8 8.2V6.7A2.1 2.1 0 0 0 13.7 4.6H6.8a2.1 2.1 0 0 0-2.1 2.1v7.1a2.1 2.1 0 0 0 2.1 2.1h1.4"/>',
     database: '<ellipse cx="12" cy="6.4" rx="6.8" ry="2.8"/><path d="M5.2 6.4v7.2c0 1.6 3 2.8 6.8 2.8s6.8-1.2 6.8-2.8V6.4"/><path d="M5.2 10c0 1.6 3 2.8 6.8 2.8s6.8-1.2 6.8-2.8"/>',
   };
   return `<span class="${className} icon-${kind}" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false">${paths[kind]}</svg></span>`;
@@ -251,10 +252,19 @@ const landingHero = `<section class="hero wrap">
       </div>
     </div>
 
-    <figure class="product-preview" aria-label="CoLiPas 脱敏后台预览">
-      <div class="preview-top"><i></i><i></i><i></i><span>安全脱敏的产品实景</span></div>
-      <img src="/colipas-dashboard-preview.svg?v=20260801-landing2" alt="CoLiPas 服务器总览、全球地图与资源状态界面" loading="eager" fetchpriority="high">
-      <figcaption><span>Overview</span><span>Servers</span><span>SSH</span><span>AI</span><span>Audit</span></figcaption>
+    <figure class="product-preview product-tour is-cycling" data-product-tour aria-label="CoLiPas 脱敏产品动态演示">
+      <div class="preview-top"><i></i><i></i><i></i><span data-tour-title>全局资产总览 · 实时状态</span><em><b></b>自动演示</em></div>
+      <div class="preview-stage">
+        <img id="tour-scene-overview" class="preview-scene is-active" data-tour-scene="overview" role="tabpanel" aria-labelledby="tour-tab-overview" aria-hidden="false" src="/colipas-dashboard-preview.svg?v=20260801-tour1" alt="CoLiPas 服务器总览、全球地图与资源状态界面" loading="eager" fetchpriority="high">
+        <img id="tour-scene-terminal" class="preview-scene" data-tour-scene="terminal" role="tabpanel" aria-labelledby="tour-tab-terminal" aria-hidden="true" src="/colipas-terminal-preview.svg?v=20260801-tour1" alt="CoLiPas 低延迟 SSH 实时终端界面" loading="lazy">
+        <img id="tour-scene-ai" class="preview-scene" data-tour-scene="ai" role="tabpanel" aria-labelledby="tour-tab-ai" aria-hidden="true" src="/colipas-ai-preview.svg?v=20260801-tour1" alt="CoLiPas 上下文 AI 运维诊断界面" loading="lazy">
+      </div>
+      <figcaption class="preview-tabs" role="tablist" aria-label="产品场景">
+        <button id="tour-tab-overview" type="button" role="tab" aria-selected="true" aria-controls="tour-scene-overview" data-tour-tab="overview"><span>01</span>资产总览</button>
+        <button id="tour-tab-terminal" type="button" role="tab" aria-selected="false" aria-controls="tour-scene-terminal" data-tour-tab="terminal" tabindex="-1"><span>02</span>实时 SSH</button>
+        <button id="tour-tab-ai" type="button" role="tab" aria-selected="false" aria-controls="tour-scene-ai" data-tour-tab="ai" tabindex="-1"><span>03</span>AI 诊断</button>
+      </figcaption>
+      <div class="preview-progress" aria-hidden="true"><i></i></div>
     </figure>
   </section>`;
 replaceOnce(/<section class="hero wrap">[\s\S]*?<\/section>/, landingHero);
@@ -395,6 +405,95 @@ replaceOnce(
   /(<div class="feature-grid">)[\s\S]*?(<\/div>\s*<\/section>\s*<section id="security")/,
   `$1\n      ${landingFeatureGrid}\n    $2`,
 );
+
+const landingWorkflow = `<section id="product" class="section wrap workflow-section">
+    <div class="workflow-heading">
+      <div>
+        <p class="kicker">运维链路</p>
+        <h2>每一步都有输入、状态和下一步</h2>
+      </div>
+      <p class="section-copy">从资产登记到审计复盘，CoLiPas 把原本分散的操作串成一条可观测链路；当前状态、执行边界和证据去向始终清晰。</p>
+    </div>
+    <div class="workflow-shell" aria-label="CoLiPas 运维工作流">
+      <div class="workflow-rail" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      <article class="workflow-stage workflow-stage-assets">
+        <div class="workflow-stage-head"><span class="workflow-index">01</span>${landingIcon('assets', 'workflow-stage-icon')}</div>
+        <p class="workflow-overline">Inventory</p>
+        <h3>登记资产</h3>
+        <p>统一记录厂商、地域、系统和标签，批量导入先校验再写入。</p>
+        <div class="workflow-signal"><b></b><span>资产上下文已建立</span></div>
+      </article>
+      <article class="workflow-stage workflow-stage-terminal">
+        <div class="workflow-stage-head"><span class="workflow-index">02</span>${landingIcon('terminal', 'workflow-stage-icon')}</div>
+        <p class="workflow-overline">Live session</p>
+        <h3>验证与操作</h3>
+        <p>连接真实 PTY，连续读取输出、调整窗口并安全中断前台命令。</p>
+        <div class="workflow-signal"><b></b><span>SSH 会话可追踪</span></div>
+      </article>
+      <article class="workflow-stage workflow-stage-ai">
+        <div class="workflow-stage-head"><span class="workflow-index">03</span>${landingIcon('ai', 'workflow-stage-icon')}</div>
+        <p class="workflow-overline">Diagnosis</p>
+        <h3>分析与修复</h3>
+        <p>AI 读取当前服务器证据，建议命令经过确认后再进入 SSH 执行。</p>
+        <div class="workflow-signal"><b></b><span>人机确认边界明确</span></div>
+      </article>
+      <article class="workflow-stage workflow-stage-shield">
+        <div class="workflow-stage-head"><span class="workflow-index">04</span>${landingIcon('shield', 'workflow-stage-icon')}</div>
+        <p class="workflow-overline">Evidence</p>
+        <h3>审计与复盘</h3>
+        <p>登录、API、命令和编排结果汇入统一审计链，风险可定位、结果可复核。</p>
+        <div class="workflow-signal"><b></b><span>关键动作已留痕</span></div>
+      </article>
+    </div>
+    <div class="workflow-handoff" aria-label="工作流交接关系">
+      <span>资产上下文</span><i></i><span>实时证据</span><i></i><span>确认后执行</span><i></i><span>审计记录</span>
+    </div>
+  </section>`;
+replaceOnce(/<section id="product" class="section wrap[^"]*">[\s\S]*?<\/section>/, landingWorkflow);
+
+const deployCommand = 'curl -fsSL https://raw.githubusercontent.com/nmklio/CoLiPas/master/scripts/one-click-deploy.sh | sudo env COLIPAS_DEPLOY_MODE=docker bash';
+const landingDeploy = `<section id="deploy" class="section wrap deploy-section-modern">
+    <div class="deploy-heading-modern">
+      <div>
+        <p class="kicker">私有化部署</p>
+        <h2>一条命令开始，数据始终留在自己的服务器</h2>
+      </div>
+      <p class="section-copy">交互式脚本会引导选择目录、域名、管理员和运行方式；已有 .env 与 .data 会原样保留，不覆盖用户数据。</p>
+    </div>
+    <div class="deploy-command-center">
+      <div class="deploy-console">
+        <div class="deploy-console-head"><span><i></i><i></i><i></i></span><b>推荐 · Docker Compose</b><em>约 3 分钟</em></div>
+        <div class="deploy-console-body">
+          <p>在 Linux 服务器中运行</p>
+          <div class="deploy-command-line"><code>${deployCommand}</code><button type="button" data-copy-deploy data-copy-value="${deployCommand}" aria-label="复制一键部署命令">${landingIcon('copy', 'copy-icon')}<span>复制</span></button></div>
+          <div class="deploy-console-result"><b></b><span>自动检查 Docker、创建私有配置并验证健康接口</span></div>
+        </div>
+      </div>
+      <div class="deploy-methods" aria-label="部署方式">
+        <article class="deploy-method deploy-method-primary">${landingIcon('database', 'deploy-method-icon')}<div><span>推荐</span><h3>Docker Compose</h3><p>运行环境隔离，挂载 .data 持久化，升级和迁移路径更直接。</p></div><strong>容器化</strong></article>
+        <article class="deploy-method">${landingIcon('terminal', 'deploy-method-icon')}<div><span>原生</span><h3>Linux systemd</h3><p>Node 24+ 直接运行，由 systemd 守护并配合 Nginx 提供 HTTPS。</p></div><strong>长期运行</strong></article>
+      </div>
+    </div>
+    <div class="deploy-flow-modern" aria-label="部署完成路径">
+      <article><span>01</span><div><strong>环境预检</strong><p>检测系统、Docker 或 Node 版本</p></div></article>
+      <article><span>02</span><div><strong>安全配置</strong><p>交互填写域名与管理员信息</p></div></article>
+      <article><span>03</span><div><strong>启动验证</strong><p>构建服务并检查 /api/health</p></div></article>
+      <article><span>04</span><div><strong>进入后台</strong><p>使用配置的账号开始接入资产</p></div></article>
+    </div>
+    <div class="deploy-runtime-row"><span><b></b>数据目录持久化</span><span><b></b>现有配置保留</span><span><b></b>健康检查内置</span><a href="/docs.html">查看完整部署文档</a></div>
+  </section>`;
+replaceOnce(/<section id="deploy" class="section wrap[^"]*">[\s\S]*?<\/section>/, landingDeploy);
+
+const landingFooter = `<footer class="footer">
+  <div class="wrap footer-main">
+    <div class="footer-brand-block"><a href="#top" class="footer-brand-link"><img src="/colipas-icon.svg" alt="" aria-hidden="true"><span><strong>CoLiPas</strong><small>云服务器管理面板</small></span></a><p>云服务器管理与 AI 运维后台，把资产、SSH、编排与审计留在同一个自托管工作区。</p></div>
+    <nav aria-label="产品"><strong>产品</strong><a href="#product">运维链路</a><a href="#features">功能模块</a><a href="#security">安全机制</a></nav>
+    <nav aria-label="资源"><strong>资源</strong><a href="/docs.html">使用文档</a><a href="https://github.com/nmklio/CoLiPas" target="_blank" rel="noreferrer">GitHub</a><a href="#deploy">部署指南</a></nav>
+    <div class="footer-action"><span>准备管理自己的服务器？</span><a href="/admin/">进入管理后台</a></div>
+  </div>
+  <div class="wrap footer-bottom"><span>© 2026 CoLiPas · 自托管云服务器运维后台</span><div class="footer-runtime"><span><i></i>服务在线</span><span>数据自主保留</span><span>开源部署</span></div></div>
+</footer>`;
+replaceOnce(/<footer class="footer">[\s\S]*?<\/footer>/, landingFooter);
 
 replaceAll(/<article class="deploy-card"><h3>Linux systemd<\/h3>/g, `<article class="deploy-card">${landingIcon('terminal', 'deploy-icon')}<h3>Linux systemd</h3>`);
 replaceAll(/<article class="deploy-card"><h3>Node 20\+<\/h3>/g, `<article class="deploy-card">${landingIcon('code', 'deploy-icon')}<h3>Node 20+</h3>`);
@@ -919,7 +1018,7 @@ replaceOnce('</style>', `/* colipas landing balanced ui v8 */
 }
 </style>`);
 
-replaceOnce('</style>', `/* colipas landing immersive product ui v1 */
+replaceOnce('</style>', `/* colipas landing immersive product ui v2 */
 :root {
   --landing-dark: #090d0f;
   --landing-dark-soft: #111718;
@@ -1515,14 +1614,731 @@ button:focus-visible {
   .deploy-flow,
   .deploy-grid { grid-template-columns: 1fr; }
 }
+/* Continuous dark product system */
+body {
+  color: #e7efed;
+  background: #090e10;
+}
+.preview-top {
+  justify-content: flex-start;
+}
+.preview-top span {
+  margin-left: 4px;
+  color: #b9c4c1;
+  font-weight: 760;
+}
+.preview-top em {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #7e8c89;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 760;
+}
+.preview-top em b {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 0 5px rgba(52, 211, 153, .08);
+}
+.preview-stage {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  aspect-ratio: 1600 / 980;
+  background: #071016;
+}
+.preview-scene {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+  opacity: 0;
+  transform: scale(1.015);
+  transition: opacity .55s ease, transform 1.1s ease;
+  pointer-events: none;
+}
+.preview-scene.is-active {
+  z-index: 1;
+  opacity: 1;
+  transform: scale(1);
+}
+.product-preview .preview-tabs {
+  min-height: 54px;
+  padding: 0 16px;
+  gap: 8px;
+  text-transform: none;
+}
+.preview-tabs button {
+  position: relative;
+  min-width: 124px;
+  min-height: 38px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #758380;
+  background: transparent;
+  font: 760 11px Inter, "Segoe UI", "PingFang SC", sans-serif;
+  cursor: pointer;
+  transition: color .2s ease, background .2s ease;
+}
+.preview-tabs button span {
+  color: #52605d;
+  font: 800 9px ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.preview-tabs button:hover {
+  color: #dce5e2;
+  background: rgba(255, 255, 255, .04);
+}
+.preview-tabs button[aria-selected="true"] {
+  color: #eaf3f0;
+  background: rgba(114, 222, 196, .08);
+}
+.preview-tabs button[aria-selected="true"] span {
+  color: var(--landing-mint);
+}
+.preview-progress {
+  height: 2px;
+  background: rgba(255, 255, 255, .055);
+}
+.preview-progress i {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: linear-gradient(90deg, #5eead4, #38bdf8, #a78bfa);
+}
+.product-tour.is-cycling .preview-progress i {
+  animation: product-tour-progress 5.2s linear forwards;
+}
+@keyframes product-tour-progress {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+#product.workflow-section,
+#features.section,
+#deploy.deploy-section-modern {
+  position: relative;
+  z-index: 0;
+  color: #e7efed;
+}
+#product.workflow-section::before,
+#features.section::before,
+#deploy.deploy-section-modern::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0 50% 0 auto;
+  width: 100vw;
+  transform: translateX(50%);
+}
+#product.workflow-section::before { background: #101718; }
+#features.section::before { background: #0b1113; }
+#deploy.deploy-section-modern::before { background: #0d1416; }
+.workflow-section {
+  padding-top: 92px;
+  padding-bottom: 96px;
+}
+.workflow-heading,
+.deploy-heading-modern {
+  display: grid;
+  grid-template-columns: minmax(0, .9fr) minmax(340px, .62fr);
+  align-items: end;
+  gap: 64px;
+}
+.workflow-heading h2,
+.deploy-heading-modern h2,
+#features h2,
+#deploy h2 {
+  color: #f1f6f4;
+}
+.workflow-heading .section-copy,
+.deploy-heading-modern .section-copy,
+#features .section-copy,
+#deploy .section-copy {
+  color: #98a6a2;
+}
+.workflow-shell {
+  position: relative;
+  margin-top: 48px;
+  border: 1px solid #293536;
+  border-radius: 10px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  background: #0b1113;
+  overflow: hidden;
+}
+.workflow-rail {
+  position: absolute;
+  z-index: 2;
+  left: 12.5%;
+  right: 12.5%;
+  top: 61px;
+  height: 1px;
+  display: flex;
+  justify-content: space-between;
+  background: linear-gradient(90deg, #5eead4, #38bdf8 38%, #a78bfa 70%, #fb7185);
+  opacity: .72;
+}
+.workflow-rail i {
+  width: 9px;
+  height: 9px;
+  margin-top: -4px;
+  border: 2px solid #0b1113;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 4px rgba(114, 222, 196, .08);
+}
+.workflow-stage {
+  position: relative;
+  min-height: 302px;
+  padding: 30px 25px 26px;
+  border-right: 1px solid #293536;
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+}
+.workflow-stage:last-child { border-right: 0; }
+.workflow-stage::after {
+  content: '';
+  position: absolute;
+  inset: auto 24px 0;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: #5eead4;
+  opacity: .7;
+}
+.workflow-stage-terminal::after { background: #38bdf8; }
+.workflow-stage-ai::after { background: #a78bfa; }
+.workflow-stage-shield::after { background: #fb7185; }
+.workflow-stage-head {
+  position: relative;
+  z-index: 3;
+  min-height: 62px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.workflow-index {
+  color: #66736f;
+  font: 850 13px ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.workflow-stage-icon {
+  width: 40px;
+  height: 40px;
+  border: 1px solid #324241;
+  border-radius: 8px;
+  color: #79e7ce;
+  display: grid;
+  place-items: center;
+  background: #13201f;
+}
+.workflow-stage-terminal .workflow-stage-icon { color: #67d8ff; background: #101e25; }
+.workflow-stage-ai .workflow-stage-icon { color: #c4adff; background: #1b1827; }
+.workflow-stage-shield .workflow-stage-icon { color: #ff9aa8; background: #24181d; }
+.workflow-stage-icon svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.workflow-overline {
+  margin: 20px 0 0;
+  color: #697874;
+  font: 780 10px ui-monospace, SFMono-Regular, Consolas, monospace;
+  text-transform: uppercase;
+}
+.workflow-stage h3 {
+  margin: 8px 0 12px;
+  color: #edf4f2;
+  font-size: 21px;
+}
+.workflow-stage > p:not(.workflow-overline) {
+  margin: 0;
+  color: #8d9b97;
+  font-size: 13px;
+  line-height: 1.72;
+}
+.workflow-signal {
+  margin-top: auto;
+  padding-top: 22px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #b0bdb9;
+  font-size: 11px;
+  font-weight: 760;
+}
+.workflow-signal b {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #5eead4;
+  box-shadow: 0 0 0 5px rgba(94, 234, 212, .07);
+}
+.workflow-stage-terminal .workflow-signal b { background: #38bdf8; box-shadow: 0 0 0 5px rgba(56, 189, 248, .07); }
+.workflow-stage-ai .workflow-signal b { background: #a78bfa; box-shadow: 0 0 0 5px rgba(167, 139, 250, .07); }
+.workflow-stage-shield .workflow-signal b { background: #fb7185; box-shadow: 0 0 0 5px rgba(251, 113, 133, .07); }
+.workflow-handoff {
+  min-height: 48px;
+  margin-top: 16px;
+  padding: 0 20px;
+  border: 1px solid #263234;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: #71807c;
+  background: rgba(8, 13, 15, .54);
+  font: 720 10px ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.workflow-handoff i {
+  width: 28px;
+  height: 1px;
+  background: #364341;
+}
+
+#features.section {
+  padding-top: 96px;
+  padding-bottom: 104px;
+}
+#features .kicker,
+#deploy .kicker { color: #69d7bd; }
+.feature-card {
+  border-color: #273335;
+  color: #e8efed;
+  background: #11191b;
+}
+.feature-card:hover {
+  border-color: #3a4a49;
+  background: #151f21;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, .18);
+}
+.feature-card-wide,
+.feature-card-wide:hover {
+  border-color: #2f4241;
+  background: #14201f;
+}
+.feature-card h3 { color: #e7efed; }
+.feature-card p { color: #8f9d99; }
+.feature-icon,
+.feature-card-wide .feature-icon {
+  color: #75dfc6;
+  border-color: #31413f;
+  background: #172422;
+}
+.tags span,
+.feature-card-wide .tags span {
+  color: #88a59e;
+  border-color: #2a3a37;
+  background: #14201e;
+}
+.band {
+  border-top: 1px solid #24302f;
+  border-bottom: 1px solid #24302f;
+  background: #101917;
+}
+
+.deploy-section-modern {
+  padding-top: 96px;
+  padding-bottom: 104px;
+}
+.deploy-command-center {
+  margin-top: 48px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.28fr) minmax(320px, .72fr);
+  gap: 14px;
+}
+.deploy-console {
+  overflow: hidden;
+  min-height: 300px;
+  border: 1px solid #304042;
+  border-radius: 10px;
+  background: #080e10;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .24);
+}
+.deploy-console-head {
+  min-height: 52px;
+  padding: 0 18px;
+  border-bottom: 1px solid #293638;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: #93a19e;
+  background: #11191b;
+  font-size: 11px;
+}
+.deploy-console-head > span { display: inline-flex; gap: 6px; }
+.deploy-console-head i { width: 8px; height: 8px; border-radius: 50%; background: #fb7185; }
+.deploy-console-head i:nth-child(2) { background: #fbbf24; }
+.deploy-console-head i:nth-child(3) { background: #34d399; }
+.deploy-console-head b { color: #cbd5d2; }
+.deploy-console-head em { margin-left: auto; color: #687672; font-style: normal; }
+.deploy-console-body {
+  min-height: 246px;
+  padding: 30px;
+  display: flex;
+  flex-direction: column;
+}
+.deploy-console-body > p {
+  margin: 0 0 16px;
+  color: #7f8e8a;
+  font-size: 12px;
+  font-weight: 740;
+}
+.deploy-command-line {
+  min-height: 90px;
+  border: 1px solid #2c3a3c;
+  border-radius: 8px;
+  padding: 18px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  background: #0d1517;
+}
+.deploy-command-line code {
+  color: #b8c9c5;
+  font: 650 13px/1.7 ui-monospace, SFMono-Regular, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+.deploy-command-line button {
+  min-width: 84px;
+  min-height: 40px;
+  border: 1px solid #3a4a49;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: #dce6e3;
+  background: #182224;
+  font-weight: 800;
+  cursor: pointer;
+}
+.deploy-command-line button:hover { border-color: #65cdb5; color: #8ce8d2; }
+.copy-icon { width: 16px; height: 16px; display: inline-grid; place-items: center; }
+.copy-icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.deploy-console-result {
+  margin-top: auto;
+  padding-top: 22px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #81908c;
+  font-size: 11px;
+}
+.deploy-console-result b {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 0 5px rgba(52, 211, 153, .07);
+}
+.deploy-methods { display: grid; gap: 14px; }
+.deploy-method {
+  min-height: 143px;
+  border: 1px solid #293638;
+  border-radius: 10px;
+  padding: 20px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 16px;
+  background: #11191b;
+}
+.deploy-method-primary { border-color: #35514b; background: #12201e; }
+.deploy-method-icon {
+  width: 42px;
+  height: 42px;
+  border: 1px solid #334441;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: #78e4ca;
+  background: #182624;
+}
+.deploy-method-icon svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.deploy-method div > span { color: #6ddcc1; font-size: 10px; font-weight: 800; }
+.deploy-method h3 { margin: 6px 0 7px; color: #e9f1ef; font-size: 17px; }
+.deploy-method p { margin: 0; color: #82908d; font-size: 12px; line-height: 1.6; }
+.deploy-method > strong { color: #677571; font-size: 10px; white-space: nowrap; }
+.deploy-flow-modern {
+  margin-top: 18px;
+  border: 1px solid #293638;
+  border-radius: 9px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+  background: #101719;
+}
+.deploy-flow-modern article {
+  min-height: 94px;
+  padding: 20px;
+  border-right: 1px solid #293638;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 13px;
+}
+.deploy-flow-modern article:last-child { border-right: 0; }
+.deploy-flow-modern article > span { color: #63d8bd; font: 850 11px ui-monospace, SFMono-Regular, Consolas, monospace; }
+.deploy-flow-modern strong { color: #dce6e3; font-size: 13px; }
+.deploy-flow-modern p { margin: 5px 0 0; color: #71807c; font-size: 11px; line-height: 1.5; }
+.deploy-runtime-row {
+  min-height: 54px;
+  padding: 0 18px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  color: #768580;
+  font-size: 11px;
+  font-weight: 740;
+}
+.deploy-runtime-row span { display: inline-flex; align-items: center; gap: 7px; }
+.deploy-runtime-row b { width: 5px; height: 5px; border-radius: 50%; background: #4fae9a; }
+.deploy-runtime-row a { margin-left: auto; color: #7ee4cc; text-decoration: none; font-weight: 800; }
+.deploy-runtime-row a:hover { color: #b1f4e4; }
+
+.footer {
+  min-height: 0;
+  padding: 66px 0 26px;
+  border-top: 1px solid #202b2c;
+  background: #070b0d;
+}
+.footer-main {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.35fr) repeat(2, minmax(120px, .55fr)) minmax(220px, .8fr);
+  gap: 48px;
+  align-items: start;
+}
+.footer-brand-link {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: #f0f5f3;
+  text-decoration: none;
+}
+.footer-brand-link img { width: 42px; height: 42px; border-radius: 9px; }
+.footer-brand-link span,
+.footer-brand-link strong,
+.footer-brand-link small { display: block; }
+.footer-brand-link strong { color: #f2f7f5; font-size: 17px; }
+.footer-brand-link small { margin-top: 3px; color: #788682; font-size: 10px; font-weight: 720; }
+.footer-brand-block p { max-width: 360px; margin: 18px 0 0; color: #71807c; font-size: 12px; line-height: 1.72; }
+.footer-main nav { display: grid; gap: 12px; }
+.footer-main nav strong { margin-bottom: 4px; color: #dfe7e5; font-size: 12px; }
+.footer-main nav a { color: #71807c; font-size: 11px; text-decoration: none; }
+.footer-main nav a:hover { color: #9cebd8; }
+.footer-action {
+  border-left: 1px solid #243032;
+  padding-left: 30px;
+}
+.footer-action span { color: #83918d; font-size: 11px; }
+.footer-action a {
+  width: fit-content;
+  min-height: 42px;
+  margin-top: 14px;
+  border: 1px solid #dfe7e5;
+  border-radius: 7px;
+  padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  color: #0a1211;
+  background: #e7eeec;
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 850;
+}
+.footer-bottom {
+  min-height: 58px;
+  margin-top: 50px;
+  border-top: 1px solid #1e292a;
+  padding: 20px 0 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  color: #596763;
+  font-size: 10px;
+}
+.footer-runtime { display: inline-flex; align-items: center; gap: 18px; }
+.footer-runtime span { display: inline-flex; align-items: center; gap: 7px; color: #66736f; }
+.footer-runtime i { width: 6px; height: 6px; border-radius: 50%; background: #34d399; box-shadow: 0 0 0 4px rgba(52, 211, 153, .06); }
+
+@media (max-width: 980px) {
+  .workflow-heading,
+  .deploy-heading-modern { grid-template-columns: 1fr; gap: 20px; }
+  .workflow-shell { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .workflow-rail { display: none; }
+  .workflow-stage:nth-child(3) { border-right: 0; }
+  .workflow-stage:nth-child(-n + 3) { border-bottom: 1px solid #293536; }
+  .deploy-command-center { grid-template-columns: 1fr; }
+  .deploy-methods { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .deploy-flow-modern { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .deploy-flow-modern article:nth-child(2) { border-right: 0; }
+  .deploy-flow-modern article:nth-child(-n + 2) { border-bottom: 1px solid #293638; }
+  .footer-main { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .footer-action { border-left: 0; padding-left: 0; }
+}
+@media (max-width: 640px) {
+  .preview-top em { display: none; }
+  .product-preview .preview-tabs { min-height: 48px; padding: 0 6px; gap: 2px; }
+  .preview-tabs button { min-width: 0; flex: 1; min-height: 36px; padding: 0 6px; font-size: 9px; }
+  .preview-tabs button span { display: none; }
+  .workflow-section,
+  .deploy-section-modern { padding-top: 68px; padding-bottom: 72px; }
+  .workflow-shell { grid-template-columns: 1fr; }
+  .workflow-stage { min-height: 236px; border-right: 0; border-bottom: 1px solid #293536; }
+  .workflow-stage:last-child { border-bottom: 0; }
+  .workflow-handoff { justify-content: flex-start; overflow-x: auto; white-space: nowrap; }
+  .deploy-console-body { padding: 20px; }
+  .deploy-command-line { grid-template-columns: 1fr; }
+  .deploy-command-line button { width: 100%; }
+  .deploy-methods,
+  .deploy-flow-modern { grid-template-columns: 1fr; }
+  .deploy-method { grid-template-columns: auto minmax(0, 1fr); }
+  .deploy-method > strong { display: none; }
+  .deploy-flow-modern article { border-right: 0; border-bottom: 1px solid #293638; }
+  .deploy-flow-modern article:last-child { border-bottom: 0; }
+  .deploy-runtime-row { padding: 16px 0 0; flex-wrap: wrap; gap: 12px 18px; }
+  .deploy-runtime-row a { width: 100%; margin-left: 0; }
+  .footer { padding-top: 50px; }
+  .footer-main { grid-template-columns: 1fr 1fr; gap: 34px 24px; }
+  .footer-brand-block,
+  .footer-action { grid-column: 1 / -1; }
+  .footer-bottom { align-items: flex-start; flex-direction: column; }
+  .footer-runtime { width: 100%; gap: 12px; flex-wrap: wrap; }
+}
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   .hero-copy,
-  .product-preview { animation: none; }
+  .product-preview,
+  .preview-scene,
+  .preview-progress i { animation: none; transition: none; }
   .feature-card,
   .button { transition: none; }
 }
 </style>`);
+
+replaceAll(/\s*<script id="colipas-product-tour">[\s\S]*?<\/script>\s*/g, '\n');
+const landingProductTourScript = `<script id="colipas-product-tour">
+(function () {
+  var tour = document.querySelector('[data-product-tour]');
+  var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var timer = 0;
+  var current = 0;
+  var titles = {
+    overview: '全局资产总览 · 实时状态',
+    terminal: '低延迟 SSH · 连续交互',
+    ai: '上下文 AI · 确认后执行'
+  };
+
+  function activate(index, moveFocus) {
+    if (!tour) return;
+    var tabs = Array.prototype.slice.call(tour.querySelectorAll('[data-tour-tab]'));
+    var scenes = Array.prototype.slice.call(tour.querySelectorAll('[data-tour-scene]'));
+    if (!tabs.length || tabs.length !== scenes.length) return;
+    current = (index + tabs.length) % tabs.length;
+    tabs.forEach(function (tab, tabIndex) {
+      var active = tabIndex === current;
+      tab.setAttribute('aria-selected', active ? 'true' : 'false');
+      tab.tabIndex = active ? 0 : -1;
+      scenes[tabIndex].classList.toggle('is-active', active);
+      scenes[tabIndex].setAttribute('aria-hidden', active ? 'false' : 'true');
+    });
+    var title = tour.querySelector('[data-tour-title]');
+    if (title) title.textContent = titles[tabs[current].getAttribute('data-tour-tab')] || '';
+    tour.classList.remove('is-cycling');
+    void tour.offsetWidth;
+    if (!reduceMotion) tour.classList.add('is-cycling');
+    if (moveFocus) tabs[current].focus();
+  }
+
+  function stop() {
+    if (timer) window.clearTimeout(timer);
+    timer = 0;
+    if (tour) tour.classList.remove('is-cycling');
+  }
+
+  function schedule() {
+    stop();
+    if (!tour || reduceMotion || document.hidden || tour.matches(':hover') || tour.contains(document.activeElement)) return;
+    tour.classList.add('is-cycling');
+    timer = window.setTimeout(function () {
+      activate(current + 1, false);
+      schedule();
+    }, 5200);
+  }
+
+  if (tour) {
+    var tabs = Array.prototype.slice.call(tour.querySelectorAll('[data-tour-tab]'));
+    tabs.forEach(function (tab, index) {
+      tab.addEventListener('click', function () {
+        activate(index, false);
+        schedule();
+      });
+      tab.addEventListener('keydown', function (event) {
+        var target = null;
+        if (event.key === 'ArrowRight') target = index + 1;
+        if (event.key === 'ArrowLeft') target = index - 1;
+        if (event.key === 'Home') target = 0;
+        if (event.key === 'End') target = tabs.length - 1;
+        if (target === null) return;
+        event.preventDefault();
+        activate(target, true);
+        schedule();
+      });
+    });
+    tour.addEventListener('pointerenter', stop);
+    tour.addEventListener('pointerleave', schedule);
+    tour.addEventListener('focusin', stop);
+    tour.addEventListener('focusout', function () {
+      window.setTimeout(function () {
+        if (!tour.contains(document.activeElement)) schedule();
+      }, 0);
+    });
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) stop(); else schedule();
+    });
+    activate(0, false);
+    schedule();
+  }
+
+  var copyButton = document.querySelector('[data-copy-deploy]');
+  if (copyButton) {
+    copyButton.addEventListener('click', function () {
+      var value = copyButton.getAttribute('data-copy-value') || '';
+      var write = navigator.clipboard && navigator.clipboard.writeText
+        ? navigator.clipboard.writeText(value)
+        : Promise.reject(new Error('clipboard unavailable'));
+      write.then(function () {
+        var label = copyButton.querySelector('span:last-child');
+        if (!label) return;
+        label.textContent = '已复制';
+        window.setTimeout(function () { label.textContent = '复制'; }, 1600);
+      }).catch(function () {
+        var area = document.createElement('textarea');
+        area.value = value;
+        area.setAttribute('readonly', '');
+        area.style.position = 'fixed';
+        area.style.opacity = '0';
+        document.body.appendChild(area);
+        area.select();
+        document.execCommand('copy');
+        area.remove();
+      });
+    });
+  }
+}());
+</script>`;
+replaceOnce(/\s*<\/body>/, `\n${landingProductTourScript}\n</body>`);
 
 if (!html.includes('https://github.com/nmklio/CoLiPas')) {
   throw new Error(`Unable to add GitHub link to ${file}`);
@@ -1548,6 +2364,12 @@ write_docs_page() {
 
   if [ -f "$APP_DIR/.github/assets/colipas-dashboard-preview.svg" ]; then
     install -m 0644 "$APP_DIR/.github/assets/colipas-dashboard-preview.svg" "$LANDING_ROOT/colipas-dashboard-preview.svg"
+  fi
+  if [ -f "$APP_DIR/.github/assets/colipas-terminal-preview.svg" ]; then
+    install -m 0644 "$APP_DIR/.github/assets/colipas-terminal-preview.svg" "$LANDING_ROOT/colipas-terminal-preview.svg"
+  fi
+  if [ -f "$APP_DIR/.github/assets/colipas-ai-preview.svg" ]; then
+    install -m 0644 "$APP_DIR/.github/assets/colipas-ai-preview.svg" "$LANDING_ROOT/colipas-ai-preview.svg"
   fi
 
   cat >"$LANDING_ROOT/colipas-icon.svg" <<'SVG'
@@ -2754,6 +3576,18 @@ server {
     add_header Cache-Control "public, max-age=3600" always;
   }
 
+  location = /colipas-terminal-preview.svg {
+    try_files /colipas-terminal-preview.svg =404;
+    expires 1h;
+    add_header Cache-Control "public, max-age=3600" always;
+  }
+
+  location = /colipas-ai-preview.svg {
+    try_files /colipas-ai-preview.svg =404;
+    expires 1h;
+    add_header Cache-Control "public, max-age=3600" always;
+  }
+
   location = /favicon.ico {
     try_files /colipas-icon.svg =404;
     expires -1;
@@ -2845,6 +3679,18 @@ server {
 
   location = /colipas-dashboard-preview.svg {
     try_files /colipas-dashboard-preview.svg =404;
+    expires 1h;
+    add_header Cache-Control "public, max-age=3600" always;
+  }
+
+  location = /colipas-terminal-preview.svg {
+    try_files /colipas-terminal-preview.svg =404;
+    expires 1h;
+    add_header Cache-Control "public, max-age=3600" always;
+  }
+
+  location = /colipas-ai-preview.svg {
+    try_files /colipas-ai-preview.svg =404;
     expires 1h;
     add_header Cache-Control "public, max-age=3600" always;
   }

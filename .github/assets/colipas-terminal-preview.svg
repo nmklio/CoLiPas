@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="980" viewBox="0 0 1600 980" role="img" aria-labelledby="title desc">
+  <title id="title">CoLiPas sanitized SSH terminal preview</title>
+  <desc id="desc">A fictional low-latency PTY session using RFC 5737 documentation addresses only.</desc>
+  <defs>
+    <linearGradient id="page" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#071116"/>
+      <stop offset="0.55" stop-color="#0b1b20"/>
+      <stop offset="1" stop-color="#102a2c"/>
+    </linearGradient>
+    <linearGradient id="terminal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#08141a"/>
+      <stop offset="1" stop-color="#050c10"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#5eead4"/>
+      <stop offset="1" stop-color="#38bdf8"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="30" stdDeviation="34" flood-color="#00080b" flood-opacity="0.48"/>
+    </filter>
+    <filter id="glow" x="-200%" y="-200%" width="500%" height="500%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+    <style><![CDATA[
+      .ui { font-family: Inter, Segoe UI, Arial, sans-serif; letter-spacing: 0; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Consolas, Liberation Mono, monospace; letter-spacing: 0; }
+      .nav { font: 760 14px Inter, Segoe UI, Arial, sans-serif; fill: #9fb0b3; }
+      .navActive { font: 850 14px Inter, Segoe UI, Arial, sans-serif; fill: #f6fbfa; }
+      .eyebrow { font: 820 12px Inter, Segoe UI, Arial, sans-serif; fill: #5eead4; }
+      .title { font: 850 34px Inter, Segoe UI, Arial, sans-serif; fill: #f6fbfa; }
+      .sub { font: 650 16px Inter, Segoe UI, Arial, sans-serif; fill: #91a4a6; }
+      .label { font: 800 14px Inter, Segoe UI, Arial, sans-serif; fill: #dfe9e7; }
+      .small { font: 680 12px Inter, Segoe UI, Arial, sans-serif; fill: #7f9294; }
+      .term { font: 640 17px ui-monospace, SFMono-Regular, Consolas, monospace; fill: #b8c8c9; }
+      .prompt { fill: #6ee7d0; font-weight: 800; }
+      .value { fill: #edf7f5; }
+      .cyan { fill: #67e8f9; }
+      .amber { fill: #f8c471; }
+      .cursor { animation: blink 1s steps(1, end) infinite; }
+      .pulse { transform-box: fill-box; transform-origin: center; animation: pulse 2.2s ease-out infinite; }
+      .pulse.delay { animation-delay: 1.1s; }
+      @keyframes blink { 0%, 48% { opacity: 1; } 49%, 100% { opacity: 0; } }
+      @keyframes pulse { 0% { opacity: .52; transform: scale(.72); } 70%, 100% { opacity: 0; transform: scale(1.7); } }
+      @media (prefers-reduced-motion: reduce) { .cursor, .pulse { animation: none; } }
+    ]]></style>
+  </defs>
+
+  <rect width="1600" height="980" fill="url(#page)"/>
+  <circle cx="1340" cy="160" r="250" fill="#0ea5a5" opacity="0.08"/>
+  <path d="M0 830 C300 730 515 846 760 752 C1028 650 1296 708 1600 598 V980 H0Z" fill="#0a2025" opacity="0.82"/>
+
+  <g filter="url(#shadow)">
+    <rect x="66" y="54" width="1468" height="872" rx="30" fill="#081419" stroke="#263b3d"/>
+    <rect x="66" y="54" width="1468" height="74" rx="30" fill="#0c1a1f"/>
+    <rect x="66" y="100" width="1468" height="28" fill="#0c1a1f"/>
+
+    <g transform="translate(98 75)">
+      <rect width="40" height="40" rx="10" fill="#0f766e"/>
+      <path d="M11 27h18a6 6 0 0 0 .4-12A10 10 0 0 0 10 19.5 5.5 5.5 0 0 0 11 27Z" fill="none" stroke="#d9fffa" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="m15 22 3 2.5-3 2.5M21 27h6" fill="none" stroke="#67e8f9" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="54" y="26" class="ui" font-size="19" font-weight="900" fill="#f6fbfa">CoLiPas</text>
+    </g>
+    <g transform="translate(330 76)">
+      <text x="0" y="24" class="nav ui">Overview</text>
+      <rect x="92" width="108" height="38" rx="12" fill="#15302f"/>
+      <text x="120" y="24" class="navActive ui">Servers</text>
+      <text x="230" y="24" class="nav ui">Operations</text>
+      <text x="354" y="24" class="nav ui">AI</text>
+      <text x="412" y="24" class="nav ui">Audit</text>
+    </g>
+    <g transform="translate(1262 75)">
+      <rect width="226" height="40" rx="12" fill="#102428" stroke="#244143"/>
+      <circle cx="24" cy="20" r="5" fill="#34d399"/>
+      <text x="40" y="25" class="ui" font-size="13" font-weight="800" fill="#bff9e9">Connected · 38 ms</text>
+    </g>
+
+    <g transform="translate(104 162)">
+      <text class="eyebrow ui">LIVE SSH WORKSPACE · SANITIZED PUBLIC PREVIEW</text>
+      <text y="48" class="title ui">Interactive shell without the command-by-command wait</text>
+      <text y="80" class="sub ui">PTY streaming, resize, interrupt and session cleanup share one persistent connection.</text>
+    </g>
+
+    <g transform="translate(104 280)">
+      <rect width="982" height="570" rx="22" fill="url(#terminal)" stroke="#294346"/>
+      <rect width="982" height="54" rx="22" fill="#101f24"/>
+      <rect y="32" width="982" height="22" fill="#101f24"/>
+      <circle cx="24" cy="27" r="5" fill="#fb7185"/>
+      <circle cx="43" cy="27" r="5" fill="#fbbf24"/>
+      <circle cx="62" cy="27" r="5" fill="#34d399"/>
+      <text x="88" y="33" class="small ui">edge-demo-02 · root · PTY 148 x 38</text>
+      <g transform="translate(28 92)">
+        <text class="term mono"><tspan class="prompt">root@edge-demo-02</tspan><tspan class="value">:~# uptime</tspan></text>
+        <text y="34" class="term mono"> 12:44:18 up 18 days,  4:31,  load average: <tspan class="cyan">0.18, 0.24, 0.21</tspan></text>
+        <text y="86" class="term mono"><tspan class="prompt">root@edge-demo-02</tspan><tspan class="value">:~# free -h</tspan></text>
+        <text y="120" class="term mono">               total        used        free      shared  buff/cache   available</text>
+        <text y="154" class="term mono">Mem:            7.7Gi       <tspan class="cyan">2.1Gi</tspan>       2.8Gi       112Mi       3.2Gi       5.3Gi</text>
+        <text y="188" class="term mono">Swap:           2.0Gi          0B       2.0Gi</text>
+        <text y="240" class="term mono"><tspan class="prompt">root@edge-demo-02</tspan><tspan class="value">:~# df -h /</tspan></text>
+        <text y="274" class="term mono">Filesystem      Size  Used Avail Use% Mounted on</text>
+        <text y="308" class="term mono">/dev/vda1        78G   24G   51G  <tspan class="amber">32%</tspan> /</text>
+        <text y="360" class="term mono"><tspan class="prompt">root@edge-demo-02</tspan><tspan class="value">:~# systemctl is-active colipas</tspan></text>
+        <text y="394" class="term mono" fill="#6ee7b7">active</text>
+        <text y="446" class="term mono"><tspan class="prompt">root@edge-demo-02</tspan><tspan class="value">:~# </tspan><tspan class="cursor" fill="#dffbf5">█</tspan></text>
+      </g>
+    </g>
+
+    <g transform="translate(1110 280)">
+      <rect width="378" height="176" rx="20" fill="#102125" stroke="#2a4143"/>
+      <text x="22" y="34" class="label ui">Session transport</text>
+      <g transform="translate(22 64)">
+        <circle cx="8" cy="8" r="8" fill="#34d399" opacity="0.22"/>
+        <circle cx="8" cy="8" r="4" fill="#34d399"/>
+        <circle class="pulse" cx="8" cy="8" r="10" fill="none" stroke="#34d399"/>
+        <text x="30" y="13" class="small ui">WebSocket healthy</text>
+        <text x="0" y="52" class="small ui">Input echo</text><text x="316" y="52" text-anchor="end" class="label ui">9 ms</text>
+        <rect y="68" width="334" height="7" rx="4" fill="#1d3337"/><rect y="68" width="78" height="7" rx="4" fill="url(#accent)"/>
+      </g>
+    </g>
+
+    <g transform="translate(1110 478)">
+      <rect width="378" height="372" rx="20" fill="#102125" stroke="#2a4143"/>
+      <text x="22" y="35" class="label ui">Live session contract</text>
+      <g transform="translate(22 66)">
+        <circle cx="8" cy="8" r="5" fill="#5eead4"/><text x="26" y="13" class="small ui">Continuous output streaming</text>
+        <circle cx="8" cy="64" r="5" fill="#38bdf8"/><text x="26" y="69" class="small ui">Ctrl+C interrupts foreground command</text>
+        <circle cx="8" cy="120" r="5" fill="#f8c471"/><text x="26" y="125" class="small ui">Resize follows the browser viewport</text>
+        <circle cx="8" cy="176" r="5" fill="#fb7185"/><text x="26" y="181" class="small ui">Close releases the remote PTY</text>
+        <rect y="220" width="334" height="1" fill="#294043"/>
+        <text y="254" class="small ui">Target</text><text x="334" y="254" text-anchor="end" class="label ui">198.51.100.24</text>
+        <text y="290" class="small ui">Audit mode</text><text x="334" y="290" text-anchor="end" class="label ui">Summary only</text>
+      </g>
+    </g>
+  </g>
+</svg>

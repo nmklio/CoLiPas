@@ -119,9 +119,12 @@ function buildLandingCheck() {
       await expectLink(page, /GitHub/i, 'https://github.com/nmklio/CoLiPas');
       await expectLinkTarget(page.locator('a[href="/docs.html"]').first(), '/docs.html', 'landing docs link');
       await expectLink(page, /后台|登录|Admin|进入/i, '/admin/');
-      await expectLocatorCount(page.locator('.hero .product-preview img[src^="/colipas-dashboard-preview.svg"]'), 1, 'landing product-stage preview');
+      await expectLocatorCount(page.locator('.hero .product-preview [data-tour-scene]'), 3, 'landing dynamic product-tour scenes');
+      await expectLocatorCount(page.locator('.hero .product-preview [data-tour-tab]'), 3, 'landing dynamic product-tour tabs');
       await expectLocatorCount(page.locator('.feature-card.feature-card-wide'), 2, 'landing primary capability cards');
       await assertLandingProductStage(page);
+      await assertLandingProductTour(page);
+      await assertLandingThemeContinuity(page);
       await expectLocatorCountAtLeast(page.locator('section, article, .feature-card, .position-card, .deploy-card'), 6, 'landing content sections');
       await expectLocatorCount(page.locator('[data-colipas-feature="contextual-launch-summary"]'), 1, 'landing contextual launch guide feature card');
       await expectText(page.locator('[data-colipas-feature="contextual-launch-summary"]'), /上线检查|release checklist|workspace summary/i, 'landing contextual launch guide copy');
@@ -146,13 +149,16 @@ function buildLandingCheck() {
       await expectLocatorCount(page.locator('[data-colipas-feature="intent-ready-navigation"]'), 1, 'landing intent-ready navigation feature card');
       await expectText(page.locator('[data-colipas-feature="intent-ready-navigation"]'), /意图就绪导航|目标工作区|最后一次选择|竞态保护/i, 'landing intent-ready navigation copy');
       await expectLocatorCountAtLeast(page.locator('.feature-card .feature-icon svg'), 8, 'landing feature SVG icons');
-      await expectLocatorCountAtLeast(page.locator('.position-card.position-flow-card'), 4, 'landing redesigned flow position cards');
-      await expectLocatorCount(page.locator('.position-card .position-step'), 4, 'landing position flow step numbers');
-      await expectLocatorCount(page.locator('.position-card .position-state'), 4, 'landing position flow state pills');
-      await expectLocatorCount(page.locator('.position-card .position-visual, .position-card svg'), 0, 'landing legacy position icon blocks');
-      await expectLocatorCount(page.locator('.position-card small'), 0, 'landing legacy numbered position badges');
-      await expectLocatorCount(page.locator('.position-card .shape-fill, .position-card .shape-line, .position-card .shape-dot'), 0, 'landing legacy bulky position icon shapes');
-      await expectLocatorCountAtLeast(page.locator('.deploy-card .deploy-icon svg'), 3, 'landing deploy SVG icons');
+      await expectLocatorCount(page.locator('.workflow-shell .workflow-stage'), 4, 'landing integrated workflow stages');
+      await expectLocatorCount(page.locator('.workflow-stage .workflow-stage-icon svg'), 4, 'landing workflow SVG icons');
+      await expectLocatorCount(page.locator('.workflow-stage .workflow-signal'), 4, 'landing workflow status signals');
+      await expectLocatorCount(page.locator('.position-card, .position-grid'), 0, 'landing legacy flat position cards');
+      await expectLocatorCount(page.locator('.deploy-command-center'), 1, 'landing deploy command center');
+      await expectLocatorCount(page.locator('.deploy-method'), 2, 'landing deploy methods');
+      await expectLocatorCount(page.locator('.deploy-flow-modern article'), 4, 'landing deploy completion stages');
+      await expectLocatorCount(page.locator('[data-copy-deploy]'), 1, 'landing deploy copy command');
+      await expectLocatorCount(page.locator('.footer-runtime'), 1, 'landing operational footer status');
+      await expectTextAbsent(page, /Production port 8080|Stream AI|入口已固定在顶部/, 'landing legacy technical footer copy');
       await expectLocatorCountAtLeast(page.locator('.brand img.brand-mark[src="/colipas-icon.svg"]'), 1, 'landing brand icon image');
       await expectLocatorCount(page.locator('.brand .brand-mark').filter({ hasText: /^CP$/ }), 0, 'landing legacy CP brand mark');
       await assertSensitiveTextAbsent(page, 'landing');
@@ -395,11 +401,17 @@ async function assertNoBadBoxes(page, pageName, viewportName) {
 }
 
 async function assertLandingProductStage(page) {
+  await page.waitForFunction(() => {
+    const scenes = Array.from(document.querySelectorAll('.product-preview [data-tour-scene]'));
+    return scenes.length === 3 && scenes.every((scene) => scene instanceof HTMLImageElement && scene.complete && scene.naturalWidth > 0);
+  }, undefined, { timeout: 15000 });
+
   const stage = await page.evaluate(() => {
     const hero = document.querySelector('.hero');
     const heading = hero?.querySelector('h1');
     const preview = hero?.querySelector('.product-preview');
-    const image = preview?.querySelector('img');
+    const images = preview ? Array.from(preview.querySelectorAll('[data-tour-scene]')) : [];
+    const image = preview?.querySelector('[data-tour-scene].is-active');
     const primary = hero?.querySelector('.hero-primary');
     const securityItem = document.querySelector('.security-list > div');
     if (!(hero instanceof HTMLElement) || !(heading instanceof HTMLElement) || !(preview instanceof HTMLElement) || !(image instanceof HTMLImageElement)) {
@@ -417,8 +429,9 @@ async function assertLandingProductStage(page) {
       previewWidth: Math.round(previewBox.width),
       imageTop: Math.round(imageBox.top),
       imageBottom: Math.round(imageBox.bottom),
-      naturalWidth: image.naturalWidth,
-      naturalHeight: image.naturalHeight,
+      sceneCount: images.length,
+      sceneDimensions: images.map((scene) => scene instanceof HTMLImageElement ? [scene.naturalWidth, scene.naturalHeight] : [0, 0]),
+      activeScene: image.getAttribute('data-tour-scene'),
       viewportWidth: window.innerWidth,
       viewportHeight: window.innerHeight,
       primaryHref: primary instanceof HTMLAnchorElement ? primary.getAttribute('href') : '',
@@ -442,8 +455,11 @@ async function assertLandingProductStage(page) {
   if (stage.imageTop >= stage.viewportHeight || stage.imageBottom <= 0) {
     throw new Error(`landing product preview is not hinted in the first viewport: ${JSON.stringify(stage)}`);
   }
-  if (stage.naturalWidth < 1200 || stage.naturalHeight < 700) {
-    throw new Error(`landing product preview asset did not load at inspection quality: ${stage.naturalWidth}x${stage.naturalHeight}`);
+  if (stage.sceneCount !== 3 || stage.sceneDimensions.some(([width, height]) => width < 1200 || height < 700)) {
+    throw new Error(`landing product-tour assets did not load at inspection quality: ${JSON.stringify(stage.sceneDimensions)}`);
+  }
+  if (stage.activeScene !== 'overview') {
+    throw new Error(`landing product tour must start on overview, got ${stage.activeScene}`);
   }
   if (stage.primaryHref !== '/admin/') {
     throw new Error(`landing primary action must open the protected admin console, got ${stage.primaryHref}`);
@@ -453,6 +469,106 @@ async function assertLandingProductStage(page) {
   }
   if (!stage.securityColor || stage.securityColor === 'rgb(255, 255, 255)') {
     throw new Error(`landing security list text color is not explicitly integrated with the dark band: ${JSON.stringify(stage)}`);
+  }
+}
+
+async function assertLandingProductTour(page) {
+  const terminalTab = page.locator('[data-tour-tab="terminal"]');
+  await terminalTab.click();
+  await page.waitForFunction(() => document.querySelector('[data-tour-scene="terminal"]')?.classList.contains('is-active'));
+
+  const terminalState = await page.evaluate(() => ({
+    activeScenes: document.querySelectorAll('[data-tour-scene].is-active').length,
+    selectedTabs: document.querySelectorAll('[data-tour-tab][aria-selected="true"]').length,
+    activeScene: document.querySelector('[data-tour-scene].is-active')?.getAttribute('data-tour-scene'),
+    selectedTab: document.querySelector('[data-tour-tab][aria-selected="true"]')?.getAttribute('data-tour-tab'),
+    title: document.querySelector('[data-tour-title]')?.textContent?.trim(),
+    scriptCount: document.querySelectorAll('#colipas-product-tour').length,
+    command: document.querySelector('[data-copy-deploy]')?.getAttribute('data-copy-value') ?? '',
+  }));
+  if (
+    terminalState.activeScenes !== 1
+    || terminalState.selectedTabs !== 1
+    || terminalState.activeScene !== 'terminal'
+    || terminalState.selectedTab !== 'terminal'
+    || !/低延迟 SSH/.test(terminalState.title ?? '')
+    || terminalState.scriptCount !== 1
+  ) {
+    throw new Error(`landing product tour did not switch atomically: ${JSON.stringify(terminalState)}`);
+  }
+  if (!terminalState.command.includes('scripts/one-click-deploy.sh') || !terminalState.command.includes('COLIPAS_DEPLOY_MODE=docker')) {
+    throw new Error(`landing deployment command is incomplete: ${terminalState.command}`);
+  }
+
+  await terminalTab.press('ArrowRight');
+  await page.waitForFunction(() => document.querySelector('[data-tour-scene="ai"]')?.classList.contains('is-active'));
+  const keyboardState = await page.evaluate(() => ({
+    active: document.querySelector('[data-tour-scene].is-active')?.getAttribute('data-tour-scene'),
+    focused: document.activeElement?.getAttribute('data-tour-tab'),
+  }));
+  if (keyboardState.active !== 'ai' || keyboardState.focused !== 'ai') {
+    throw new Error(`landing product tour keyboard navigation failed: ${JSON.stringify(keyboardState)}`);
+  }
+
+  await page.locator('[data-tour-tab="overview"]').click();
+  await page.waitForFunction(() => document.querySelector('[data-tour-scene="overview"]')?.classList.contains('is-active'));
+  await page.mouse.move(1, 1);
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
+  await page.waitForFunction(
+    () => document.querySelector('[data-tour-scene="terminal"]')?.classList.contains('is-active'),
+    undefined,
+    { timeout: 6500 },
+  );
+  await page.locator('[data-tour-tab="overview"]').click();
+  await page.waitForFunction(() => document.querySelector('[data-tour-scene="overview"]')?.classList.contains('is-active'));
+  await page.evaluate(() => {
+    const previous = document.documentElement.style.scrollBehavior;
+    document.documentElement.style.scrollBehavior = 'auto';
+    window.scrollTo(0, 0);
+    document.documentElement.style.scrollBehavior = previous;
+  });
+  await page.waitForFunction(() => window.scrollY === 0);
+}
+
+async function assertLandingThemeContinuity(page) {
+  const theme = await page.evaluate(() => {
+    function background(selector, pseudo = null) {
+      const element = document.querySelector(selector);
+      return element instanceof HTMLElement ? window.getComputedStyle(element, pseudo).backgroundColor : '';
+    }
+    function rgb(value) {
+      const match = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+      return match ? match.slice(1).map(Number) : null;
+    }
+    const backgrounds = {
+      hero: background('.hero', '::before'),
+      workflow: background('#product', '::before'),
+      features: background('#features', '::before'),
+      security: background('#security'),
+      deploy: background('#deploy', '::before'),
+      footer: background('.footer'),
+      featureCard: background('.feature-card:not(.feature-card-wide)'),
+      deployConsole: background('.deploy-console'),
+    };
+    return {
+      backgrounds,
+      channels: Object.fromEntries(Object.entries(backgrounds).map(([key, value]) => [key, rgb(value)])),
+      legacyLightCards: Array.from(document.querySelectorAll('.feature-card, .workflow-shell, .deploy-console, .deploy-method')).filter((element) => {
+        const channels = rgb(window.getComputedStyle(element).backgroundColor);
+        return channels && channels.every((channel) => channel > 225);
+      }).length,
+    };
+  });
+
+  const missing = Object.entries(theme.channels).filter(([, channels]) => !channels).map(([name]) => name);
+  if (missing.length) {
+    throw new Error(`landing dark theme surfaces are missing computed colors: ${missing.join(', ')}`);
+  }
+  const bright = Object.entries(theme.channels).filter(([, channels]) => Math.max(...channels) > 52);
+  if (bright.length || theme.legacyLightCards > 0) {
+    throw new Error(`landing theme still contains abrupt light surfaces: ${JSON.stringify(theme)}`);
   }
 }
 

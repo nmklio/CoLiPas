@@ -4598,18 +4598,29 @@ function assertAccountUiGuards() {
   const landingProductStageFragments = [
     'landingFeatureCard({ kind, title, description, tags, featureId = \'\', wide = false })',
     'const landingHero = `<section class="hero wrap">',
-    '安全脱敏的产品实景',
-    '/colipas-dashboard-preview.svg?v=20260801-landing2',
+    'data-product-tour',
+    '/colipas-dashboard-preview.svg?v=20260801-tour1',
+    '/colipas-terminal-preview.svg?v=20260801-tour1',
+    '/colipas-ai-preview.svg?v=20260801-tour1',
+    'id="colipas-product-tour"',
     'const landingFeatureGrid = [',
     '实时 SSH 工作区',
     '上下文 AI 运维助手',
     'feature-card-wide',
-    'colipas landing immersive product ui v1',
+    'const landingWorkflow = `<section id="product" class="section wrap workflow-section">',
+    'const landingDeploy = `<section id="deploy" class="section wrap deploy-section-modern">',
+    'const landingFooter = `<footer class="footer">',
+    'colipas landing immersive product ui v2',
     '@media (prefers-reduced-motion: reduce)',
     'install -m 0644 "$APP_DIR/.github/assets/colipas-dashboard-preview.svg"',
+    'install -m 0644 "$APP_DIR/.github/assets/colipas-terminal-preview.svg"',
+    'install -m 0644 "$APP_DIR/.github/assets/colipas-ai-preview.svg"',
     'location = /colipas-dashboard-preview.svg',
+    'location = /colipas-terminal-preview.svg',
+    'location = /colipas-ai-preview.svg',
     'assertLandingProductStage(page)',
-    '.hero .product-preview img[src^="/colipas-dashboard-preview.svg"]',
+    '.hero .product-preview [data-tour-scene]',
+    'assertLandingThemeContinuity(page)',
   ];
   const landingProductStageSource = `${serverUpdateSource}\n${publicPagesCheckSource}`;
   const missingLandingProductStage = landingProductStageFragments.filter((fragment) => !landingProductStageSource.includes(fragment));
@@ -4692,12 +4703,16 @@ function assertAccountUiGuards() {
     'expectTextAbsent',
     'landing legacy footer product description',
     'landing feature SVG icons',
-    'landing redesigned flow position cards',
-    'landing position flow step numbers',
-    'landing position flow state pills',
-    'landing legacy position icon blocks',
-    'landing legacy numbered position badges',
-    'landing deploy SVG icons',
+    'landing dynamic product-tour scenes',
+    'landing dynamic product-tour tabs',
+    'assertLandingProductTour',
+    'assertLandingThemeContinuity',
+    'landing integrated workflow stages',
+    'landing workflow status signals',
+    'landing legacy flat position cards',
+    'landing deploy command center',
+    'landing deploy completion stages',
+    'landing operational footer status',
     'CoLiPas - 多云服务器管理面板',
     '云服务器管理与 AI 运维后台',
     "path.resolve('output', 'public-pages-check')",
@@ -5991,21 +6006,36 @@ function assertStandalonePerformanceCheckGuards() {
 
 function assertRepositoryPreviewAssetGuards() {
   const readmeSource = fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8');
-  const githubPreviewUrl = new URL('../.github/assets/colipas-dashboard-preview.svg', import.meta.url);
-  const publicPreviewUrl = new URL('../public/colipas-dashboard-preview.svg', import.meta.url);
-  const previewSource = fs.readFileSync(githubPreviewUrl, 'utf8');
+  const previewNames = [
+    'colipas-dashboard-preview.svg',
+    'colipas-terminal-preview.svg',
+    'colipas-ai-preview.svg',
+  ];
+  const previewSources = previewNames.map((name) => ({
+    name,
+    source: fs.readFileSync(new URL(`../.github/assets/${name}`, import.meta.url), 'utf8'),
+  }));
 
   if (!readmeSource.includes('.github/assets/colipas-dashboard-preview.svg')) {
     throw new Error('README preview image must point to .github/assets, not deployed public assets');
   }
-  if (readmeSource.includes('public/colipas-dashboard-preview.svg') || fs.existsSync(publicPreviewUrl)) {
-    throw new Error('Repository preview image must not be copied into the production public directory');
+  if (previewNames.some((name) => readmeSource.includes(`public/${name}`) || fs.existsSync(new URL(`../public/${name}`, import.meta.url)))) {
+    throw new Error('Repository preview images must not be copied into the production public directory');
   }
-  if (!previewSource.includes('PUBLIC PREVIEW') || !previewSource.includes('deployment opens login console only')) {
+  const dashboardSource = previewSources.find(({ name }) => name === 'colipas-dashboard-preview.svg')?.source ?? '';
+  if (!dashboardSource.includes('PUBLIC PREVIEW') || !dashboardSource.includes('deployment opens login console only')) {
     throw new Error('Repository preview image must clearly describe sanitized public preview and deployment behavior');
   }
+  for (const { name, source } of previewSources) {
+    if (!source.includes('width="1600" height="980"') || !/sanitized|fictional|documentation addresses/i.test(source)) {
+      throw new Error(`Repository preview image ${name} must be inspection-sized and explicitly sanitized`);
+    }
+    if (/\b(?:10\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.168\.)\d{1,3}\.\d{1,3}\b|BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY|sk-[A-Za-z0-9_-]{12,}/i.test(source)) {
+      throw new Error(`Repository preview image ${name} contains sensitive-looking infrastructure data`);
+    }
+  }
 
-  console.log('ok repository preview asset stays outside deployed public assets');
+  console.log('ok sanitized product-tour preview assets stay outside deployed public assets');
 }
 
 function assertLandingPatchIdempotence() {
@@ -6046,6 +6076,7 @@ function assertLandingPatchIdempotence() {
   </section>
   <section id="security" class="band"></section>
   <section id="deploy" class="section wrap"><div class="deploy-grid"><article class="deploy-card"><h3>Linux systemd</h3></article><article class="deploy-card"><h3>Node 20+</h3></article><article class="deploy-card"><h3>Docker Compose</h3></article></div></section>
+  <footer class="footer"><div class="footer-bottom">CoLiPas © 2026 · Production port 8080 · Stream AI</div></footer>
   </body>
 </html>`;
   const tempRoot = fs.mkdtempSync(new URL('../.tmp-landing-patch-', import.meta.url));
@@ -6074,11 +6105,19 @@ function assertLandingPatchIdempotence() {
       throw new Error('Landing page patch must be byte-for-byte idempotent across repeated deployments');
     }
     if (
-      !second.includes('colipas landing immersive product ui v1')
-      || !second.includes('/colipas-dashboard-preview.svg?v=20260801-landing2')
+      !second.includes('colipas landing immersive product ui v2')
+      || !second.includes('/colipas-dashboard-preview.svg?v=20260801-tour1')
+      || !second.includes('/colipas-terminal-preview.svg?v=20260801-tour1')
+      || !second.includes('/colipas-ai-preview.svg?v=20260801-tour1')
+      || (second.match(/data-tour-scene=/g) ?? []).length !== 3
+      || (second.match(/class="workflow-stage workflow-stage-/g) ?? []).length !== 4
+      || !second.includes('class="deploy-command-center"')
+      || !second.includes('data-copy-deploy')
+      || !second.includes('class="footer-runtime"')
+      || (second.match(/id="colipas-product-tour"/g) ?? []).length !== 1
       || (second.match(/<article class="feature-card feature-card-wide"/g) ?? []).length !== 2
     ) {
-      throw new Error('Landing page patch fixture did not produce the immersive product stage and two primary capability cards');
+      throw new Error('Landing page patch fixture did not produce the dynamic product tour and redesigned dark sections');
     }
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
