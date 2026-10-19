@@ -231,7 +231,8 @@ const accountSessionUsageBlock = {
 };
 
 const apiRows = [
-  ['GET /api/health', '服务健康状态、SQLite 驱动和运行时间。'],
+  ['GET /api/health', '公开健康检查：边缘静态探针，只返回运行状态，供监控探活。'],
+  ['GET /api/health/', '应用健康详情：SQLite 驱动、部署目标与模式、release.gitCommit 和运行时间。'],
   ['POST /api/auth/login', '管理员登录并写入会话 cookie。'],
   ['GET /api/account/sessions', '读取重启安全的活跃登录会话、脱敏设备标签、时间、容量和持久化状态。'],
   ['DELETE /api/account/sessions/:id', '撤销指定的其他登录会话；当前会话需要通过退出登录关闭。'],

@@ -139,6 +139,32 @@ function Test-HealthCommitMatches {
   return $ExpectedCommit.StartsWith($actualCommit, [StringComparison]::OrdinalIgnoreCase) -or $actualCommit.StartsWith($ExpectedCommit, [StringComparison]::OrdinalIgnoreCase)
 }
 
+function Get-HealthProbePaths {
+  # The hardened edge fronts "/api/health" with a static probe, so the release
+  # gate asks the application route first (trailing slash) and keeps the plain
+  # path as a fallback for deployments without an edge stub.
+  return @("/api/health/", "/api/health")
+}
+
+function Get-HealthPayloadDiagnostic {
+  param(
+    [object]$Health,
+    [string]$HealthPath
+  )
+
+  if ($null -eq $Health) {
+    return "$HealthPath returned no JSON body."
+  }
+
+  $status = [string]$Health.status
+  $actualCommit = Get-HealthGitCommit $Health
+  if ([string]::IsNullOrWhiteSpace($actualCommit)) {
+    return "$HealthPath answered status '$status' without release evidence; the path is probably shadowed by a reverse proxy or static health probe, so ask for a path the application serves."
+  }
+
+  return "$HealthPath reported commit '$actualCommit' with status '$status'."
+}
+
 function Invoke-TargetHealthCommitValidation {
   param(
     [object]$Target,
@@ -152,42 +178,48 @@ function Invoke-TargetHealthCommitValidation {
     return
   }
 
-  $healthUrl = Join-UrlPath $Target.publicBaseUrl "/api/health"
+  $expectedShort = $ExpectedCommit.Substring(0, [Math]::Min(12, $ExpectedCommit.Length))
+  $probePaths = Get-HealthProbePaths
   $lastError = ""
+
   for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
-    try {
-      $health = Invoke-RestMethod -Uri $healthUrl -Method Get -TimeoutSec 20 -Headers @{
-        "Cache-Control" = "no-cache"
-        "Pragma" = "no-cache"
-      }
-      if ($health.status -ne "ok") {
-        throw "Health endpoint status was '$($health.status)' instead of 'ok'."
-      }
-
-      $actualCommit = Get-HealthGitCommit $health
-      if (-not (Test-HealthCommitMatches -Health $health -ExpectedCommit $ExpectedCommit)) {
-        throw "Health endpoint commit '$actualCommit' does not match published commit '$($ExpectedCommit.Substring(0, [Math]::Min(12, $ExpectedCommit.Length)))'."
-      }
-
-      $script:TargetHealthResults += [pscustomobject]@{
-        name = $Target.name
-        ok = $true
-        publicBaseUrl = $Target.publicBaseUrl
-        gitCommit = $actualCommit
-        attempts = $attempt
-        error = ""
-      }
-      Write-Host "Target $($Target.name) health commit verified: $actualCommit."
-      return
-    } catch {
-      $lastError = [string]$_
-      $global:LASTEXITCODE = 0
-      if ($attempt -lt $MaxAttempts) {
-        Write-Warning "Health commit validation attempt $attempt/$MaxAttempts failed for target $($Target.name): $lastError"
-        if ($RetryDelaySeconds -gt 0) {
-          Start-Sleep -Seconds $RetryDelaySeconds
+    $diagnostics = @()
+    foreach ($probePath in $probePaths) {
+      $healthUrl = Join-UrlPath $Target.publicBaseUrl $probePath
+      try {
+        $health = Invoke-RestMethod -Uri $healthUrl -Method Get -TimeoutSec 20 -Headers @{
+          "Cache-Control" = "no-cache"
+          "Pragma" = "no-cache"
         }
-        continue
+
+        if (Test-HealthCommitMatches -Health $health -ExpectedCommit $ExpectedCommit) {
+          $actualCommit = Get-HealthGitCommit $health
+          $script:TargetHealthResults += [pscustomobject]@{
+            name = $Target.name
+            ok = $true
+            publicBaseUrl = $Target.publicBaseUrl
+            healthPath = $probePath
+            gitCommit = $actualCommit
+            attempts = $attempt
+            error = ""
+          }
+          Write-Host "Target $($Target.name) health commit verified at $probePath : $actualCommit."
+          return
+        }
+
+        $diagnostics += Get-HealthPayloadDiagnostic -Health $health -HealthPath $probePath
+      } catch {
+        $diagnostics += "$probePath failed: $([string]$_)"
+      } finally {
+        $global:LASTEXITCODE = 0
+      }
+    }
+
+    $lastError = "No health probe matched published commit $expectedShort. $($diagnostics -join ' ')"
+    if ($attempt -lt $MaxAttempts) {
+      Write-Warning "Health commit validation attempt $attempt/$MaxAttempts failed for target $($Target.name): $lastError"
+      if ($RetryDelaySeconds -gt 0) {
+        Start-Sleep -Seconds $RetryDelaySeconds
       }
     }
   }
@@ -196,6 +228,7 @@ function Invoke-TargetHealthCommitValidation {
     name = $Target.name
     ok = $false
     publicBaseUrl = $Target.publicBaseUrl
+    healthPath = ""
     gitCommit = ""
     attempts = $MaxAttempts
     error = $lastError
@@ -1314,6 +1347,23 @@ function Test-TargetHealthCommitValidation {
 
   if ((Join-UrlPath "https://example.test/" "/api/health") -ne "https://example.test/api/health") {
     throw "Health validation URL join did not normalize duplicate slashes."
+  }
+  if ((Join-UrlPath "https://example.test/" "/api/health/") -ne "https://example.test/api/health/") {
+    throw "Health validation URL join did not preserve the application health path."
+  }
+
+  $probePaths = Get-HealthProbePaths
+  if ($probePaths.Count -ne 2 -or $probePaths[0] -ne "/api/health/" -or $probePaths[1] -ne "/api/health") {
+    throw "Health probes must ask the application route before the plain edge path."
+  }
+
+  $stubDiagnostic = Get-HealthPayloadDiagnostic -Health $missingHealth -HealthPath "/api/health"
+  if (-not $stubDiagnostic.Contains("without release evidence") -or -not $stubDiagnostic.Contains("shadowed")) {
+    throw "Health payload diagnostics did not flag a static edge probe response."
+  }
+  $driftDiagnostic = Get-HealthPayloadDiagnostic -Health $staleHealth -HealthPath "/api/health/"
+  if (-not $driftDiagnostic.Contains("111111111111")) {
+    throw "Health payload diagnostics did not report the observed commit."
   }
   if (-not (Test-HealthCommitMatches -Health $matchingHealth -ExpectedCommit $expectedCommit)) {
     throw "Health commit validation did not accept a target commit prefix."

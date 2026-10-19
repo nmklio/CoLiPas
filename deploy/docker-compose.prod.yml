@@ -1,0 +1,33 @@
+services:
+  colipas:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    expose:
+      - "8080"
+    volumes:
+      - colipas-data:/app/.data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  colipas-proxy:
+    image: nginx:1.29-alpine
+    restart: unless-stopped
+    depends_on:
+      colipas:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/acme:/var/www/acme:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+
+volumes:
+  colipas-data:

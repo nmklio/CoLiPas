@@ -227,6 +227,7 @@ function writeFailureDiagnostics(error) {
 }
 
 async function runVerificationSuite() {
+  await run(process.execPath, ['scripts/deploy-config-check.mjs']);
   server = startServer();
   await waitForHealth();
   await run(process.execPath, ['scripts/smoke.mjs'], {

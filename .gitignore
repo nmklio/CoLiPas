@@ -16,3 +16,5 @@ output/
 *.tsbuildinfo
 release-targets.local.json
 release-targets*.local.json
+.codex-history/
+.dsh/

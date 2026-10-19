@@ -6939,22 +6939,30 @@ function runSshProductionBrowserRoundTrip(serverId: string) {
 }
 
 async function fetchProductionHealthLabel() {
-  try {
-    const response = await fetch('/api/health');
-    if (!response.ok) {
-      throw new Error('health unavailable');
+  // The hardened edge answers "/api/health" with a static probe, so read the application
+  // route first and fall back to the plain path only when it carries release evidence.
+  for (const healthPath of ['/api/health/', '/api/health']) {
+    try {
+      const response = await fetch(healthPath, { headers: { Accept: 'application/json' } });
+      if (!response.ok) {
+        continue;
+      }
+      const body = await response.json() as { release?: { targetName?: string; deploymentMode?: string } };
+      if (!body.release?.targetName && !body.release?.deploymentMode) {
+        continue;
+      }
+      return {
+        targetLabel: body.release?.targetName || 'browser-live',
+        deploymentMode: body.release?.deploymentMode || 'browser',
+      };
+    } catch {
+      // Try the next health path before falling back to the browser default.
     }
-    const body = await response.json() as { release?: { targetName?: string; deploymentMode?: string } };
-    return {
-      targetLabel: body.release?.targetName || 'browser-live',
-      deploymentMode: body.release?.deploymentMode || 'browser',
-    };
-  } catch {
-    return {
-      targetLabel: 'browser-live',
-      deploymentMode: 'browser',
-    };
   }
+  return {
+    targetLabel: 'browser-live',
+    deploymentMode: 'browser',
+  };
 }
 
 function formatSshProductionProbeTitle(tone: 'ok' | 'warn' | 'fail', target: string, language: string) {

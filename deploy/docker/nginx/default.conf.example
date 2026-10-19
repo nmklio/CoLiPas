@@ -1,0 +1,109 @@
+# CoLiPas Docker 前置代理模板（脱敏示例）
+#
+# 生产环境的实际文件是 /opt/colipas-cp/nginx/default.conf，除本站路由外还承载其他站点，
+# 属于服务器私有资产，不入库。本文件只保留本站需要的部分与全部边缘加固块，
+# 重建服务器时以它为起点，再把私有站点路由补回去：
+#
+#   install -d -m 0755 /opt/colipas-cp/nginx/acme
+#   install -m 0644 deploy/docker/nginx/default.conf.example /opt/colipas-cp/nginx/default.conf
+#
+# 替换 cp.example.com 为真实站点域名，证书路径随域名同步调整。
+#
+# 上线前必须补齐 Cloudflare 回源网段（见下方两处 TODO-CF），否则 CDN 之外的请求会被 403。
+# 网段来源：https://www.cloudflare.com/ips/ （ips-v4 与 ips-v6）
+# 生成方式（示例）：
+#   { printf 'default 0;\n127.0.0.0/8 1;\n::1 1;\n'
+#     curl -fsS https://www.cloudflare.com/ips-v4 | sed 's/$/ 1;/'
+#     curl -fsS https://www.cloudflare.com/ips-v6 | sed 's/$/ 1;/'
+#   } > /opt/colipas-cp/nginx/cf-geo.conf
+
+# MIAO7-RATELIMIT: CC 基础防护（真实客户端 IP）
+limit_req_zone  $binary_remote_addr zone=miao_web_req:10m  rate=30r/s;
+limit_conn_zone $binary_remote_addr zone=miao_web_conn:10m;
+limit_req_status 429;
+limit_conn_status 429;
+
+# MIAO7: 判定对端(realip 改写前)是否为 Cloudflare，防伪造 CF-Connecting-IP
+geo $realip_remote_addr $miao_cf_only {
+  default 0;
+  127.0.0.0/8 1;
+  ::1 1;
+  # TODO-CF: 在此追加 Cloudflare 官方网段（v4/v6），每行形如 "  <cidr> 1;"
+}
+
+server {
+  listen 80;
+  listen [::]:80;
+  server_name cp.example.com;
+  # MIAO7-RATELIMIT-APPLY
+  limit_req  zone=miao_web_req  burst=60 nodelay;
+  limit_conn miao_web_conn 60;
+  add_header Strict-Transport-Security "max-age=31536000" always;  # MIAO7-HSTS
+  location ~ /\.(?!well-known) { return 404; }  # MIAO7-DOT404
+  location ~* \.(env|git|bak|old|orig|save|swp|ds_store|log|sql|ini|conf|sh|zip|tar|gz|tgz|7z|rar|php|phtml)$ { return 404; }  # MIAO7-SPA404
+  client_max_body_size 2m;
+
+  location ^~ /.well-known/acme-challenge/ {
+    root /var/www/acme;
+    try_files $uri =404;
+  }
+
+  add_header X-Frame-Options "SAMEORIGIN" always;
+  add_header X-Content-Type-Options "nosniff" always;
+  add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+  location / {
+    return 301 https://$host$request_uri;
+  }
+}
+
+server {
+  listen 443 ssl;
+  listen [::]:443 ssl;
+  server_name cp.example.com;
+  # MIAO7-RATELIMIT-APPLY
+  limit_req  zone=miao_web_req  burst=60 nodelay;
+  limit_conn miao_web_conn 60;
+  add_header Strict-Transport-Security "max-age=31536000" always;  # MIAO7-HSTS
+  location ~ /\.(?!well-known) { return 404; }  # MIAO7-DOT404
+  location ~* \.(env|git|bak|old|orig|save|swp|ds_store|log|sql|ini|conf|sh|zip|tar|gz|tgz|7z|rar|php|phtml)$ { return 404; }  # MIAO7-SPA404
+  # MIAO7-CF-GUARD-START
+  set_real_ip_from 127.0.0.1;
+  # TODO-CF: 在此逐行补充 set_real_ip_from <Cloudflare 网段>;
+  real_ip_header CF-Connecting-IP;
+  real_ip_recursive on;
+  if ($miao_cf_only = 0) { return 403; }
+  # MIAO7-CF-GUARD-END
+  client_max_body_size 2m;
+
+  ssl_certificate /etc/letsencrypt/live/cp.example.com/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/cp.example.com/privkey.pem;
+  ssl_protocols TLSv1.2 TLSv1.3;
+  ssl_session_cache shared:SSL:10m;
+  ssl_session_timeout 10m;
+
+  add_header X-Frame-Options "SAMEORIGIN" always;
+  add_header X-Content-Type-Options "nosniff" always;
+  add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+  # MIAO7-HEALTH: 边缘静态探针，保证应用重启/升级期间监控不抖；
+  # 完整运行信息（含 release.gitCommit）仍由应用提供，走 /api/health/ 尾斜杠路径。
+  location = /api/health {
+    default_type application/json;
+    return 200 '{"status":"ok"}';
+  }
+
+  location / {
+    proxy_pass http://colipas:8080;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $remote_addr;  # MIAO7-XFF-FIX: never trust client-supplied X-Forwarded-For
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+    proxy_buffering off;
+  }
+}

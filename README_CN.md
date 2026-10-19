@@ -181,7 +181,9 @@ sudo -u colipas env COLIPAS_RESET_PASSWORD='replace-with-new-strong-password' np
 - 自定义 API 代理会阻止私网地址、链路本地地址、危险请求头和敏感跳转。
 - 发布验证、诊断导出和审计报告会避免泄漏密钥、私钥和真实运行数据。
 - 管理员可创建限时、可撤销的上线证据链接，用于交付或外部审阅。链接只包含固定的聚合快照，不含服务器地址、部署目标、提交号、命令、凭据、审计详情或用户数据；创建、查看和撤销都会写入审计。
-- 公开登录页只显示服务可用性、访问保护和最近检查时间；数据库、部署目标和发布标识仅在登录后的审计工作区查看。
+- 公开健康检查分两级：`/api/health` 由边缘返回静态探针，只表示服务可用；`/api/health/` 由应用返回 SQLite 驱动名、部署目标与模式、短提交号和运行时间，不含路径、密钥或服务器地址。登录页只呈现服务可用性、访问保护和最近检查时间。
+- 边缘代理加固（仅放行 Cloudflare 回源、CC 限速、点文件与备份后缀 404、HSTS、真实客户端 IP 解析）属于服务器私有配置，不入库；`deploy/server-update.sh` 在每次升级时按 `# MIAO7-CF-GUARD-START` … `# MIAO7-CF-GUARD-END` 锚点回填，无法回填时直接中止发布，不会静默丢弃。
+- Docker 前置代理的站点路由同样保留在服务器侧，仓库只跟踪 `deploy/docker-compose.prod.yml`、`deploy/docker-compose.proxy.yml` 和加固模板 `deploy/docker/nginx/default.conf.example`。
 
 ## 验证
 

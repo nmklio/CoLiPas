@@ -3229,7 +3229,8 @@ systemctl status ssh --no-pager
         <p class="kicker">API 与自定义代理</p>
         <h2>业务 API 需要登录，自定义代理需要白名单</h2>
         <div class="table">
-          <div><code>GET /api/health</code><p>公开健康检查，返回运行状态、SQLite 驱动名称和短发布标识，不暴露路径或密钥。</p></div>
+          <div><code>GET /api/health</code><p>公开健康检查：边缘静态探针，只返回运行状态，供监控探活，不暴露路径或密钥。</p></div>
+          <div><code>GET /api/health/</code><p>应用健康详情：SQLite 驱动名称、部署目标与模式、短发布标识和运行时间。</p></div>
           <div><code>POST /api/auth/login</code><p>管理员登录，失败次数会限速并返回 Retry-After。</p></div>
           <div><code>GET /api/account/sessions</code><p>读取重启安全的活跃登录设备、最近活动、到期时间、容量与持久化状态。</p></div>
           <div><code>DELETE /api/account/sessions/:id</code><p>撤销指定的其他登录会话，不允许误删当前会话。</p></div>
@@ -3504,9 +3505,133 @@ DEFAULTS
   fi
 }
 
+COLIPAS_NGINX_CONFIG="/etc/nginx/sites-available/colipas.conf"
+COLIPAS_NGINX_SYMLINK="/etc/nginx/sites-enabled/colipas.conf"
+COLIPAS_NGINX_EDGE_ANCHOR="# __COLIPAS_EDGE_PRESERVE__"
+COLIPAS_NGINX_GUARD_START="# MIAO7-CF-GUARD-START"
+COLIPAS_NGINX_GUARD_END="# MIAO7-CF-GUARD-END"
+
+backup_nginx_config() {
+  local backup_dir="/var/backups/colipas"
+  local stamp
+  local stale
+
+  install -d -m 0700 "$backup_dir" || return 1
+  stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  cp -a "$COLIPAS_NGINX_CONFIG" "$backup_dir/nginx-colipas.conf.$stamp" || return 1
+
+  for stale in $(ls -1t "$backup_dir"/nginx-colipas.conf.* 2>/dev/null | tail -n +11); do
+    rm -f "$stale"
+  done
+
+  return 0
+}
+
+extract_edge_hardening_block() {
+  local output_file="$1"
+
+  : >"$output_file"
+  if [ ! -f "$COLIPAS_NGINX_CONFIG" ]; then
+    return 1
+  fi
+
+  awk -v start="$COLIPAS_NGINX_GUARD_START" -v end="$COLIPAS_NGINX_GUARD_END" '
+    index($0, start) > 0 { capture = 1 }
+    capture { print }
+    capture && index($0, end) > 0 { capture = 0 }
+  ' "$COLIPAS_NGINX_CONFIG" >"$output_file"
+
+  [ -s "$output_file" ]
+}
+
+install_edge_preserving_nginx_config() {
+  local rendered_file="$1"
+  local preserved_file
+  local staged_file
+  local restore_file=""
+  local preserve_required=0
+
+  preserved_file="$(mktemp)"
+  staged_file="$(mktemp)"
+
+  if extract_edge_hardening_block "$preserved_file"; then
+    preserve_required=1
+  fi
+
+  if [ "$preserve_required" -eq 1 ]; then
+    if ! grep -qF "$COLIPAS_NGINX_EDGE_ANCHOR" "$rendered_file"; then
+      echo "ERROR: refusing to replace $COLIPAS_NGINX_CONFIG because the repository template no longer exposes $COLIPAS_NGINX_EDGE_ANCHOR; replacing it would silently drop the server-side edge hardening." >&2
+      rm -f "$preserved_file" "$staged_file"
+      return 1
+    fi
+
+    if grep -q 'miao_cf_only' "$preserved_file" && [ ! -f /etc/nginx/conf.d/10-miao-cf-geo.conf ]; then
+      echo "ERROR: refusing to replace $COLIPAS_NGINX_CONFIG because the preserved edge hardening uses \$miao_cf_only while /etc/nginx/conf.d/10-miao-cf-geo.conf is missing; nginx would fail to start." >&2
+      rm -f "$preserved_file" "$staged_file"
+      return 1
+    fi
+
+    awk -v anchor="$COLIPAS_NGINX_EDGE_ANCHOR" -v block="$preserved_file" '
+      index($0, anchor) > 0 {
+        while ((getline line < block) > 0) {
+          print line
+        }
+        close(block)
+        next
+      }
+      { print }
+    ' "$rendered_file" >"$staged_file"
+
+    if ! grep -qF "$COLIPAS_NGINX_GUARD_START" "$staged_file"; then
+      echo "ERROR: edge hardening was extracted from $COLIPAS_NGINX_CONFIG but could not be re-applied to the rendered template." >&2
+      rm -f "$preserved_file" "$staged_file"
+      return 1
+    fi
+  else
+    grep -vF "$COLIPAS_NGINX_EDGE_ANCHOR" "$rendered_file" >"$staged_file" || true
+  fi
+
+  if [ -f "$COLIPAS_NGINX_CONFIG" ] && cmp -s "$staged_file" "$COLIPAS_NGINX_CONFIG"; then
+    rm -f "$preserved_file" "$staged_file"
+    echo "nginx configuration already current; edge hardening preserved."
+    return 0
+  fi
+
+  if ! backup_nginx_config; then
+    echo "WARN: unable to back up $COLIPAS_NGINX_CONFIG before replacing it." >&2
+  fi
+
+  install -m 0644 "$staged_file" "$COLIPAS_NGINX_CONFIG" || {
+    rm -f "$preserved_file" "$staged_file"
+    return 1
+  }
+  ln -sfn "$COLIPAS_NGINX_CONFIG" "$COLIPAS_NGINX_SYMLINK"
+
+  if ! nginx -t; then
+    echo "ERROR: the updated nginx configuration failed validation; restoring the previous configuration." >&2
+    restore_file="$( { ls -1t /var/backups/colipas/nginx-colipas.conf.* 2>/dev/null || true; } | head -n 1)"
+    if [ -n "$restore_file" ]; then
+      install -m 0644 "$restore_file" "$COLIPAS_NGINX_CONFIG"
+      nginx -t || true
+    fi
+    rm -f "$preserved_file" "$staged_file"
+    return 1
+  fi
+
+  rm -f "$preserved_file" "$staged_file"
+  if [ "$preserve_required" -eq 1 ]; then
+    echo "nginx configuration updated with the existing edge hardening preserved."
+  else
+    echo "nginx configuration updated."
+  fi
+}
+
 install_nginx_config() {
   local nginx_ssl_certificate="$SSL_CERTIFICATE"
   local nginx_ssl_certificate_key="$SSL_CERTIFICATE_KEY"
+  local rendered_nginx_config
+
+  rendered_nginx_config="$(mktemp)"
 
   if [ ! -f "$nginx_ssl_certificate" ] || [ ! -f "$nginx_ssl_certificate_key" ]; then
     if ensure_fallback_ssl_certificate; then
@@ -3516,7 +3641,7 @@ install_nginx_config() {
   fi
 
   if [ -f "$LANDING_ROOT/index.html" ] && [ -f "$nginx_ssl_certificate" ] && [ -f "$nginx_ssl_certificate_key" ]; then
-    cat >/etc/nginx/sites-available/colipas.conf <<NGINX
+    cat >"$rendered_nginx_config" <<NGINX
 server {
   listen 80;
   listen [::]:80;
@@ -3536,6 +3661,7 @@ server {
   listen [::]:443 ssl http2;
   server_name $SERVER_NAME;
 
+  # __COLIPAS_EDGE_PRESERVE__
   ssl_certificate $nginx_ssl_certificate;
   ssl_certificate_key $nginx_ssl_certificate_key;
   ssl_protocols TLSv1.2 TLSv1.3;
@@ -3603,7 +3729,7 @@ server {
     proxy_http_version 1.1;
     proxy_set_header Host \$host;
     proxy_set_header X-Real-IP \$remote_addr;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-For \$remote_addr;  # never trust client-supplied X-Forwarded-For
     proxy_set_header X-Forwarded-Proto https;
     proxy_set_header Upgrade \$http_upgrade;
     proxy_set_header Connection "upgrade";
@@ -3617,7 +3743,7 @@ server {
     proxy_http_version 1.1;
     proxy_set_header Host \$host;
     proxy_set_header X-Real-IP \$remote_addr;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-For \$remote_addr;  # never trust client-supplied X-Forwarded-For
     proxy_set_header X-Forwarded-Proto https;
     proxy_set_header Upgrade \$http_upgrade;
     proxy_set_header Connection "upgrade";
@@ -3631,7 +3757,7 @@ server {
     proxy_http_version 1.1;
     proxy_set_header Host \$host;
     proxy_set_header X-Real-IP \$remote_addr;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-For \$remote_addr;  # never trust client-supplied X-Forwarded-For
     proxy_set_header X-Forwarded-Proto https;
     expires 1h;
     add_header Cache-Control "public, max-age=3600";
@@ -3639,7 +3765,7 @@ server {
 }
 NGINX
   else
-    cat >/etc/nginx/sites-available/colipas.conf <<NGINX
+    cat >"$rendered_nginx_config" <<NGINX
 server {
   listen 80;
   listen [::]:80;
@@ -3710,7 +3836,7 @@ server {
     proxy_http_version 1.1;
     proxy_set_header Host \$host;
     proxy_set_header X-Real-IP \$remote_addr;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-For \$remote_addr;  # never trust client-supplied X-Forwarded-For
     proxy_set_header X-Forwarded-Proto http;
     proxy_set_header Upgrade \$http_upgrade;
     proxy_set_header Connection "upgrade";
@@ -3724,7 +3850,7 @@ server {
     proxy_http_version 1.1;
     proxy_set_header Host \$host;
     proxy_set_header X-Real-IP \$remote_addr;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-For \$remote_addr;  # never trust client-supplied X-Forwarded-For
     proxy_set_header X-Forwarded-Proto http;
     proxy_set_header Upgrade \$http_upgrade;
     proxy_set_header Connection "upgrade";
@@ -3738,7 +3864,7 @@ server {
     proxy_http_version 1.1;
     proxy_set_header Host \$host;
     proxy_set_header X-Real-IP \$remote_addr;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-For \$remote_addr;  # never trust client-supplied X-Forwarded-For
     proxy_set_header X-Forwarded-Proto http;
     expires 1h;
     add_header Cache-Control "public, max-age=3600";
@@ -3747,7 +3873,15 @@ server {
 NGINX
   fi
 
-  ln -sfn /etc/nginx/sites-available/colipas.conf /etc/nginx/sites-enabled/colipas.conf
+  local install_status=0
+  if ! install_edge_preserving_nginx_config "$rendered_nginx_config"; then
+    install_status=1
+  fi
+  rm -f "$rendered_nginx_config"
+  if [ "$install_status" -ne 0 ]; then
+    echo "ERROR: nginx configuration was not replaced; the previous configuration stays in place." >&2
+    return 1
+  fi
 }
 
 cd "$APP_DIR"

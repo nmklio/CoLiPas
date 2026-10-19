@@ -1,0 +1,14 @@
+services:
+  colipas-proxy:
+    image: nginx:1.29-alpine
+    restart: unless-stopped
+    depends_on:
+      colipas:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - ./nginx/acme:/var/www/acme:ro

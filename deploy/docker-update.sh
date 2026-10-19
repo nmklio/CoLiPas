@@ -11,6 +11,22 @@ cd "$APP_DIR"
 git fetch --prune origin "$BRANCH"
 git reset --hard "origin/$BRANCH"
 
+# Compose definitions live in the repository; seed a missing host copy from deploy/
+# instead of overwriting a host-customized file.
+for compose_file in docker-compose.prod.yml docker-compose.proxy.yml; do
+  if [ ! -f "$compose_file" ] && [ -f "deploy/$compose_file" ]; then
+    install -m 0644 "deploy/$compose_file" "$compose_file"
+    echo "seeded $compose_file from deploy/$compose_file"
+  fi
+done
+
+# The edge proxy config is a server-private asset (it also routes other sites), so it is
+# not tracked; fail early with a clear hint instead of letting the proxy container crash-loop.
+if [ ! -f "nginx/default.conf" ]; then
+  echo "ERROR: $APP_DIR/nginx/default.conf is missing; rebuild it from deploy/docker/nginx/default.conf.example before deploying." >&2
+  exit 1
+fi
+
 HEAD_SHA="$(git rev-parse HEAD)"
 DEPLOYED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 TARGET_NAME="${RELEASE_TARGET_NAME:-secondary-docker}"

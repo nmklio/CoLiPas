@@ -207,6 +207,12 @@ sudo systemctl reload nginx
 
 Replace `server_name` and TLS certificate paths before using it on a new domain.
 
+A hardened edge is expected to answer `GET /api/health` with a static probe so monitoring never blinks during an upgrade. The full runtime payload (SQLite driver, deployment target, `release.gitCommit`, uptime) is served by the application at `GET /api/health/`, and both the release gate and the in-app release sync probe that path first.
+
+`deploy/server-update.sh` re-applies a server-side hardening block back into the rendered config on every upgrade: if the existing `sites-available/colipas.conf` contains a `# MIAO7-CF-GUARD-START` … `# MIAO7-CF-GUARD-END` region, the script backs the file up, renders the new template, splices the region back at the `# __COLIPAS_EDGE_PRESERVE__` anchor, and refuses to continue if the region cannot be re-applied. Server-private blocks therefore survive upgrades instead of being silently dropped.
+
+For the Docker proxy topology, `deploy/docker-compose.prod.yml` and `deploy/docker-compose.proxy.yml` are tracked and seeded into the app directory when missing. The live proxy config stays server-side because it also routes other sites; `deploy/docker/nginx/default.conf.example` documents every hardening block it needs.
+
 ## Forgot the Admin Password
 
 CoLiPas Cloud Server Management Panel stores administrator passwords as `scrypt` hashes. Forgotten passwords must be reset, not recovered.

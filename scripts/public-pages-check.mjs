@@ -22,6 +22,8 @@ fs.mkdirSync(evidenceDir, { recursive: true });
 const browser = await chromium.launch(executablePath ? { executablePath, headless: true } : { headless: true });
 const failures = [];
 
+failures.push(...(await collectHealthContractFailures()));
+
 try {
   for (const viewport of viewports) {
     for (const pageSpec of pages) {
@@ -649,6 +651,60 @@ async function assertFaviconResponse(page) {
   if (!contentType.includes('image/svg+xml') || !body.includes('<svg') || !body.includes('CoLiPas') || body.includes('<html')) {
     throw new Error(`/favicon.ico must return the CoLiPas SVG icon, got content-type ${contentType}`);
   }
+}
+
+// The hardened edge answers /api/health with a static probe, so the release payload is only
+// guaranteed at /api/health/ (trailing slash). Both routes must stay reachable and healthy.
+async function collectHealthContractFailures() {
+  const problems = [];
+
+  for (const pathname of ['/api/health', '/api/health/']) {
+    let response;
+    try {
+      response = await fetch(new URL(pathname, baseUrl).toString(), {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(10000),
+      });
+    } catch (error) {
+      problems.push(`${pathname}: request failed (${error instanceof Error ? error.message : String(error)})`);
+      continue;
+    }
+
+    const text = await response.text();
+    if (response.status !== 200) {
+      problems.push(`${pathname}: expected HTTP 200, got ${response.status}`);
+      continue;
+    }
+
+    const contentType = response.headers.get('content-type') ?? '';
+    if (!contentType.includes('application/json')) {
+      problems.push(`${pathname}: expected JSON content-type, got "${contentType}"`);
+      continue;
+    }
+
+    let body;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      problems.push(`${pathname}: response is not valid JSON (${text.slice(0, 80)})`);
+      continue;
+    }
+
+    if (body?.status !== 'ok') {
+      problems.push(`${pathname}: expected status "ok", got "${body?.status}"`);
+      continue;
+    }
+
+    if (pathname === '/api/health/' && !/^[0-9a-f]{12}$/.test(String(body?.release?.gitCommit ?? ''))) {
+      problems.push(`${pathname}: must expose a 12-character release.gitCommit, got "${body?.release?.gitCommit}"`);
+    }
+  }
+
+  if (problems.length === 0) {
+    console.log(`ok health contract ${baseUrl}`);
+  }
+
+  return problems;
 }
 
 function findSystemBrowser() {
