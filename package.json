@@ -18,6 +18,8 @@
     "probe:ssh-production": "node scripts/production-ssh-probe.mjs",
     "reset:admin": "node scripts/reset-admin-password.mjs",
     "secrets": "node scripts/secret-scan.mjs",
+    "check:design": "node scripts/check-tokens.mjs",
+    "check:boundaries": "node scripts/check-boundaries.mjs",
     "test": "npm run build && npm run secrets && node scripts/verify-production.mjs"
   },
   "dependencies": {

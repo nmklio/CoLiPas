@@ -1,30 +1,7 @@
+/* Colour, type and spacing variables live in src/styles/tokens.css and are
+   imported first by src/main.tsx. Only structural defaults belong here. */
 :root {
-  --build-marker: "20260510-ui-refine";
-  color-scheme: light;
-  --bg: #f4f7f8;
-  --panel: #ffffff;
-  --panel-strong: #eef5f6;
-  --surface: #fbfdfd;
-  --surface-strong: #f7fbfb;
-  --text: #122329;
-  --muted: #64747b;
-  --line: #d7e2e5;
-  --line-strong: #c7d7db;
-  --brand: #0f766e;
-  --brand-strong: #0b5f59;
-  --brand-soft: #e8f6f3;
-  --brand-line: #a8d8d0;
-  --sidebar: #10262b;
-  --sidebar-strong: #18343a;
-  --blue: #246b86;
-  --orange: #b86a17;
-  --red: #b43737;
-  --green: #16774e;
-  --shadow: 0 16px 38px rgba(18, 35, 41, 0.08);
-  --shadow-soft: 0 8px 20px rgba(18, 35, 41, 0.055);
-  --focus-ring: 0 0 0 3px rgba(15, 118, 110, 0.14);
-  font-family:
-    Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-family: var(--font-ui);
 }
 
 * {
@@ -2119,7 +2096,7 @@ button:disabled {
   background: #eef6f5;
 }
 
-.language-switcher-option {
+.language-switcher-option, .theme-switcher-option {
   min-width: 30px;
   min-height: 24px;
   border: 0;
@@ -2133,19 +2110,18 @@ button:disabled {
   cursor: pointer;
 }
 
-.language-switcher-option.active {
+.language-switcher-option.active, .theme-switcher-option.active {
   background: #ffffff;
   color: var(--brand-strong);
   box-shadow: 0 1px 4px rgba(15, 48, 53, 0.12);
 }
 
-.language-switcher-option:hover,
-.language-switcher-option:focus-visible {
+.language-switcher-option:hover, .theme-switcher-option:hover, .language-switcher-option:focus-visible, .theme-switcher-option:focus-visible {
   color: var(--brand-strong);
   outline: none;
 }
 
-.language-switcher-option:focus-visible {
+.language-switcher-option:focus-visible, .theme-switcher-option:focus-visible {
   box-shadow: var(--focus-ring);
 }
 
@@ -24068,7 +24044,7 @@ pre {
     grid-auto-columns: minmax(28px, auto);
   }
 
-  .language-switcher-option {
+  .language-switcher-option, .theme-switcher-option {
     min-width: 28px;
     padding: 0 6px;
   }

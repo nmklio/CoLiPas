@@ -1,0 +1,230 @@
+/* ============================================================================
+ * Dark-theme adaptation layer.
+ *
+ * Loaded after global.css and scoped under [data-theme="dark"], so light mode is
+ * byte-for-byte unaffected (the only selector that also matches in light mode is
+ * documented below).
+ *
+ * Three layers, in cascade order:
+ *   1. page + chrome   鈥?body, scrollbars, topbar, form controls, command palette
+ *   2. light island    鈥?<main> keeps the light palette until the modules are
+ *                        converted, so module content stays pixel-identical to
+ *                        light mode instead of half-flipping (dark tokens over a
+ *                        literal white card is unreadable text)
+ *   3. nothing else    鈥?module interiors are migrated in P2; until then the
+ *                        island keeps them correct rather than approximately dark
+ *
+ * scripts/check-tokens.mjs enforces that the island re-declares exactly the
+ * variables that tokens.css flips, with exactly the light values, so the two
+ * files cannot drift.
+ * ========================================================================== */
+
+[data-theme="dark"] {
+  /* --- page ------------------------------------------------------------- */
+  html,
+  body {
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  body {
+    /* global.css paints a light top-down wash; drop it in dark. */
+    background-image: none;
+    background-color: var(--bg);
+  }
+
+  ::selection {
+    background: rgba(45, 212, 191, 0.28);
+    color: var(--text);
+  }
+
+  * {
+    scrollbar-color: var(--line-strong) transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+    border-radius: var(--r-pill);
+  }
+
+  /* --- topbar ----------------------------------------------------------- */
+  .topbar {
+    /* global.css paints an opaque light wash with a blur; mirror it in dark. */
+    background: color-mix(in srgb, var(--panel) 92%, transparent);
+    border-bottom-color: var(--line);
+  }
+
+  .topbar-chip,
+  .topbar-chip.ok {
+    border-color: var(--line);
+    background: var(--panel);
+  }
+
+  .topbar-chip b {
+    color: var(--text);
+  }
+
+  .topbar-chip.warn {
+    border-color: rgba(224, 161, 92, 0.42);
+    background: rgba(224, 161, 92, 0.14);
+  }
+
+  .topbar-connect {
+    border-color: var(--line);
+    background: var(--panel);
+    color: var(--text);
+  }
+
+  .topbar-connect:hover,
+  .topbar-refresh:hover,
+  .topbar-logout:hover,
+  .language-switcher:hover {
+    background: var(--surface-strong);
+  }
+
+  /* --- form controls outside the island (login, portaled dialogs) -------- */
+  :is(input, select, textarea):not([type="checkbox"]):not([type="radio"]):not([type="range"]) {
+    background: var(--panel);
+    color: var(--text);
+    border-color: var(--line);
+  }
+
+  :is(input, textarea)::placeholder {
+    color: var(--muted);
+  }
+
+  /* --- topbar status counters ------------------------------------------- *
+   * The counters paint literal light-mode status tones (a fixed red, slate and
+   * dark-teal), which drop below 3:1 on the dark chrome; re-point them at the
+   * status tokens, which are tuned per theme.
+   * ---------------------------------------------------------------------- */
+  .operations-inbox-trigger.critical b,
+  .launch-guide-open.fail b {
+    color: var(--red);
+  }
+
+  .operations-inbox-trigger.warning b,
+  .launch-guide-open.warn b {
+    color: var(--orange);
+  }
+
+  .performance-mode-toggle b,
+  .performance-mode-toggle.active b {
+    color: var(--muted);
+  }
+
+  .operator-utility-copy b {
+    color: var(--text);
+  }
+
+  .ai-launcher {
+    background: var(--brand);
+    color: var(--text-inverse);
+  }
+
+  /* --- command palette -------------------------------------------------- */
+  .command-palette-backdrop {
+    background: rgba(0, 0, 0, 0.55);
+  }
+
+  .command-palette {
+    border-color: var(--line);
+    background:
+      radial-gradient(circle at 12% 0%, rgba(45, 212, 191, 0.1), transparent 60%),
+      var(--panel);
+  }
+
+  .command-palette-header {
+    border-bottom-color: var(--line);
+  }
+
+  .command-palette-search {
+    border-color: var(--line);
+    background: var(--surface-strong);
+    box-shadow: none;
+  }
+
+  .command-palette-clear {
+    border-color: var(--line);
+    background: var(--panel);
+    color: var(--muted);
+  }
+
+  .command-palette-clear:hover,
+  .command-palette-clear:focus-visible,
+  .command-palette-item:hover,
+  .command-palette-item:focus-visible {
+    border-color: var(--brand-line);
+    background: var(--surface-strong);
+  }
+
+  .command-palette-group-heading {
+    color: var(--muted);
+  }
+
+  .command-palette-item em,
+  .command-trigger kbd,
+  .command-palette-search kbd {
+    border-color: var(--line);
+    background: var(--surface-strong);
+    color: var(--muted);
+  }
+
+  .command-palette-empty {
+    border-color: var(--line-strong);
+  }
+
+  /* --- light workspace island ------------------------------------------- *
+   * global.css still hard-codes light literals inside the modules (counted by
+   * check-tokens.mjs and migrated per module in P2). Flipping the tokens while
+   * those literals stay light produces dark-on-dark text, so the workspace keeps
+   * the light palette: every module renders exactly as in light mode, and the
+   * dark chrome around it owns the theme switch. Each module that is migrated to
+   * tokens gets removed from this scope in P2.
+   * ---------------------------------------------------------------------- */
+  main {
+    /* __LIGHT_ISLAND__ */
+    color-scheme: light;
+
+    --c-white: #ffffff;
+    --bg: var(--c-slate-50);
+    --panel: var(--c-white);
+    --panel-strong: var(--c-slate-100);
+    --surface: var(--c-slate-25);
+    --surface-strong: var(--c-slate-30);
+    --surface-hover: #f2f8f8;
+    --overlay: rgba(18, 35, 41, 0.42);
+    --text: var(--c-slate-950);
+    --muted: var(--c-slate-500);
+    --text-inverse: var(--c-white);
+    --text-disabled: #9aa9ae;
+    --line: var(--c-slate-200);
+    --line-strong: var(--c-slate-300);
+    /* Aliases are substituted where they are declared, so the island has to
+       re-declare them or the workspace would inherit the chrome's dark values. */
+    --text-muted: var(--muted);
+    --border: var(--line);
+    --border-strong: var(--line-strong);
+    --status-ok: var(--green);
+    --status-warn: var(--orange);
+    --status-danger: var(--red);
+    --status-info: var(--blue);
+    --sidebar: var(--c-slate-900);
+    --sidebar-strong: var(--c-slate-800);
+    --brand: var(--c-teal-500);
+    --brand-strong: var(--c-teal-600);
+    --brand-soft: var(--c-teal-50);
+    --brand-line: var(--c-teal-100);
+    --blue: var(--c-blue-600);
+    --orange: var(--c-amber-600);
+    --red: var(--c-red-600);
+    --green: var(--c-green-600);
+    --shadow: 0 16px 38px rgba(18, 35, 41, 0.08);
+    --shadow-soft: 0 8px 20px rgba(18, 35, 41, 0.055);
+    --shadow-overlay: 0 28px 64px rgba(18, 35, 41, 0.18);
+    --focus-ring: 0 0 0 3px rgba(15, 118, 110, 0.14);
+
+    background: var(--bg);
+    color: var(--text);
+  }
+}

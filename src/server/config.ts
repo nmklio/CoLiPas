@@ -29,6 +29,8 @@ const envSchema = z.object({
   RELEASE_SYNC_TARGETS: z.string().default(''),
   COLIPAS_TEST_ALLOW_RELEASE_SYNC_LOOPBACK: z.enum(['0', '1']).default('0'),
   COLIPAS_SECURE_COOKIES: z.enum(['0', '1']).optional(),
+  COLIPAS_REQUEST_LOG: z.enum(['0', '1']).default('1'),
+  COLIPAS_SLOW_REQUEST_MS: z.coerce.number().int().min(50).max(60000).default(1000),
 });
 
 export const defaultRuntimeSecrets = {
@@ -75,6 +77,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       sessionSecretDefault: parsed.SESSION_SECRET === defaultRuntimeSecrets.sessionSecret,
       credentialEncryptionKeyConfigured: Boolean(env.CREDENTIAL_ENCRYPTION_KEY),
       credentialEncryptionKeyDefault: (env.CREDENTIAL_ENCRYPTION_KEY || defaultRuntimeSecrets.credentialEncryptionKey) === defaultRuntimeSecrets.credentialEncryptionKey,
+    },
+    observability: {
+      requestLog: parsed.COLIPAS_REQUEST_LOG === '1',
+      slowRequestMs: parsed.COLIPAS_SLOW_REQUEST_MS,
     },
     releaseVerification: {
       token: parsed.RELEASE_VERIFY_TOKEN,

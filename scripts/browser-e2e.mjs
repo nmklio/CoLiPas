@@ -1961,6 +1961,26 @@ async function assertAccountSettingsAndAiChat(targetPage) {
   if (!new RegExp(username, 'i').test(await operatorUtilityTrigger.innerText())) {
     throw new Error('Operator controls trigger must keep the signed-in username visible');
   }
+  const themeToggle = targetPage.locator('[data-theme-toggle="true"]');
+  await themeToggle.waitFor({ timeout: 5000 });
+  for (const step of [1, 2]) {
+    const before = await targetPage.evaluate(() => document.documentElement.dataset.theme);
+    await themeToggle.click();
+    const flipped = before === 'dark' ? 'light' : 'dark';
+    await targetPage.waitForFunction(
+      (expected) => document.documentElement.dataset.theme === expected,
+      flipped,
+      { timeout: 5000 },
+    );
+    const stored = await targetPage.evaluate(() => window.localStorage.getItem('colipas.theme'));
+    if (stored !== flipped) {
+      throw new Error(`Theme toggle ${step} must persist "${flipped}" as the stored preference, got "${stored}"`);
+    }
+    const colourScheme = await targetPage.evaluate(() => getComputedStyle(document.documentElement).colorScheme);
+    if (colourScheme !== flipped) {
+      throw new Error(`Theme toggle ${step} must switch color-scheme to "${flipped}", got "${colourScheme}"`);
+    }
+  }
   await operatorUtilityTrigger.click();
   const operatorUtilityMenu = targetPage.locator('[data-operator-utility-menu="true"]');
   await operatorUtilityMenu.waitFor({ timeout: 5000 });
@@ -1970,8 +1990,10 @@ async function assertAccountSettingsAndAiChat(targetPage) {
     || await operatorUtilityMenu.locator('[data-adaptive-refresh-card="true"]').count() !== 1
     || await operatorUtilityMenu.locator('[data-operator-utility-account="true"]').count() !== 1
     || await operatorUtilityMenu.locator('[data-operator-utility-logout="true"]').count() !== 1
+    || await operatorUtilityMenu.locator('[data-theme-option]').count() !== 3
+    || await operatorUtilityMenu.locator('.theme-switcher-option.active').count() !== 1
   ) {
-    throw new Error('Desktop operator controls must expose language, adaptive refresh, manual refresh, account, and sign-out actions');
+    throw new Error('Desktop operator controls must expose language, theme, adaptive refresh, manual refresh, account, and sign-out actions');
   }
   const adaptiveRefreshCardText = await operatorUtilityMenu.locator('[data-adaptive-refresh-card="true"]').innerText();
   if (!/Adaptive refresh|Foreground sync|Every 15s|Payload reuse|saved/i.test(adaptiveRefreshCardText)) {

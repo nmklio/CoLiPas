@@ -46,6 +46,7 @@ const quickNav = [
   { href: '#ai', label: 'AI 设置' },
   { href: '#ssh', label: 'SSH 终端' },
   { href: '#security', label: '安全审计' },
+  { href: '#theme', label: '主题与界面' },
   { href: '#faq', label: '常见问题' },
 ];
 
@@ -335,6 +336,7 @@ export function DocsPage({ onLogin }: DocsPageProps) {
           <a href="#ssh">SSH 与编排</a>
           <a href="#api">API 与代理</a>
           <a href="#security">安全上线</a>
+          <a href="#theme">主题与界面</a>
           <a href="#faq">常见问题</a>
         </aside>
 
@@ -489,6 +491,26 @@ export function DocsPage({ onLogin }: DocsPageProps) {
               <Database size={28} />
               <strong>SQLite 默认落地</strong>
               <p>资产、审计、账号配置会写入本地 SQLite。SSH 凭据单独加密存储，健康轮询不会制造无意义写入。</p>
+            </div>
+          </section>
+
+          <section id="theme" className="docs-section docs-split-section">
+            <div>
+              <div className="docs-section-heading">
+                <span><MonitorSmartphone size={18} /> 主题与界面</span>
+                <h2>亮色、暗色与跟随系统</h2>
+              </div>
+              <div className="docs-check-list">
+                <p><CheckCircle2 size={16} /> 顶栏右侧的月亮 / 太阳按钮一键切换亮色与暗色；操作员菜单里还可以选择“跟随系统”。</p>
+                <p><CheckCircle2 size={16} /> 首次访问跟随系统偏好；手动选择后按浏览器保存，同一浏览器的多个标签页会自动同步。</p>
+                <p><CheckCircle2 size={16} /> 当前暗色是骨架级：导航栏、顶栏、命令面板和表单控件为暗色，工作区保留亮色以保证图表、终端和审计细节零回归；模块内部真暗色排在后续版本。</p>
+                <p><CheckCircle2 size={16} /> 界面配色来自一层语义 token（src/styles/tokens.css）；组件只引用语义变量，暗色只覆写变量而不复制样式。</p>
+              </div>
+            </div>
+            <div className="docs-data-card">
+              <ListChecks size={28} />
+              <strong>三项设计守卫</strong>
+              <p>node scripts/check-tokens.mjs 校验 token 覆盖、暗色覆写、亮色区域一致性与 WCAG AA 对比度；node scripts/check-boundaries.mjs 守住分层与文件体量；node scripts/theme-verify.mjs 在浏览器里验证切换、持久化与跨标签页同步。</p>
             </div>
           </section>
 

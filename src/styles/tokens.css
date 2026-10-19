@@ -1,0 +1,182 @@
+/* ============================================================================
+ * Design tokens — single source of truth for colour, type, space, motion.
+ *
+ * Two layers, strictly enforced:
+ *   1. scale   --c-*      raw palette values. Only this file may use them.
+ *   2. semantic           what components reference (--bg, --text, --brand, ...).
+ *
+ * Every colour a component needs must resolve through a semantic token, so a
+ * theme is a swap of one variable layer rather than a rewrite of components.
+ * scripts/check-tokens.mjs enforces the rules (see "Token guard" in README).
+ *
+ * The --panel/--muted/--line/... family are the historical names that
+ * global.css already binds across ~25k lines. They are kept as the public
+ * semantic layer with byte-identical light values, so this file is a pure
+ * indirection refactor in light mode and the only switch needed for dark.
+ * ========================================================================== */
+
+:root {
+  color-scheme: light;
+  --build-marker: "20261020-tokens-v1";
+
+  /* --- 1. scale: brand teal ------------------------------------------------ */
+  --c-teal-50: #e8f6f3;
+  --c-teal-100: #a8d8d0;
+  --c-teal-500: #0f766e;
+  --c-teal-600: #0b5f59;
+
+  /* --- 1. scale: neutral slate -------------------------------------------- */
+  --c-white: #ffffff;
+  --c-slate-25: #fbfdfd;
+  --c-slate-30: #f7fbfb;
+  --c-slate-50: #f4f7f8;
+  --c-slate-100: #eef5f6;
+  --c-slate-200: #d7e2e5;
+  --c-slate-300: #c7d7db;
+  --c-slate-500: #64747b;
+  --c-slate-800: #18343a;
+  --c-slate-900: #10262b;
+  --c-slate-950: #122329;
+
+  /* --- 1. scale: status hues ---------------------------------------------- */
+  --c-blue-600: #246b86;
+  --c-amber-600: #b86a17;
+  --c-red-600: #b43737;
+  --c-green-600: #16774e;
+
+  /* --- 2. semantic: surfaces ---------------------------------------------- */
+  --bg: var(--c-slate-50);
+  --panel: var(--c-white);
+  --panel-strong: var(--c-slate-100);
+  --surface: var(--c-slate-25);
+  --surface-strong: var(--c-slate-30);
+  --surface-hover: #f2f8f8;
+  --overlay: rgba(18, 35, 41, 0.42);
+
+  /* --- 2. semantic: text -------------------------------------------------- */
+  --text: var(--c-slate-950);
+  --muted: var(--c-slate-500);
+  --text-inverse: var(--c-white);
+  --text-muted: var(--muted);
+  --text-disabled: #9aa9ae;
+
+  /* --- 2. semantic: lines ------------------------------------------------- */
+  --line: var(--c-slate-200);
+  --line-strong: var(--c-slate-300);
+  --border: var(--line);
+  --border-strong: var(--line-strong);
+
+  /* --- 2. semantic: brand ------------------------------------------------- */
+  --brand: var(--c-teal-500);
+  --brand-strong: var(--c-teal-600);
+  --brand-soft: var(--c-teal-50);
+  --brand-line: var(--c-teal-100);
+
+  /* --- 2. semantic: sidebar ----------------------------------------------- */
+  --sidebar: var(--c-slate-900);
+  --sidebar-strong: var(--c-slate-800);
+
+  /* --- 2. semantic: status ------------------------------------------------ */
+  --blue: var(--c-blue-600);
+  --orange: var(--c-amber-600);
+  --red: var(--c-red-600);
+  --green: var(--c-green-600);
+  --status-ok: var(--green);
+  --status-warn: var(--orange);
+  --status-danger: var(--red);
+  --status-info: var(--blue);
+
+  /* --- 2. semantic: elevation / focus ------------------------------------- */
+  --shadow: 0 16px 38px rgba(18, 35, 41, 0.08);
+  --shadow-soft: 0 8px 20px rgba(18, 35, 41, 0.055);
+  --shadow-overlay: 0 28px 64px rgba(18, 35, 41, 0.18);
+  --focus-ring: 0 0 0 3px rgba(15, 118, 110, 0.14);
+
+  /* --- typography --------------------------------------------------------- */
+  --font-ui: Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", SFMono-Regular, Consolas, monospace;
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  --fs-lg: 18px;
+  --fs-xl: 24px;
+  --lh-tight: 1.25;
+  --lh-body: 1.55;
+
+  /* --- space: 4px grid ---------------------------------------------------- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+
+  /* --- radius ------------------------------------------------------------- */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-pill: 999px;
+
+  /* --- layering ----------------------------------------------------------- */
+  --z-base: 0;
+  --z-sticky: 30;
+  --z-overlay: 60;
+  --z-dialog: 80;
+  --z-toast: 90;
+
+  /* --- motion ------------------------------------------------------------- */
+  --dur-fast: 120ms;
+  --dur-mid: 200ms;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+/* ============================================================================
+ * Dark theme — a variable swap, no component knowledge required.
+ *
+ * Applied by <html data-theme="dark">; src/app/theme.ts resolves the user
+ * preference (explicit choice, otherwise the OS) and keeps it in sync.
+ * Anything still written as a literal hex in global.css does not follow the
+ * theme yet; those are tracked down per module in the P2/P5 phases and the
+ * remaining count is reported by scripts/check-tokens.mjs.
+ * ========================================================================== */
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --c-white: #ffffff;
+
+  --bg: #0d1416;
+  --panel: #121b1e;
+  --panel-strong: #162226;
+  --surface: #121b1e;
+  --surface-strong: #162226;
+  --surface-hover: #18262b;
+  --overlay: rgba(0, 0, 0, 0.58);
+
+  --text: #e7f0f1;
+  --muted: #97abb0;
+  --text-inverse: #0d1416;
+  --text-disabled: #6b7d82;
+
+  --line: #213035;
+  --line-strong: #2b3f45;
+
+  --sidebar: #0a1012;
+  --sidebar-strong: #111b1e;
+
+  --brand: #2dd4bf;
+  --brand-strong: #14b8a6;
+  --brand-soft: rgba(45, 212, 191, 0.14);
+  --brand-line: rgba(45, 212, 191, 0.34);
+
+  --blue: #6fb6d4;
+  --orange: #e0a15c;
+  --red: #e07a7a;
+  --green: #5ec99a;
+
+  --shadow: 0 16px 38px rgba(0, 0, 0, 0.45);
+  --shadow-soft: 0 8px 20px rgba(0, 0, 0, 0.3);
+  --shadow-overlay: 0 28px 64px rgba(0, 0, 0, 0.6);
+  --focus-ring: 0 0 0 3px rgba(45, 212, 191, 0.28);
+}

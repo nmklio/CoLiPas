@@ -15,6 +15,7 @@ import {
   MessageSquareText,
   Menu,
   Minimize2,
+  Moon,
   MoreHorizontal,
   PlugZap,
   RefreshCw,
@@ -22,6 +23,7 @@ import {
   Search,
   Server,
   ShieldCheck,
+  Sun,
   TerminalSquare,
   UserCog,
   X,
@@ -29,6 +31,14 @@ import {
 import { getLocale, languageOptions, useI18n } from '../i18n';
 import { AccountSessionControl } from './AccountSessionControl';
 import { LoginPage } from './LoginPage';
+import {
+  readThemePreference,
+  resolveTheme,
+  setThemePreference as persistThemePreference,
+  subscribeToTheme,
+  type ResolvedTheme,
+  type ThemePreference,
+} from './theme';
 import type { OperationsDraft } from '../modules/operations/OperationsCenter';
 import type { OverviewPreflightSnapshot } from '../modules/overview/MonitoringOverview';
 import type { ServerFleetTriageCardId } from '../modules/servers/ServerInventory';
@@ -140,6 +150,12 @@ const sections: Array<{ id: SectionId; labelKey: string; icon: typeof LayoutDash
   { id: 'ai', labelKey: 'nav.ai', icon: Bot },
   { id: 'api', labelKey: 'nav.api', icon: PlugZap },
   { id: 'security', labelKey: 'nav.security', icon: ShieldCheck },
+];
+
+const themeOptions: Array<{ id: ThemePreference; labelKey: string; shortLabelKey: string }> = [
+  { id: 'light', labelKey: 'app.themeLightDetail', shortLabelKey: 'app.themeLight' },
+  { id: 'dark', labelKey: 'app.themeDarkDetail', shortLabelKey: 'app.themeDark' },
+  { id: 'system', labelKey: 'app.themeSystemDetail', shortLabelKey: 'app.themeSystem' },
 ];
 
 function createPreloadableComponent<Module, Props extends object>(
@@ -467,6 +483,8 @@ export function App() {
   const [operationsInboxOpen, setOperationsInboxOpen] = useState(false);
   const [aiCollapsed, setAiCollapsed] = useState(true);
   const [performanceMode, setPerformanceMode] = useState(readStoredPerformanceMode);
+  const [themePreference, setThemePreference] = useState<ThemePreference>(readThemePreference);
+  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() => resolveTheme(readThemePreference()));
   const [aiSeedQuestion, setAiSeedQuestion] = useState('');
   const [overview, setOverview] = useState<OverviewResponse>(fallbackOverview);
   const [configSummary, setConfigSummary] = useState<ConfigSummaryResponse | null>(null);
@@ -673,6 +691,20 @@ export function App() {
   useEffect(() => {
     window.localStorage.setItem(performanceModeStorageKey, performanceMode ? '1' : '0');
   }, [performanceMode]);
+
+  useEffect(
+    () =>
+      subscribeToTheme((resolved, preference) => {
+        setResolvedTheme(resolved);
+        setThemePreference(preference);
+      }),
+    [],
+  );
+
+  const changeTheme = (preference: ThemePreference) => {
+    setResolvedTheme(persistThemePreference(preference));
+    setThemePreference(preference);
+  };
 
   useEffect(() => {
     try {
@@ -1873,6 +1905,21 @@ export function App() {
             </button>
             <button
               type="button"
+              className={resolvedTheme === 'dark' ? 'performance-mode-toggle active' : 'performance-mode-toggle'}
+              data-theme-toggle="true"
+              data-theme-resolved={resolvedTheme}
+              data-theme-preference={themePreference}
+              aria-pressed={resolvedTheme === 'dark'}
+              aria-label={resolvedTheme === 'dark' ? t('app.themeDarkActive') : t('app.themeLightActive')}
+              title={resolvedTheme === 'dark' ? t('app.themeDarkActive') : t('app.themeLightActive')}
+              onClick={() => changeTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
+            >
+              {resolvedTheme === 'dark' ? <Moon size={15} aria-hidden="true" /> : <Sun size={15} aria-hidden="true" />}
+              <span>{t('app.theme')}</span>
+              <b>{resolvedTheme === 'dark' ? t('app.themeDark') : t('app.themeLight')}</b>
+            </button>
+            <button
+              type="button"
               className="command-trigger"
               aria-label={t('app.openCommandPalette')}
               title={t('app.openCommandPalette')}
@@ -2049,6 +2096,23 @@ export function App() {
                           onClick={() => setLanguage(option.id)}
                         >
                           {option.shortLabel}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="language-switcher operator-utility-language" role="group" aria-label={t('app.theme')}>
+                    <span className="language-switcher-label">{t('app.theme')}</span>
+                    <div className="language-switcher-options">
+                      {themeOptions.map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          data-theme-option={option.id} className={themePreference === option.id ? 'theme-switcher-option active' : 'theme-switcher-option'}
+                          aria-pressed={themePreference === option.id}
+                          title={t(option.labelKey)}
+                          onClick={() => changeTheme(option.id)}
+                        >
+                          {t(option.shortLabelKey)}
                         </button>
                       ))}
                     </div>

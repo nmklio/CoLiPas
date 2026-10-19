@@ -28,6 +28,7 @@ import {
 import { executeCustomApiProxy } from './services/customApiProxy.js';
 import { getDatabasePath } from './services/database.js';
 import { buildDiagnosticExport } from './services/diagnosticService.js';
+import { createRequestContext, readRequestMetrics } from './http/requestContext.js';
 import { createMaintenanceWindow, deleteMaintenanceWindow, listMaintenanceWindows } from './services/maintenanceWindowService.js';
 import { createOperationTask, preflightOperationTask } from './services/operationsService.js';
 import { buildOverviewHttpSnapshot, matchesOverviewEtag } from './services/overviewSnapshotService.js';
@@ -69,6 +70,12 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
 
   app.disable('x-powered-by');
   app.use(
+    createRequestContext({
+      enabled: config.observability.requestLog,
+      slowRequestMs: config.observability.slowRequestMs,
+    }),
+  );
+  app.use(
     helmet({
       contentSecurityPolicy: false,
     }),
@@ -94,6 +101,7 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
   );
 
   app.get('/api/health', (_request, response) => {
+    const memory = process.memoryUsage();
     response.setHeader('Cache-Control', 'no-store');
     response.json({
       status: 'ok',
@@ -108,6 +116,15 @@ export function createApp(config: RuntimeConfig = loadConfig()) {
         gitCommit: config.release.gitCommit ? config.release.gitCommit.slice(0, 12) : '',
       },
       uptime: Math.round(process.uptime()),
+      // Coarse, non-identifying operational counters (no paths, peers or users).
+      metrics: {
+        requests: readRequestMetrics(),
+        process: {
+          uptimeSec: Math.round(process.uptime()),
+          rssMb: Math.round(memory.rss / 1024 / 1024),
+          heapUsedMb: Math.round(memory.heapUsed / 1024 / 1024),
+        },
+      },
       time: new Date().toISOString(),
     });
   });

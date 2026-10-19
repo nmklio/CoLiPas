@@ -78,6 +78,16 @@ The runtime is intentionally simple. One Node.js process serves the Express API 
 | Custom API lab | Allowlisted backend proxy for provider API testing without exposing browser-side secrets or private network targets. |
 | Security audit | Auth events, blocked calls, SSH actions, remediation flows, relation cards, diagnostics export, release readiness evidence, and revocable public-safe evidence snapshots for external review. |
 | Operator account | Login, restart-safe SQLite session storage using token hashes instead of raw Cookies, 15-second foreground-and-online sync that pauses while hidden or offline and resumes immediately after reconnect, configurable active-session capacity with oldest-session retirement, individual or bulk revocation of other signed-in devices, privacy-minimized device labels without raw IP or User-Agent values, profile/avatar update with decoded-image validation and automatic brand fallback, password change, and Chinese / English / Japanese UI language switching. |
+| Theming | Light, dark, and follow-system appearance with a one-click topbar toggle, per-browser persistence, and cross-tab sync. Dark mode currently covers the shell (navigation, topbar, command palette, form controls) while the workspace keeps the audited light surface; module-level dark surfaces are the next milestone. |
+
+## Theming
+
+Every colour comes from one semantic token layer in `src/styles/tokens.css` (82 light variables plus 28 dark overrides). `src/styles/theme-dark.css` re-points those variables and restyles shell surfaces instead of duplicating component rules.
+
+- Appearance: light, dark, or follow system. The topbar moon/sun button flips light and dark; the operator menu exposes all three choices.
+- Persistence: the choice is stored per browser (`colipas.theme`) and synced across open tabs; a first visit follows `prefers-color-scheme`.
+- Current dark coverage: navigation, topbar, command palette, and form controls are dark. The workspace intentionally stays on the audited light surface so charts, terminal text, and audit details keep their contrast; module-level dark surfaces ship in a later milestone.
+- Guards: `node scripts/check-tokens.mjs` verifies token coverage, dark overrides, light-surface parity, WCAG AA contrast, and a literal-colour budget; `node scripts/check-boundaries.mjs` enforces layer boundaries and file-size ratchets; `node scripts/theme-verify.mjs` drives a real browser to check switching, persistence, and cross-tab sync.
 
 ## Quick Start
 
@@ -265,6 +275,10 @@ src/
     operations/         Workflow orchestration center
     security/           Audit, readiness, diagnostics, and remediation
     servers/            Inventory, map linkage, SSH terminal, server actions
+  styles/
+    tokens.css          Semantic design tokens and the dark override set
+    global.css          Component styles that consume the token layer
+    theme-dark.css      Dark shell overrides plus the light workspace island
   server/
     app.ts              Express API and static frontend hosting
     sshShellSocket.ts   WebSocket bridge for live SSH shells
@@ -286,7 +300,7 @@ npm audit --omit=dev --audit-level=high
 node scripts/secret-scan.mjs
 ```
 
-`npm test` builds the app, starts a temporary production server on port `18080`, runs API and browser checks, validates SSH terminal behavior, exercises AI/cache/custom API/security flows, checks performance and concurrency, validates reset-password behavior, then cleans up temporary test data.
+`npm test` builds the app, starts a temporary production server on port `18080`, runs API and browser checks, validates SSH terminal behavior, exercises AI/cache/custom API/security flows, checks performance and concurrency, validates reset-password behavior, then cleans up temporary test data. It runs the design-token and architecture-boundary guards as part of the same pipeline; run `node scripts/check-tokens.mjs`, `node scripts/check-boundaries.mjs`, and `node scripts/theme-verify.mjs` directly when iterating on the UI.
 
 For UI smoothness checks against a running production server:
 

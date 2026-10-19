@@ -227,6 +227,8 @@ function writeFailureDiagnostics(error) {
 }
 
 async function runVerificationSuite() {
+  await run(process.execPath, ['scripts/check-tokens.mjs']);
+  await run(process.execPath, ['scripts/check-boundaries.mjs']);
   await run(process.execPath, ['scripts/deploy-config-check.mjs']);
   server = startServer();
   await waitForHealth();
