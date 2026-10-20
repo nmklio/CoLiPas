@@ -220,8 +220,10 @@ function replacePositionCard(title, kind, description) {
 }
 
 replaceAll(/\/\* colipas landing balanced ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\/style>)/g, '');
+replaceAll(/\/\* colipas landing live release ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\/style>)/g, '');
+replaceAll(/\s*<script id="colipas-landing-dynamic">[\s\S]*?<\/script>\s*/g, '\n');
 replaceAll(/<title>[\s\S]*?<\/title>/g, '<title>CoLiPas云服务器管理面板</title>');
-replaceAll(/[ \t]*<link\s+rel="icon"[^>]*>\s*/g, '\n');
+replaceAll(/\s*<link\s+rel="icon"[^>]*>\s*/g, '\n');
 replaceOnce(/<title>CoLiPas云服务器管理面板<\/title>/, '<title>CoLiPas云服务器管理面板</title>\n<link rel="icon" type="image/svg+xml" href="/colipas-icon.svg?v=20260530-brand3">');
 replaceAll(/<a class="button github-button" href="https:\/\/github\.com\/nmklio\/CoLiPas"[^>]*>GitHub<\/a>/g, '');
 replaceAll(/<span class="brand-mark">CP<\/span>/g, '<img class="brand-mark" src="/colipas-icon.svg" alt="" aria-hidden="true">');
@@ -245,6 +247,16 @@ const landingHero = `<section class="hero wrap">
         <a class="button hero-primary" href="/admin/">进入管理后台</a>
         <a class="button hero-secondary" href="#product">查看工作流</a>
       </div>
+      <div class="live-release" data-live-release data-live-state="loading">
+        <span class="live-dot" aria-hidden="true"></span>
+        <span class="live-label">线上发布</span>
+        <b class="live-commit" data-live-commit>读取中</b>
+        <span class="live-divider" aria-hidden="true"></span>
+        <span class="live-metric">运行 <b data-live-uptime>—</b></span>
+        <span class="live-divider" aria-hidden="true"></span>
+        <span class="live-metric">P95 <b data-live-latency>—</b></span>
+        <a class="live-link" href="/api/health/" target="_blank" rel="noreferrer">健康检查</a>
+      </div>
       <div class="stats" aria-label="产品能力">
         <div><strong>PTY</strong><span>实时 SSH 交互</span></div>
         <div><strong>7 天</strong><span>可信资源历史</span></div>
@@ -266,6 +278,23 @@ const landingHero = `<section class="hero wrap">
       </figcaption>
       <div class="preview-progress" aria-hidden="true"><i></i></div>
     </figure>
+
+    <div class="capability-ticker" aria-hidden="true">
+      <div class="ticker-track">
+        <span>PTY 实时 SSH 交互</span>
+        <span>7 天可信资源历史</span>
+        <span>3 语言界面</span>
+        <span>500 行批量资产导入</span>
+        <span>240 点历史曲线</span>
+        <span>60 秒运维预检</span>
+        <span>PTY 实时 SSH 交互</span>
+        <span>7 天可信资源历史</span>
+        <span>3 语言界面</span>
+        <span>500 行批量资产导入</span>
+        <span>240 点历史曲线</span>
+        <span>60 秒运维预检</span>
+      </div>
+    </div>
   </section>`;
 replaceOnce(/<section class="hero wrap">[\s\S]*?<\/section>/, landingHero);
 
@@ -308,7 +337,7 @@ replaceAll(/<span class="icon">06<\/span>/g, landingIcon('shield', 'icon feature
 
 if (!html.includes('data-colipas-feature="contextual-launch-summary"')) {
   replaceOnce(/(<div class="feature-grid">)/, `$1
-      <article class="feature-card" data-colipas-feature="contextual-launch-summary">${landingIcon('checklist', 'icon feature-icon')}<h3>上下文上线检查</h3><p>总览保留完整上线清单；进入服务器、AI、运维、API 和安全工作区后自动压缩为摘要，需要证据时再一键展开。</p><div class="tags"><span>渐进披露</span><span>性能模式联动</span></div></article>`);
+      <article class="feature-card" data-colipas-feature="contextual-launch-summary">${landingIcon('checklist', 'icon feature-icon')}<h3>上下文上线检查</h3><p>六项完整上线检查只在总览页出现；其它模块通过顶栏「待办 N 项」一键回到概览，修复顺序直接标在清单条目上。</p><div class="tags"><span>单一表达位置</span><span>顶栏待办入口</span></div></article>`);
 }
 
 if (!html.includes('data-colipas-feature="fleet-views"')) {
@@ -388,7 +417,7 @@ if (!html.includes('data-colipas-feature="intent-ready-navigation"')) {
 const landingFeatureGrid = [
   landingFeatureCard({ kind: 'terminal', title: '实时 SSH 工作区', description: '浏览器内直接进入 PTY 终端，连续读取输出、调整窗口、中断前台命令，并在关闭界面时释放远端会话。', tags: ['xterm', '低延迟输入'], wide: true }),
   landingFeatureCard({ kind: 'ai', title: '上下文 AI 运维助手', description: '把当前服务器与终端上下文交给自定义 OpenAI 兼容模型分析；命令先确认，再交给真实 SSH 会话执行。', tags: ['流式对话', '执行确认'], wide: true }),
-  landingFeatureCard({ kind: 'checklist', title: '上下文上线检查', description: '总览保留完整上线清单，进入具体工作区后压缩为摘要，需要证据时再展开。', tags: ['渐进披露', '性能联动'], featureId: 'contextual-launch-summary' }),
+  landingFeatureCard({ kind: 'checklist', title: '上下文上线检查', description: '六项检查只在总览页渲染，其它模块通过顶栏「待办 N 项」回到概览；修复顺序直接标在清单条目上。', tags: ['单一表达位置', '顶栏待办入口'], featureId: 'contextual-launch-summary' }),
   landingFeatureCard({ kind: 'assets', title: '资产视图', description: '保存关键词、厂商、状态、地域和健康筛选，排障时一键恢复常用工作范围。', tags: ['本机保存', '快速恢复'], featureId: 'fleet-views' }),
   landingFeatureCard({ kind: 'assets', title: '安全批量资产导入', description: 'CSV / JSON 先预览校验再登记，单次最多 500 台无凭据资产，并提供本地校验报告。', tags: ['2 MB 上限', '公式注入防护'], featureId: 'server-bulk-import' }),
   landingFeatureCard({ kind: 'command', title: '上下文命令面板', description: '按当前优先级、最近使用和全部操作组织跨模块入口，减少重复搜索与页面跳转。', tags: ['最近使用', '跨模块'], featureId: 'command-palette-context' }),
@@ -2227,6 +2256,240 @@ body {
 }
 </style>`);
 
+replaceOnce('</style>', `/* colipas landing live release ui v1 */
+@keyframes lp-aurora-drift {
+  0% { transform: translate3d(-3%, -2%, 0) scale(1); opacity: .5; }
+  50% { transform: translate3d(2%, 2%, 0) scale(1.05); opacity: .82; }
+  100% { transform: translate3d(-3%, -2%, 0) scale(1); opacity: .5; }
+}
+@keyframes lp-grid-drift {
+  from { background-position: 0 0, 0 0; }
+  to { background-position: 44px 44px, 44px 44px; }
+}
+@keyframes lp-title-sheen {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+@keyframes lp-cta-sweep {
+  0% { transform: translateX(-130%) skewX(-14deg); }
+  58% { transform: translateX(240%) skewX(-14deg); }
+  100% { transform: translateX(240%) skewX(-14deg); }
+}
+@keyframes lp-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(114, 222, 196, .55); }
+  55% { box-shadow: 0 0 0 7px rgba(114, 222, 196, 0); }
+}
+@keyframes lp-ticker {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.hero {
+  overflow-x: clip;
+}
+.hero::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: -150px;
+  left: 50%;
+  width: min(1120px, 94vw);
+  height: 640px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  background:
+    radial-gradient(38% 44% at 22% 30%, rgba(114, 222, 196, .22), transparent 70%),
+    radial-gradient(34% 40% at 77% 26%, rgba(88, 140, 255, .17), transparent 72%),
+    radial-gradient(46% 50% at 50% 80%, rgba(232, 185, 104, .10), transparent 74%);
+  filter: blur(6px);
+  animation: lp-aurora-drift 22s ease-in-out infinite;
+}
+.hero::before {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, .035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, .035) 1px, transparent 1px);
+  background-size: 44px 44px, 44px 44px;
+  animation: lp-grid-drift 32s linear infinite;
+}
+.hero h1 .hero-title-accent {
+  background-image: linear-gradient(100deg, #f4f7f6 0%, #9cebd8 32%, #f4f7f6 58%, #cfe9ff 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: lp-title-sheen 7.5s linear infinite;
+}
+.hero .hero-primary {
+  position: relative;
+  overflow: hidden;
+}
+.hero .hero-primary::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent 22%, rgba(255, 255, 255, .42) 50%, transparent 78%);
+  transform: translateX(-130%) skewX(-14deg);
+  animation: lp-cta-sweep 5.4s ease-in-out infinite;
+}
+.live-release {
+  margin-top: 26px;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 10px;
+  max-width: 100%;
+  padding: 9px 15px;
+  border: 1px solid rgba(114, 222, 196, .22);
+  border-radius: 999px;
+  background: linear-gradient(120deg, rgba(114, 222, 196, .10), rgba(9, 13, 15, .74) 46%, rgba(88, 140, 255, .10));
+  color: #c7d3d0;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06);
+}
+.live-release .live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #72dec4;
+  animation: lp-pulse 2.4s ease-out infinite;
+}
+.live-release .live-label {
+  color: #8fa09c;
+  font-size: 10px;
+  font-weight: 820;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.live-release .live-commit {
+  color: #9cebd8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  letter-spacing: .02em;
+}
+.live-release .live-metric b {
+  color: #f4f7f6;
+  font-weight: 820;
+}
+.live-release .live-divider {
+  width: 1px;
+  height: 12px;
+  background: rgba(255, 255, 255, .16);
+}
+.live-release .live-link {
+  color: #9cebd8;
+  text-decoration: none;
+  border-bottom: 1px dashed rgba(156, 235, 216, .42);
+}
+.live-release .live-link:hover,
+.live-release .live-link:focus-visible {
+  color: #ffffff;
+  border-bottom-color: #ffffff;
+  outline: none;
+}
+.live-release[data-live-state='offline'] {
+  border-color: rgba(232, 185, 104, .3);
+}
+.live-release[data-live-state='offline'] .live-dot {
+  background: #e8b968;
+  animation: none;
+}
+.capability-ticker {
+  width: 100%;
+  margin: 52px 0 0;
+  padding: 12px 0;
+  border-top: 1px solid rgba(255, 255, 255, .07);
+  border-bottom: 1px solid rgba(255, 255, 255, .07);
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+.ticker-track {
+  display: flex;
+  width: max-content;
+  gap: 34px;
+  animation: lp-ticker 34s linear infinite;
+}
+.ticker-track span {
+  color: #93a3a0;
+  font-size: 12px;
+  font-weight: 720;
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+.ticker-track span::before {
+  content: '';
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 10px;
+  border-radius: 50%;
+  background: rgba(114, 222, 196, .72);
+  vertical-align: middle;
+}
+.is-reveal-pending {
+  opacity: 0;
+  transform: translateY(18px);
+}
+.is-revealed {
+  opacity: 1;
+  transform: none;
+  transition: opacity .6s ease, transform .6s cubic-bezier(.22, .61, .36, 1);
+}
+.feature-card,
+.position-card {
+  position: relative;
+}
+.feature-card::after,
+.position-card::after {
+  content: '';
+  display: block;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .35s ease;
+  background: radial-gradient(240px circle at var(--lp-x, 50%) var(--lp-y, 0%), rgba(114, 222, 196, .15), transparent 72%);
+}
+.feature-card:hover::after,
+.position-card:hover::after,
+.feature-card:focus-within::after,
+.position-card:focus-within::after {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero::after,
+  .hero::before,
+  .hero h1 .hero-title-accent,
+  .hero .hero-primary::after,
+  .live-release .live-dot,
+  .ticker-track {
+    animation: none;
+  }
+  .is-reveal-pending {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (max-width: 720px) {
+  .live-release {
+    margin-top: 20px;
+    padding: 9px 12px;
+    border-radius: 16px;
+    font-size: 11px;
+    gap: 6px 8px;
+  }
+  .live-release .live-divider {
+    display: none;
+  }
+  .capability-ticker {
+    margin-top: 38px;
+  }
+}
+</style>`);
+
 replaceAll(/\s*<script id="colipas-product-tour">[\s\S]*?<\/script>\s*/g, '\n');
 const landingProductTourScript = `<script id="colipas-product-tour">
 (function () {
@@ -2339,6 +2602,154 @@ const landingProductTourScript = `<script id="colipas-product-tour">
 }());
 </script>`;
 replaceOnce(/\s*<\/body>/, `\n${landingProductTourScript}\n</body>`);
+
+const landingDynamicScript = `<script id="colipas-landing-dynamic">
+(function () {
+  var root = document.documentElement;
+  var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  root.classList.add('lp-dynamic');
+
+  if (!reduceMotion && 'IntersectionObserver' in window) {
+    var targets = document.querySelectorAll('#product .position-card, #product .workflow-stage, #features .feature-card, #deploy .deploy-card');
+    var pending = [];
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) {
+          return;
+        }
+        entry.target.classList.remove('is-reveal-pending');
+        entry.target.classList.add('is-revealed');
+        observer.unobserve(entry.target);
+      });
+    }, { rootMargin: '0px 0px -6% 0px', threshold: 0.1 });
+    var revealAll = function () {
+      pending.forEach(function (element) {
+        element.classList.remove('is-reveal-pending');
+        element.classList.add('is-revealed');
+        observer.unobserve(element);
+      });
+      pending = [];
+    };
+    Array.prototype.forEach.call(targets, function (element, index) {
+      var box = element.getBoundingClientRect();
+      if (box.top < window.innerHeight * 0.88) {
+        return;
+      }
+      element.style.transitionDelay = Math.min(index % 6, 5) * 55 + 'ms';
+      element.classList.add('is-reveal-pending');
+      observer.observe(element);
+      pending.push(element);
+    });
+    // Safety net: reveal anything still hidden after 2.5s (print, screenshots,
+    // reduced-motion emulation, or a browser without usable intersection data).
+    window.setTimeout(revealAll, 2500);
+    window.addEventListener('beforeprint', revealAll);
+  }
+
+  if (!reduceMotion) {
+    document.addEventListener('pointermove', function (event) {
+      var card = event.target && event.target.closest ? event.target.closest('.feature-card, .position-card') : null;
+      if (!card) {
+        return;
+      }
+      var box = card.getBoundingClientRect();
+      if (!box.width || !box.height) {
+        return;
+      }
+      card.style.setProperty('--lp-x', ((event.clientX - box.left) / box.width * 100).toFixed(1) + '%');
+      card.style.setProperty('--lp-y', ((event.clientY - box.top) / box.height * 100).toFixed(1) + '%');
+    }, { passive: true });
+  }
+
+  var strip = document.querySelector('[data-live-release]');
+  if (!strip) {
+    return;
+  }
+  var commitNode = strip.querySelector('[data-live-commit]');
+  var uptimeNode = strip.querySelector('[data-live-uptime]');
+  var latencyNode = strip.querySelector('[data-live-latency]');
+
+  function formatUptime(seconds) {
+    if (typeof seconds !== 'number' || !isFinite(seconds) || seconds <= 0) {
+      return '—';
+    }
+    var days = Math.floor(seconds / 86400);
+    var hours = Math.floor((seconds % 86400) / 3600);
+    var minutes = Math.floor((seconds % 3600) / 60);
+    if (days > 0) {
+      return days + ' 天 ' + hours + ' 小时';
+    }
+    if (hours > 0) {
+      return hours + ' 小时 ' + minutes + ' 分';
+    }
+    return Math.max(minutes, 1) + ' 分钟';
+  }
+
+  function render(payload) {
+    var release = payload && payload.release ? payload.release : {};
+    var metrics = payload && payload.metrics ? payload.metrics : {};
+    var latency = metrics.requests && metrics.requests.latencyMs ? metrics.requests.latencyMs : {};
+    var commit = typeof release.gitCommit === 'string' ? release.gitCommit.slice(0, 12) : '';
+    if (commitNode) {
+      commitNode.textContent = commit || '未知版本';
+    }
+    if (uptimeNode) {
+      uptimeNode.textContent = formatUptime(payload && payload.uptime);
+    }
+    if (latencyNode) {
+      latencyNode.textContent = typeof latency.p95 === 'number' ? latency.p95 + 'ms' : '—';
+    }
+    strip.setAttribute('data-live-state', payload && payload.status === 'ok' ? 'live' : 'degraded');
+  }
+
+  function fail() {
+    strip.setAttribute('data-live-state', 'offline');
+    if (commitNode) {
+      commitNode.textContent = '暂不可用';
+    }
+    if (uptimeNode) {
+      uptimeNode.textContent = '—';
+    }
+    if (latencyNode) {
+      latencyNode.textContent = '—';
+    }
+  }
+
+  function load() {
+    var controller = 'AbortController' in window ? new AbortController() : null;
+    var timer = controller ? window.setTimeout(function () { controller.abort(); }, 6000) : null;
+    var options = { cache: 'no-store', credentials: 'same-origin', headers: { accept: 'application/json' } };
+    if (controller) {
+      options.signal = controller.signal;
+    }
+    fetch('/api/health/', options)
+      .then(function (response) {
+        if (!response.ok) {
+          throw new Error('health status ' + response.status);
+        }
+        return response.json();
+      })
+      .then(function (payload) {
+        if (timer) {
+          window.clearTimeout(timer);
+        }
+        render(payload);
+      })
+      .catch(function () {
+        if (timer) {
+          window.clearTimeout(timer);
+        }
+        fail();
+      });
+  }
+
+  load();
+  window.setInterval(load, 20000);
+}());
+</script>`;
+if (!html.includes('id="colipas-landing-dynamic"')) {
+  replaceOnce(/\s*<\/body>/, `\n${landingDynamicScript}\n</body>`);
+}
 
 if (!html.includes('https://github.com/nmklio/CoLiPas')) {
   throw new Error(`Unable to add GitHub link to ${file}`);
@@ -3042,20 +3453,39 @@ SVG
       <section id="launch-checklist" class="section split">
         <div>
           <p class="kicker">上下文上线检查</p>
-          <h2>总览看完整证据，工作区只保留当前需要的摘要</h2>
-          <p>总览页默认展示运行安全、资产接入、SSH、AI、运维预检和审计六项完整检查，以及按优先级排序的修复队列。进入服务器、AI、运维、API 或安全工作区后，面板会自动收敛为进度、整体状态和下一步修复，避免重复占用操作空间。</p>
+          <h2>完整证据只在一个地方，其它模块只做引用</h2>
+          <p>六项上线检查（运行安全、资产接入、SSH、AI、运维预检、审计）只在总览页渲染。其它模块通过顶栏唯一的「待办 N 项」入口回到概览，同一份上线状态不会在多个页面重复出现。</p>
           <div class="check-list">
-            <p class="check-line"><span>✓</span> 摘要状态仍会显示当前完成度和最高优先级操作。</p>
-            <p class="check-line"><span>✓</span> 需要排障或上线留证时，可一键展开完整检查、修复队列和脱敏报告。</p>
-            <p class="check-line"><span>✓</span> 展开或摘要偏好仅保存在当前浏览器，切换页面后仍会保持。</p>
+            <p class="check-line"><span>✓</span> 修复顺序（P1–Pn）和修复原因直接标在检查清单条目上，不再额外复制一份修复队列。</p>
+            <p class="check-line"><span>✓</span> 需要留证时可复制脱敏报告或重新采集证据，报告只包含聚合状态与模块入口。</p>
+            <p class="check-line"><span>✓</span> 顶栏只保留一个运行状态 chip，具体计数交给运维收件箱角标，避免同一批数字出现两次。</p>
           </div>
         </div>
         <aside class="terminal-card">
           <strong>推荐使用顺序</strong>
-          <pre>总览：确认六项完整检查
-工作区：按摘要处理下一步
-性能模式：保持摘要，减少首屏负担
-上线前：展开完整证据并复检</pre>
+          <pre>概览：确认六项检查与 P1
+其它模块：点顶栏「待办 N 项」回到概览
+资源：清单 / 监控与历史 / 告警
+上线前：复制脱敏报告并复检</pre>
+        </aside>
+      </section>
+
+      <section id="information-architecture" class="section split">
+        <div>
+          <p class="kicker">信息架构</p>
+          <h2>一个状态只有一个表达位置</h2>
+          <p>每个模块只承载一个工作对象，二级界面拆成视图，进入模块时回到首个视图，视图选择不做持久化，避免与深链冲突。</p>
+          <div class="check-list">
+            <p class="check-line"><span>✓</span> 资源页分为清单 / 监控与历史 / 告警：清单保留服务器表格，监控与历史列出全量遥测并直达单机历史曲线，告警承载资源告警策略。</p>
+            <p class="check-line"><span>✓</span> 安全页分为总览 / 发布门禁 / SSH 诊断 / 审计记录，一次只展开一个视图，页面高度从 9340px 降到 1000–5500px。</p>
+            <p class="check-line"><span>✓</span> 顶栏只保留一个运行状态 chip，具体计数交给收件箱角标；修复顺序合并进上线检查清单，不再复制第二份队列。</p>
+          </div>
+        </div>
+        <aside class="terminal-card">
+          <strong>三条判定规则</strong>
+          <pre>1 一个状态只有一个表达位置
+2 其它位置只能引用（链接 / 角标）
+3 一级导航承载工作对象，不承载工具</pre>
         </aside>
       </section>
 
@@ -3085,7 +3515,7 @@ response limit: 240 points</pre>
         <div>
           <p class="kicker">资源告警策略</p>
           <h2>把资源越线变成可持续跟进的值班事项</h2>
-          <p>在总览健康基线中打开策略抽屉，为 CPU、内存和磁盘设置独立阈值，并选择未解消越线的再次提醒周期。策略保存在 SQLite，告警只消费最近一次成功采集的可信遥测。</p>
+          <p>在「资源 → 告警」打开策略抽屉，为 CPU、内存和磁盘设置独立阈值，并选择未解消越线的再次提醒周期。策略保存在 SQLite，告警只消费最近一次成功采集的可信遥测；总览健康基线只保留一个指向该视图的入口。</p>
           <div class="check-list">
             <p class="check-line"><span>✓</span> 阈值范围为 50%–95%，再次提醒可选 15 分钟至 24 小时。</p>
             <p class="check-line"><span>✓</span> 只评估 SSH 已验证、未停止且遥测新鲜的服务器；过期或不可用样本会跳过。</p>

@@ -127,6 +127,7 @@ function buildLandingCheck() {
       await assertLandingProductStage(page);
       await assertLandingProductTour(page);
       await assertLandingThemeContinuity(page);
+      await assertLandingLiveRelease(page);
       await expectLocatorCountAtLeast(page.locator('section, article, .feature-card, .position-card, .deploy-card'), 6, 'landing content sections');
       await expectLocatorCount(page.locator('[data-colipas-feature="contextual-launch-summary"]'), 1, 'landing contextual launch guide feature card');
       await expectText(page.locator('[data-colipas-feature="contextual-launch-summary"]'), /上线检查|release checklist|workspace summary/i, 'landing contextual launch guide copy');
@@ -474,8 +475,55 @@ async function assertLandingProductStage(page) {
   }
 }
 
-async function assertLandingProductTour(page) {
-  const terminalTab = page.locator('[data-tour-tab="terminal"]');
+async function assertLandingLiveRelease(page) {
+  await page.waitForFunction(() => {
+    const strip = document.querySelector('[data-live-release]');
+    return Boolean(strip) && strip.getAttribute('data-live-state') === 'live';
+  }, undefined, { timeout: 20000 });
+
+  const live = await page.evaluate(() => {
+    const strip = document.querySelector('[data-live-release]');
+    const track = document.querySelector('.ticker-track');
+    const hero = document.querySelector('.hero');
+    const read = (selector) => strip?.querySelector(selector)?.textContent?.trim() ?? '';
+    return {
+      state: strip?.getAttribute('data-live-state') ?? '',
+      commit: read('[data-live-commit]'),
+      uptime: read('[data-live-uptime]'),
+      latency: read('[data-live-latency]'),
+      stripBox: strip ? strip.getBoundingClientRect().width : 0,
+      tickerCount: track ? track.querySelectorAll('span').length : 0,
+      tickerAnimation: track ? window.getComputedStyle(track).animationName : '',
+      heroAnimation: hero ? window.getComputedStyle(hero, '::after').animationName : '',
+      revealPending: document.querySelectorAll('.is-reveal-pending').length,
+      liveLink: strip?.querySelector('a[href="/api/health/"]') ? 'present' : 'missing',
+    };
+  });
+
+  if (live.state !== 'live') {
+    throw new Error(`landing live release strip did not report a healthy release: ${JSON.stringify(live)}`);
+  }
+  if (!/^[0-9a-f]{7,12}$/i.test(live.commit)) {
+    throw new Error(`landing live release strip must show the deployed commit: ${JSON.stringify(live)}`);
+  }
+  if (!live.uptime || live.uptime === '—' || !live.latency.endsWith('ms')) {
+    throw new Error(`landing live release strip must show uptime and latency: ${JSON.stringify(live)}`);
+  }
+  if (live.stripBox < 220) {
+    throw new Error(`landing live release strip is undersized: ${JSON.stringify(live)}`);
+  }
+  if (live.tickerCount !== 12 || live.tickerAnimation !== 'lp-ticker') {
+    throw new Error(`landing capability ticker is not animating its duplicated track: ${JSON.stringify(live)}`);
+  }
+  if (live.heroAnimation !== 'lp-aurora-drift') {
+    throw new Error(`landing hero atmosphere is not animating: ${JSON.stringify(live)}`);
+  }
+  if (live.liveLink !== 'present') {
+    throw new Error(`landing live release strip must link to the health contract: ${JSON.stringify(live)}`);
+  }
+}
+
+async function assertLandingProductTour(page) {  const terminalTab = page.locator('[data-tour-tab="terminal"]');
   await terminalTab.click();
   await page.waitForFunction(() => document.querySelector('[data-tour-scene="terminal"]')?.classList.contains('is-active'));
 

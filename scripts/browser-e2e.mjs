@@ -21,6 +21,7 @@ try {
   await openAndLogin(page, `${baseUrl}/admin/#security?trace=${encodeURIComponent(traceId)}`);
   await assertSyntheticTraceDeepLink(page, traceId);
   await assertLaunchGuide(page);
+  await assertResourceViews(page);
   await assertResourceAlertPolicyReadiness(page);
   await assertOperationsInbox(page);
   await assertResourceAlertPolicy(page);
@@ -525,6 +526,61 @@ async function assertResourceAlertPolicy(targetPage) {
       await targetPage.reload({ waitUntil: 'networkidle', timeout: 30000 });
     }
   }
+}
+
+async function assertResourceViews(targetPage) {
+  await targetPage.locator('button.nav-item', { hasText: /Servers/i }).click();
+  await targetPage.waitForURL(/#servers$/, { timeout: 10000 });
+  await targetPage.locator('#servers-title').waitFor({ timeout: 10000 });
+
+  const tabs = targetPage.locator('[data-servers-view-tab]');
+  if (await tabs.count() !== 3) {
+    throw new Error(`Resources module should expose three views, got ${await tabs.count()}`);
+  }
+  if (await targetPage.locator("main[data-module='servers'][data-servers-view='list']").count() !== 1) {
+    throw new Error('Resources module should open on its inventory view');
+  }
+
+  await targetPage.locator('[data-servers-view-tab="history"]').click();
+  await targetPage.locator("main[data-module='servers'][data-servers-view='history']").waitFor({ timeout: 10000 });
+  await targetPage.locator('[data-fleet-telemetry="true"]').waitFor({ timeout: 10000 });
+  const telemetrySummary = await targetPage.locator('[data-fleet-telemetry-summary="true"]').innerText();
+  if (!/\d+\s*\/\s*\d+/.test(telemetrySummary)) {
+    throw new Error(`Resources telemetry view should report sampled coverage, got ${telemetrySummary}`);
+  }
+  if (await targetPage.locator('.server-workspace-row').count() !== 0) {
+    throw new Error('Resources telemetry view must not duplicate the inventory table');
+  }
+
+  const historyButtons = targetPage.locator('[data-fleet-telemetry-history]');
+  if (await historyButtons.count() > 0) {
+    await historyButtons.first().click();
+    await targetPage.locator("main[data-module='servers'][data-servers-view='list']").waitFor({ timeout: 10000 });
+    await targetPage.locator('[data-server-metric-history-drawer="true"]').waitFor({ timeout: 10000 });
+    await targetPage.keyboard.press('Escape');
+    await targetPage.locator('[data-server-metric-history-drawer="true"]').waitFor({ state: 'hidden', timeout: 5000 });
+  }
+
+  await targetPage.locator('[data-servers-view-tab="alerts"]').click();
+  await targetPage.locator("main[data-module='servers'][data-servers-view='alerts']").waitFor({ timeout: 10000 });
+  await targetPage.locator('[data-resource-alert-policy-open="true"]').waitFor({ timeout: 10000 });
+
+  await targetPage.locator('button.nav-item', { hasText: /Overview/i }).click();
+  await targetPage.waitForURL(/#overview$/, { timeout: 10000 });
+  await targetPage.locator('[data-health-baseline="true"]').waitFor({ timeout: 10000 });
+  await targetPage.locator('[data-resource-alerts-link="true"]').click();
+  await targetPage.waitForURL(/#servers$/, { timeout: 10000 });
+  await targetPage.locator("main[data-module='servers'][data-servers-view='alerts']").waitFor({ timeout: 10000 });
+  if (await targetPage.locator('[data-resource-alert-policy-open="true"]').count() !== 1) {
+    throw new Error('Overview alert policy reference should land on the resources alerts view');
+  }
+
+  await targetPage.locator('button.nav-item', { hasText: /Overview/i }).click();
+  await targetPage.waitForURL(/#overview$/, { timeout: 10000 });
+  await targetPage.locator('button.nav-item', { hasText: /Servers/i }).click();
+  await targetPage.waitForURL(/#servers$/, { timeout: 10000 });
+  await targetPage.locator("main[data-module='servers'][data-servers-view='list']").waitFor({ timeout: 10000 });
+  console.log('ok browser e2e covers resource views, telemetry handoff, and the overview alert reference');
 }
 
 async function assertResourceAlertPolicyReadiness(targetPage) {

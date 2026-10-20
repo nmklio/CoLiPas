@@ -4643,6 +4643,16 @@ function assertAccountUiGuards() {
     'assertLandingProductStage(page)',
     '.hero .product-preview [data-tour-scene]',
     'assertLandingThemeContinuity(page)',
+    'colipas landing live release ui v1',
+    'data-live-release',
+    'data-live-commit',
+    'data-live-uptime',
+    'data-live-latency',
+    'capability-ticker',
+    'colipas-landing-dynamic',
+    'is-reveal-pending',
+    'prefers-reduced-motion: reduce',
+    'assertLandingLiveRelease(page)',
   ];
   const landingProductStageSource = `${serverUpdateSource}\n${publicPagesCheckSource}`;
   const missingLandingProductStage = landingProductStageFragments.filter((fragment) => !landingProductStageSource.includes(fragment));
@@ -6142,8 +6152,12 @@ function assertLandingPatchIdempotence() {
       || !second.includes('class="footer-runtime"')
       || (second.match(/id="colipas-product-tour"/g) ?? []).length !== 1
       || (second.match(/<article class="feature-card feature-card-wide"/g) ?? []).length !== 2
+      || (second.match(/colipas landing live release ui v1/g) ?? []).length !== 1
+      || (second.match(/id="colipas-landing-dynamic"/g) ?? []).length !== 1
+      || !second.includes('data-live-release')
+      || (second.match(/class="capability-ticker"/g) ?? []).length !== 1
     ) {
-      throw new Error('Landing page patch fixture did not produce the dynamic product tour and redesigned dark sections');
+      throw new Error('Landing page patch fixture did not produce the dynamic product tour, live release strip, and redesigned dark sections');
     }
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
@@ -9843,6 +9857,19 @@ async function assertResourceAlertPolicyGuards() {
     if (!`${appSource}\n${overviewSource}\n${policyUiSource}\n${fleetTelemetrySource}`.includes(fragment)) {
       throw new Error(`Resource alert policy UI guard is incomplete: ${fragment}`);
     }
+  }
+
+  const resourceViewBrowserCoverage = [
+    'async function assertResourceViews',
+    'ok browser e2e covers resource views, telemetry handoff, and the overview alert reference',
+    'data-servers-view-tab="history"',
+    'data-fleet-telemetry-summary="true"',
+    'data-resource-alerts-link="true"',
+  ];
+  const resourceViewBrowserSource = fs.readFileSync(new URL('../scripts/browser-e2e.mjs', import.meta.url), 'utf8');
+  const missingResourceViewCoverage = resourceViewBrowserCoverage.filter((fragment) => !resourceViewBrowserSource.includes(fragment));
+  if (missingResourceViewCoverage.length) {
+    throw new Error(`Resource view browser coverage is incomplete: ${missingResourceViewCoverage.join(', ')}`);
   }
 
   for (const fragment of [

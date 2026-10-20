@@ -506,10 +506,14 @@ export function App() {
   // telemetry/history, and the resource alert policy. Entering it starts on the
   // inventory and nothing is persisted.
   const [serversView, setServersView] = useState<'list' | 'history' | 'alerts'>('list');
+  // Cross-module references may request a specific resources view; the reset
+  // below must honour that request instead of forcing the inventory view.
+  const serversViewRequestRef = useRef<'list' | 'history' | 'alerts' | null>(null);
   const [metricHistoryFocusId, setMetricHistoryFocusId] = useState('');
   useEffect(() => {
     if (activeSection === 'servers') {
-      setServersView('list');
+      setServersView(serversViewRequestRef.current ?? 'list');
+      serversViewRequestRef.current = null;
     }
   }, [activeSection]);
   const [operationsInboxOpen, setOperationsInboxOpen] = useState(false);
@@ -2383,7 +2387,7 @@ export function App() {
                 performanceMode={performanceMode}
                 opsPreflightSnapshot={overviewPreflightSnapshot}
                 onResourceAlertsOpen={() => {
-                  setServersView('alerts');
+                  serversViewRequestRef.current = 'alerts';
                   navigateToSection('servers');
                 }}
                 onRegionServersOpen={openServersForRegion}
