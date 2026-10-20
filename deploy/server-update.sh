@@ -276,6 +276,18 @@ const landingHero = `<section class="hero wrap">
         <button id="tour-tab-terminal" type="button" role="tab" aria-selected="false" aria-controls="tour-scene-terminal" data-tour-tab="terminal" tabindex="-1"><span>02</span>实时 SSH</button>
         <button id="tour-tab-ai" type="button" role="tab" aria-selected="false" aria-controls="tour-scene-ai" data-tour-tab="ai" tabindex="-1"><span>03</span>AI 诊断</button>
       </figcaption>
+      <div class="preview-terminal" data-live-terminal>
+        <div class="terminal-bar">
+          <i></i><i></i><i></i>
+          <span>operator@colipas · /api/health</span>
+          <em data-terminal-state>连接中</em>
+        </div>
+        <div class="terminal-body">
+          <p class="terminal-prompt"><b>operator@colipas</b><span>:</span><i>~</i><span>$</span> curl -s /api/health/</p>
+          <pre class="terminal-output" data-live-terminal-output></pre>
+          <p class="terminal-status"><span data-live-terminal-status>等待首个响应…</span><i class="terminal-cursor" aria-hidden="true"></i></p>
+        </div>
+      </div>
       <div class="preview-progress" aria-hidden="true"><i></i></div>
     </figure>
 
@@ -2449,13 +2461,139 @@ replaceOnce('</style>', `/* colipas landing live release ui v1 */
 .position-card:focus-within::after {
   opacity: 1;
 }
+@keyframes lp-scan {
+  0% { transform: translateY(-120%); }
+  100% { transform: translateY(320%); }
+}
+@keyframes lp-cursor {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.preview-stage {
+  position: relative;
+}
+.preview-stage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent, rgba(114, 222, 196, .12) 46%, rgba(114, 222, 196, .02) 56%, transparent 72%);
+  transform: translateY(-120%);
+  animation: lp-scan 7s linear infinite;
+  mix-blend-mode: screen;
+}
+.preview-terminal {
+  margin: 0;
+  border-top: 1px solid rgba(255, 255, 255, .07);
+  background: #0b1112;
+  text-align: left;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.terminal-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, .06);
+  background: rgba(255, 255, 255, .02);
+}
+.terminal-bar i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .18);
+}
+.terminal-bar i:nth-child(1) { background: #ff5f57; }
+.terminal-bar i:nth-child(2) { background: #febc2e; }
+.terminal-bar i:nth-child(3) { background: #28c840; }
+.terminal-bar span {
+  color: #7d8b88;
+  font-size: 11px;
+}
+.terminal-bar em {
+  margin-left: auto;
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 820;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #9cebd8;
+}
+.terminal-bar em[data-terminal-state='offline'] {
+  color: #e8b968;
+}
+.terminal-body {
+  display: grid;
+  gap: 4px;
+  padding: 12px 16px 14px;
+}
+.terminal-prompt {
+  margin: 0;
+  color: #9fb0ac;
+  font-size: 12px;
+}
+.terminal-prompt b {
+  color: #72dec4;
+  font-weight: 700;
+}
+.terminal-prompt i {
+  color: #60a5fa;
+  font-style: normal;
+}
+.terminal-output {
+  margin: 0;
+  max-height: 132px;
+  overflow: hidden;
+  color: #c7d3d0;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre;
+}
+.terminal-output .k { color: #60a5fa; }
+.terminal-output .s { color: #e8b968; }
+.terminal-output .n { color: #22d3ee; }
+.terminal-output .ok { color: #4ade80; }
+.terminal-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: #7d8b88;
+  font-size: 11px;
+}
+.terminal-status span[data-live-terminal-status='ok'] {
+  color: #4ade80;
+}
+.terminal-status span[data-live-terminal-status='offline'] {
+  color: #e8b968;
+}
+.terminal-cursor {
+  width: 7px;
+  height: 13px;
+  background: #72dec4;
+  animation: lp-cursor 1.1s steps(1) infinite;
+}
+@media (max-width: 720px) {
+  .terminal-body {
+    padding: 10px 12px 12px;
+  }
+  .terminal-output {
+    font-size: 11px;
+    max-height: 120px;
+  }
+  .terminal-prompt {
+    font-size: 11px;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .hero::after,
   .hero::before,
   .hero h1 .hero-title-accent,
   .hero .hero-primary,
   .live-release .live-dot,
-  .ticker-track {
+  .ticker-track,
+  .preview-stage::after,
+  .terminal-cursor {
     animation: none;
   }
   .is-reveal-pending {
@@ -2690,6 +2828,86 @@ const landingDynamicScript = `<script id="colipas-landing-dynamic">
       latencyNode.textContent = typeof latency.p95 === 'number' ? latency.p95 + 'ms' : '—';
     }
     strip.setAttribute('data-live-state', payload && payload.status === 'ok' ? 'live' : 'degraded');
+    renderTerminal(payload);
+  }
+
+  // Live terminal: streams the same health payload line by line so the hero
+  // visual keeps moving with real data instead of a static screenshot.
+  var terminal = document.querySelector('[data-live-terminal]');
+  var terminalOutput = terminal ? terminal.querySelector('[data-live-terminal-output]') : null;
+  var terminalStatusNode = terminal ? terminal.querySelector('[data-live-terminal-status]') : null;
+  var terminalStateNode = terminal ? terminal.querySelector('[data-terminal-state]') : null;
+  var terminalTimers = [];
+
+  function clearTerminalTimers() {
+    while (terminalTimers.length) {
+      window.clearTimeout(terminalTimers.pop());
+    }
+  }
+
+  function terminalLines(payload) {
+    var release = payload && payload.release ? payload.release : {};
+    var metrics = payload && payload.metrics ? payload.metrics : {};
+    var latency = metrics.requests && metrics.requests.latencyMs ? metrics.requests.latencyMs : {};
+    var requests = metrics.requests || {};
+    var commit = typeof release.gitCommit === 'string' ? release.gitCommit.slice(0, 12) : 'unknown';
+    var target = typeof release.targetName === 'string' ? release.targetName : 'unknown';
+    var p95 = typeof latency.p95 === 'number' ? latency.p95 : null;
+    return [
+      '{',
+      '  <span class="k">"release"</span>: {',
+      '    <span class="k">"commit"</span>: <span class="s">"' + commit + '"</span>,',
+      '    <span class="k">"target"</span>: <span class="s">"' + target + '"</span>',
+      '  },',
+      '  <span class="k">"uptime"</span>: <span class="n">' + Math.max(0, Math.round(payload && payload.uptime ? payload.uptime : 0)) + '</span>,',
+      '  <span class="k">"p95"</span>: ' + (p95 === null ? '<span class="s">"n/a"</span>' : '<span class="n">' + p95 + '</span>') + ',',
+      '  <span class="k">"requests"</span>: <span class="n">' + (typeof requests.total === 'number' ? requests.total : 0) + '</span>,',
+      '  <span class="k">"status"</span>: <span class="ok">"' + (payload && payload.status === 'ok' ? 'ok' : 'degraded') + '"</span>',
+      '}'
+    ];
+  }
+
+  function renderTerminal(payload) {
+    if (!terminalOutput) {
+      return;
+    }
+    var lines = terminalLines(payload);
+    clearTerminalTimers();
+    terminalOutput.innerHTML = '';
+    if (reduceMotion) {
+      terminalOutput.innerHTML = lines.join('\\n');
+    } else {
+      lines.forEach(function (line, index) {
+        terminalTimers.push(window.setTimeout(function () {
+          terminalOutput.insertAdjacentHTML('beforeend', (index ? '\\n' : '') + line);
+        }, index * 90));
+      });
+    }
+    if (terminalStatusNode) {
+      var metrics = payload && payload.metrics ? payload.metrics : {};
+      var latency = metrics.requests && metrics.requests.latencyMs ? metrics.requests.latencyMs : {};
+      terminalStatusNode.setAttribute('data-live-terminal-status', 'ok');
+      terminalStatusNode.textContent = '→ 200 OK · p95 ' + (typeof latency.p95 === 'number' ? latency.p95 + 'ms' : 'n/a') + ' · 运行 ' + formatUptime(payload && payload.uptime);
+    }
+    if (terminalStateNode) {
+      terminalStateNode.setAttribute('data-terminal-state', 'live');
+      terminalStateNode.textContent = '实时';
+    }
+  }
+
+  function failTerminal() {
+    clearTerminalTimers();
+    if (terminalOutput) {
+      terminalOutput.innerHTML = '<span class="s">"status"</span>: <span class="s">"unreachable"</span>';
+    }
+    if (terminalStatusNode) {
+      terminalStatusNode.setAttribute('data-live-terminal-status', 'offline');
+      terminalStatusNode.textContent = '→ 连接失败，稍后自动重试';
+    }
+    if (terminalStateNode) {
+      terminalStateNode.setAttribute('data-terminal-state', 'offline');
+      terminalStateNode.textContent = '离线';
+    }
   }
 
   function fail() {
@@ -2730,11 +2948,12 @@ const landingDynamicScript = `<script id="colipas-landing-dynamic">
           window.clearTimeout(timer);
         }
         fail();
+        failTerminal();
       });
   }
 
   load();
-  window.setInterval(load, 20000);
+  window.setInterval(load, 15000);
 }());
 </script>`;
 if (!html.includes('id="colipas-landing-dynamic"')) {

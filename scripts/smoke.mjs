@@ -4648,6 +4648,13 @@ function assertAccountUiGuards() {
     'data-live-commit',
     'data-live-uptime',
     'data-live-latency',
+    'data-live-terminal',
+    'data-live-terminal-output',
+    'data-live-terminal-status',
+    'preview-terminal',
+    'terminal-cursor',
+    'lp-scan',
+    'renderTerminal',
     'capability-ticker',
     'colipas-landing-dynamic',
     'is-reveal-pending',
@@ -9885,6 +9892,18 @@ async function assertResourceAlertPolicyGuards() {
   }
   if (/id: 'api', labelKey/.test(appSource)) {
     throw new Error('The custom API lab must not stay in the first-level navigation');
+  }
+  if (/id: 'ai', labelKey/.test(appSource)) {
+    throw new Error('The AI assistant must not stay in the first-level navigation');
+  }
+  for (const fragment of [
+    "{activeSection === 'ai' && (",
+    "id: 'open-ai'",
+    "navigateToSection('ai');",
+  ]) {
+    if (!appSource.includes(fragment)) {
+      throw new Error(`AI assistant routing is incomplete after navigation cleanup: ${fragment}`);
+    }
   }
   for (const key of ['app.operationsViews', 'app.operationsViewOrchestrate', 'app.operationsViewTools']) {
     const count = (i18nSource.match(new RegExp(key.replaceAll('.', '\\.'), 'g')) ?? []).length;

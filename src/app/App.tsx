@@ -139,13 +139,21 @@ interface LaunchChecklistSummary {
   remediationSteps: LaunchRemediationStep[];
 }
 
-const sections: Array<{ id: SectionId; labelKey: string; icon: typeof LayoutDashboard }> = [
-  { id: 'overview', labelKey: 'nav.overview', icon: LayoutDashboard },
-  { id: 'servers', labelKey: 'nav.servers', icon: Server },
-  { id: 'operations', labelKey: 'nav.operations', icon: TerminalSquare },
-  { id: 'ai', labelKey: 'nav.ai', icon: Bot },
-  { id: 'security', labelKey: 'nav.security', icon: ShieldCheck },
-];
+// Route-addressable workspaces. The assistant and the custom API lab stay
+// routable (deep links, command palette, checklist jumps) but no longer occupy
+// a first-level navigation slot.
+const sectionMeta: Record<SectionId, { labelKey: string; icon: typeof LayoutDashboard }> = {
+  overview: { labelKey: 'nav.overview', icon: LayoutDashboard },
+  servers: { labelKey: 'nav.servers', icon: Server },
+  operations: { labelKey: 'nav.operations', icon: TerminalSquare },
+  ai: { labelKey: 'nav.ai', icon: Bot },
+  api: { labelKey: 'nav.api', icon: PlugZap },
+  security: { labelKey: 'nav.security', icon: ShieldCheck },
+};
+
+const sections: Array<{ id: SectionId; labelKey: string; icon: typeof LayoutDashboard }> = (
+  ['overview', 'servers', 'operations', 'security'] as const
+).map((id) => ({ id, ...sectionMeta[id] }));
 
 const themeOptions: Array<{ id: ThemePreference; labelKey: string; shortLabelKey: string }> = [
   { id: 'light', labelKey: 'app.themeLightDetail', shortLabelKey: 'app.themeLight' },
@@ -343,7 +351,7 @@ const commandPaletteHistoryLimit = 5;
 const commandPaletteHistoryIdPattern = /^(?:section-(?:overview|servers|operations|ai|api|security)|next-remediation|launch-guide|open-ai|refresh-assets|account-settings)$/;
 
 function isSectionId(value: string): value is SectionId {
-  return sections.some((section) => section.id === value);
+  return Object.prototype.hasOwnProperty.call(sectionMeta, value);
 }
 
 function normalizeTraceRouteId(value: string | null | undefined) {
@@ -1163,7 +1171,7 @@ export function App() {
     count: tabSyncStats.overviewResponsesReused,
     size: formatByteCount(tabSyncStats.overviewBytesAvoided, timeLocale),
   });
-  const activeSectionConfig = sections.find((section) => section.id === activeSection) ?? sections[0];
+  const activeSectionConfig = sectionMeta[activeSection] ?? sectionMeta.overview;
   const ActiveSectionIcon = activeSectionConfig.icon;
   const commandShortcutLabel = isApplePlatform() ? '⌘K' : 'Ctrl K';
   const launchChecklist = useMemo(() => buildLaunchChecklist({

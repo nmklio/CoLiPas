@@ -80,7 +80,7 @@ try {
   const sections = [
     { name: 'servers', button: /^Servers$/i, url: /#servers$/, ready: '.server-workspace-list, .empty-state' },
     { name: 'operations', button: /^Operations$/i, url: /#operations$/, ready: '.ops-layout' },
-    { name: 'ai', button: /^AI System$/i, url: /#ai$/, ready: '.ai-workbench' },
+    { name: 'ai', palette: true, url: /#ai$/, ready: '.ai-workbench', threshold: 1500 },
     { name: 'custom api', button: /^Operations$/i, url: /#operations$/, tab: '[data-operations-view-tab="tools"]', ready: '.api-workbench-layout' },
     { name: 'security', button: /^Security$/i, url: /#security$/, ready: '.security-workbench' },
     { name: 'overview', button: /^Overview$/i, url: /#overview$/, ready: '.cloud-map' },
@@ -104,7 +104,12 @@ try {
     const phases = { click: 0, route: 0, ready: 0 };
     const duration = await measure(section.name, async () => {
       const clickStartedAt = performance.now();
-      if (section.tab) {
+      if (section.palette) {
+        await page.keyboard.press('Control+K');
+        await page.getByRole('dialog', { name: /open command palette/i }).waitFor({ timeout: 5000 });
+        await page.getByLabel(/search modules, tools, or actions/i).fill('ai');
+        await page.getByRole('option', { name: /ai/i }).first().click();
+      } else if (section.tab) {
         await page.locator(section.tab).click();
       } else {
         await clickNav(section.button);
@@ -158,7 +163,8 @@ try {
   const worstSection = sectionDurations.reduce((worst, item) => item.duration > worst.duration ? item : worst, { section: 'none', duration: 0 });
 
   assertUnder('login', loginMs, thresholds.loginMs);
-  assertUnder(`section switch (${worstSection.section})`, worstSection.duration, thresholds.sectionSwitchMs);
+  const sectionThresholds = new Map(sections.map((section) => [section.name, section.threshold ?? thresholds.sectionSwitchMs]));
+  assertUnder(`section switch (${worstSection.section})`, worstSection.duration, sectionThresholds.get(worstSection.section) ?? thresholds.sectionSwitchMs);
   assertUnder('map interaction', mapInteractionMs, thresholds.mapInteractionMs);
   assertUnder('long task', maxLongTask, thresholds.longTaskMs);
   if (consoleProblems.length > 0) {

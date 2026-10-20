@@ -148,7 +148,7 @@ const lineBudgets = new Map([
   // module surfaces are migrated to tokens instead.
   ['src/styles/console.css', 795],
   ['src/styles/theme-dark.css', 234],
-  ['src/app/App.tsx', 3139],
+  ['src/app/App.tsx', 3147],
   ['src/services/apiClient.ts', 1874],
   ['src/server/app.ts', 1233],
   ['src/server/config.ts', 169],

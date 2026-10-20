@@ -1732,6 +1732,14 @@ function releaseFixAnchorForModule(module) {
   throw new Error(`Unexpected release fix module for anchor routing: ${module}`);
 }
 
+async function openAiWorkspaceFromPalette(targetPage) {
+  await targetPage.keyboard.press('Control+K');
+  await targetPage.getByRole('dialog', { name: /open command palette/i }).waitFor({ timeout: 5000 });
+  await targetPage.getByLabel(/search modules, tools, or actions/i).fill('ai');
+  await targetPage.getByRole('option', { name: /ai/i }).first().click();
+  await targetPage.waitForURL(/#ai$/, { timeout: 10000 });
+}
+
 async function assertCommandPalette(targetPage) {
   await targetPage.keyboard.press('Control+K');
   await targetPage.getByRole('dialog', { name: /open command palette/i }).waitFor({ timeout: 5000 });
@@ -2244,8 +2252,7 @@ async function assertAccountSettingsAndAiChat(targetPage) {
     const aiSshServer = await createTemporarySimulatedSshServer(targetPage, 'browser-e2e-ai-exec');
     aiSshServerId = aiSshServer.id;
 
-    await targetPage.getByRole('button', { name: /^AI System$/i }).click();
-    await targetPage.waitForURL(/#ai$/, { timeout: 10000 });
+    await openAiWorkspaceFromPalette(targetPage);
     await targetPage.locator('.ai-dock-workspace').waitFor({ timeout: 10000 });
     if (await targetPage.locator('.ai-launcher, .ai-dock:not(.ai-dock-workspace)').count() !== 0) {
       throw new Error('AI route must render one embedded workspace without a duplicate floating assistant');
@@ -4594,9 +4601,7 @@ async function assertMobileConsoleAndMap() {
     await mobilePage.getByRole('button', { name: /close settings/i }).click();
     await mobilePage.locator('.account-modal').waitFor({ state: 'hidden', timeout: 5000 });
 
-    await mobilePage.getByRole('button', { name: /open navigation/i }).click();
-    await mobilePage.getByRole('button', { name: /^AI System$/i }).click();
-    await mobilePage.waitForURL(/#ai$/, { timeout: 10000 });
+    await openAiWorkspaceFromPalette(mobilePage);
     await mobilePage.locator('.ai-dock-workspace').waitFor({ timeout: 10000 });
     const mobileWorkspaceOrder = await mobilePage.evaluate(() => ({
       dockTop: document.querySelector('.ai-dock-workspace')?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY,
@@ -4641,6 +4646,13 @@ async function assertMobileConsoleAndMap() {
     await mobilePage.getByRole('button', { name: /open navigation/i }).click();
     await mobilePage.getByRole('button', { name: /^Overview$/i }).click();
     await mobilePage.waitForURL(/#overview$/, { timeout: 10000 });
+    // Opening the workspace from the palette leaves the floating dock expanded,
+    // so collapse it before asserting the launcher path.
+    const mobileHideAssistant = mobilePage.getByRole('button', { name: /hide ai assistant/i });
+    if (await mobileHideAssistant.count() > 0) {
+      await mobileHideAssistant.first().click();
+      await mobilePage.locator('.ai-dock:not(.ai-dock-workspace)').waitFor({ state: 'hidden', timeout: 5000 });
+    }
     await mobilePage.locator('.ai-launcher').click();
     const mobileFloatingAi = mobilePage.locator('.ai-dock:not(.ai-dock-workspace)');
     await mobileFloatingAi.waitFor({ timeout: 10000 });

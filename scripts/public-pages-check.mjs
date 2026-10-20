@@ -485,6 +485,9 @@ async function assertLandingLiveRelease(page) {
     const strip = document.querySelector('[data-live-release]');
     const track = document.querySelector('.ticker-track');
     const hero = document.querySelector('.hero');
+    const terminal = document.querySelector('[data-live-terminal]');
+    const terminalOutput = terminal?.querySelector('[data-live-terminal-output]');
+    const stage = document.querySelector('.preview-stage');
     const read = (selector) => strip?.querySelector(selector)?.textContent?.trim() ?? '';
     return {
       state: strip?.getAttribute('data-live-state') ?? '',
@@ -497,6 +500,10 @@ async function assertLandingLiveRelease(page) {
       heroAnimation: hero ? window.getComputedStyle(hero, '::after').animationName : '',
       revealPending: document.querySelectorAll('.is-reveal-pending').length,
       liveLink: strip?.querySelector('a[href="/api/health/"]') ? 'present' : 'missing',
+      terminalState: terminal?.querySelector('[data-terminal-state]')?.getAttribute('data-terminal-state') ?? 'missing',
+      terminalText: (terminalOutput?.textContent ?? '').trim(),
+      terminalStatus: terminal?.querySelector('[data-live-terminal-status]')?.textContent?.trim() ?? '',
+      stageAnimation: stage ? window.getComputedStyle(stage, '::after').animationName : '',
     };
   });
 
@@ -520,6 +527,15 @@ async function assertLandingLiveRelease(page) {
   }
   if (live.liveLink !== 'present') {
     throw new Error(`landing live release strip must link to the health contract: ${JSON.stringify(live)}`);
+  }
+  if (live.terminalState !== 'live' || !/"commit"/.test(live.terminalText) || !/"status"/.test(live.terminalText)) {
+    throw new Error(`landing live terminal must stream the health payload: ${JSON.stringify(live)}`);
+  }
+  if (!/200 OK/.test(live.terminalStatus)) {
+    throw new Error(`landing live terminal must report the request result: ${JSON.stringify(live)}`);
+  }
+  if (live.stageAnimation !== 'lp-scan') {
+    throw new Error(`landing product stage must keep its scan animation: ${JSON.stringify(live)}`);
   }
 }
 
