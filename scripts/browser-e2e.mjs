@@ -165,17 +165,23 @@ async function assertLaunchGuide(targetPage) {
   if (itemCount !== 6) {
     throw new Error(`Launch guide should expose six checklist items, got ${itemCount}`);
   }
-  await targetPage.locator('[data-launch-guide-fix-queue="true"]').waitFor({ timeout: 5000 });
-  const fixQueueText = await targetPage.locator('[data-launch-guide-fix-queue="true"]').innerText();
-  if (!/Priority remediation queue|Fix P1 first|Runtime security/i.test(fixQueueText)) {
-    throw new Error(`Launch guide priority remediation queue is incomplete: ${fixQueueText}`);
+  if (await targetPage.locator('[data-launch-guide-fix-queue="true"]').count() !== 0) {
+    throw new Error('Launch guide must not duplicate the checklist as a separate fix queue');
   }
-  const fixStepCount = await targetPage.locator('[data-launch-guide-fix-step]').count();
-  if (fixStepCount < 3) {
-    throw new Error(`Launch guide should expose prioritized remediation steps, got ${fixStepCount}`);
+  const prioritizedItems = await targetPage.locator('[data-launch-guide-item-priority]').evaluateAll((nodes) => nodes.map((node) => ({
+    rank: Number(node.getAttribute('data-launch-guide-item-priority')),
+    label: (node.querySelector('.launch-guide-item-priority')?.textContent ?? '').trim(),
+  })));
+  if (prioritizedItems.length < 1) {
+    throw new Error(`Launch guide should surface remediation priority on the checklist itself, got ${prioritizedItems.length}`);
   }
-  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b|sk-[A-Za-z0-9_-]{12,}|BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY|password=|passphrase=/i.test(fixQueueText)) {
-    throw new Error('Launch guide remediation queue leaked a raw IP address or secret');
+  const prioritizedRanks = prioritizedItems.map((entry) => entry.rank);
+  const orderedRanks = [...prioritizedRanks].sort((left, right) => left - right);
+  if (
+    prioritizedItems.some((entry) => !Number.isInteger(entry.rank) || entry.rank < 1 || !/^P\d+$/.test(entry.label))
+    || prioritizedRanks.join(',') !== orderedRanks.join(',')
+  ) {
+    throw new Error(`Launch guide priority badges must read P1..Pn in remediation order: ${JSON.stringify(prioritizedItems)}`);
   }
   await targetPage.locator('[data-launch-guide-start-top-fix="true"]').waitFor({ timeout: 5000 });
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b|sk-[A-Za-z0-9_-]{12,}|BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY|password=|passphrase=/i.test(launchText)) {
@@ -197,7 +203,7 @@ async function assertLaunchGuide(targetPage) {
   await targetPage.locator('[data-launch-guide-copy-report="true"]').click();
   await targetPage.waitForFunction(() => Boolean(window.__colipasCopiedLaunchGuideReport), null, { timeout: 5000 });
   const copiedLaunchReport = await targetPage.evaluate(() => window.__colipasCopiedLaunchGuideReport);
-  if (!/CoLiPas launch checklist report|Priority remediation queue|P1 Runtime security|Checklist items|sanitized/i.test(copiedLaunchReport)) {
+  if (!/CoLiPas launch checklist report|Fix order|P1 Runtime security|Checklist items|sanitized/i.test(copiedLaunchReport)) {
     throw new Error(`Launch guide copied report is incomplete: ${copiedLaunchReport}`);
   }
   if (/\b(?:\d{1,3}\.){3}\d{1,3}\b|sk-[A-Za-z0-9_-]{12,}|BEGIN (?:RSA|OPENSSH|EC|DSA) PRIVATE KEY|password=|passphrase=/i.test(copiedLaunchReport)) {
@@ -1873,21 +1879,21 @@ async function assertAccountSettingsAndAiChat(targetPage) {
     const container = element.getBoundingClientRect();
     return {
       container: { left: container.left, right: container.right, width: container.width },
-      chips: Array.from(element.querySelectorAll('.topbar-chip')).map((chip) => {
+      chips: Array.from(element.querySelectorAll('.topbar-status')).map((chip) => {
         const rect = chip.getBoundingClientRect();
         return { left: rect.left, right: rect.right, width: rect.width };
       }),
     };
   });
   if (
-    topbarMetricLayout.chips.length !== 4
+    topbarMetricLayout.chips.length !== 1
     || topbarMetricLayout.chips.some((chip) => (
       chip.width < 48
       || chip.left < topbarMetricLayout.container.left - 1
       || chip.right > topbarMetricLayout.container.right + 1
     ))
   ) {
-    throw new Error(`Desktop operator topbar must keep all four runtime metrics readable: ${JSON.stringify(topbarMetricLayout)}`);
+    throw new Error(`Desktop operator topbar must fold its runtime metrics into one readable status chip: ${JSON.stringify(topbarMetricLayout)}`);
   }
   await captureVisualEvidence(targetPage, 'desktop-operator-topbar', ['.topbar']);
   const desktopViewport = targetPage.viewportSize();

@@ -54,17 +54,17 @@
     border-bottom-color: var(--line);
   }
 
-  .topbar-chip,
-  .topbar-chip.ok {
+  .topbar-status,
+  .topbar-status.ok {
     border-color: var(--line);
     background: var(--panel);
   }
 
-  .topbar-chip b {
+  .topbar-status b {
     color: var(--text);
   }
 
-  .topbar-chip.warn {
+  .topbar-status.warn {
     border-color: rgba(224, 161, 92, 0.42);
     background: rgba(224, 161, 92, 0.14);
   }

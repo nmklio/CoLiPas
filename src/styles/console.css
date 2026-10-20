@@ -166,7 +166,7 @@
   gap: 6px;
 }
 
-.topbar-chip {
+.topbar-status {
   min-height: 24px;
   padding: 0 8px;
   gap: 4px;
@@ -177,19 +177,19 @@
   color: var(--muted);
 }
 
-.topbar-chip b {
+.topbar-status b {
   font-size: 11px;
   font-weight: 600;
   color: var(--text);
 }
 
-.topbar-chip.ok {
+.topbar-status.ok {
   border-color: var(--brand-line);
   background: var(--brand-soft);
   color: var(--brand);
 }
 
-.topbar-chip.ok b {
+.topbar-status.ok b {
   color: var(--brand);
 }
 
@@ -533,7 +533,6 @@ article.launch-guide.warn,
 }
 
 .launch-guide-radar,
-.launch-guide-fix-queue,
 .monitor-overview,
 .monitor-card,
 .monitor-map-panel {
@@ -548,13 +547,11 @@ section.monitor-overview {
   padding: 16px;
 }
 
-.launch-guide-radar,
-.launch-guide-fix-queue {
+.launch-guide-radar {
   background-color: var(--surface);
 }
 
 .launch-guide-item,
-.launch-guide-fix-step,
 .health-baseline-signal,
 .resource-alert-policy-trigger,
 .health-baseline-draft-button {
@@ -580,7 +577,7 @@ main :where([class*='-pill'], [class*='-badge'], [class*='-tag'], [class*='-stam
 
 /* --- dark adjustments ----------------------------------------------------- */
 
-[data-theme='dark'] .topbar-chip {
+[data-theme='dark'] .topbar-status {
   background: var(--surface);
 }
 

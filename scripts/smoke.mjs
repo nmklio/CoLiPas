@@ -4452,8 +4452,8 @@ function assertAccountUiGuards() {
     'data-launch-guide-copy-report="true"',
     'data-launch-guide-recheck="true"',
     'data-launch-guide-start-top-fix="true"',
-    'data-launch-guide-fix-queue="true"',
-    'data-launch-guide-fix-step={step.item.id}',
+    'data-launch-guide-item-priority={step ? String(step.rank) : undefined}',
+    'launchGuideItems',
     'openLaunchChecklistItem',
     'copyLaunchGuideReport',
     'refreshLaunchGuideEvidence',
@@ -4467,12 +4467,11 @@ function assertAccountUiGuards() {
     '.launch-guide-radar',
     '.launch-guide-grid',
     '.launch-guide-actions',
-    '.launch-guide-fix-queue',
-    '.launch-guide-fix-step',
+    '.launch-guide-item-priority',
     'async function assertLaunchGuide',
     'overview-scoped launch guide, todo chip routing, recheck, and sanitization',
     'Launch guide copied report leaked a raw IP address or secret',
-    'Launch guide priority remediation queue is incomplete',
+    'Launch guide must not duplicate the checklist as a separate fix queue',
     'Launch guide must only render on the overview page',
   ];
   const launchGuideSource = `${appSource}\n${i18nSource}\n${globalCss}\n${fs.readFileSync(new URL('../scripts/browser-e2e.mjs', import.meta.url), 'utf8')}`;
@@ -4480,7 +4479,7 @@ function assertAccountUiGuards() {
   if (missingLaunchGuide.length) {
     throw new Error(`First-run launch guide is incomplete: ${missingLaunchGuide.join(', ')}`);
   }
-  for (const key of ['launchGuide.title', 'launchGuide.todoChip', 'launchGuide.runtimeTitle', 'launchGuide.assetsTitle', 'launchGuide.sshTitle', 'launchGuide.aiTitle', 'launchGuide.preflightTitle', 'launchGuide.auditTitle', 'launchGuide.copyReport', 'launchGuide.recheck', 'launchGuide.rechecked', 'launchGuide.reportSanitizedNote', 'launchGuide.fixQueueTitle', 'launchGuide.fixReasonRuntime', 'launchGuide.startTopFix']) {
+  for (const key of ['launchGuide.title', 'launchGuide.todoChip', 'launchGuide.runtimeTitle', 'launchGuide.assetsTitle', 'launchGuide.sshTitle', 'launchGuide.aiTitle', 'launchGuide.preflightTitle', 'launchGuide.auditTitle', 'launchGuide.copyReport', 'launchGuide.recheck', 'launchGuide.rechecked', 'launchGuide.reportSanitizedNote', 'launchGuide.reportOrderTitle', 'launchGuide.fixReasonRuntime', 'launchGuide.startTopFix', 'app.runtimeSummary', 'app.runtimeSummaryTitle']) {
     const count = (i18nSource.match(new RegExp(key.replace('.', '\\.'), 'g')) ?? []).length;
     if (count < 3) {
       throw new Error(`Launch guide i18n key is missing languages: ${key}`);
@@ -8608,6 +8607,7 @@ function assertAdaptiveOperatorControls() {
 
   const appRequiredFragments = [
     'const [operatorUtilityOpen, setOperatorUtilityOpen] = useState(false);',
+    'data-topbar-status="true"',
     'data-operator-utility-trigger="true"',
     'data-operator-utility-menu="true"',
     'data-operator-utility-refresh="true"',
@@ -8631,6 +8631,9 @@ function assertAdaptiveOperatorControls() {
   if (missingAppFragments.length) {
     throw new Error(`Adaptive operator controls behavior is incomplete: ${missingAppFragments.join(', ')}`);
   }
+  if (appSource.includes('topbar-chip')) {
+    throw new Error('Topbar runtime metrics must fold into one status chip instead of four chips');
+  }
 
   for (const key of ['app.mobileControls', 'app.closeMobileControls', 'app.operatorControls', 'app.closeOperatorControls', 'app.accountControls']) {
     const count = (i18nSource.match(new RegExp(key.replaceAll('.', '\\.'), 'g')) ?? []).length;
@@ -8641,7 +8644,7 @@ function assertAdaptiveOperatorControls() {
 
   const browserE2eFragments = [
     'Desktop operator topbar must remain a single non-overflowing row',
-    'Desktop operator topbar must keep all four runtime metrics readable',
+    'Desktop operator topbar must fold its runtime metrics into one readable status chip',
     'Tablet operator topbar must remain compact and non-overflowing',
     'data-operator-utility-trigger="true"',
     'data-operator-utility-menu="true"',

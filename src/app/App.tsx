@@ -1159,6 +1159,19 @@ export function App() {
   const operationsInboxReview = useOperationsInboxReview(operationsInboxItems);
   const nextRemediation = launchChecklist.remediationSteps[0]?.item;
   const launchTodoPending = Math.max(launchChecklist.total - launchChecklist.done, 0);
+  // One expression per state: the checklist grid is the only place the six
+  // launch checks are listed, so the remediation order and reasons live on the
+  // grid items themselves instead of in a second, parallel fix queue.
+  const launchGuideItems = useMemo(() => {
+    const remediationByItemId = new Map(
+      launchChecklist.remediationSteps.map((step) => [step.item.id, step]),
+    );
+    const ordered = [
+      ...launchChecklist.remediationSteps.map((step) => step.item),
+      ...launchChecklist.items.filter((item) => !remediationByItemId.has(item.id)),
+    ];
+    return ordered.map((item) => ({ item, step: remediationByItemId.get(item.id) ?? null }));
+  }, [launchChecklist.items, launchChecklist.remediationSteps]);
   const commandPaletteActions: CommandPaletteAction[] = [
     ...(nextRemediation ? [{
       id: 'next-remediation',
@@ -1882,25 +1895,14 @@ export function App() {
               </div>
             </div>
             <div className="topbar-metrics" aria-label={t('app.assets')}>
-              <span className={dataSource === 'api' ? 'topbar-chip ok' : 'topbar-chip warn'}>
+              <span
+                className={`topbar-status ${dataSource === 'api' ? (openEventCount > 0 ? 'warn' : 'ok') : 'warn'}`}
+                data-topbar-status="true"
+                title={t('app.runtimeSummaryTitle', { ssh: connectedCount, events: openEventCount })}
+              >
                 <PlugZap size={14} aria-hidden="true" />
-                <b>{dataSource === 'api' ? 'API' : t('app.localChip')}</b>
-                <span>{dataSource === 'api' ? t('status.connected') : t('app.localFallback')}</span>
-              </span>
-              <span className="topbar-chip">
-                <Server size={14} aria-hidden="true" />
-                <b>{onlineCount}/{overview.servers.length}</b>
-                <span>{t('overview.kpiOnline')}</span>
-              </span>
-              <span className="topbar-chip">
-                <TerminalSquare size={14} aria-hidden="true" />
-                <b>{connectedCount}</b>
-                <span>SSH</span>
-              </span>
-              <span className={openEventCount > 0 ? 'topbar-chip warn' : 'topbar-chip ok'}>
-                <Activity size={14} aria-hidden="true" />
-                <b>{openEventCount}</b>
-                <span>{t('app.events')}</span>
+                <b>{dataSource === 'api' ? t('status.connected') : t('app.localChip')}</b>
+                <span>{t('app.runtimeSummary', { online: onlineCount, total: overview.servers.length })}</span>
               </span>
             </div>
           </div>
@@ -2259,52 +2261,28 @@ export function App() {
                 {launchGuideMessage && <em className="launch-guide-message">{launchGuideMessage}</em>}
               </div>
               <div className="launch-guide-grid">
-                {launchChecklist.items.map((item) => (
+                {launchGuideItems.map(({ item, step }) => (
                   <button
                     key={item.id}
                     type="button"
                     className={`launch-guide-item ${item.tone}`}
                     data-launch-guide-item={item.id}
+                    data-launch-guide-item-priority={step ? String(step.rank) : undefined}
                     onClick={() => openLaunchChecklistItem(item)}
                   >
                     <span className="launch-guide-item-state" aria-hidden="true">
                       {item.tone === 'ok' ? <CheckCircle2 size={16} /> : <ShieldCheck size={16} />}
                     </span>
                     <span className="launch-guide-item-copy">
-                      <strong>{item.title}</strong>
-                      <small>{item.detail}</small>
+                      <span className="launch-guide-item-heading">
+                        {step && <span className="launch-guide-item-priority">{step.priority}</span>}
+                        <strong>{item.title}</strong>
+                      </span>
+                      <small>{step ? step.reason : item.detail}</small>
                     </span>
                     <b>{item.action}</b>
                   </button>
                 ))}
-              </div>
-              <div className="launch-guide-fix-queue" data-launch-guide-fix-queue="true">
-                <div className="launch-guide-fix-queue-head">
-                  <span>
-                    <ListChecks size={15} />
-                    {t('launchGuide.fixQueueEyebrow')}
-                  </span>
-                  <strong>{t('launchGuide.fixQueueTitle')}</strong>
-                  <p>{launchChecklist.remediationSteps.length > 0 ? t('launchGuide.fixQueueDesc') : t('launchGuide.fixQueueEmpty')}</p>
-                </div>
-                {launchChecklist.remediationSteps.length > 0 && (
-                  <div className="launch-guide-fix-steps">
-                    {launchChecklist.remediationSteps.map((step) => (
-                      <button
-                        key={step.id}
-                        type="button"
-                        className={`launch-guide-fix-step ${step.item.tone}`}
-                        data-launch-guide-fix-step={step.item.id}
-                        onClick={() => openLaunchChecklistItem(step.item)}
-                      >
-                        <span>{step.priority}</span>
-                        <strong>{step.item.title}</strong>
-                        <small>{step.reason}</small>
-                        <b>{step.item.action}</b>
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
             </article>
           )}
@@ -2958,10 +2936,10 @@ function buildLaunchChecklistReport(input: {
     `${t('launchGuide.reportStatus')}: ${checklist.status} (${checklist.done}/${checklist.total})`,
     `${t('launchGuide.reportNextAction')}: ${checklist.nextAction}`,
     '',
-    `## ${t('launchGuide.fixQueueTitle')}`,
+    `## ${t('launchGuide.reportOrderTitle')}`,
     ...(checklist.remediationSteps.length > 0
       ? checklist.remediationSteps.map((step) => `- ${step.priority} ${step.item.title}: ${step.reason} -> ${step.item.action}`)
-      : [`- ${t('launchGuide.fixQueueEmpty')}`]),
+      : [`- ${t('launchGuide.reportOrderEmpty')}`]),
     '',
     `## ${t('launchGuide.reportItemsTitle')}`,
     ...checklist.items.map((item) => `- [${toneLabel[item.tone]}] ${item.title}: ${item.detail} -> ${item.action}`),
