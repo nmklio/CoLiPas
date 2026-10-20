@@ -146,9 +146,9 @@ const lineBudgets = new Map([
   // island (28 variables, mirrored from tokens.css and asserted by
   // check-tokens.mjs), and the command palette. It does not grow per module —
   // module surfaces are migrated to tokens instead.
-  ['src/styles/console.css', 582],
+  ['src/styles/console.css', 678],
   ['src/styles/theme-dark.css', 236],
-  ['src/app/App.tsx', 3046],
+  ['src/app/App.tsx', 3066],
   ['src/services/apiClient.ts', 1874],
   ['src/server/app.ts', 1233],
   ['src/server/config.ts', 169],

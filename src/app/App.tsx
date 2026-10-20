@@ -2177,7 +2177,27 @@ export function App() {
           onClearReviewState={operationsInboxReview.clearReviewState}
         />
 
-        <main>
+        <main data-module={activeSection}>
+          {activeSection === 'security' && (
+            <nav className="module-subnav" aria-label={t('app.securityViews')}>
+              {[
+                { key: 'app.securityViewOverview', selector: '.security-kpi-grid' },
+                { key: 'app.securityViewGate', selector: '.security-release-handoff' },
+                { key: 'app.securityViewEvidence', selector: '.security-evidence-brief' },
+                { key: 'app.securityViewDiagnose', selector: '.security-ssh-performance-card' },
+                { key: 'app.securityViewAudit', selector: '.security-audit-workspace' },
+              ].map((view) => (
+                <button
+                  key={view.key}
+                  type="button"
+                  data-security-jump={view.key.replace('app.securityView', '').toLowerCase()}
+                  onClick={() => document.querySelector(view.selector)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                >
+                  {t(view.key)}
+                </button>
+              ))}
+            </nav>
+          )}
           {launchGuideOpen && (
             <article
               className={`launch-guide ${launchChecklist.tone}${launchGuideCompact ? ' compact' : ''}`}

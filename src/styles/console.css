@@ -579,3 +579,100 @@ main :where([class*='-pill'], [class*='-badge'], [class*='-tag'], [class*='-stam
     padding: 12px 14px 24px;
   }
 }
+
+/* --- decluttering --------------------------------------------------------- *
+ * The launch guide follows the operator onto every module. As a compact strip
+ * it only needs the kicker, the state and the next action, so the radar orb,
+ * the progress bar and the oversized paddings are dropped outside Overview.
+ * ------------------------------------------------------------------------- */
+
+.launch-guide.compact {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  min-height: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: none;
+}
+
+.launch-guide.compact .launch-guide-radar {
+  display: none;
+}
+
+.launch-guide.compact .launch-guide-copy {
+  gap: 2px;
+}
+
+.launch-guide.compact .launch-guide-copy h2 {
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.launch-guide.compact .launch-guide-copy p {
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.launch-guide.compact .launch-guide-progress {
+  display: none;
+}
+
+.launch-guide.compact .launch-guide-status {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px 8px;
+  font-size: 12px;
+}
+
+.launch-guide.compact .launch-guide-status > * {
+  margin: 0;
+}
+
+.launch-guide.compact .launch-guide-status button {
+  min-height: var(--control-h-sm);
+  padding: 0 8px;
+  border-radius: var(--r-control);
+  font-size: 12px;
+}
+
+/* --- module sub-navigation ----------------------------------------------- */
+
+.module-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  background: var(--panel);
+  width: fit-content;
+}
+
+.module-subnav button {
+  min-height: var(--control-h-sm);
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--r-chip);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.module-subnav button:hover {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.module-subnav button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  color: var(--brand);
+}
