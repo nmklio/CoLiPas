@@ -1061,7 +1061,7 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
         </article>
       </div>
 
-      <div className="ops-layout">
+      <div className="ops-layout" data-ops-view-panel="orchestrate">
         <div className="workflow-panel ops-runner">
           <h3><Workflow size={18} /> {copy.dashboard}</h3>
 
@@ -1425,39 +1425,43 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
         </div>
 
         <div className="event-panel ops-queue-panel">
-          <MaintenanceWindowPanel servers={servers} />
-
-          <div className="ops-panel-title">
-            <h3>{copy.queue}</h3>
-            <span>{tasks.length}</span>
-          </div>
-          <div className="ops-task-list">
-            {tasks.length === 0 ? (
-              <div className="quiet-state">{copy.noTasks}</div>
-            ) : (
-              tasks.map((task) => {
-                const meta = taskMeta[task.type];
-                const Icon = meta.icon;
-                return (
-                  <button
-                    key={task.id}
-                    type="button"
-                    className={activeTask?.id === task.id ? `ops-task-item active ${task.status}` : `ops-task-item ${task.status}`}
-                    onClick={() => setActiveTaskId(task.id)}
-                  >
-                    <Icon size={17} />
-                    <span>
-                      <strong>{meta.label}</strong>
-                      <small>{formatTaskTime(task.startedAt, language)} / {targetSummary(task, copy)} / {shortTraceId(task.correlationId)}</small>
-                    </span>
-                    <b>{statusText(task.status, copy)}</b>
-                  </button>
-                );
-              })
-            )}
+          <div data-ops-view-panel="maintenance">
+            <MaintenanceWindowPanel servers={servers} />
           </div>
 
-          <div className="ops-preflight-advisor" data-ops-preflight-advisor="true">
+          <div data-ops-view-panel="queue">
+            <div className="ops-panel-title">
+              <h3>{copy.queue}</h3>
+              <span>{tasks.length}</span>
+            </div>
+            <div className="ops-task-list">
+              {tasks.length === 0 ? (
+                <div className="quiet-state">{copy.noTasks}</div>
+              ) : (
+                tasks.map((task) => {
+                  const meta = taskMeta[task.type];
+                  const Icon = meta.icon;
+                  return (
+                    <button
+                      key={task.id}
+                      type="button"
+                      className={activeTask?.id === task.id ? `ops-task-item active ${task.status}` : `ops-task-item ${task.status}`}
+                      onClick={() => setActiveTaskId(task.id)}
+                    >
+                      <Icon size={17} />
+                      <span>
+                        <strong>{meta.label}</strong>
+                        <small>{formatTaskTime(task.startedAt, language)} / {targetSummary(task, copy)} / {shortTraceId(task.correlationId)}</small>
+                      </span>
+                      <b>{statusText(task.status, copy)}</b>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          <div className="ops-preflight-advisor" data-ops-preflight-advisor="true" data-ops-view-panel="preflight">
             <div className="ops-panel-title">
               <h3>{copy.preflightAdvisorTitle}</h3>
               <span>{preflightAdvisorEntries.length}</span>

@@ -97,6 +97,7 @@ import {
 } from './tabSyncCoordinator';
 
 type SectionId = OperationsInboxSection;
+type OperationsView = 'orchestrate' | 'maintenance' | 'queue' | 'preflight' | 'tools';
 
 interface ReleaseFixFocusPayload {
   id: string;
@@ -511,8 +512,8 @@ export function App() {
   const [operatorUtilityOpen, setOperatorUtilityOpen] = useState(false);
   // The operations module owns orchestration plus the low-frequency tools that
   // used to sit in the first-level navigation (custom API lab).
-  const [operationsView, setOperationsView] = useState<'orchestrate' | 'tools'>('orchestrate');
-  const operationsViewRequestRef = useRef<'orchestrate' | 'tools' | null>(null);
+  const [operationsView, setOperationsView] = useState<OperationsView>('orchestrate');
+  const operationsViewRequestRef = useRef<OperationsView | null>(null);
   useEffect(() => {
     if (activeSection === 'operations') {
       setOperationsView(operationsViewRequestRef.current ?? 'orchestrate');
@@ -2244,6 +2245,9 @@ export function App() {
             <nav className="module-subnav" aria-label={t('app.operationsViews')}>
               {([
                 { id: 'orchestrate', key: 'app.operationsViewOrchestrate' },
+                { id: 'maintenance', key: 'app.operationsViewMaintenance' },
+                { id: 'queue', key: 'app.operationsViewQueue' },
+                { id: 'preflight', key: 'app.operationsViewPreflight' },
                 { id: 'tools', key: 'app.operationsViewTools' },
               ] as const).map((view) => (
                 <button
@@ -2490,7 +2494,7 @@ export function App() {
             </Suspense>
           )}
 
-          {activeSection === 'operations' && operationsView === 'orchestrate' && (
+          {activeSection === 'operations' && operationsView !== 'tools' && (
             <Suspense fallback={<ModuleLoadingFallback title={t('nav.operations')} />}>
               <LazyOperationsCenter
                 events={overview.operationEvents}

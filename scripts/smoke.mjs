@@ -9883,12 +9883,38 @@ async function assertResourceAlertPolicyGuards() {
     'data-operations-view={activeSection === \'operations\' ? operationsView : undefined}',
     'data-operations-view-tab={view.id}',
     'app.operationsViewTools',
+    'app.operationsViewMaintenance',
+    'app.operationsViewQueue',
+    'app.operationsViewPreflight',
     'operationsViewRequestRef.current = \'tools\'',
   ];
   const operationsToolsSource = `${appSource}\n${i18nSource}`;
   const missingOperationsTools = operationsToolsFragments.filter((fragment) => !operationsToolsSource.includes(fragment));
   if (missingOperationsTools.length) {
-    throw new Error(`Operations tools view is incomplete: ${missingOperationsTools.join(', ')}`);
+    throw new Error(`Operations views are incomplete: ${missingOperationsTools.join(', ')}`);
+  }
+  const operationsPanelSource = fs.readFileSync(new URL('../src/modules/operations/OperationsCenter.tsx', import.meta.url), 'utf8');
+  const operationsConsoleCss = fs.readFileSync(new URL('../src/styles/console.css', import.meta.url), 'utf8');
+  for (const fragment of [
+    'data-ops-view-panel="orchestrate"',
+    'data-ops-view-panel="maintenance"',
+    'data-ops-view-panel="queue"',
+    'data-ops-view-panel="preflight"',
+  ]) {
+    if (!operationsPanelSource.includes(fragment)) {
+      throw new Error(`Operations view panels are incomplete: ${fragment}`);
+    }
+  }
+  for (const view of ['orchestrate', 'maintenance', 'queue', 'preflight']) {
+    if (!operationsConsoleCss.includes(`[data-operations-view='${view}']`)) {
+      throw new Error(`Operations view gating CSS is missing for: ${view}`);
+    }
+  }
+  for (const key of ['app.operationsViewMaintenance', 'app.operationsViewQueue', 'app.operationsViewPreflight']) {
+    const count = (i18nSource.match(new RegExp(key.replaceAll('.', '\\.'), 'g')) ?? []).length;
+    if (count < 3) {
+      throw new Error(`Operations view i18n key is missing language coverage: ${key}`);
+    }
   }
   if (/id: 'api', labelKey/.test(appSource)) {
     throw new Error('The custom API lab must not stay in the first-level navigation');
@@ -9913,6 +9939,11 @@ async function assertResourceAlertPolicyGuards() {
   }
   const operationsToolsE2eFragments = [
     '[data-operations-view-tab="tools"]',
+    'async function openOperationsView',
+    "[data-operations-view-tab=\"${view}\"]",
+    "openOperationsView(targetPage, 'maintenance')",
+    "openOperationsView(targetPage, 'queue')",
+    "openOperationsView(targetPage, 'preflight')",
     'mobile servers, operations, custom API tools view, and security layout linkage',
   ];
   const missingOperationsToolsE2e = operationsToolsE2eFragments.filter((fragment) => !resourceViewBrowserSource.includes(fragment));

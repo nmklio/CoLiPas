@@ -793,3 +793,28 @@ main[data-module='security'][data-security-view='audit'] :is(
   color: var(--muted);
   font-size: 12px;
 }
+/* --- operations views ----------------------------------------------------- */
+
+main[data-module='operations'][data-operations-view='orchestrate'] .ops-queue-panel {
+  display: none;
+}
+
+main[data-module='operations']:is(
+  [data-operations-view='maintenance'],
+  [data-operations-view='queue'],
+  [data-operations-view='preflight']
+) .ops-layout > .ops-runner {
+  display: none;
+}
+
+main[data-module='operations'][data-operations-view='maintenance'] .ops-queue-panel [data-ops-view-panel]:not([data-ops-view-panel='maintenance']) {
+  display: none;
+}
+
+main[data-module='operations'][data-operations-view='queue'] .ops-queue-panel [data-ops-view-panel]:not([data-ops-view-panel='queue']) {
+  display: none;
+}
+
+main[data-module='operations'][data-operations-view='preflight'] .ops-queue-panel [data-ops-view-panel]:not([data-ops-view-panel='preflight']) {
+  display: none;
+}

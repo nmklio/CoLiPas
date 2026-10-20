@@ -528,6 +528,15 @@ async function assertResourceAlertPolicy(targetPage) {
   }
 }
 
+async function openOperationsView(targetPage, view) {
+  const tab = targetPage.locator(`[data-operations-view-tab="${view}"]`);
+  await tab.waitFor({ timeout: 15000 });
+  if (await tab.getAttribute('aria-pressed') !== 'true') {
+    await tab.click();
+  }
+  await targetPage.locator(`main[data-module='operations'][data-operations-view='${view}']`).waitFor({ timeout: 15000 });
+}
+
 async function assertResourceViews(targetPage) {
   await targetPage.locator('button.nav-item', { hasText: /Servers/i }).click();
   await targetPage.waitForURL(/#servers$/, { timeout: 10000 });
@@ -4139,6 +4148,7 @@ async function assertOperationsResultTraceRoundTrip(targetPage) {
   await targetPage.getByRole('button', { name: /new task/i }).click();
   await targetPage.locator('.ops-builder').waitFor({ timeout: 10000 });
 
+  await openOperationsView(targetPage, 'maintenance');
   const maintenancePanel = targetPage.locator('[data-ops-maintenance-panel="true"]');
   await maintenancePanel.waitFor({ timeout: 10000 });
   await maintenancePanel.locator('[data-ops-maintenance-open="true"]').click();
@@ -4166,6 +4176,7 @@ async function assertOperationsResultTraceRoundTrip(targetPage) {
 
   const remediationServer = await createTemporarySimulatedSshServer(targetPage, 'browser-e2e-ops-fix');
   try {
+    await openOperationsView(targetPage, 'orchestrate');
     await targetPage.getByRole('button', { name: /run command/i }).click();
     await targetPage.locator('.ops-type-card.active').filter({ hasText: /run command/i }).waitFor({ timeout: 5000 });
     await targetPage.locator('.ops-form-grid select').selectOption('selected');
@@ -4184,6 +4195,7 @@ async function assertOperationsResultTraceRoundTrip(targetPage) {
     if (!/Maintenance window covers 1(?:\/1)? high-impact target/i.test(maintenancePreflightText)) {
       throw new Error(`Operations preflight did not surface active maintenance coverage: ${maintenancePreflightText}`);
     }
+    await openOperationsView(targetPage, 'preflight');
     const advisorPanel = targetPage.locator('[data-ops-preflight-advisor="true"]');
     await advisorPanel.waitFor({ timeout: 10000 });
     const advisorText = await advisorPanel.innerText();
@@ -4191,12 +4203,14 @@ async function assertOperationsResultTraceRoundTrip(targetPage) {
       throw new Error(`Operations preflight advisor queue is incomplete: ${advisorText}`);
     }
     await targetPage.locator('[data-ops-preflight-advisor-draft="true"]').first().click();
+    await openOperationsView(targetPage, 'orchestrate');
     const remediationDraftBanner = targetPage.locator('[data-ops-draft-banner="true"]');
     await remediationDraftBanner.waitFor({ timeout: 10000 });
     const remediationDraftText = await remediationDraftBanner.innerText();
     if (!/Preflight fix draft|high-impact action|confirmation/i.test(remediationDraftText)) {
       throw new Error(`Operations preflight remediation did not create a draft banner: ${remediationDraftText}`);
     }
+    await openOperationsView(targetPage, 'maintenance');
     await activeMaintenanceWindow.locator('button').click();
     await targetPage.waitForFunction(
       () => !document.querySelector('[data-ops-maintenance-item="active"]'),
@@ -4207,6 +4221,7 @@ async function assertOperationsResultTraceRoundTrip(targetPage) {
     await deleteTemporaryAssetServer(targetPage, remediationServer.id).catch(() => undefined);
   }
 
+  await openOperationsView(targetPage, 'orchestrate');
   await targetPage.getByRole('button', { name: /asset sweep/i }).click();
   await targetPage.locator('.ops-type-card.active').filter({ hasText: /asset sweep/i }).waitFor({ timeout: 5000 });
   await targetPage.locator('.ops-form-grid select').selectOption('allServers');
@@ -4362,7 +4377,9 @@ async function assertOverviewHealthBaseline(targetPage) {
   }
   const preflightOnlyButton = targetPage.locator('[data-ops-draft-preflight-button="true"]');
   await preflightOnlyButton.waitFor({ timeout: 10000 });
+  await openOperationsView(targetPage, 'queue');
   const tasksBeforePreflight = await targetPage.locator('.ops-task-item').count();
+  await openOperationsView(targetPage, 'orchestrate');
   await preflightOnlyButton.click();
   await targetPage.waitForFunction(
     () => {
@@ -4372,10 +4389,12 @@ async function assertOverviewHealthBaseline(targetPage) {
     null,
     { timeout: 10000 },
   );
+  await openOperationsView(targetPage, 'queue');
   const tasksAfterPreflight = await targetPage.locator('.ops-task-item').count();
   if (tasksAfterPreflight !== tasksBeforePreflight) {
     throw new Error(`Preflight-only should not create a task, before=${tasksBeforePreflight}, after=${tasksAfterPreflight}`);
   }
+  await openOperationsView(targetPage, 'preflight');
   const preflightHistoryPanel = targetPage.locator('[data-ops-preflight-history="true"]');
   await preflightHistoryPanel.waitFor({ timeout: 10000 });
   const preflightHistoryItem = preflightHistoryPanel.locator('[data-ops-preflight-history-item="true"]').first();
@@ -4388,11 +4407,14 @@ async function assertOverviewHealthBaseline(targetPage) {
     throw new Error(`Operations preflight history should not show an all-server asset draft as 0/0 targets: ${preflightHistoryText}`);
   }
   await preflightHistoryItem.click();
+  await openOperationsView(targetPage, 'queue');
   const tasksAfterHistoryRestore = await targetPage.locator('.ops-task-item').count();
   if (tasksAfterHistoryRestore !== tasksBeforePreflight) {
     throw new Error(`Restoring preflight history should not create a task, before=${tasksBeforePreflight}, after=${tasksAfterHistoryRestore}`);
   }
+  await openOperationsView(targetPage, 'orchestrate');
   await captureVisualEvidence(targetPage, 'desktop-ops-health-draft', ['[data-ops-draft-banner="true"]', '.ops-builder']);
+  await openOperationsView(targetPage, 'preflight');
   const preflightEvidenceButton = preflightHistoryPanel.locator('[data-ops-preflight-evidence-button="true"]').first();
   await preflightEvidenceButton.click();
   await targetPage.waitForURL(/#security\?trace=ops-trace-[a-f0-9-]+$/, { timeout: 10000 });
@@ -4727,7 +4749,6 @@ async function assertMobileModuleLayoutSweep() {
     await assertMobileSection(mobilePage, /^Operations$/i, /#operations$/, [
       '.ops-summary-grid',
       '.ops-layout',
-      '.ops-queue-panel',
       '.ops-result-panel',
     ]);
     await mobilePage.getByRole('button', { name: /new task/i }).click();
@@ -4742,6 +4763,7 @@ async function assertMobileModuleLayoutSweep() {
     await mobilePage.locator('.ops-form-grid select').selectOption('tag');
     await mobilePage.locator('[data-ops-tag-scope="true"]').waitFor({ timeout: 5000 });
     await assertElementHorizontallyWithinViewport(mobilePage, '[data-ops-tag-scope="true"]', 'mobile operations tag scope');
+    await openOperationsView(mobilePage, 'maintenance');
     await mobilePage.locator('[data-ops-maintenance-panel="true"]').waitFor({ timeout: 5000 });
     await assertElementHorizontallyWithinViewport(mobilePage, '[data-ops-maintenance-panel="true"]', 'mobile maintenance window panel');
     await mobilePage.locator('[data-ops-maintenance-open="true"]').click();
