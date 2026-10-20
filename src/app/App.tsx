@@ -213,6 +213,14 @@ const aiConsoleModule = createPreloadableComponent(
   () => import('../modules/ai/AIConsole'),
   (module) => module.AIConsole,
 );
+const fleetTelemetryModule = createPreloadableComponent(
+  () => import('../modules/servers/FleetTelemetryPanel'),
+  (module) => module.FleetTelemetryPanel,
+);
+const resourceAlertPolicyModule = createPreloadableComponent(
+  () => import('../modules/servers/ResourceAlertPolicyControl'),
+  (module) => module.ResourceAlertPolicyControl,
+);
 
 const LazyMonitoringOverview = monitoringOverviewModule.Component;
 const LazyServerInventory = serverInventoryModule.Component;
@@ -220,6 +228,8 @@ const LazyOperationsCenter = operationsCenterModule.Component;
 const LazyCustomApiLab = customApiLabModule.Component;
 const LazySecurityPanel = securityPanelModule.Component;
 const LazyAIConsole = aiConsoleModule.Component;
+const LazyFleetTelemetryPanel = fleetTelemetryModule.Component;
+const LazyResourceAlertPolicyControl = resourceAlertPolicyModule.Component;
 
 const sectionModuleLoaders: Record<SectionId, () => Promise<void>> = {
   overview: monitoringOverviewModule.preload,
@@ -492,6 +502,16 @@ export function App() {
     }
   }, [activeSection]);
   const [operatorUtilityOpen, setOperatorUtilityOpen] = useState(false);
+  // The resources module carries three views: the inventory itself, fleet
+  // telemetry/history, and the resource alert policy. Entering it starts on the
+  // inventory and nothing is persisted.
+  const [serversView, setServersView] = useState<'list' | 'history' | 'alerts'>('list');
+  const [metricHistoryFocusId, setMetricHistoryFocusId] = useState('');
+  useEffect(() => {
+    if (activeSection === 'servers') {
+      setServersView('list');
+    }
+  }, [activeSection]);
   const [operationsInboxOpen, setOperationsInboxOpen] = useState(false);
   const [aiCollapsed, setAiCollapsed] = useState(true);
   const [performanceMode, setPerformanceMode] = useState(readStoredPerformanceMode);
@@ -2186,7 +2206,27 @@ export function App() {
           onClearReviewState={operationsInboxReview.clearReviewState}
         />
 
-        <main data-module={activeSection} data-security-view={activeSection === 'security' ? (securityTraceActive ? 'audit' : securityView) : undefined}>
+        <main data-module={activeSection} data-security-view={activeSection === 'security' ? (securityTraceActive ? 'audit' : securityView) : undefined} data-servers-view={activeSection === 'servers' ? serversView : undefined}>
+          {activeSection === 'servers' && (
+            <nav className="module-subnav" aria-label={t('app.serversViews')}>
+              {([
+                { id: 'list', key: 'app.serversViewList' },
+                { id: 'history', key: 'app.serversViewHistory' },
+                { id: 'alerts', key: 'app.serversViewAlerts' },
+              ] as const).map((view) => (
+                <button
+                  key={view.id}
+                  type="button"
+                  aria-pressed={serversView === view.id}
+                  className={serversView === view.id ? 'active' : undefined}
+                  data-servers-view-tab={view.id}
+                  onClick={() => setServersView(view.id)}
+                >
+                  {t(view.key)}
+                </button>
+              ))}
+            </nav>
+          )}
           {activeSection === 'security' && (
             <nav className="module-subnav" aria-label={t('app.securityViews')}>
               {([
@@ -2342,11 +2382,10 @@ export function App() {
                 avgCpu={avgCpu}
                 performanceMode={performanceMode}
                 opsPreflightSnapshot={overviewPreflightSnapshot}
-                resourceAlertPolicy={resourceAlertPolicy}
-                resourceAlertEvaluation={resourceAlertEvaluation}
-                resourceAlertPolicyStatus={resourceAlertPolicyStatus}
-                onResourceAlertPolicyRetry={refreshResourceAlertPolicy}
-                onResourceAlertPolicySave={saveResourceAlertPolicy}
+                onResourceAlertsOpen={() => {
+                  setServersView('alerts');
+                  navigateToSection('servers');
+                }}
                 onRegionServersOpen={openServersForRegion}
                 onHealthSignalOpen={openHealthSignal}
                 onOperationsDraftOpen={openOverviewOperationsDraft}
@@ -2355,7 +2394,7 @@ export function App() {
             </Suspense>
           )}
 
-          {activeSection === 'servers' && (
+          {activeSection === 'servers' && serversView === 'list' && (
             <Suspense fallback={<ModuleLoadingFallback title={t('nav.servers')} />}>
               <LazyServerInventory
                 filters={filters}
@@ -2369,6 +2408,32 @@ export function App() {
                 allServers={overview.servers}
                 servers={filteredServers}
                 performanceMode={performanceMode}
+                focusMetricHistoryServerId={metricHistoryFocusId || undefined}
+                onMetricHistoryFocusHandled={() => setMetricHistoryFocusId('')}
+              />
+            </Suspense>
+          )}
+
+          {activeSection === 'servers' && serversView === 'history' && (
+            <Suspense fallback={<ModuleLoadingFallback title={t('app.serversViewHistory')} />}>
+              <LazyFleetTelemetryPanel
+                servers={overview.servers}
+                onOpenHistory={(serverId) => {
+                  setMetricHistoryFocusId(serverId);
+                  setServersView('list');
+                }}
+              />
+            </Suspense>
+          )}
+
+          {activeSection === 'servers' && serversView === 'alerts' && (
+            <Suspense fallback={<ModuleLoadingFallback title={t('app.serversViewAlerts')} />}>
+              <LazyResourceAlertPolicyControl
+                policy={resourceAlertPolicy}
+                evaluation={resourceAlertEvaluation}
+                status={resourceAlertPolicyStatus}
+                onRetry={refreshResourceAlertPolicy}
+                onSave={saveResourceAlertPolicy}
               />
             </Suspense>
           )}

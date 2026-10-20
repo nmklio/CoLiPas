@@ -514,6 +514,27 @@ export function DocsPage({ onLogin }: DocsPageProps) {
             </div>
           </section>
 
+          <section id="information-architecture" className="docs-section">
+            <div>
+              <div className="docs-section-heading">
+                <span><ListChecks size={18} /> 信息架构</span>
+                <h2>一个状态只有一个表达位置</h2>
+              </div>
+              <div className="docs-check-list">
+                <p><CheckCircle2 size={16} /> 安全页拆成总览 / 发布门禁 / SSH 诊断 / 审计记录等子视图，一次只展开一个视图，页面高度从 9340px 降到 1000–5500px。</p>
+                <p><CheckCircle2 size={16} /> 资源页拆成清单 / 监控与历史 / 告警三个视图：清单保留服务器表格，监控与历史列出全量遥测并直达单机历史曲线，告警承载资源告警策略。</p>
+                <p><CheckCircle2 size={16} /> 上线向导只在概览页出现；其它模块通过顶栏“待办 N 项”入口回到概览，不再重复渲染同一份状态。</p>
+                <p><CheckCircle2 size={16} /> 顶栏只保留一个运行状态 chip，具体计数交给收件箱角标；修复顺序直接标在检查清单条目上，不再额外复制一份修复队列。</p>
+                <p><CheckCircle2 size={16} /> 进入任一模块都会回到该模块的首个视图，视图选择不做持久化，避免“上次停在哪”与深链冲突。</p>
+              </div>
+            </div>
+            <div className="docs-data-card">
+              <ListChecks size={28} />
+              <strong>三条判定规则</strong>
+              <p>一个状态只有一个表达位置，其它位置只能引用（链接 / 角标）不能复制；一级导航承载工作对象而不是工具；每轮删除内容必须同时删除对应的测试断言。</p>
+            </div>
+          </section>
+
           <section id="faq" className="docs-section">
             <div className="docs-section-heading">
               <span><LifeBuoy size={18} /> 常见问题</span>

@@ -329,6 +329,15 @@ async function assertOperationsInbox(targetPage) {
   console.log('ok browser e2e covers operations inbox aggregation, safe persistence, review controls, and deep routing');
 }
 
+async function openServersView(targetPage, view) {
+  const tab = targetPage.locator(`[data-servers-view-tab="${view}"]`);
+  await tab.waitFor({ timeout: 15000 });
+  if (await tab.getAttribute('aria-pressed') !== 'true') {
+    await tab.click();
+  }
+  await targetPage.locator(`main[data-module='servers'][data-servers-view='${view}']`).waitFor({ timeout: 15000 });
+}
+
 async function assertResourceAlertPolicy(targetPage) {
   let temporaryResourceServerId = '';
   let originalPolicy = null;
@@ -384,7 +393,8 @@ async function assertResourceAlertPolicy(targetPage) {
     };
     await targetPage.route('**/api/overview', overviewRoute);
 
-    await targetPage.goto(`${baseUrl}/admin/#overview`, { waitUntil: 'networkidle', timeout: 30000 });
+    await targetPage.goto(`${baseUrl}/admin/#servers`, { waitUntil: 'networkidle', timeout: 30000 });
+    await openServersView(targetPage, 'alerts');
     const trigger = targetPage.locator('[data-resource-alert-policy-open="true"]');
     await trigger.waitFor({ timeout: 10000 });
     await trigger.click();
@@ -409,6 +419,7 @@ async function assertResourceAlertPolicy(targetPage) {
     await drawer.waitFor({ state: 'hidden', timeout: 5000 });
 
     await targetPage.reload({ waitUntil: 'networkidle', timeout: 30000 });
+    await openServersView(targetPage, 'alerts');
     await targetPage.locator('[data-resource-alert-policy-open="true"]').click();
     const persistedDrawer = targetPage.locator('[data-resource-alert-policy-drawer="true"]');
     await persistedDrawer.waitFor({ timeout: 5000 });
@@ -423,7 +434,7 @@ async function assertResourceAlertPolicy(targetPage) {
       throw new Error(`Resource alert policy did not persist through reload: ${persistedValues.join(',')}`);
     }
     await captureVisualEvidence(targetPage, 'desktop-resource-alert-policy', [
-      '[data-health-baseline="true"]',
+      '.module-subnav',
       '[data-resource-alert-policy-drawer="true"]',
     ]);
     await targetPage.keyboard.press('Escape');
@@ -673,9 +684,10 @@ async function assertResourceAlertPolicyReadiness(targetPage) {
       request.method() === 'GET'
       && request.url().includes('/api/monitoring/resource-alert-policy')
     ));
-    await targetPage.goto(`${baseUrl}/admin/?e2e=policy-readiness#overview`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await targetPage.goto(`${baseUrl}/admin/?e2e=policy-readiness#servers`, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await delayedPolicyRequest;
     await targetPage.locator('.topbar').waitFor({ timeout: 10000 });
+    await openServersView(targetPage, 'alerts');
     const trigger = targetPage.locator('[data-resource-alert-policy-open="true"]');
     await trigger.waitFor({ timeout: 10000 });
     if (await trigger.getAttribute('data-resource-alert-policy-status') !== 'loading') {
@@ -755,8 +767,9 @@ async function assertResourceAlertPolicyReadiness(targetPage) {
       response.status() === 503
       && response.url().includes('/api/monitoring/resource-alert-policy')
     ));
-    await targetPage.goto(`${baseUrl}/admin/?e2e=policy-error#overview`, { waitUntil: 'networkidle', timeout: 30000 });
+    await targetPage.goto(`${baseUrl}/admin/?e2e=policy-error#servers`, { waitUntil: 'networkidle', timeout: 30000 });
     await failedPolicyResponse;
+    await openServersView(targetPage, 'alerts');
     const failedTrigger = targetPage.locator('[data-resource-alert-policy-open="true"]');
     await failedTrigger.waitFor({ timeout: 10000 });
     if (await failedTrigger.getAttribute('data-resource-alert-policy-status') !== 'error') {
@@ -4426,6 +4439,10 @@ async function assertMobileConsoleAndMap() {
     await assertElementHorizontallyWithinViewport(mobilePage, '[data-launch-guide="true"]', 'mobile launch guide');
     await assertElementHorizontallyWithinViewport(mobilePage, '[data-launch-todo="true"]', 'mobile launch todo chip');
 
+    await mobilePage.getByRole('button', { name: /open navigation/i }).click();
+    await mobilePage.getByRole('button', { name: /^Servers$/i }).click();
+    await mobilePage.waitForURL(/#servers$/, { timeout: 10000 });
+    await openServersView(mobilePage, 'alerts');
     await mobilePage.locator('[data-resource-alert-policy-open="true"]').click();
     const mobilePolicyDrawer = mobilePage.locator('[data-resource-alert-policy-drawer="true"]');
     await mobilePolicyDrawer.waitFor({ timeout: 5000 });

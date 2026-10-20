@@ -9784,7 +9784,8 @@ async function assertResourceAlertPolicyGuards() {
   const apiClientSource = fs.readFileSync(new URL('../src/services/apiClient.ts', import.meta.url), 'utf8');
   const appSource = fs.readFileSync(new URL('../src/app/App.tsx', import.meta.url), 'utf8');
   const overviewSource = fs.readFileSync(new URL('../src/modules/overview/MonitoringOverview.tsx', import.meta.url), 'utf8');
-  const policyUiSource = fs.readFileSync(new URL('../src/modules/overview/ResourceAlertPolicyControl.tsx', import.meta.url), 'utf8');
+  const policyUiSource = fs.readFileSync(new URL('../src/modules/servers/ResourceAlertPolicyControl.tsx', import.meta.url), 'utf8');
+  const fleetTelemetrySource = fs.readFileSync(new URL('../src/modules/servers/FleetTelemetryPanel.tsx', import.meta.url), 'utf8');
   const inboxSource = fs.readFileSync(new URL('../src/app/OperationsInbox.tsx', import.meta.url), 'utf8');
   const marketingSource = fs.readFileSync(new URL('../src/app/MarketingPage.tsx', import.meta.url), 'utf8');
   const docsSource = fs.readFileSync(new URL('../src/app/DocsPage.tsx', import.meta.url), 'utf8');
@@ -9826,8 +9827,11 @@ async function assertResourceAlertPolicyGuards() {
   for (const fragment of [
     'buildResourceAlertEvaluation(overview.servers, resourceAlertPolicy)',
     'resourceAlerts: resourceAlertEvaluation',
-    'onResourceAlertPolicySave={saveResourceAlertPolicy}',
-    '<ResourceAlertPolicyControl',
+    'onSave={saveResourceAlertPolicy}',
+    '<LazyResourceAlertPolicyControl',
+    'data-resource-alerts-link="true"',
+    'data-servers-view-tab={view.id}',
+    'data-fleet-telemetry-card={server.id}',
     'data-resource-alert-policy-open="true"',
     'data-resource-alert-policy-drawer="true"',
     'data-resource-alert-threshold={metric}',
@@ -9836,7 +9840,7 @@ async function assertResourceAlertPolicyGuards() {
     'resourceAlertReminderOptions.map',
     'createPortal',
   ]) {
-    if (!`${appSource}\n${overviewSource}\n${policyUiSource}`.includes(fragment)) {
+    if (!`${appSource}\n${overviewSource}\n${policyUiSource}\n${fleetTelemetrySource}`.includes(fragment)) {
       throw new Error(`Resource alert policy UI guard is incomplete: ${fragment}`);
     }
   }

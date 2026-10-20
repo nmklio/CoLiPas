@@ -73,6 +73,8 @@ interface ServerInventoryProps {
   onServerConnected: () => Promise<void> | void;
   onAuditTraceOpen?: (correlationId: string) => void;
   releaseFocusAnchor?: string;
+  focusMetricHistoryServerId?: string;
+  onMetricHistoryFocusHandled?: () => void;
 }
 
 type ServerWorkspaceRowAction = 'powerOn' | 'shutdown' | 'reboot' | 'edit' | 'ssh' | 'diagnose' | 'history' | 'delete';
@@ -768,7 +770,7 @@ function areServerWorkspaceSshRowsEqual(previous: ServerNode['ssh'], next: Serve
     && previous.fingerprint === next.fingerprint;
 }
 
-export function ServerInventory({ allServers, servers, filters, performanceMode = false, onFiltersChange, onTriageDraftOpen, onServerConnected, onAuditTraceOpen, releaseFocusAnchor }: ServerInventoryProps) {
+export function ServerInventory({ allServers, servers, filters, performanceMode = false, onFiltersChange, onTriageDraftOpen, onServerConnected, onAuditTraceOpen, releaseFocusAnchor, focusMetricHistoryServerId, onMetricHistoryFocusHandled }: ServerInventoryProps) {
   const { language, t } = useI18n();
   const regions = useMemo(() => buildSortedRegions(allServers), [allServers]);
   const initialTerminalLiteModePreference = useMemo(() => readTerminalLiteModePreference(), []);
@@ -906,6 +908,15 @@ export function ServerInventory({ allServers, servers, filters, performanceMode 
   const fleetViewsEmpty = fleetViews.length === 0;
   const activeFleetFilterCount = useMemo(() => countFleetViewFilters(filters), [filters]);
   const allServersById = useMemo(() => buildServerById(allServers), [allServers]);
+  // The telemetry view hands a server over to this inventory view; open its
+  // history drawer once, then clear the request so it never re-opens by itself.
+  useEffect(() => {
+    if (!focusMetricHistoryServerId) {
+      return;
+    }
+    setMetricHistoryServerId(focusMetricHistoryServerId);
+    onMetricHistoryFocusHandled?.();
+  }, [focusMetricHistoryServerId, onMetricHistoryFocusHandled]);
   const metricHistoryServer = useMemo(
     () => allServersById.get(metricHistoryServerId) ?? null,
     [allServersById, metricHistoryServerId],

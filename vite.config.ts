@@ -27,6 +27,10 @@ export default defineConfig({
             normalizedId.endsWith('/src/data/mockData.ts')
             || normalizedId.endsWith('/src/services/apiClient.ts')
             || normalizedId.endsWith('/src/shared/serverFilters.ts')
+            // Shared by the shell and by the lazy resource-alert policy view.
+            // Without this Rollup folds it into the lazy servers chunk, and the
+            // shell then eagerly preloads that whole chunk on first paint.
+            || normalizedId.endsWith('/src/shared/resourceAlerts.ts')
           ) {
             return 'app-shared';
           }

@@ -6,8 +6,6 @@ import { feature } from 'topojson-client';
 import { useI18n } from '../../i18n';
 import { OperationEvent, ServerNode } from '../../types';
 import { formatCountryName, formatRegionName, percentClass, statusLabel } from '../../utils/format';
-import type { ResourceAlertEvaluation, ResourceAlertPolicy, ResourceAlertPolicyLoadStatus, ResourceAlertPolicyUpdate } from '../../types';
-import { ResourceAlertPolicyControl } from './ResourceAlertPolicyControl';
 import { hasFreshServerTelemetry } from '../../shared/serverTelemetry';
 import type { Feature, FeatureCollection, Geometry } from 'geojson';
 
@@ -18,11 +16,7 @@ interface MonitoringOverviewProps {
   avgCpu: number | null;
   performanceMode?: boolean;
   opsPreflightSnapshot?: OverviewPreflightSnapshot | null;
-  resourceAlertPolicy: ResourceAlertPolicy | null;
-  resourceAlertEvaluation: ResourceAlertEvaluation | null;
-  resourceAlertPolicyStatus: ResourceAlertPolicyLoadStatus;
-  onResourceAlertPolicyRetry: () => Promise<boolean>;
-  onResourceAlertPolicySave: (policy: ResourceAlertPolicyUpdate) => Promise<ResourceAlertPolicy>;
+  onResourceAlertsOpen?: () => void;
   onRegionServersOpen?: (region: string | string[]) => void;
   onHealthSignalOpen?: (signal: HealthBaselineSignalId) => void;
   onOperationsDraftOpen?: () => void;
@@ -236,11 +230,7 @@ export function MonitoringOverview({
   avgCpu,
   performanceMode = false,
   opsPreflightSnapshot,
-  resourceAlertPolicy,
-  resourceAlertEvaluation,
-  resourceAlertPolicyStatus,
-  onResourceAlertPolicyRetry,
-  onResourceAlertPolicySave,
+  onResourceAlertsOpen,
   onRegionServersOpen,
   onHealthSignalOpen,
   onOperationsDraftOpen,
@@ -459,13 +449,14 @@ export function MonitoringOverview({
           {healthBaseline.actions.map((action) => (
             <small key={action}>{action}</small>
           ))}
-          <ResourceAlertPolicyControl
-            policy={resourceAlertPolicy}
-            evaluation={resourceAlertEvaluation}
-            status={resourceAlertPolicyStatus}
-            onRetry={onResourceAlertPolicyRetry}
-            onSave={onResourceAlertPolicySave}
-          />
+          <button
+            type="button"
+            className="health-baseline-link-button"
+            data-resource-alerts-link="true"
+            onClick={onResourceAlertsOpen}
+          >
+            {t('overview.resourceAlertsLink')}
+          </button>
           <button type="button" className="health-baseline-draft-button" onClick={onOperationsDraftOpen}>
             {t('overview.opsDraftButton')}
           </button>

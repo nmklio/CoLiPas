@@ -554,7 +554,8 @@ section.monitor-overview {
 .launch-guide-item,
 .health-baseline-signal,
 .resource-alert-policy-trigger,
-.health-baseline-draft-button {
+.health-baseline-draft-button,
+.health-baseline-link-button {
   min-height: var(--control-h);
   border-radius: var(--r-control);
   font-size: 12px;
@@ -698,4 +699,97 @@ main[data-module='security'][data-security-view='audit'] :is(
   [class*='security-ssh-']
 ) {
   display: none;
+}
+/* --- resources: telemetry and history view -------------------------------- */
+
+.fleet-telemetry-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.fleet-telemetry-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.fleet-telemetry-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--panel);
+}
+
+.fleet-telemetry-card header {
+  display: grid;
+  gap: 2px;
+}
+
+.fleet-telemetry-card header strong {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.fleet-telemetry-card header small {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.fleet-telemetry-card dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.fleet-telemetry-card dl div {
+  display: grid;
+  gap: 2px;
+}
+
+.fleet-telemetry-card dt {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.fleet-telemetry-card dd {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.fleet-telemetry-card.stale dd,
+.fleet-telemetry-card.unavailable dd {
+  color: var(--muted);
+}
+
+.fleet-telemetry-card footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.fleet-telemetry-card footer span {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.fleet-telemetry-empty {
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px dashed var(--line);
+  border-radius: var(--r-card);
+  color: var(--muted);
+  font-size: 12px;
 }
