@@ -1523,7 +1523,7 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
             </div>
           </div>
 
-          <div className="ops-preflight-history" data-ops-preflight-history="true">
+          <div className="ops-preflight-history" data-ops-preflight-history="true" data-ops-view-panel="preflight">
             <div className="ops-panel-title">
               <h3>{copy.preflightHistory}</h3>
               <span>{preflightHistory.length}</span>
@@ -1586,7 +1586,7 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
             </div>
           </div>
 
-          <div className="ops-mini-events">
+          <div className="ops-mini-events" data-ops-view-panel="queue">
             <div className="ops-panel-title">
               <h3>{t('ops.eventQueue')}</h3>
               <span>{events.length}</span>
