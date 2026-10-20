@@ -2270,10 +2270,10 @@ replaceOnce('</style>', `/* colipas landing live release ui v1 */
   0% { background-position: 0% 50%; }
   100% { background-position: 200% 50%; }
 }
-@keyframes lp-cta-sweep {
-  0% { transform: translateX(-130%) skewX(-14deg); }
-  58% { transform: translateX(240%) skewX(-14deg); }
-  100% { transform: translateX(240%) skewX(-14deg); }
+@keyframes lp-cta-glow {
+  0%, 68%, 100% { filter: brightness(1); }
+  80% { filter: brightness(1.14); }
+  90% { filter: brightness(1.04); }
 }
 @keyframes lp-pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(114, 222, 196, .55); }
@@ -2319,17 +2319,7 @@ replaceOnce('</style>', `/* colipas landing live release ui v1 */
   animation: lp-title-sheen 7.5s linear infinite;
 }
 .hero .hero-primary {
-  position: relative;
-  overflow: hidden;
-}
-.hero .hero-primary::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(100deg, transparent 22%, rgba(255, 255, 255, .42) 50%, transparent 78%);
-  transform: translateX(-130%) skewX(-14deg);
-  animation: lp-cta-sweep 5.4s ease-in-out infinite;
+  animation: lp-cta-glow 5.4s ease-in-out infinite;
 }
 .live-release {
   margin-top: 26px;
@@ -2463,7 +2453,7 @@ replaceOnce('</style>', `/* colipas landing live release ui v1 */
   .hero::after,
   .hero::before,
   .hero h1 .hero-title-accent,
-  .hero .hero-primary::after,
+  .hero .hero-primary,
   .live-release .live-dot,
   .ticker-track {
     animation: none;
