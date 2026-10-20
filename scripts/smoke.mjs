@@ -4442,16 +4442,13 @@ function assertAccountUiGuards() {
   const launchGuideFragments = [
     'interface LaunchChecklistItem',
     'launchGuideStorageKey',
-    'launchGuideViewStorageKey',
-    'type LaunchGuideViewPreference',
-    'readLaunchGuideViewPreference',
+    'launchTodoPending',
+    'data-launch-todo="true"',
+    'data-launch-todo-pending={launchTodoPending}',
+    'topbar-todo',
     'buildLaunchChecklist',
     'data-launch-guide="true"',
-    'data-launch-guide-compact={launchGuideCompact ? \'true\' : undefined}',
     'data-launch-guide-item={item.id}',
-    'data-launch-guide-open="true"',
-    'data-launch-guide-view-toggle={launchGuideCompact ? \'expand\' : \'compact\'}',
-    'data-launch-guide-compact-next="true"',
     'data-launch-guide-copy-report="true"',
     'data-launch-guide-recheck="true"',
     'data-launch-guide-start-top-fix="true"',
@@ -4468,23 +4465,22 @@ function assertAccountUiGuards() {
     'getLaunchRemediationReason',
     'fetchConfigSummary',
     '.launch-guide-radar',
-    '.launch-guide.compact',
-    '.launch-guide-compact-next',
     '.launch-guide-grid',
     '.launch-guide-actions',
     '.launch-guide-fix-queue',
     '.launch-guide-fix-step',
     'async function assertLaunchGuide',
-    'contextual launch guide compaction, detail routing, recheck, and sanitization',
+    'overview-scoped launch guide, todo chip routing, recheck, and sanitization',
     'Launch guide copied report leaked a raw IP address or secret',
     'Launch guide priority remediation queue is incomplete',
+    'Launch guide must only render on the overview page',
   ];
   const launchGuideSource = `${appSource}\n${i18nSource}\n${globalCss}\n${fs.readFileSync(new URL('../scripts/browser-e2e.mjs', import.meta.url), 'utf8')}`;
   const missingLaunchGuide = launchGuideFragments.filter((fragment) => !launchGuideSource.includes(fragment));
   if (missingLaunchGuide.length) {
     throw new Error(`First-run launch guide is incomplete: ${missingLaunchGuide.join(', ')}`);
   }
-  for (const key of ['launchGuide.title', 'launchGuide.compactEyebrow', 'launchGuide.compactTitle', 'launchGuide.compactDetail', 'launchGuide.compactMode', 'launchGuide.compactExpand', 'launchGuide.runtimeTitle', 'launchGuide.assetsTitle', 'launchGuide.sshTitle', 'launchGuide.aiTitle', 'launchGuide.preflightTitle', 'launchGuide.auditTitle', 'launchGuide.copyReport', 'launchGuide.recheck', 'launchGuide.rechecked', 'launchGuide.reportSanitizedNote', 'launchGuide.fixQueueTitle', 'launchGuide.fixReasonRuntime', 'launchGuide.startTopFix']) {
+  for (const key of ['launchGuide.title', 'launchGuide.todoChip', 'launchGuide.runtimeTitle', 'launchGuide.assetsTitle', 'launchGuide.sshTitle', 'launchGuide.aiTitle', 'launchGuide.preflightTitle', 'launchGuide.auditTitle', 'launchGuide.copyReport', 'launchGuide.recheck', 'launchGuide.rechecked', 'launchGuide.reportSanitizedNote', 'launchGuide.fixQueueTitle', 'launchGuide.fixReasonRuntime', 'launchGuide.startTopFix']) {
     const count = (i18nSource.match(new RegExp(key.replace('.', '\\.'), 'g')) ?? []).length;
     if (count < 3) {
       throw new Error(`Launch guide i18n key is missing languages: ${key}`);

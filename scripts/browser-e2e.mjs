@@ -136,7 +136,6 @@ async function createE2ePage(options) {
     window.localStorage.removeItem('colipas.sshTerminalWorkspaceMode.v1');
     window.localStorage.removeItem('colipas.serverFleetViews.v1');
     window.localStorage.removeItem('colipas.launchGuide.dismissed.v1');
-    window.localStorage.removeItem('colipas.launchGuide.view.v1');
     window.localStorage.removeItem('colipas.operationsInbox.review.v1');
   });
   const targetPage = await context.newPage();
@@ -155,18 +154,9 @@ async function createE2ePage(options) {
 }
 
 async function assertLaunchGuide(targetPage) {
+  await targetPage.locator('button.nav-item', { hasText: /Overview/i }).click();
+  await targetPage.waitForURL(/#overview$/, { timeout: 10000 });
   await targetPage.locator('[data-launch-guide="true"]').waitFor({ timeout: 10000 });
-  await targetPage.locator('[data-launch-guide-open="true"]').waitFor({ timeout: 5000 });
-  await targetPage.locator('[data-launch-guide-compact="true"]').waitFor({ timeout: 5000 });
-  const compactLaunchText = await targetPage.locator('[data-launch-guide="true"]').innerText();
-  if (!/Workspace summary|Current launch status|Next action/i.test(compactLaunchText)) {
-    throw new Error(`Launch guide compact workspace summary is incomplete: ${compactLaunchText}`);
-  }
-  if (await targetPage.locator('[data-launch-guide-item]').count() !== 0) {
-    throw new Error('Launch guide compact workspace summary should defer the six full checklist cards');
-  }
-  await targetPage.locator('[data-launch-guide-view-toggle="expand"]').click();
-  await targetPage.locator('[data-launch-guide-compact="true"]').waitFor({ state: 'hidden', timeout: 5000 });
   const launchText = await targetPage.locator('[data-launch-guide="true"]').innerText();
   if (!/First-run launch guide|Runtime security|Asset onboarding|SSH access|AI key custody|Operations preflight|Audit risk/i.test(launchText)) {
     throw new Error(`Launch guide did not render the full first-run checklist: ${launchText}`);
@@ -216,28 +206,40 @@ async function assertLaunchGuide(targetPage) {
   await targetPage.locator('.launch-guide-message').waitFor({ timeout: 5000 });
   await assertElementHorizontallyWithinViewport(targetPage, '[data-launch-guide="true"]', 'desktop launch guide');
   await captureVisualEvidence(targetPage, 'desktop-launch-guide', ['[data-launch-guide="true"]']);
-  await targetPage.evaluate(() => {
-    window.localStorage.removeItem('colipas.launchGuide.view.v1');
-  });
+  const todoChip = targetPage.locator('[data-launch-todo="true"]');
+  await todoChip.waitFor({ timeout: 5000 });
+  const todoPending = await todoChip.getAttribute('data-launch-todo-pending');
+  if (!/^\d+$/.test(todoPending ?? '')) {
+    throw new Error(`Launch todo chip should expose a pending count, got ${todoPending}`);
+  }
+  const todoLabel = await todoChip.innerText();
+  if (!todoLabel.includes(String(todoPending)) || !/\d+/.test(todoLabel)) {
+    throw new Error(`Launch todo chip label should surface the pending count, got ${todoLabel}`);
+  }
+  await assertElementHorizontallyWithinViewport(targetPage, '[data-launch-todo="true"]', 'desktop launch todo chip');
+  await targetPage.locator('button.nav-item', { hasText: /Servers/i }).click();
+  await targetPage.waitForURL(/#servers$/, { timeout: 10000 });
+  await targetPage.locator('#servers-title').waitFor({ timeout: 10000 });
+  if (await targetPage.locator('[data-launch-guide="true"]').count() !== 0) {
+    throw new Error('Launch guide must only render on the overview page');
+  }
+  await targetPage.locator('[data-launch-todo="true"]').click();
+  await targetPage.waitForURL(/#overview$/, { timeout: 10000 });
+  await targetPage.locator('[data-launch-guide="true"]').waitFor({ timeout: 5000 });
   await targetPage.locator('[data-launch-guide-item="ai"]').click();
   await targetPage.waitForURL(/#ai$/, { timeout: 10000 });
   await targetPage.locator('.ai-workbench').waitFor({ timeout: 10000 });
+  if (await targetPage.locator('[data-launch-guide="true"]').count() !== 0) {
+    throw new Error('Launch guide must stay overview-scoped after routing to the AI workspace');
+  }
+  await targetPage.locator('[data-launch-todo="true"]').waitFor({ timeout: 5000 });
   await targetPage.reload({ waitUntil: 'networkidle', timeout: 30000 });
   await targetPage.locator('.ai-workbench').waitFor({ timeout: 10000 });
-  await targetPage.locator('[data-launch-guide-compact="true"]').waitFor({ timeout: 5000 });
-  await targetPage.locator('[data-launch-guide-view-toggle="expand"]').click();
-  await targetPage.locator('[data-launch-guide-item]').first().waitFor({ timeout: 5000 });
-  const expandedPreference = await targetPage.evaluate(() => window.localStorage.getItem('colipas.launchGuide.view.v1'));
-  if (expandedPreference !== 'expanded') {
-    throw new Error(`Launch guide expanded preference did not persist: ${expandedPreference}`);
+  if (await targetPage.locator('[data-launch-guide="true"]').count() !== 0) {
+    throw new Error('Launch guide must not reappear outside the overview page after reload');
   }
-  await targetPage.locator('[data-launch-guide-view-toggle="compact"]').click();
-  await targetPage.locator('[data-launch-guide-compact="true"]').waitFor({ timeout: 5000 });
-  const compactPreference = await targetPage.evaluate(() => window.localStorage.getItem('colipas.launchGuide.view.v1'));
-  if (compactPreference !== 'compact') {
-    throw new Error(`Launch guide compact preference did not persist: ${compactPreference}`);
-  }
-  console.log('ok browser e2e covers contextual launch guide compaction, detail routing, recheck, and sanitization');
+  await targetPage.locator('[data-launch-todo="true"]').waitFor({ timeout: 5000 });
+  console.log('ok browser e2e covers overview-scoped launch guide, todo chip routing, recheck, and sanitization');
 }
 
 async function assertOperationsInbox(targetPage) {
@@ -4415,7 +4417,8 @@ async function assertMobileConsoleAndMap() {
     await openAndLogin(mobilePage, `${baseUrl}/admin/#overview`);
     await mobilePage.getByRole('button', { name: /open navigation/i }).waitFor({ timeout: 5000 });
     await assertNoHorizontalOverflow(mobilePage, 'mobile console after login');
-    await assertElementHorizontallyWithinViewport(mobilePage, '[data-launch-guide="true"]', 'mobile compact launch guide');
+    await assertElementHorizontallyWithinViewport(mobilePage, '[data-launch-guide="true"]', 'mobile launch guide');
+    await assertElementHorizontallyWithinViewport(mobilePage, '[data-launch-todo="true"]', 'mobile launch todo chip');
 
     await mobilePage.locator('[data-resource-alert-policy-open="true"]').click();
     const mobilePolicyDrawer = mobilePage.locator('[data-resource-alert-policy-drawer="true"]');

@@ -197,6 +197,39 @@
   gap: 6px;
 }
 
+/* Single topbar entry for launch readiness: the guide itself lives on the
+ * overview page only, so this chip is the cross-module pointer to it. */
+.topbar-todo {
+  min-height: var(--control-h-sm);
+  padding: 0 10px;
+  gap: 6px;
+  border: 1px solid var(--brand-line);
+  border-radius: var(--r-chip);
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.topbar-todo:hover,
+.topbar-todo:focus-visible {
+  border-color: var(--brand);
+  outline: none;
+}
+
+.topbar-todo.warn {
+  border-color: color-mix(in srgb, var(--status-warn) 42%, transparent);
+  background: color-mix(in srgb, var(--status-warn) 12%, transparent);
+  color: var(--status-warn);
+}
+
+.topbar-todo.fail {
+  border-color: color-mix(in srgb, var(--status-danger) 42%, transparent);
+  background: color-mix(in srgb, var(--status-danger) 12%, transparent);
+  color: var(--status-danger);
+}
+
 .icon-button {
   width: var(--control-h);
   height: var(--control-h);
@@ -578,67 +611,6 @@ main :where([class*='-pill'], [class*='-badge'], [class*='-tag'], [class*='-stam
   main.page {
     padding: 12px 14px 24px;
   }
-}
-
-/* --- decluttering --------------------------------------------------------- *
- * The launch guide follows the operator onto every module. As a compact strip
- * it only needs the kicker, the state and the next action, so the radar orb,
- * the progress bar and the oversized paddings are dropped outside Overview.
- * ------------------------------------------------------------------------- */
-
-.launch-guide.compact {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  min-height: 0;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  box-shadow: none;
-}
-
-.launch-guide.compact .launch-guide-radar {
-  display: none;
-}
-
-.launch-guide.compact .launch-guide-copy {
-  gap: 2px;
-}
-
-.launch-guide.compact .launch-guide-copy h2 {
-  font-size: 14px;
-  line-height: 20px;
-}
-
-.launch-guide.compact .launch-guide-copy p {
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.launch-guide.compact .launch-guide-progress {
-  display: none;
-}
-
-.launch-guide.compact .launch-guide-status {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px 8px;
-  font-size: 12px;
-}
-
-.launch-guide.compact .launch-guide-status > * {
-  margin: 0;
-}
-
-.launch-guide.compact .launch-guide-status button {
-  min-height: var(--control-h-sm);
-  padding: 0 8px;
-  border-radius: var(--r-control);
-  font-size: 12px;
 }
 
 /* --- module sub-navigation ----------------------------------------------- */

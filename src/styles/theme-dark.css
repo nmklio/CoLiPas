@@ -98,13 +98,11 @@
    * dark-teal), which drop below 3:1 on the dark chrome; re-point them at the
    * status tokens, which are tuned per theme.
    * ---------------------------------------------------------------------- */
-  .operations-inbox-trigger.critical b,
-  .launch-guide-open.fail b {
+  .operations-inbox-trigger.critical b {
     color: var(--red);
   }
 
-  .operations-inbox-trigger.warning b,
-  .launch-guide-open.warn b {
+  .operations-inbox-trigger.warning b {
     color: var(--orange);
   }
 

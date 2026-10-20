@@ -11,10 +11,8 @@ import {
   LayoutDashboard,
   ListChecks,
   LogOut,
-  Maximize2,
   MessageSquareText,
   Menu,
-  Minimize2,
   Moon,
   MoreHorizontal,
   PlugZap,
@@ -140,8 +138,6 @@ interface LaunchChecklistSummary {
   items: LaunchChecklistItem[];
   remediationSteps: LaunchRemediationStep[];
 }
-
-type LaunchGuideViewPreference = 'auto' | 'compact' | 'expanded';
 
 const sections: Array<{ id: SectionId; labelKey: string; icon: typeof LayoutDashboard }> = [
   { id: 'overview', labelKey: 'nav.overview', icon: LayoutDashboard },
@@ -332,7 +328,6 @@ const avatarMaxBytes = 2 * 1024 * 1024;
 const avatarMaxDimension = 4096;
 const settingsMessageTtlMs = 2800;
 const launchGuideStorageKey = 'colipas.launchGuide.dismissed.v1';
-const launchGuideViewStorageKey = 'colipas.launchGuide.view.v1';
 const performanceModeStorageKey = 'colipas.performanceMode.v1';
 const commandPaletteHistoryStorageKey = 'colipas.commandPaletteHistory.v1';
 const commandPaletteHistoryLimit = 5;
@@ -372,15 +367,6 @@ function readStoredPerformanceMode() {
   }
 
   return window.localStorage.getItem(performanceModeStorageKey) === '1';
-}
-
-function readLaunchGuideViewPreference(): LaunchGuideViewPreference {
-  if (typeof window === 'undefined') {
-    return 'auto';
-  }
-
-  const stored = window.localStorage.getItem(launchGuideViewStorageKey);
-  return stored === 'compact' || stored === 'expanded' ? stored : 'auto';
 }
 
 function normalizeCommandPaletteHistory(value: unknown) {
@@ -532,7 +518,6 @@ export function App() {
     }
     return window.localStorage.getItem(launchGuideStorageKey) !== 'dismissed';
   });
-  const [launchGuideViewPreference, setLaunchGuideViewPreference] = useState<LaunchGuideViewPreference>(readLaunchGuideViewPreference);
   const [launchGuideMessage, setLaunchGuideMessage] = useState('');
   const [launchGuideRefreshing, setLaunchGuideRefreshing] = useState(false);
   const appMountedRef = useRef(true);
@@ -731,18 +716,6 @@ export function App() {
     setResolvedTheme(persistThemePreference(preference));
     setThemePreference(preference);
   };
-
-  useEffect(() => {
-    try {
-      if (launchGuideViewPreference === 'auto') {
-        window.localStorage.removeItem(launchGuideViewStorageKey);
-      } else {
-        window.localStorage.setItem(launchGuideViewStorageKey, launchGuideViewPreference);
-      }
-    } catch {
-      // The guide remains usable if browser storage is unavailable.
-    }
-  }, [launchGuideViewPreference]);
 
   useEffect(() => {
     if (!session?.authenticated) {
@@ -1184,9 +1157,8 @@ export function App() {
     t,
   }), [launchChecklist.remediationSteps, overview.operationEvents, resourceAlertEvaluation, resourceAlertPolicy?.reminderMinutes, t]);
   const operationsInboxReview = useOperationsInboxReview(operationsInboxItems);
-  const launchGuideCompact = launchGuideViewPreference === 'compact'
-    || (launchGuideViewPreference === 'auto' && (performanceMode || activeSection !== 'overview'));
   const nextRemediation = launchChecklist.remediationSteps[0]?.item;
+  const launchTodoPending = Math.max(launchChecklist.total - launchChecklist.done, 0);
   const commandPaletteActions: CommandPaletteAction[] = [
     ...(nextRemediation ? [{
       id: 'next-remediation',
@@ -1603,6 +1575,9 @@ export function App() {
     } catch {
       // Keep the launch guide usable when storage is unavailable.
     }
+    if (activeSection !== 'overview') {
+      navigateToSection('overview');
+    }
   }
 
   function dismissLaunchGuide() {
@@ -1937,15 +1912,15 @@ export function App() {
             />
             <button
               type="button"
-              className={`launch-guide-open ${launchChecklist.tone}`}
-              data-launch-guide-open="true"
-              aria-label={t('launchGuide.open')}
+              className={`topbar-todo ${launchChecklist.tone}`}
+              data-launch-todo="true"
+              data-launch-todo-pending={launchTodoPending}
+              aria-label={t('launchGuide.todoChip', { count: launchTodoPending })}
               title={launchChecklist.nextAction}
               onClick={openLaunchGuide}
             >
               <Rocket size={15} aria-hidden="true" />
-              <span>{t('launchGuide.open')}</span>
-              <b>{launchChecklist.done}/{launchChecklist.total}</b>
+              <span>{t('launchGuide.todoChip', { count: launchTodoPending })}</span>
             </button>
             <button
               type="button"
@@ -2233,11 +2208,10 @@ export function App() {
               ))}
             </nav>
           )}
-          {launchGuideOpen && (
+          {launchGuideOpen && activeSection === 'overview' && (
             <article
-              className={`launch-guide ${launchChecklist.tone}${launchGuideCompact ? ' compact' : ''}`}
+              className={`launch-guide ${launchChecklist.tone}`}
               data-launch-guide="true"
-              data-launch-guide-compact={launchGuideCompact ? 'true' : undefined}
               aria-labelledby="launch-guide-title"
             >
               <div className="launch-guide-radar" aria-hidden="true">
@@ -2246,13 +2220,10 @@ export function App() {
               <div className="launch-guide-copy">
                 <span className="launch-guide-kicker">
                   <ListChecks size={15} />
-                  {launchGuideCompact ? t('launchGuide.compactEyebrow') : t('launchGuide.eyebrow')}
+                  {t('launchGuide.eyebrow')}
                 </span>
-                <h2 id="launch-guide-title">{launchGuideCompact ? t('launchGuide.compactTitle') : t('launchGuide.title')}</h2>
-                <p>{launchGuideCompact
-                  ? t('launchGuide.compactDetail', { count: launchChecklist.remediationSteps.length })
-                  : t('launchGuide.desc')}
-                </p>
+                <h2 id="launch-guide-title">{t('launchGuide.title')}</h2>
+                <p>{t('launchGuide.desc')}</p>
                 <div className="launch-guide-progress" aria-label={t('launchGuide.progress', { done: launchChecklist.done, total: launchChecklist.total })}>
                   <span style={{ width: `${Math.round((launchChecklist.done / launchChecklist.total) * 100)}%` }} />
                 </div>
@@ -2260,30 +2231,17 @@ export function App() {
               <div className="launch-guide-status">
                 <span>{t('launchGuide.progress', { done: launchChecklist.done, total: launchChecklist.total })}</span>
                 <strong>{launchChecklist.status}</strong>
-                {launchGuideCompact && launchChecklist.remediationSteps[0] && (
-                  <button
-                    type="button"
-                    className="launch-guide-compact-next"
-                    data-launch-guide-compact-next="true"
-                    onClick={startTopLaunchFix}
-                  >
-                    <span>{t('launchGuide.compactNext')}</span>
-                    <b>{launchChecklist.nextAction}</b>
-                  </button>
-                )}
                 <div className="launch-guide-actions">
-                  {!launchGuideCompact && launchChecklist.remediationSteps[0] && (
+                  {launchChecklist.remediationSteps[0] && (
                     <button type="button" className="tool-button" data-launch-guide-start-top-fix="true" onClick={startTopLaunchFix}>
                       <ListChecks size={15} />
                       {t('launchGuide.startTopFix')}
                     </button>
                   )}
-                  {!launchGuideCompact && (
-                    <button type="button" className="tool-button" data-launch-guide-copy-report="true" onClick={copyLaunchGuideReport}>
-                      <ClipboardCheck size={15} />
-                      {t('launchGuide.copyReport')}
-                    </button>
-                  )}
+                  <button type="button" className="tool-button" data-launch-guide-copy-report="true" onClick={copyLaunchGuideReport}>
+                    <ClipboardCheck size={15} />
+                    {t('launchGuide.copyReport')}
+                  </button>
                   <button
                     type="button"
                     className="tool-button"
@@ -2294,73 +2252,60 @@ export function App() {
                     <RefreshCw size={15} className={launchGuideRefreshing ? 'spin-icon' : undefined} />
                     {launchGuideRefreshing ? t('launchGuide.rechecking') : t('launchGuide.recheck')}
                   </button>
-                  <button
-                    type="button"
-                    className="tool-button"
-                    data-launch-guide-view-toggle={launchGuideCompact ? 'expand' : 'compact'}
-                    onClick={() => setLaunchGuideViewPreference(launchGuideCompact ? 'expanded' : 'compact')}
-                  >
-                    {launchGuideCompact ? <Maximize2 size={15} /> : <Minimize2 size={15} />}
-                    {launchGuideCompact ? t('launchGuide.compactExpand') : t('launchGuide.compactMode')}
-                  </button>
                   <button type="button" className="tool-button" onClick={dismissLaunchGuide}>
                     {t('launchGuide.dismiss')}
                   </button>
                 </div>
                 {launchGuideMessage && <em className="launch-guide-message">{launchGuideMessage}</em>}
               </div>
-              {!launchGuideCompact && (
-                <>
-                  <div className="launch-guide-grid">
-                    {launchChecklist.items.map((item) => (
+              <div className="launch-guide-grid">
+                {launchChecklist.items.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`launch-guide-item ${item.tone}`}
+                    data-launch-guide-item={item.id}
+                    onClick={() => openLaunchChecklistItem(item)}
+                  >
+                    <span className="launch-guide-item-state" aria-hidden="true">
+                      {item.tone === 'ok' ? <CheckCircle2 size={16} /> : <ShieldCheck size={16} />}
+                    </span>
+                    <span className="launch-guide-item-copy">
+                      <strong>{item.title}</strong>
+                      <small>{item.detail}</small>
+                    </span>
+                    <b>{item.action}</b>
+                  </button>
+                ))}
+              </div>
+              <div className="launch-guide-fix-queue" data-launch-guide-fix-queue="true">
+                <div className="launch-guide-fix-queue-head">
+                  <span>
+                    <ListChecks size={15} />
+                    {t('launchGuide.fixQueueEyebrow')}
+                  </span>
+                  <strong>{t('launchGuide.fixQueueTitle')}</strong>
+                  <p>{launchChecklist.remediationSteps.length > 0 ? t('launchGuide.fixQueueDesc') : t('launchGuide.fixQueueEmpty')}</p>
+                </div>
+                {launchChecklist.remediationSteps.length > 0 && (
+                  <div className="launch-guide-fix-steps">
+                    {launchChecklist.remediationSteps.map((step) => (
                       <button
-                        key={item.id}
+                        key={step.id}
                         type="button"
-                        className={`launch-guide-item ${item.tone}`}
-                        data-launch-guide-item={item.id}
-                        onClick={() => openLaunchChecklistItem(item)}
+                        className={`launch-guide-fix-step ${step.item.tone}`}
+                        data-launch-guide-fix-step={step.item.id}
+                        onClick={() => openLaunchChecklistItem(step.item)}
                       >
-                        <span className="launch-guide-item-state" aria-hidden="true">
-                          {item.tone === 'ok' ? <CheckCircle2 size={16} /> : <ShieldCheck size={16} />}
-                        </span>
-                        <span className="launch-guide-item-copy">
-                          <strong>{item.title}</strong>
-                          <small>{item.detail}</small>
-                        </span>
-                        <b>{item.action}</b>
+                        <span>{step.priority}</span>
+                        <strong>{step.item.title}</strong>
+                        <small>{step.reason}</small>
+                        <b>{step.item.action}</b>
                       </button>
                     ))}
                   </div>
-                  <div className="launch-guide-fix-queue" data-launch-guide-fix-queue="true">
-                    <div className="launch-guide-fix-queue-head">
-                      <span>
-                        <ListChecks size={15} />
-                        {t('launchGuide.fixQueueEyebrow')}
-                      </span>
-                      <strong>{t('launchGuide.fixQueueTitle')}</strong>
-                      <p>{launchChecklist.remediationSteps.length > 0 ? t('launchGuide.fixQueueDesc') : t('launchGuide.fixQueueEmpty')}</p>
-                    </div>
-                    {launchChecklist.remediationSteps.length > 0 && (
-                      <div className="launch-guide-fix-steps">
-                        {launchChecklist.remediationSteps.map((step) => (
-                          <button
-                            key={step.id}
-                            type="button"
-                            className={`launch-guide-fix-step ${step.item.tone}`}
-                            data-launch-guide-fix-step={step.item.id}
-                            onClick={() => openLaunchChecklistItem(step.item)}
-                          >
-                            <span>{step.priority}</span>
-                            <strong>{step.item.title}</strong>
-                            <small>{step.reason}</small>
-                            <b>{step.item.action}</b>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
+                )}
+              </div>
             </article>
           )}
 
