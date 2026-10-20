@@ -3688,6 +3688,7 @@ SVG
             <p class="check-line"><span>✓</span> 资源页分为清单 / 监控与历史 / 告警：清单保留服务器表格，监控与历史列出全量遥测并直达单机历史曲线，告警承载资源告警策略。</p>
             <p class="check-line"><span>✓</span> 安全页分为总览 / 发布门禁 / SSH 诊断 / 审计记录，一次只展开一个视图，页面高度从 9340px 降到 1000–5500px。</p>
             <p class="check-line"><span>✓</span> 低频工具进二级视图：自定义 API 测试从一级导航移到「运维 → 工具」，一级导航不再承载工具类入口。</p>
+            <p class="check-line"><span>✓</span> AI 助手以右下角常驻 dock 提供，不占一级导航；需要完整工作区时用命令面板或 <code>#ai</code> 深链打开。</p>
             <p class="check-line"><span>✓</span> 顶栏只保留一个运行状态 chip，具体计数交给收件箱角标；修复顺序合并进上线检查清单，不再复制第二份队列。</p>
           </div>
         </div>
