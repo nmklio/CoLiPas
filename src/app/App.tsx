@@ -479,6 +479,32 @@ export function App() {
   const [operationDraft, setOperationDraft] = useState<OperationsDraft | null>(null);
   const [overviewPreflightSnapshot, setOverviewPreflightSnapshot] = useState<OverviewPreflightSnapshot | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // A trace deep link opens the audit view directly: that is where the filtered
+  // event trail lives, and it keeps the deep-linked evidence on screen. The
+  // listener covers in-app navigation, the initial state covers a cold load.
+  useEffect(() => {
+    const syncTraceView = () => {
+      if (window.location.hash.includes('trace=') || window.location.search.includes('trace=')) {
+        setSecurityView('audit');
+      }
+    };
+    syncTraceView();
+    window.addEventListener('hashchange', syncTraceView);
+    return () => window.removeEventListener('hashchange', syncTraceView);
+  }, []);
+  const [securityView, setSecurityView] = useState<'overview' | 'diagnose' | 'audit'>(() => (
+    window.location.hash.includes('trace=') || window.location.search.includes('trace=') ? 'audit' : 'overview'
+  ));
+  // History-based navigation does not fire hashchange, so read the live URL at render.
+  const [securityTraceDismissed, setSecurityTraceDismissed] = useState(false);
+  const securityTraceActive = /^#security\?trace=/.test(window.location.hash) && !securityTraceDismissed;
+  // Entering the security module always starts on its overview view; only an
+  // explicit tab click or a trace deep link changes that.
+  useEffect(() => {
+    if (activeSection === 'security') {
+      setSecurityView('overview');
+    }
+  }, [activeSection]);
   const [operatorUtilityOpen, setOperatorUtilityOpen] = useState(false);
   const [operationsInboxOpen, setOperationsInboxOpen] = useState(false);
   const [aiCollapsed, setAiCollapsed] = useState(true);
@@ -1366,6 +1392,12 @@ export function App() {
   function navigateToSection(section: SectionId, focus?: ReleaseFixFocusPayload, traceId = '') {
     const commitNavigation = () => {
       setActiveSection(section);
+      // Every entry into the security workspace starts on its overview view;
+      // the diagnostic and audit views are an explicit choice, not sticky mode.
+      if (section === 'security') {
+        setSecurityView('overview');
+        setSecurityTraceDismissed(!traceId);
+      }
       setReleaseFixFocus(focus ? { ...focus, targetSection: section } : null);
       if (focus?.anchor === 'ai-provider') {
         setAiCollapsed(false);
@@ -2177,21 +2209,24 @@ export function App() {
           onClearReviewState={operationsInboxReview.clearReviewState}
         />
 
-        <main data-module={activeSection}>
+        <main data-module={activeSection} data-security-view={activeSection === 'security' ? (securityTraceActive ? 'audit' : securityView) : undefined}>
           {activeSection === 'security' && (
             <nav className="module-subnav" aria-label={t('app.securityViews')}>
-              {[
-                { key: 'app.securityViewOverview', selector: '.security-kpi-grid' },
-                { key: 'app.securityViewGate', selector: '.security-release-handoff' },
-                { key: 'app.securityViewEvidence', selector: '.security-evidence-brief' },
-                { key: 'app.securityViewDiagnose', selector: '.security-ssh-performance-card' },
-                { key: 'app.securityViewAudit', selector: '.security-audit-workspace' },
-              ].map((view) => (
+              {([
+                { id: 'overview', key: 'app.securityViewOverview' },
+                { id: 'diagnose', key: 'app.securityViewDiagnose' },
+                { id: 'audit', key: 'app.securityViewAudit' },
+              ] as const).map((view) => (
                 <button
-                  key={view.key}
+                  key={view.id}
                   type="button"
-                  data-security-jump={view.key.replace('app.securityView', '').toLowerCase()}
-                  onClick={() => document.querySelector(view.selector)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                  aria-pressed={securityView === view.id}
+                  className={securityView === view.id ? 'active' : undefined}
+                  data-security-view-tab={view.id}
+                  onClick={() => {
+                    setSecurityTraceDismissed(true);
+                    setSecurityView(view.id);
+                  }}
                 >
                   {t(view.key)}
                 </button>

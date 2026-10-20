@@ -40,10 +40,12 @@ try {
   await page.locator('[data-release-fix-router="true"]').scrollIntoViewIfNeeded();
   await captureVisualEvidence(page, 'desktop-release-cockpit-handoff', ['[data-release-fix-router="true"]', '[data-release-cockpit="true"]', '[data-release-handoff-pack="true"]', '[data-release-evidence-timeline="true"]']);
   await captureVisualEvidence(page, 'desktop-security-trace', ['.security-workbench', '.security-readiness-card', '[data-release-gate-policy="true"]', '[data-release-fix-router="true"]', '[data-release-cockpit="true"]', '[data-release-handoff-pack="true"]', '[data-release-evidence-timeline="true"]', '.security-evidence-brief', '.security-release-playbook', '.security-ssh-performance-card']);
+  await openSecurityView(page, 'diagnose');
   await page.locator('[data-ssh-flight-recorder="true"]').scrollIntoViewIfNeeded();
   await captureVisualEvidence(page, 'desktop-ssh-flight-recorder', ['[data-ssh-flight-recorder="true"]', '.security-ssh-flight-rail', '[data-ssh-latency-curve="true"]', '[data-ssh-interaction-sampler="true"]', '[data-ssh-experience-sla="true"]', '[data-ssh-bottleneck-trend="true"]']);
   await page.locator('[data-ssh-bottleneck-trend="true"]').scrollIntoViewIfNeeded();
   await captureVisualEvidence(page, 'desktop-ssh-bottleneck-trend', ['[data-ssh-bottleneck-trend="true"]']);
+  await openSecurityView(page, 'overview');
   await assertOverviewHealthBaseline(page);
   await deleteTemporaryAssetServer(page, temporaryServer.id);
   temporaryServerId = '';
@@ -835,6 +837,39 @@ async function setRangeInputValue(locator, value) {
   }, value);
 }
 
+async function openSecurityView(targetPage, view) {
+  // A trace deep link pins the audit view; drop it before switching tabs so the
+  // tab state is authoritative again.
+  const hadTrace = await targetPage.evaluate(() => {
+    if (window.location.hash.includes('trace=')) {
+      window.location.hash = '#security';
+      return true;
+    }
+    return false;
+  });
+  if (hadTrace) {
+    await targetPage.waitForTimeout(300);
+  }
+  const tab = targetPage.locator(`[data-security-view-tab="${view}"]`);
+  await tab.waitFor({ timeout: 10000 });
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    await tab.click();
+    const applied = await targetPage
+      .waitForFunction(
+        (expected) => document.querySelector('main')?.getAttribute('data-security-view') === expected,
+        view,
+        { timeout: 1000 },
+      )
+      .then(() => true)
+      .catch(() => false);
+    if (applied) {
+      return;
+    }
+    await targetPage.waitForTimeout(250);
+  }
+  throw new Error(`security view "${view}" did not activate`);
+}
+
 function isExpectedBrowserConsoleNoise(text) {
   return /WebSocket connection to .+\/api\/servers\/shells\/ws.+WebSocket is closed before the connection is established/i.test(text);
 }
@@ -912,6 +947,7 @@ async function ensureSshQuickCommandsEnabled(targetPage, sshServerRow) {
 }
 
 async function assertReleaseEvidenceBrief(targetPage) {
+  await openSecurityView(targetPage, 'overview');
   await targetPage.locator('.security-evidence-brief').waitFor({ timeout: 10000 });
   await targetPage.locator('[data-release-fix-router="true"]').waitFor({ timeout: 10000 });
   await targetPage.locator('[data-release-fix-checklist="true"]').waitFor({ timeout: 10000 });
@@ -1167,6 +1203,8 @@ async function assertReleaseEvidenceBrief(targetPage) {
   if (playbookCount !== 3) {
     throw new Error(`Release failure playbook should expose three diagnostic cards, got ${playbookCount}`);
   }
+  // The SSH diagnostics moved into their own security view.
+  await openSecurityView(targetPage, 'diagnose');
   const sshPerfMetricCount = await targetPage.locator('.security-ssh-performance-metric').count();
   if (sshPerfMetricCount !== 9) {
     throw new Error(`SSH performance card should expose nine aggregate metrics, got ${sshPerfMetricCount}`);
@@ -1590,6 +1628,7 @@ async function assertReleaseEvidenceBrief(targetPage) {
   await assertElementHorizontallyWithinViewport(targetPage, '.security-release-playbook', 'desktop release failure playbook');
   await assertElementHorizontallyWithinViewport(targetPage, '[data-ssh-production-probe="true"]', 'desktop SSH production probe');
   await assertElementHorizontallyWithinViewport(targetPage, '.security-ssh-performance-card', 'desktop SSH performance card');
+  await openSecurityView(targetPage, 'overview');
 }
 
 async function expectReleaseFixChecklistStatus(targetPage, status) {
@@ -3884,6 +3923,7 @@ async function assertSshTerminalPanel(targetPage) {
     await closeMessage.waitFor({ state: 'hidden', timeout: 7000 });
     await waitForSshShellCount(targetPage, 0, 5000);
     await targetPage.locator('.nav-list').getByRole('button', { name: /^Security$/i }).click();
+    await openSecurityView(targetPage, 'diagnose');
     await targetPage.locator('[data-ssh-terminal-support-snapshot="true"]').waitFor({ timeout: 10000 });
     const securityTerminalSnapshotText = await targetPage.locator('[data-ssh-terminal-support-snapshot="true"]').innerText();
     if (!/Latest terminal field evidence/i.test(securityTerminalSnapshotText) || !/SSH sanitized diagnosis pack/i.test(securityTerminalSnapshotText) || !/Last copied/i.test(securityTerminalSnapshotText) || !/Channel state/i.test(securityTerminalSnapshotText)) {
@@ -4632,29 +4672,39 @@ async function assertMobileModuleLayoutSweep() {
       '.security-readiness-card',
       '.security-evidence-brief',
       '.security-release-playbook',
-      '.security-ssh-production-probe',
-      '.security-ssh-sla-trend',
-      '.security-ssh-bottleneck-trend',
       '.security-kpi-grid',
       '.security-control-grid',
       '.security-remediation-card',
-      '.security-audit-workspace',
     ]);
     await assertSingleColumnStack(mobilePage, '.security-readiness-card', 'mobile security readiness card');
     await assertSingleColumnStack(mobilePage, '.security-evidence-metrics', 'mobile release evidence metrics');
     await assertSingleColumnStack(mobilePage, '.security-release-playbook-grid', 'mobile release failure playbook');
     await assertElementHorizontallyWithinViewport(mobilePage, '.security-evidence-brief', 'mobile release evidence brief');
     await assertElementHorizontallyWithinViewport(mobilePage, '.security-release-playbook', 'mobile release failure playbook');
-    await assertElementHorizontallyWithinViewport(mobilePage, '.security-ssh-production-probe', 'mobile SSH production probe');
-    await assertElementHorizontallyWithinViewport(mobilePage, '.security-ssh-sla-trend', 'mobile SSH experience SLA trend');
-    await assertElementHorizontallyWithinViewport(mobilePage, '.security-ssh-bottleneck-trend', 'mobile SSH bottleneck trend');
     await assertSingleColumnStack(mobilePage, '.security-control-grid', 'mobile security control grid');
+    await assertNoHorizontalOverflow(mobilePage, 'mobile Security overview layout');
+
+    await openSecurityView(mobilePage, 'diagnose');
+    for (const sshSelector of ['.security-ssh-production-probe', '.security-ssh-sla-trend', '.security-ssh-bottleneck-trend']) {
+      const sshLabel = 'mobile Security section ' + sshSelector;
+      await mobilePage.locator(sshSelector).first().waitFor({ timeout: 10000 });
+      await mobilePage.locator(sshSelector).first().scrollIntoViewIfNeeded();
+      await assertElementHorizontallyWithinViewport(mobilePage, sshSelector, sshLabel);
+      await assertNoHorizontalOverflow(mobilePage, sshLabel);
+    }
+
+    await openSecurityView(mobilePage, 'audit');
+    await mobilePage.locator('.security-audit-workspace').waitFor({ timeout: 10000 });
+    await assertNoHorizontalOverflow(mobilePage, 'mobile Security section .security-audit-workspace');
     await assertMobileAuditRowLayout(mobilePage);
     await mobilePage.locator('.security-audit-row').first().click();
     await mobilePage.locator('.security-audit-detail-card').waitFor({ timeout: 5000 });
     await assertElementHorizontallyWithinViewport(mobilePage, '.security-audit-detail-card', 'mobile security audit detail');
-    await assertNoHorizontalOverflow(mobilePage, 'mobile module layout sweep');
+    await assertNoHorizontalOverflow(mobilePage, 'mobile Security audit layout');
     await captureVisualEvidence(mobilePage, 'mobile-security-audit', ['.security-workbench', '.security-audit-detail-card']);
+
+    await openSecurityView(mobilePage, 'overview');
+    await assertNoHorizontalOverflow(mobilePage, 'mobile module layout sweep');
 
     console.log('ok browser e2e covers mobile servers, operations, custom API, and security layout linkage');
   } finally {

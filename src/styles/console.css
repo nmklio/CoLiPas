@@ -676,3 +676,57 @@ main :where([class*='-pill'], [class*='-badge'], [class*='-tag'], [class*='-stam
   box-shadow: var(--focus-ring);
   color: var(--brand);
 }
+/* --- security views ------------------------------------------------------- *
+ * The security workspace used to be a single 9.3k px scroll with 86 panels.
+ * Three views keep each surface reachable without stacking the SSH sampler,
+ * the audit trail and the release gate on top of each other.
+ * ------------------------------------------------------------------------- */
+
+.module-subnav button.active {
+  background: var(--brand-solid);
+  color: var(--on-brand);
+}
+
+.module-subnav button.active:hover {
+  background: var(--brand-hover);
+  color: var(--on-brand);
+}
+
+main[data-module='security'][data-security-view='overview'] :is(
+  [class*='security-ssh-'],
+  [class*='security-audit-']
+) {
+  display: none;
+}
+
+/* The SSH performance summary stays on the overview as a single capped card;
+   the sampler, curves and flight recorder stay in the diagnostics view. */
+main[data-module='security'][data-security-view='overview'] .security-ssh-performance-card {
+  display: block;
+  max-height: 420px;
+  overflow: hidden;
+}
+
+main[data-module='security'][data-security-view='diagnose'] :is(
+  .security-kpi-grid,
+  .security-check-list,
+  .security-policy-grid,
+  [class*='security-readiness'],
+  [class*='security-remediation'],
+  [class*='security-control-'],
+  [class*='security-audit-']
+) {
+  display: none;
+}
+
+main[data-module='security'][data-security-view='audit'] :is(
+  .security-kpi-grid,
+  .security-check-list,
+  .security-policy-grid,
+  [class*='security-readiness'],
+  [class*='security-remediation'],
+  [class*='security-control-'],
+  [class*='security-ssh-']
+) {
+  display: none;
+}
