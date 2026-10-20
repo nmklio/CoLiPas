@@ -25,18 +25,32 @@
   --c-teal-500: #0f766e;
   --c-teal-600: #0b5f59;
 
+  /* --- 1. scale: console brand blue (Tencent-console ramp) ----------------- */
+  --c-brand-1: #f2f3ff;
+  --c-brand-3: #b5c7ff;
+  --c-brand-6: #366ef4;
+  --c-brand-7: #0052d9;
+  --c-brand-8: #003cab;
+  --c-brand-9: #002a7c;
+  --c-brand-dark: #4593ff;
+  --c-brand-dark-strong: #79b0ff;
+
   /* --- 1. scale: neutral slate -------------------------------------------- */
   --c-white: #ffffff;
   --c-slate-25: #fbfdfd;
   --c-slate-30: #f7fbfb;
   --c-slate-50: #f4f7f8;
+  --c-slate-75: #f3f5f7;
   --c-slate-100: #eef5f6;
+  --c-slate-150: #e8e8e8;
   --c-slate-200: #d7e2e5;
+  --c-slate-250: #dcdcdc;
   --c-slate-300: #c7d7db;
   --c-slate-500: #64747b;
   --c-slate-800: #18343a;
   --c-slate-900: #10262b;
   --c-slate-950: #122329;
+  --c-row-hover: #f2f8ff;
 
   /* --- 1. scale: status hues ---------------------------------------------- */
   --c-blue-600: #246b86;
@@ -50,8 +64,12 @@
   --panel-strong: var(--c-slate-100);
   --surface: var(--c-slate-25);
   --surface-strong: var(--c-slate-30);
-  --surface-hover: #f2f8f8;
+  --surface-hover: var(--c-row-hover);
   --overlay: rgba(18, 35, 41, 0.42);
+  /* Console canvas: flatter than the marketing page, one step greyer than cards. */
+  --canvas: var(--c-slate-75);
+  --console-row-hover: var(--c-row-hover);
+  --console-nav-bg: var(--c-white);
 
   /* --- 2. semantic: text -------------------------------------------------- */
   --text: var(--c-slate-950);
@@ -61,16 +79,19 @@
   --text-disabled: #9aa9ae;
 
   /* --- 2. semantic: lines ------------------------------------------------- */
-  --line: var(--c-slate-200);
-  --line-strong: var(--c-slate-300);
+  --line: var(--c-slate-150);
+  --line-strong: var(--c-slate-250);
   --border: var(--line);
   --border-strong: var(--line-strong);
 
   /* --- 2. semantic: brand ------------------------------------------------- */
-  --brand: var(--c-teal-500);
-  --brand-strong: var(--c-teal-600);
-  --brand-soft: var(--c-teal-50);
-  --brand-line: var(--c-teal-100);
+  --brand: var(--c-brand-7);
+  --brand-strong: var(--c-brand-8);
+  --brand-hover: var(--c-brand-6);
+  --brand-soft: var(--c-brand-1);
+  --brand-line: var(--c-brand-3);
+  --brand-solid: var(--c-brand-7);
+  --on-brand: var(--c-white);
 
   /* --- 2. semantic: sidebar ----------------------------------------------- */
   --sidebar: var(--c-slate-900);
@@ -90,7 +111,7 @@
   --shadow: 0 16px 38px rgba(18, 35, 41, 0.08);
   --shadow-soft: 0 8px 20px rgba(18, 35, 41, 0.055);
   --shadow-overlay: 0 28px 64px rgba(18, 35, 41, 0.18);
-  --focus-ring: 0 0 0 3px rgba(15, 118, 110, 0.14);
+  --focus-ring: 0 0 0 3px rgba(0, 82, 217, 0.16);
 
   /* --- typography --------------------------------------------------------- */
   --font-ui: Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
@@ -117,6 +138,17 @@
   --r-md: 10px;
   --r-lg: 14px;
   --r-pill: 999px;
+  /* Console geometry: flat 3px cards, 2px chips, 6px popovers (TDesign scale). */
+  --r-card: 3px;
+  --r-control: 3px;
+  --r-chip: 2px;
+  --r-pop: 6px;
+  --control-h-sm: 28px;
+  --control-h: 32px;
+  --control-h-lg: 36px;
+  --row-h: 44px;
+  --nav-width: 208px;
+  --topbar-h: 48px;
 
   /* --- layering ----------------------------------------------------------- */
   --z-base: 0;
@@ -153,6 +185,9 @@
   --surface-strong: #162226;
   --surface-hover: #18262b;
   --overlay: rgba(0, 0, 0, 0.58);
+  --canvas: #0d1416;
+  --console-row-hover: #16232a;
+  --console-nav-bg: #0a1012;
 
   --text: #e7f0f1;
   --muted: #97abb0;
@@ -165,10 +200,11 @@
   --sidebar: #0a1012;
   --sidebar-strong: #111b1e;
 
-  --brand: #2dd4bf;
-  --brand-strong: #14b8a6;
-  --brand-soft: rgba(45, 212, 191, 0.14);
-  --brand-line: rgba(45, 212, 191, 0.34);
+  --brand: var(--c-brand-dark);
+  --brand-strong: var(--c-brand-dark-strong);
+  --brand-hover: var(--c-brand-dark-strong);
+  --brand-soft: rgba(69, 147, 255, 0.14);
+  --brand-line: rgba(69, 147, 255, 0.34);
 
   --blue: #6fb6d4;
   --orange: #e0a15c;
@@ -178,5 +214,5 @@
   --shadow: 0 16px 38px rgba(0, 0, 0, 0.45);
   --shadow-soft: 0 8px 20px rgba(0, 0, 0, 0.3);
   --shadow-overlay: 0 28px 64px rgba(0, 0, 0, 0.6);
-  --focus-ring: 0 0 0 3px rgba(45, 212, 191, 0.28);
+  --focus-ring: 0 0 0 3px rgba(69, 147, 255, 0.3);
 }

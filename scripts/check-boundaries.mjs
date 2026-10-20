@@ -141,13 +141,14 @@ for (const file of clientFiles) {
 // ---------------------------------------------------------------------------
 const lineBudgets = new Map([
   ['src/styles/global.css', 25325],
-  ['src/styles/tokens.css', 183],
+  ['src/styles/tokens.css', 219],
   // The dark layer holds three things: chrome overrides, the light workspace
   // island (28 variables, mirrored from tokens.css and asserted by
   // check-tokens.mjs), and the command palette. It does not grow per module —
   // module surfaces are migrated to tokens instead.
-  ['src/styles/theme-dark.css', 231],
-  ['src/app/App.tsx', 3034],
+  ['src/styles/console.css', 582],
+  ['src/styles/theme-dark.css', 236],
+  ['src/app/App.tsx', 3046],
   ['src/services/apiClient.ts', 1874],
   ['src/server/app.ts', 1233],
   ['src/server/config.ts', 169],

@@ -192,14 +192,17 @@
     --panel-strong: var(--c-slate-100);
     --surface: var(--c-slate-25);
     --surface-strong: var(--c-slate-30);
-    --surface-hover: #f2f8f8;
+    --surface-hover: var(--c-row-hover);
     --overlay: rgba(18, 35, 41, 0.42);
+    --canvas: var(--c-slate-75);
+    --console-row-hover: var(--c-row-hover);
+    --console-nav-bg: var(--c-white);
     --text: var(--c-slate-950);
     --muted: var(--c-slate-500);
     --text-inverse: var(--c-white);
     --text-disabled: #9aa9ae;
-    --line: var(--c-slate-200);
-    --line-strong: var(--c-slate-300);
+    --line: var(--c-slate-150);
+    --line-strong: var(--c-slate-250);
     /* Aliases are substituted where they are declared, so the island has to
        re-declare them or the workspace would inherit the chrome's dark values. */
     --text-muted: var(--muted);
@@ -211,10 +214,12 @@
     --status-info: var(--blue);
     --sidebar: var(--c-slate-900);
     --sidebar-strong: var(--c-slate-800);
-    --brand: var(--c-teal-500);
-    --brand-strong: var(--c-teal-600);
-    --brand-soft: var(--c-teal-50);
-    --brand-line: var(--c-teal-100);
+    --brand: var(--c-brand-7);
+    --brand-strong: var(--c-brand-8);
+    --brand-hover: var(--c-brand-6);
+    --brand-soft: var(--c-brand-1);
+    --brand-line: var(--c-brand-3);
+    --on-brand: var(--c-white);
     --blue: var(--c-blue-600);
     --orange: var(--c-amber-600);
     --red: var(--c-red-600);
@@ -222,7 +227,7 @@
     --shadow: 0 16px 38px rgba(18, 35, 41, 0.08);
     --shadow-soft: 0 8px 20px rgba(18, 35, 41, 0.055);
     --shadow-overlay: 0 28px 64px rgba(18, 35, 41, 0.18);
-    --focus-ring: 0 0 0 3px rgba(15, 118, 110, 0.14);
+    --focus-ring: 0 0 0 3px rgba(0, 82, 217, 0.16);
 
     background: var(--bg);
     color: var(--text);

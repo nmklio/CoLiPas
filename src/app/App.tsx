@@ -1812,10 +1812,22 @@ export function App() {
           </div>
         </div>
         <nav className="nav-list" aria-label={t('app.navAria')}>
-          {sections.map((section) => {
+          {sections.map((section, index) => {
             const Icon = section.icon;
             const isPending = pendingSection === section.id;
-            return (
+            // Console-style grouping: the labels are decorative, the buttons stay
+            // flat so navigation semantics and existing hooks do not change.
+            const groupLabelKey = index === 0
+              ? 'app.navGroupWorkspace'
+              : index === 2
+                ? 'app.navGroupOperate'
+                : index === 5
+                  ? 'app.navGroupGovern'
+                  : null;
+            return [
+              groupLabelKey
+                ? <span key={`${section.id}-group`} className="nav-group-label">{t(groupLabelKey)}</span>
+                : null,
               <button
                 key={section.id}
                 type="button"
@@ -1832,8 +1844,8 @@ export function App() {
                   ? <RefreshCw className="nav-item-loading" size={18} aria-hidden="true" />
                   : <Icon size={18} aria-hidden="true" />}
                 <span>{t(section.labelKey)}</span>
-              </button>
-            );
+              </button>,
+            ];
           })}
         </nav>
         <div className="sidebar-footer">

@@ -132,7 +132,7 @@ const legacyNames = [
   '--focus-ring',
 ];
 
-/** Frozen light-mode values from the pre-token stylesheet. Light mode is the contract. */
+/** Frozen light-mode values. Light mode is the contract: moving one of these is a reviewed redesign decision. */
 const frozenLightValues = {
   '--bg': '#f4f7f8',
   '--panel': '#ffffff',
@@ -141,12 +141,12 @@ const frozenLightValues = {
   '--surface-strong': '#f7fbfb',
   '--text': '#122329',
   '--muted': '#64747b',
-  '--line': '#d7e2e5',
-  '--line-strong': '#c7d7db',
-  '--brand': '#0f766e',
-  '--brand-strong': '#0b5f59',
-  '--brand-soft': '#e8f6f3',
-  '--brand-line': '#a8d8d0',
+  '--line': '#e8e8e8',
+  '--line-strong': '#dcdcdc',
+  '--brand': '#0052d9',
+  '--brand-strong': '#003cab',
+  '--brand-soft': '#f2f3ff',
+  '--brand-line': '#b5c7ff',
   '--sidebar': '#10262b',
   '--sidebar-strong': '#18343a',
   '--blue': '#246b86',
@@ -155,7 +155,7 @@ const frozenLightValues = {
   '--green': '#16774e',
   '--shadow': '0 16px 38px rgba(18,35,41,0.08)',
   '--shadow-soft': '0 8px 20px rgba(18,35,41,0.055)',
-  '--focus-ring': '0 0 0 3px rgba(15,118,110,0.14)',
+  '--focus-ring': '0 0 0 3px rgba(0,82,217,0.16)',
 };
 
 const resolvedLight = new Map();

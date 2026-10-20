@@ -1,0 +1,581 @@
+/* ==========================================================================
+ * console.css — the console layout layer.
+ *
+ * Loaded after global.css and before theme-dark.css, so it restyles the shell
+ * and the shared component vocabulary without touching a single module file.
+ * Every value comes from tokens.css; dark mode keeps working because the layer
+ * only ever references semantic tokens.
+ *
+ * Geometry follows the measured TDesign / Tencent Cloud console scale:
+ *   12px UI text, 14px body, 16px card titles, 20px page titles
+ *   32px controls, 36px nav rows, 40px table headers, 44px table rows
+ *   3px cards and controls, 2px chips, 6px popovers
+ *   1px borders and flat surfaces instead of large blurred shadows
+ * ========================================================================== */
+
+/* --- shell ---------------------------------------------------------------- */
+
+.shell {
+  grid-template-columns: var(--nav-width) minmax(0, 1fr);
+  background: var(--canvas);
+}
+
+.sidebar {
+  padding: 0;
+  gap: 0;
+  background: var(--console-nav-bg);
+  border-right: 1px solid var(--line);
+  color: var(--text);
+}
+
+.sidebar::before {
+  display: none;
+}
+
+.brand {
+  min-height: 56px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+  gap: 10px;
+}
+
+.brand strong {
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+.brand span {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.nav-list {
+  padding: 8px;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+.nav-group-label {
+  display: block;
+  padding: 12px 10px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+
+.nav-item {
+  min-height: 36px;
+  padding: 0 10px;
+  gap: 10px;
+  border: 1px solid transparent;
+  border-radius: var(--r-control);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  background: transparent;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.nav-item > svg {
+  flex: 0 0 18px;
+  color: var(--muted);
+  transition: color 120ms ease;
+}
+
+.nav-item:hover,
+.nav-item:focus-visible {
+  background: var(--brand-soft);
+  color: var(--brand);
+  outline: none;
+}
+
+.nav-item:hover > svg,
+.nav-item:focus-visible > svg {
+  color: var(--brand);
+}
+
+.nav-item.active {
+  border-color: transparent;
+  background: var(--brand-solid);
+  color: var(--on-brand);
+  box-shadow: none;
+}
+
+.nav-item.active > svg {
+  color: var(--on-brand);
+}
+
+.nav-item.pending {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+  gap: 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.sidebar-footer strong {
+  font-size: 12px;
+  color: var(--text);
+}
+
+/* --- topbar --------------------------------------------------------------- */
+
+.topbar {
+  min-height: var(--topbar-h);
+  padding: 0 20px;
+  gap: 12px;
+  background: var(--panel);
+  backdrop-filter: none;
+  border-bottom: 1px solid var(--line);
+}
+
+.topbar-current {
+  gap: 8px;
+}
+
+.topbar-current-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-chip);
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.topbar-current span {
+  font-size: 11px;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+
+.topbar-current strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.topbar-metrics {
+  gap: 6px;
+}
+
+.topbar-chip {
+  min-height: 24px;
+  padding: 0 8px;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-chip);
+  background: var(--panel-strong);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.topbar-chip b {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.topbar-chip.ok {
+  border-color: var(--brand-line);
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.topbar-chip.ok b {
+  color: var(--brand);
+}
+
+.topbar-actions {
+  gap: 6px;
+}
+
+.icon-button {
+  width: var(--control-h);
+  height: var(--control-h);
+  border-radius: var(--r-control);
+}
+
+/* --- content frame -------------------------------------------------------- */
+
+.content {
+  background: var(--canvas);
+}
+
+.page,
+main.page {
+  padding: 16px 20px 28px;
+  gap: 12px;
+}
+
+main {
+  background: var(--canvas);
+}
+
+/* --- panels and cards ----------------------------------------------------- */
+
+.module-section,
+.launch-guide,
+.monitor-hero,
+.monitor-map-panel,
+.fleet-view-shelf,
+.operations-inbox-panel,
+.health-baseline-card,
+.docs-section,
+.docs-quick-card,
+.account-modal,
+.settings-panel {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--panel);
+  box-shadow: none;
+  gap: 12px;
+}
+
+main :where([class$='-card'], [class$='-panel'], [class$='-shelf'], [class$='-strip']) {
+  border-radius: var(--r-card);
+  border-color: var(--line);
+  box-shadow: none;
+}
+
+/* --- headings ------------------------------------------------------------- */
+
+.section-header {
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.section-header h2,
+.module-section h2 {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.section-header p,
+.module-section > p {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--muted);
+}
+
+.section-kicker {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--muted);
+}
+
+h1 {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+h3 {
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 600;
+}
+
+/* --- controls ------------------------------------------------------------- */
+
+.tool-button,
+button.tool-button,
+a.tool-button {
+  min-height: var(--control-h);
+  padding: 0 12px;
+  gap: 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-control);
+  background: var(--panel);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  box-shadow: none;
+}
+
+.tool-button:hover,
+button.tool-button:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+  background: var(--panel);
+}
+
+.tool-button.primary,
+button.tool-button.primary {
+  border-color: var(--brand-solid);
+  background: var(--brand-solid);
+  color: var(--on-brand);
+}
+
+.tool-button.primary:hover,
+button.tool-button.primary:hover {
+  border-color: var(--brand-hover);
+  background: var(--brand-hover);
+  color: var(--on-brand);
+}
+
+.tool-button.ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--brand);
+}
+
+input,
+select,
+textarea {
+  border-radius: var(--r-control);
+}
+
+input:not([type='checkbox'], [type='radio'], [type='range'], [type='color']),
+select {
+  min-height: var(--control-h);
+  font-size: 13px;
+}
+
+.field-label,
+label > span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.tab-button,
+.segmented button,
+.segmented-item {
+  min-height: var(--control-h-sm);
+  border-radius: var(--r-control);
+  font-size: 12px;
+}
+
+.tab-button.active,
+.segmented button.active,
+.segmented-item.active {
+  background: var(--brand-solid);
+  color: var(--on-brand);
+}
+
+/* --- tables --------------------------------------------------------------- */
+
+.table-wrap {
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--panel);
+  box-shadow: none;
+  overflow: auto;
+}
+
+.table-wrap table {
+  font-size: 13px;
+}
+
+.table-wrap thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 40px;
+  padding: 0 12px;
+  background: var(--panel-strong);
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.table-wrap tbody td {
+  height: var(--row-h);
+  padding: 0 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.table-wrap tbody tr:hover td {
+  background: var(--console-row-hover);
+}
+
+.table-wrap tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* --- chips, pills, callouts ---------------------------------------------- */
+
+.pill,
+.status-pill,
+.state-pill,
+.metric-pill,
+.result-pill,
+.ops-inbox-pill,
+.health-baseline-pill {
+  border-radius: var(--r-chip);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.callout,
+.note,
+.empty-state,
+.module-empty {
+  border-radius: var(--r-card);
+  border-color: var(--line);
+  font-size: 12px;
+}
+
+.kbd,
+kbd {
+  border-radius: var(--r-chip);
+  font-size: 11px;
+}
+
+/* --- popovers and overlays ------------------------------------------------ */
+
+.command-palette,
+.command-palette-panel,
+.operator-utility-menu,
+.fleet-view-menu,
+.settings-panel,
+.account-modal,
+.drawer,
+.portal-popover {
+  border-radius: var(--r-pop);
+  border-color: var(--line);
+  box-shadow: var(--shadow);
+}
+
+/* --- typography caps ------------------------------------------------------ */
+
+main :where(h1, h2) {
+  font-size: 18px;
+  line-height: 26px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+main h1 {
+  font-size: 20px;
+  line-height: 28px;
+}
+
+main :where(h4, h5) {
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+/* The AI launcher is a floating action, not a hero pill. */
+.ai-launcher {
+  min-height: var(--control-h-lg);
+  padding: 0 12px;
+  border-radius: var(--r-control);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: var(--shadow-soft);
+}
+
+/* --- module-level flattening --------------------------------------------- *
+ * Module components were built for the marketing look: tinted gradients,
+ * 10-14px radii and blurred shadows. Flattening the surfaces here keeps every
+ * status colour while matching the console's flat, bordered panels.
+ * ------------------------------------------------------------------------- */
+
+article.launch-guide,
+article.launch-guide.fail,
+article.launch-guide.warn,
+.launch-guide {
+  background: var(--panel);
+  background-image: none;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  box-shadow: none;
+}
+
+.launch-guide-radar,
+.launch-guide-fix-queue,
+.monitor-overview,
+.monitor-card,
+.monitor-map-panel {
+  background-image: none;
+  background-color: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  box-shadow: none;
+}
+
+section.monitor-overview {
+  padding: 16px;
+}
+
+.launch-guide-radar,
+.launch-guide-fix-queue {
+  background-color: var(--surface);
+}
+
+.launch-guide-item,
+.launch-guide-fix-step,
+.health-baseline-signal,
+.resource-alert-policy-trigger,
+.health-baseline-draft-button {
+  min-height: var(--control-h);
+  border-radius: var(--r-control);
+  font-size: 12px;
+  box-shadow: none;
+}
+
+main :where(button, [class*='-signal'], [class*='-trigger'], [class*='-step'], [class*='-chip'], [class*='-tab']) {
+  border-radius: var(--r-control);
+}
+
+main :where([class*='-card'], [class*='-tile'], [class*='-strip'], [class*='-brief'], [class*='-stamp'], [class*='-queue']) {
+  border-radius: var(--r-card);
+  box-shadow: none;
+  background-image: none;
+}
+
+main :where([class*='-pill'], [class*='-badge'], [class*='-tag'], [class*='-stamp'] > span) {
+  border-radius: var(--r-chip);
+}
+
+/* --- dark adjustments ----------------------------------------------------- */
+
+[data-theme='dark'] .topbar-chip {
+  background: var(--surface);
+}
+
+[data-theme='dark'] .nav-item.active {
+  background: var(--brand-solid);
+  color: var(--on-brand);
+}
+
+[data-theme='dark'] .table-wrap thead th {
+  background: var(--surface);
+}
+
+/* --- responsive ----------------------------------------------------------- */
+
+@media (max-width: 1180px) {
+  .topbar {
+    padding: 0 14px;
+    gap: 8px;
+  }
+}
+
+@media (max-width: 960px) {
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .page,
+  main.page {
+    padding: 12px 14px 24px;
+  }
+}

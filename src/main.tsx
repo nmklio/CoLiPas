@@ -6,6 +6,7 @@ import { applyTheme } from './app/theme';
 import { LanguageProvider } from './i18n';
 import './styles/tokens.css';
 import './styles/global.css';
+import './styles/console.css';
 import './styles/theme-dark.css';
 
 // Resolve the colour theme before the first paint of the application.
