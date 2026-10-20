@@ -144,7 +144,6 @@ const sections: Array<{ id: SectionId; labelKey: string; icon: typeof LayoutDash
   { id: 'servers', labelKey: 'nav.servers', icon: Server },
   { id: 'operations', labelKey: 'nav.operations', icon: TerminalSquare },
   { id: 'ai', labelKey: 'nav.ai', icon: Bot },
-  { id: 'api', labelKey: 'nav.api', icon: PlugZap },
   { id: 'security', labelKey: 'nav.security', icon: ShieldCheck },
 ];
 
@@ -502,6 +501,16 @@ export function App() {
     }
   }, [activeSection]);
   const [operatorUtilityOpen, setOperatorUtilityOpen] = useState(false);
+  // The operations module owns orchestration plus the low-frequency tools that
+  // used to sit in the first-level navigation (custom API lab).
+  const [operationsView, setOperationsView] = useState<'orchestrate' | 'tools'>('orchestrate');
+  const operationsViewRequestRef = useRef<'orchestrate' | 'tools' | null>(null);
+  useEffect(() => {
+    if (activeSection === 'operations') {
+      setOperationsView(operationsViewRequestRef.current ?? 'orchestrate');
+      operationsViewRequestRef.current = null;
+    }
+  }, [activeSection]);
   // The resources module carries three views: the inventory itself, fleet
   // telemetry/history, and the resource alert policy. Entering it starts on the
   // inventory and nothing is persisted.
@@ -1215,6 +1224,18 @@ export function App() {
       keywords: `${section.id} ${t(section.labelKey)} ${t('app.commandNavigation')}`,
       run: () => navigateToSection(section.id),
     })),
+    {
+      id: 'operations-tools',
+      title: t('app.operationsViewTools'),
+      description: t('app.commandTools'),
+      category: t('app.commandNavigation'),
+      icon: PlugZap,
+      keywords: `api custom tools integration whitelist ${t('app.operationsViewTools')} ${t('nav.api')}`,
+      run: () => {
+        operationsViewRequestRef.current = 'tools';
+        navigateToSection('operations');
+      },
+    },
     {
       id: 'launch-guide',
       title: t('launchGuide.commandTitle'),
@@ -2210,7 +2231,26 @@ export function App() {
           onClearReviewState={operationsInboxReview.clearReviewState}
         />
 
-        <main data-module={activeSection} data-security-view={activeSection === 'security' ? (securityTraceActive ? 'audit' : securityView) : undefined} data-servers-view={activeSection === 'servers' ? serversView : undefined}>
+        <main data-module={activeSection} data-security-view={activeSection === 'security' ? (securityTraceActive ? 'audit' : securityView) : undefined} data-servers-view={activeSection === 'servers' ? serversView : undefined} data-operations-view={activeSection === 'operations' ? operationsView : undefined}>
+          {activeSection === 'operations' && (
+            <nav className="module-subnav" aria-label={t('app.operationsViews')}>
+              {([
+                { id: 'orchestrate', key: 'app.operationsViewOrchestrate' },
+                { id: 'tools', key: 'app.operationsViewTools' },
+              ] as const).map((view) => (
+                <button
+                  key={view.id}
+                  type="button"
+                  aria-pressed={operationsView === view.id}
+                  className={operationsView === view.id ? 'active' : undefined}
+                  data-operations-view-tab={view.id}
+                  onClick={() => setOperationsView(view.id)}
+                >
+                  {t(view.key)}
+                </button>
+              ))}
+            </nav>
+          )}
           {activeSection === 'servers' && (
             <nav className="module-subnav" aria-label={t('app.serversViews')}>
               {([
@@ -2442,7 +2482,7 @@ export function App() {
             </Suspense>
           )}
 
-          {activeSection === 'operations' && (
+          {activeSection === 'operations' && operationsView === 'orchestrate' && (
             <Suspense fallback={<ModuleLoadingFallback title={t('nav.operations')} />}>
               <LazyOperationsCenter
                 events={overview.operationEvents}
@@ -2455,6 +2495,12 @@ export function App() {
                 onAuditTraceOpen={openSecurityTrace}
                 releaseFocusAnchor={activeReleaseFixAnchor === 'operations-builder' ? activeReleaseFixAnchor : undefined}
               />
+            </Suspense>
+          )}
+
+          {activeSection === 'operations' && operationsView === 'tools' && (
+            <Suspense fallback={<ModuleLoadingFallback title={t('app.operationsViewTools')} />}>
+              <LazyCustomApiLab releaseFocusAnchor={activeReleaseFixAnchor === 'api-request' ? activeReleaseFixAnchor : undefined} />
             </Suspense>
           )}
 

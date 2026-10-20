@@ -53,7 +53,7 @@ The runtime is intentionally simple. One Node.js process serves the Express API 
 4. Schedule a maintenance window before reboots, shutdowns, or high-impact SSH changes; Operations preflight shows whether each target is covered without bypassing operator confirmation.
 5. Use the contextual launch guide: the full six-step release checklist renders on Overview only, and the topbar "pending N" entry from any other module takes you back to it.
 6. Set CPU, memory, and disk alert thresholds under Resources → Alerts, then triage recurring resource breaches alongside release blockers, SSH coverage gaps, and open events in the global Operations inbox.
-7. Use the overview map, server table, live browser terminal, operations center, AI assistant, custom API lab, and security audit as one linked workflow.
+7. Use the overview map, server table, live browser terminal, operations center (orchestration plus the Tools view), AI assistant, and security audit as one linked workflow.
 8. Run `npm test` or the release script before shipping changes so build, API, browser, performance, concurrency, reset-password, and secret-scan checks run together.
 
 ## Core Modules
@@ -76,7 +76,7 @@ The runtime is intentionally simple. One Node.js process serves the Express API 
 | Contextual command palette | Groups the current highest-priority remediation, recent safe actions, and all available actions. Recent history stores only up to five browser-local action IDs and can be cleared at any time. |
 | AI operations | OpenAI-compatible base URL support, model discovery, streaming chat, multi-turn context, cached answers, force refresh, and server-side key storage. New chats provide three safe starter paths for risk review, SSH health-check planning, and daily prioritization; they only fill the composer and never send or execute automatically. |
 | Workflow automation | Asset sync, health checks, SSH commands, reboot/shutdown flows, persisted maintenance windows with quick-duration scheduling, target preflight, and high-impact command confirmation. |
-| Custom API lab | Allowlisted backend proxy for provider API testing without exposing browser-side secrets or private network targets. |
+| Custom API lab | Allowlisted backend proxy for provider API testing without exposing browser-side secrets or private network targets. It is reached from Operations → Tools, so the first-level navigation only carries work objects. |
 | Security audit | Auth events, blocked calls, SSH actions, remediation flows, relation cards, diagnostics export, release readiness evidence, and revocable public-safe evidence snapshots for external review. |
 | Operator account | Login, restart-safe SQLite session storage using token hashes instead of raw Cookies, 15-second foreground-and-online sync that pauses while hidden or offline and resumes immediately after reconnect, configurable active-session capacity with oldest-session retirement, individual or bulk revocation of other signed-in devices, privacy-minimized device labels without raw IP or User-Agent values, profile/avatar update with decoded-image validation and automatic brand fallback, password change, and Chinese / English / Japanese UI language switching. |
 | Theming | Light, dark, and follow-system appearance with a one-click topbar toggle, per-browser persistence, and cross-tab sync. Dark mode currently covers the shell (navigation, topbar, command palette, form controls) while the workspace keeps the audited light surface; module-level dark surfaces are the next milestone. |

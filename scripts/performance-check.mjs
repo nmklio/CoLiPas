@@ -81,22 +81,48 @@ try {
     { name: 'servers', button: /^Servers$/i, url: /#servers$/, ready: '.server-workspace-list, .empty-state' },
     { name: 'operations', button: /^Operations$/i, url: /#operations$/, ready: '.ops-layout' },
     { name: 'ai', button: /^AI System$/i, url: /#ai$/, ready: '.ai-workbench' },
-    { name: 'custom api', button: /^Custom API$/i, url: /#api$/, ready: '.api-workbench-layout' },
+    { name: 'custom api', button: /^Operations$/i, url: /#operations$/, tab: '[data-operations-view-tab="tools"]', ready: '.api-workbench-layout' },
     { name: 'security', button: /^Security$/i, url: /#security$/, ready: '.security-workbench' },
     { name: 'overview', button: /^Overview$/i, url: /#overview$/, ready: '.cloud-map' },
   ];
   const sectionDurations = [];
   for (const section of sections) {
+    // A tab-hosted section (custom API tools) shares the operations route, so
+    // warm the route first and measure only the tab switch plus its lazy chunk.
+    if (section.tab) {
+      await clickNav(section.button);
+      await page.waitForURL(section.url, { timeout: 10000 });
+      await page.waitForFunction(
+        () => document.querySelector('main')?.getAttribute('data-operations-view') === 'orchestrate',
+        undefined,
+        { timeout: 10000 },
+      );
+      await waitForReady('.ops-layout', `${section.name} prewarm`);
+      await page.waitForTimeout(250);
+    }
     const browserStartedAt = await page.evaluate(() => performance.now());
     const phases = { click: 0, route: 0, ready: 0 };
     const duration = await measure(section.name, async () => {
       const clickStartedAt = performance.now();
-      await clickNav(section.button);
+      if (section.tab) {
+        await page.locator(section.tab).click();
+      } else {
+        await clickNav(section.button);
+      }
       phases.click = Math.round(performance.now() - clickStartedAt);
-      const routeStartedAt = performance.now();
-      await page.waitForURL(section.url, { timeout: 10000 });
-      phases.route = Math.round(performance.now() - routeStartedAt);
+      if (!section.tab) {
+        const routeStartedAt = performance.now();
+        await page.waitForURL(section.url, { timeout: 10000 });
+        phases.route = Math.round(performance.now() - routeStartedAt);
+      }
       const readyStartedAt = performance.now();
+      if (section.tab) {
+        await page.waitForFunction(
+          () => document.querySelector('main')?.getAttribute('data-operations-view') === 'tools',
+          undefined,
+          { timeout: 10000 },
+        );
+      }
       await waitForReady(section.ready, section.name);
       phases.ready = Math.round(performance.now() - readyStartedAt);
     });

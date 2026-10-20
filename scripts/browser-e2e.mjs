@@ -4739,14 +4739,14 @@ async function assertMobileModuleLayoutSweep() {
     await assertElementHorizontallyWithinViewport(mobilePage, '.ops-maintenance-duration', 'mobile maintenance duration presets');
     await mobilePage.getByRole('button', { name: /^Cancel$/i }).click();
 
-    await assertMobileSection(mobilePage, /^Custom API$/i, /#api$/, [
+    await assertMobileSection(mobilePage, /^Operations$/i, /#operations$/, [
       '.api-status-strip',
       '.api-template-grid',
       '.api-workbench-layout',
       '.api-config-panel',
       '.api-debug-panel',
       '.api-integration-list',
-    ]);
+    ], '[data-operations-view-tab="tools"]');
     await assertSingleColumnStack(mobilePage, '.api-template-grid', 'mobile custom API templates');
     await assertSingleColumnStack(mobilePage, '.api-config-panel', 'mobile custom API form');
 
@@ -4788,7 +4788,7 @@ async function assertMobileModuleLayoutSweep() {
     await openSecurityView(mobilePage, 'overview');
     await assertNoHorizontalOverflow(mobilePage, 'mobile module layout sweep');
 
-    console.log('ok browser e2e covers mobile servers, operations, custom API, and security layout linkage');
+    console.log('ok browser e2e covers mobile servers, operations, custom API tools view, and security layout linkage');
   } finally {
     if (mobileServerId) {
       await deleteTemporaryAssetServer(mobilePage, mobileServerId).catch(() => undefined);
@@ -4838,11 +4838,20 @@ async function captureVisualEvidence(targetPage, name, selectors) {
   console.log(`ok browser visual evidence ${name} ${buffer.length} bytes`);
 }
 
-async function assertMobileSection(targetPage, navName, expectedHashPattern, selectors) {
+async function assertMobileSection(targetPage, navName, expectedHashPattern, selectors, tabSelector = '') {
   await targetPage.getByRole('button', { name: /open navigation/i }).click();
   await targetPage.getByRole('button', { name: navName }).click();
   await targetPage.waitForURL(expectedHashPattern, { timeout: 10000 });
-  await targetPage.locator('.module-section').first().waitFor({ timeout: 10000 });
+  if (tabSelector) {
+    const tab = targetPage.locator(tabSelector);
+    await tab.waitFor({ timeout: 10000 });
+    if (await tab.getAttribute('aria-pressed') !== 'true') {
+      await tab.click();
+    }
+    await targetPage.locator('.module-section').first().waitFor({ timeout: 10000 });
+  } else {
+    await targetPage.locator('.module-section').first().waitFor({ timeout: 10000 });
+  }
 
   for (const selector of selectors) {
     await targetPage.locator(selector).first().waitFor({ timeout: 10000 });
