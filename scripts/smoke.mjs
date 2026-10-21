@@ -4601,15 +4601,16 @@ function assertAccountUiGuards() {
   }
 
   const brandIconFragments = [
-    '<link rel="icon" type="image/svg+xml" href="/colipas-icon.svg?v=20260530-brand3" />',
+    '<link rel="icon" type="image/svg+xml" href="/colipas-icon.svg?v=20261021-brand4" />',
     'export function BrandIcon',
     'viewBox="0 0 64 64"',
-    'A clear cloud terminal mark',
+    'A bold white terminal prompt',
+    'M18 23 31 32l-13 9',
     'app-brand-mark',
     'marketing-brand-mark',
     '.brand-mark svg',
     'cat >"$LANDING_ROOT/colipas-icon.svg"',
-    '<link rel="icon" type="image/svg+xml" href="/colipas-icon.svg?v=20260530-brand3">',
+    '<link rel="icon" type="image/svg+xml" href="/colipas-icon.svg?v=20261021-brand4">',
     '<svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">',
   ];
   const brandIconSourceBundle = `${indexSource}\n${publicIconSource}\n${brandIconSource}\n${loginSource}\n${marketingSource}\n${appSource}\n${globalCss}\n${serverUpdateSource}`;
@@ -4708,7 +4709,7 @@ function assertAccountUiGuards() {
     || !serverUpdateSource.includes('try_files /docs.html =404')
     || !serverUpdateSource.includes('CoLiPas cloud server management panel docs page ready')
     || !serverUpdateSource.includes('体验测试地址')
-    || !serverUpdateSource.includes('href="/colipas-icon.svg?v=20260530-brand3"')
+    || !serverUpdateSource.includes('href="/colipas-icon.svg?v=20261021-brand4"')
     || !serverUpdateSource.includes('location = /favicon.ico')
     || !serverUpdateSource.includes('受保护的环境变量注入公网地址和初始密码')
     || !serverUpdateSource.includes('不会在结束时回显已提供的密码')
@@ -6995,7 +6996,7 @@ function assertOverviewMapInteractionGuards() {
     '.map-live-arc',
     '.map-live-node.warn .map-live-core',
     '@keyframes map-live-pulse',
-    'r: 15px',
+    'r: 16px',
   ];
   const missingCss = cssFragments.filter((fragment) => !globalCss.includes(fragment));
   if (missingCss.length) {

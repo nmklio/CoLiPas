@@ -117,7 +117,7 @@ function buildLandingCheck() {
       await expectText(page.locator('body'), /云服务器管理与 AI 运维后台|cloud server management/i, 'landing footer product description');
       await expectTextAbsent(page, /多云服务器管理与 AI 运维后台/, 'landing legacy footer product description');
       await expectTextAbsent(page, /CoLiPas Console|本页只负责介绍项目能力|真正的服务器接入、账号设置、命令执行和 AI 对话都放在受保护后台|服务器管理、SSH、AI 和审计都在后台完成|\u4e91\u7ef4\u7f16\u6392/, 'landing awkward closing copy');
-      await expectLocatorCountAtLeast(page.locator('link[rel="icon"][href="/colipas-icon.svg?v=20260530-brand3"]'), 1, 'landing versioned favicon');
+      await expectLocatorCountAtLeast(page.locator('link[rel="icon"][href="/colipas-icon.svg?v=20261021-brand4"]'), 1, 'landing versioned favicon');
       await expectLink(page, /GitHub/i, 'https://github.com/nmklio/CoLiPas');
       await expectLinkTarget(page.locator('a[href="/docs.html"]').first(), '/docs.html', 'landing docs link');
       await expectLink(page, /后台|登录|Admin|进入/i, '/admin/');
@@ -176,7 +176,7 @@ function buildDocsCheck() {
     assert: async (page) => {
       await expectTitle(page, /CoLiPas/);
       await expectText(page.locator('h1').first(), /CoLiPas 上线与使用手册|下载、配置、运行|Linux|Docker|CoLiPas云服务器管理面板/i, 'docs h1');
-      await expectLocatorCountAtLeast(page.locator('link[rel="icon"][href="/colipas-icon.svg?v=20260530-brand3"]'), 1, 'docs versioned favicon');
+      await expectLocatorCountAtLeast(page.locator('link[rel="icon"][href="/colipas-icon.svg?v=20261021-brand4"]'), 1, 'docs versioned favicon');
       await expectLocatorCountAtLeast(page.locator('h2'), 6, 'docs h2 sections');
       await expectLink(page, /GitHub/i, 'https://github.com/nmklio/CoLiPas');
       await expectLink(page, /体验测试地址/i, '/admin/');

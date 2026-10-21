@@ -516,7 +516,11 @@ export function MonitoringOverview({
               }
             }}
           >
-            <div className="map-caption">{t('overview.mapDistribution', { count: regions.length })}</div>
+            <div className="map-caption">
+              {mapLiveLayer.nodes.length
+                ? t('overview.mapDistribution', { count: regions.length })
+                : t('overview.mapEmptyHint')}
+            </div>
             {!mapAssetsReady && (
               <div className={performanceMode && !mapAssetsRequested ? 'map-asset-loader manual' : 'map-asset-loader'} data-map-asset-loader="true" aria-live="polite">
                 <Globe2 size={18} />
@@ -536,7 +540,7 @@ export function MonitoringOverview({
               className="map-transform-layer"
               style={{ transform: `translate(${mapView.x}px, ${mapView.y}px) scale(${mapView.scale})` }}
             >
-              <svg className="world-map-svg" viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`} preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+              <svg className="world-map-svg" viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`} preserveAspectRatio="xMidYMid slice" aria-hidden="true">
                 <defs>
                   <filter id="map-glow" x="-30%" y="-30%" width="160%" height="160%">
                     <feGaussianBlur stdDeviation="5" result="blur" />
@@ -621,8 +625,8 @@ export function MonitoringOverview({
                   ))}
                   {mapLiveLayer.nodes.map((node) => (
                     <g key={node.region} className={node.warn ? 'map-live-node warn' : 'map-live-node'}>
-                      <circle className="map-live-halo" cx={node.x} cy={node.y} r={12} />
-                      <circle className="map-live-core" cx={node.x} cy={node.y} r={4.6} />
+                      <circle className="map-live-halo" cx={node.x} cy={node.y} r={13} />
+                      <circle className="map-live-core" cx={node.x} cy={node.y} r={5.2} />
                     </g>
                   ))}
                 </g>

@@ -224,7 +224,7 @@ replaceAll(/\/\* colipas landing live release ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\/
 replaceAll(/\s*<script id="colipas-landing-dynamic">[\s\S]*?<\/script>\s*/g, '\n');
 replaceAll(/<title>[\s\S]*?<\/title>/g, '<title>CoLiPas云服务器管理面板</title>');
 replaceAll(/\s*<link\s+rel="icon"[^>]*>\s*/g, '\n');
-replaceOnce(/<title>CoLiPas云服务器管理面板<\/title>/, '<title>CoLiPas云服务器管理面板</title>\n<link rel="icon" type="image/svg+xml" href="/colipas-icon.svg?v=20260530-brand3">');
+replaceOnce(/<title>CoLiPas云服务器管理面板<\/title>/, '<title>CoLiPas云服务器管理面板</title>\n<link rel="icon" type="image/svg+xml" href="/colipas-icon.svg?v=20261021-brand4">');
 replaceAll(/<a class="button github-button" href="https:\/\/github\.com\/nmklio\/CoLiPas"[^>]*>GitHub<\/a>/g, '');
 replaceAll(/<span class="brand-mark">CP<\/span>/g, '<img class="brand-mark" src="/colipas-icon.svg" alt="" aria-hidden="true">');
 
@@ -3680,25 +3680,19 @@ write_docs_page() {
   cat >"$LANDING_ROOT/colipas-icon.svg" <<'SVG'
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
   <title id="title">CoLiPas云服务器管理面板 icon</title>
-  <desc id="desc">A clear cloud terminal mark on a teal and blue rounded square.</desc>
+  <desc id="desc">A bold white terminal prompt on a teal to blue rounded square with a faint cloud behind it.</desc>
   <defs>
-    <linearGradient id="colipas-bg" x1="7" y1="5" x2="57" y2="60" gradientUnits="userSpaceOnUse">
+    <linearGradient id="colipas-bg" x1="8" y1="6" x2="56" y2="59" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#0f766e"/>
-      <stop offset="0.48" stop-color="#0ea5a5"/>
+      <stop offset="0.52" stop-color="#0d9488"/>
       <stop offset="1" stop-color="#2563eb"/>
     </linearGradient>
-    <linearGradient id="colipas-cloud" x1="16" y1="17" x2="50" y2="46" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#ffffff"/>
-      <stop offset="1" stop-color="#dff9ff"/>
-    </linearGradient>
   </defs>
-  <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#colipas-bg)"/>
-  <rect x="4" y="4" width="56" height="56" rx="14" fill="none" stroke="rgba(255,255,255,.34)" stroke-width="2"/>
-  <path d="M19.2 43.5h26.6c5.9 0 10.7-4.2 10.7-9.8 0-5.1-3.9-9.2-8.9-9.7C45.4 18 39.8 14.2 33.2 14.2c-7.2 0-13.1 4.8-14.7 11.4C12.4 26.2 7.8 31 7.8 36.9c0 3.8 1.9 7.1 4.8 9.1 1.9-1.6 4.1-2.5 6.6-2.5Z" fill="url(#colipas-cloud)" opacity=".96"/>
-  <path d="M21.6 33.1 27 37.2l-5.4 4.1" fill="none" stroke="#0f766e" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M33.2 41.2h11.5" fill="none" stroke="#2563eb" stroke-width="4.2" stroke-linecap="round"/>
-  <circle cx="45.5" cy="22.8" r="3.4" fill="#67e8f9"/>
-  <circle cx="45.5" cy="22.8" r="1.5" fill="#0f766e"/>
+  <rect x="3" y="3" width="58" height="58" rx="15" fill="url(#colipas-bg)"/>
+  <rect x="3" y="3" width="58" height="58" rx="15" fill="none" stroke="#ffffff" stroke-opacity=".26" stroke-width="1.6"/>
+  <path d="M13 47C7.2 47 4.4 42.2 7 37.6c1.8-3.1 5.1-4.5 8.5-4 1.3-9.1 8.8-15.9 17.9-15.9 8.5 0 15.7 6.2 17.1 14.8 4.8-.2 8.4 3.2 8.4 7.4 0 4.1-3.3 7.1-7.7 7.1Z" fill="#ffffff" fill-opacity=".18"/>
+  <path d="M18 23 31 32l-13 9" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M37 41h12" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round"/>
 </svg>
 SVG
 
@@ -3708,7 +3702,7 @@ SVG
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" type="image/svg+xml" href="/colipas-icon.svg?v=20260530-brand3">
+  <link rel="icon" type="image/svg+xml" href="/colipas-icon.svg?v=20261021-brand4">
   <title>CoLiPas云服务器管理面板 使用文档</title>
   <style>
     :root {
@@ -4204,21 +4198,17 @@ SVG
       <a class="brand" href="/" aria-label="CoLiPas云服务器管理面板">
         <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
           <defs>
-            <linearGradient id="docs-colipas-bg" x1="8" y1="4" x2="58" y2="62" gradientUnits="userSpaceOnUse">
-              <stop offset="0" stop-color="#0f172a"/>
-              <stop offset="0.48" stop-color="#0f766e"/>
+            <linearGradient id="docs-colipas-bg" x1="8" y1="6" x2="56" y2="59" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="#0f766e"/>
+              <stop offset="0.52" stop-color="#0d9488"/>
               <stop offset="1" stop-color="#2563eb"/>
             </linearGradient>
-            <linearGradient id="docs-colipas-edge" x1="16" y1="13" x2="48" y2="49" gradientUnits="userSpaceOnUse">
-              <stop offset="0" stop-color="#ecfeff"/>
-              <stop offset="1" stop-color="#bae6fd"/>
-            </linearGradient>
           </defs>
-          <rect x="3" y="3" width="58" height="58" rx="16" fill="url(#docs-colipas-bg)"/>
-          <path d="M18.6 41.5h27.2c5.3 0 9.5-3.8 9.5-8.7 0-4.4-3.4-8-7.8-8.6C45.8 17.8 40.2 13 33.5 13c-7.2 0-13.2 5.1-14.3 11.9C13.4 25.7 9 30.4 9 36c0 3.2 1.4 5.8 3.9 7.2" fill="none" stroke="url(#docs-colipas-edge)" stroke-width="4.8" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M22.2 31.8l5 4.2-5 4.2" fill="none" stroke="#5eead4" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M32.4 40.2h10.8" fill="none" stroke="#f8fafc" stroke-width="4" stroke-linecap="round"/>
-          <circle cx="45.4" cy="23.2" r="3.2" fill="#67e8f9"/>
+          <rect x="3" y="3" width="58" height="58" rx="15" fill="url(#docs-colipas-bg)"/>
+          <rect x="3" y="3" width="58" height="58" rx="15" fill="none" stroke="#ffffff" stroke-opacity=".26" stroke-width="1.6"/>
+          <path d="M13 47C7.2 47 4.4 42.2 7 37.6c1.8-3.1 5.1-4.5 8.5-4 1.3-9.1 8.8-15.9 17.9-15.9 8.5 0 15.7 6.2 17.1 14.8 4.8-.2 8.4 3.2 8.4 7.4 0 4.1-3.3 7.1-7.7 7.1Z" fill="#ffffff" fill-opacity=".18"/>
+          <path d="M18 23 31 32l-13 9" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M37 41h12" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round"/>
         </svg>
         <strong>CoLiPas云服务器管理面板</strong>
       </a>
