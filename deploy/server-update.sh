@@ -290,13 +290,14 @@ const landingHero = `<section class="hero wrap">
                 <circle class="scene-node" cx="252" cy="104" r="2.6" />
                 <circle class="scene-node" cx="96" cy="72" r="2.6" />
               </svg>
-              <span class="scene-tag" style="left:70%;top:28%">HK</span>
-              <span class="scene-tag" style="left:46%;top:46%">SG</span>
-              <span class="scene-tag" style="left:74%;top:60%">US</span>
-              <span class="scene-tag" style="left:22%;top:36%">JP</span>
-              <span class="scene-ping" style="left:74%;top:36%"></span>
-              <span class="scene-ping scene-ping-slow" style="left:55%;top:52%"></span>
-              <span class="scene-ping" style="left:30%;top:42%"></span>
+              <span class="scene-tag" style="left:80.5%;top:37.2%">HK</span>
+              <span class="scene-tag" style="left:77.8%;top:47.7%">SG</span>
+              <span class="scene-tag" style="left:17.3%;top:29.4%">US</span>
+              <span class="scene-tag" style="left:87.4%;top:30.4%">JP</span>
+              <span class="scene-ping" style="left:80.5%;top:37.2%"></span>
+              <span class="scene-ping scene-ping-slow" style="left:77.8%;top:47.7%"></span>
+              <span class="scene-ping" style="left:17.3%;top:29.4%"></span>
+              <span class="scene-ping" style="left:87.4%;top:30.4%"></span>
             </div>
             <div class="scene-rows">
               <div class="scene-row"><span>hk-prod-01</span><i style="--v:42%"></i><b>42%</b></div>
