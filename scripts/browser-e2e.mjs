@@ -495,6 +495,7 @@ async function assertResourceAlertPolicy(targetPage) {
     ]);
     await reAlertedItem.locator('.operations-inbox-item-action').click();
     await targetPage.waitForURL(/#servers$/, { timeout: 10000 });
+    await openServersView(targetPage, 'list');
     const serverQuery = targetPage.locator('.server-filter-row input').first();
     await serverQuery.waitFor({ timeout: 10000 });
     if ((await serverQuery.inputValue()) !== resourceServer.name) {
@@ -588,8 +589,12 @@ async function assertResourceViews(targetPage) {
   await targetPage.waitForURL(/#overview$/, { timeout: 10000 });
   await targetPage.locator('button.nav-item', { hasText: /Servers/i }).click();
   await targetPage.waitForURL(/#servers$/, { timeout: 10000 });
+  await targetPage.locator("main[data-module='servers'][data-servers-view='alerts']").waitFor({ timeout: 10000 });
+  await targetPage.reload({ waitUntil: 'networkidle', timeout: 30000 });
+  await targetPage.locator("main[data-module='servers'][data-servers-view='alerts']").waitFor({ timeout: 15000 });
+  await targetPage.locator('[data-servers-view-tab="list"]').click();
   await targetPage.locator("main[data-module='servers'][data-servers-view='list']").waitFor({ timeout: 10000 });
-  console.log('ok browser e2e covers resource views, telemetry handoff, and the overview alert reference');
+  console.log('ok browser e2e covers resource views, telemetry handoff, the overview alert reference, and view memory');
 }
 
 async function assertResourceAlertPolicyReadiness(targetPage) {
@@ -791,6 +796,7 @@ async function assertResourceAlertPolicyReadiness(targetPage) {
     }
 
     await targetPage.goto(`${baseUrl}/admin/#servers`, { waitUntil: 'networkidle', timeout: 30000 });
+    await openServersView(targetPage, 'list');
     if (!freshServerName || !staleServerName || !unavailableServerName) {
       throw new Error('Telemetry freshness browser coverage requires at least three inventory rows');
     }
@@ -2580,6 +2586,7 @@ async function assertServerMetricHistoryDrawer(targetPage, server) {
   await targetPage.route(routePattern, routeHandler);
   try {
     await targetPage.goto(`${baseUrl}/admin/#servers`, { waitUntil: 'networkidle', timeout: 30000 });
+    await openServersView(targetPage, 'list');
     const rowSelector = `[data-server-workspace-row-id="${server.id}"]`;
     const desktopTrigger = targetPage.locator(`${rowSelector} .server-metric-telemetry`);
     await desktopTrigger.waitFor({ timeout: 10000 });
@@ -2649,6 +2656,7 @@ async function assertServerMetricHistoryDrawer(targetPage, server) {
 
     await targetPage.setViewportSize({ width: 390, height: 844 });
     await targetPage.goto(`${baseUrl}/admin/#servers`, { waitUntil: 'networkidle', timeout: 30000 });
+    await openServersView(targetPage, 'list');
     const mobileTrigger = targetPage.locator(`${rowSelector} .server-mobile-metric-history`);
     await mobileTrigger.waitFor({ timeout: 10000 });
     await mobileTrigger.click();
@@ -4705,6 +4713,7 @@ async function assertMobileConsoleAndMap() {
 
     await mobilePage.getByRole('button', { name: /view region servers|view regional assets/i }).click();
     await mobilePage.waitForURL(/#servers$/, { timeout: 10000 });
+    await openServersView(mobilePage, 'list');
     await assertNoHorizontalOverflow(mobilePage, 'mobile map to servers linkage');
     await captureVisualEvidence(mobilePage, 'mobile-map-to-servers', ['.server-workspace-row']);
 

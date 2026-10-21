@@ -4621,9 +4621,14 @@ function assertAccountUiGuards() {
     'landingFeatureCard({ kind, title, description, tags, featureId = \'\', wide = false })',
     'const landingHero = `<section class="hero wrap">',
     'data-product-tour',
-    '/colipas-dashboard-preview.svg?v=20260801-tour1',
-    '/colipas-terminal-preview.svg?v=20260801-tour1',
-    '/colipas-ai-preview.svg?v=20260801-tour1',
+    'data-scene="overview"',
+    'data-scene="terminal"',
+    'data-scene="ai"',
+    'data-scene-term',
+    'data-scene-ai-text',
+    'data-scene-approve',
+    'data-scene-count',
+    'scene-spark-line',
     'id="colipas-product-tour"',
     'const landingFeatureGrid = [',
     '实时 SSH 工作区',
@@ -6149,9 +6154,9 @@ function assertLandingPatchIdempotence() {
     }
     if (
       !second.includes('colipas landing immersive product ui v2')
-      || !second.includes('/colipas-dashboard-preview.svg?v=20260801-tour1')
-      || !second.includes('/colipas-terminal-preview.svg?v=20260801-tour1')
-      || !second.includes('/colipas-ai-preview.svg?v=20260801-tour1')
+      || (second.match(/data-scene="(?:overview|terminal|ai)"/g) ?? []).length !== 3
+      || !second.includes('data-scene-term')
+      || !second.includes('data-scene-ai-text')
       || (second.match(/data-tour-scene=/g) ?? []).length !== 3
       || (second.match(/class="workflow-stage workflow-stage-/g) ?? []).length !== 4
       || !second.includes('class="deploy-command-center"')
@@ -9868,7 +9873,7 @@ async function assertResourceAlertPolicyGuards() {
 
   const resourceViewBrowserCoverage = [
     'async function assertResourceViews',
-    'ok browser e2e covers resource views, telemetry handoff, and the overview alert reference',
+    'ok browser e2e covers resource views, telemetry handoff, the overview alert reference, and view memory',
     'data-servers-view-tab="history"',
     'data-fleet-telemetry-summary="true"',
     'data-resource-alerts-link="true"',
@@ -9900,10 +9905,28 @@ async function assertResourceAlertPolicyGuards() {
     'data-ops-view-panel="maintenance"',
     'data-ops-view-panel="queue"',
     'data-ops-view-panel="preflight"',
+    'data-ops-queue-strip="true"',
+    'data-ops-queue-strip-open="true"',
   ]) {
     if (!operationsPanelSource.includes(fragment)) {
       throw new Error(`Operations view panels are incomplete: ${fragment}`);
     }
+  }
+  for (const fragment of [
+    'colipas.moduleViews.v1',
+    'function readModuleViewState',
+    'function writeModuleView',
+    'writeModuleView(\'servers\'',
+    'writeModuleView(\'operations\'',
+    'writeModuleView(\'security\'',
+  ]) {
+    if (!appSource.includes(fragment)) {
+      throw new Error(`Module view memory is incomplete: ${fragment}`);
+    }
+  }
+  const queueStripKeyCount = (i18nSource.match(/ops\.queueStripOpen/g) ?? []).length;
+  if (queueStripKeyCount < 3) {
+    throw new Error('Operations queue strip i18n key is missing language coverage');
   }
   for (const view of ['orchestrate', 'maintenance', 'queue', 'preflight']) {
     if (!operationsConsoleCss.includes(`[data-operations-view='${view}']`)) {

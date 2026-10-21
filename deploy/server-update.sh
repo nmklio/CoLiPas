@@ -267,9 +267,71 @@ const landingHero = `<section class="hero wrap">
     <figure class="product-preview product-tour is-cycling" data-product-tour aria-label="CoLiPas 脱敏产品动态演示">
       <div class="preview-top"><i></i><i></i><i></i><span data-tour-title>全局资产总览 · 实时状态</span><em><b></b>自动演示</em></div>
       <div class="preview-stage">
-        <img id="tour-scene-overview" class="preview-scene is-active" data-tour-scene="overview" role="tabpanel" aria-labelledby="tour-tab-overview" aria-hidden="false" src="/colipas-dashboard-preview.svg?v=20260801-tour1" alt="CoLiPas 服务器总览、全球地图与资源状态界面" loading="eager" fetchpriority="high">
-        <img id="tour-scene-terminal" class="preview-scene" data-tour-scene="terminal" role="tabpanel" aria-labelledby="tour-tab-terminal" aria-hidden="true" src="/colipas-terminal-preview.svg?v=20260801-tour1" alt="CoLiPas 低延迟 SSH 实时终端界面" loading="lazy">
-        <img id="tour-scene-ai" class="preview-scene" data-tour-scene="ai" role="tabpanel" aria-labelledby="tour-tab-ai" aria-hidden="true" src="/colipas-ai-preview.svg?v=20260801-tour1" alt="CoLiPas 上下文 AI 运维诊断界面" loading="lazy">
+        <div id="tour-scene-overview" class="preview-scene scene scene-overview is-active" data-tour-scene="overview" data-scene="overview" role="tabpanel" aria-labelledby="tour-tab-overview" aria-hidden="false">
+          <div class="scene-top">
+            <i class="scene-live" aria-hidden="true"></i>
+            <strong>全局资产总览</strong>
+            <span class="scene-meta">18 台在线 · 6 条待处理</span>
+            <em class="scene-clock" data-scene-clock>--:--:--</em>
+          </div>
+          <div class="scene-kpis">
+            <div><span>在线服务器</span><b data-scene-count="18">0</b></div>
+            <div><span>CPU 均值</span><b data-scene-count="38" data-scene-suffix="%">0%</b></div>
+            <div><span>待处理事件</span><b data-scene-count="6">0</b></div>
+            <div><span>SSH 通道</span><b data-scene-count="12">0</b></div>
+          </div>
+          <div class="scene-split">
+            <div class="scene-map">
+              <svg viewBox="0 0 320 170" aria-hidden="true" preserveAspectRatio="none">
+                <path class="scene-map-grid" d="M0 42h320M0 85h320M0 128h320M80 0v170M160 0v170M240 0v170" />
+                <circle class="scene-node" cx="238" cy="62" r="3.4" />
+                <circle class="scene-node" cx="176" cy="88" r="3" />
+                <circle class="scene-node" cx="252" cy="104" r="2.6" />
+                <circle class="scene-node" cx="96" cy="72" r="2.6" />
+              </svg>
+              <span class="scene-ping" style="left:74%;top:36%"></span>
+              <span class="scene-ping scene-ping-slow" style="left:55%;top:52%"></span>
+              <span class="scene-ping" style="left:30%;top:42%"></span>
+            </div>
+            <div class="scene-rows">
+              <div class="scene-row"><span>hk-prod-01</span><i style="--v:42%"></i><b>42%</b></div>
+              <div class="scene-row"><span>sg-edge-02</span><i style="--v:67%"></i><b>67%</b></div>
+              <div class="scene-row"><span>us-core-03</span><i style="--v:28%"></i><b>28%</b></div>
+              <div class="scene-row"><span>jp-lab-04</span><i style="--v:55%"></i><b>55%</b></div>
+            </div>
+          </div>
+          <div class="scene-spark" aria-hidden="true">
+            <svg viewBox="0 0 300 54" preserveAspectRatio="none">
+              <path class="scene-spark-line" d="M0 40 L26 34 L52 44 L78 28 L104 36 L130 22 L156 30 L182 18 L208 26 L234 14 L260 22 L286 10 L300 16" />
+            </svg>
+          </div>
+        </div>
+        <div id="tour-scene-terminal" class="preview-scene scene scene-terminal" data-tour-scene="terminal" data-scene="terminal" role="tabpanel" aria-labelledby="tour-tab-terminal" aria-hidden="true">
+          <div class="scene-top">
+            <i class="scene-live" aria-hidden="true"></i>
+            <strong>低延迟 SSH</strong>
+            <span class="scene-meta">RTT <b data-scene-rtt>18</b>ms · 首包 <b data-scene-first>42</b>ms</span>
+            <em class="scene-clock">连续交互</em>
+          </div>
+          <pre class="scene-term" data-scene-term></pre>
+        </div>
+        <div id="tour-scene-ai" class="preview-scene scene scene-ai" data-tour-scene="ai" data-scene="ai" role="tabpanel" aria-labelledby="tour-tab-ai" aria-hidden="true">
+          <div class="scene-top">
+            <i class="scene-live" aria-hidden="true"></i>
+            <strong>上下文 AI</strong>
+            <span class="scene-meta">引用当前资产与事件</span>
+            <em class="scene-clock">确认后执行</em>
+          </div>
+          <div class="scene-chat">
+            <p class="scene-msg scene-msg-user">hk-prod-01 的 CPU 抖动需要处理吗？</p>
+            <p class="scene-msg scene-msg-ai" data-scene-ai-text></p>
+            <div class="scene-approve" data-scene-approve>
+              <span>待确认</span>
+              <b>执行低风险诊断命令</b>
+              <i>确认后执行</i>
+            </div>
+          </div>
+        </div>
       </div>
       <figcaption class="preview-tabs" role="tablist" aria-label="产品场景">
         <button id="tour-tab-overview" type="button" role="tab" aria-selected="true" aria-controls="tour-scene-overview" data-tour-tab="overview"><span>01</span>资产总览</button>
@@ -2465,6 +2527,303 @@ replaceOnce('</style>', `/* colipas landing live release ui v1 */
   0% { transform: translateY(-120%); }
   100% { transform: translateY(320%); }
 }
+@keyframes lp-scene-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, .45); }
+  55% { box-shadow: 0 0 0 6px rgba(74, 222, 128, 0); }
+}
+@keyframes lp-scene-ping {
+  0% { box-shadow: 0 0 0 0 rgba(114, 222, 196, .5); }
+  70% { box-shadow: 0 0 0 14px rgba(114, 222, 196, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(114, 222, 196, 0); }
+}
+@keyframes lp-scene-bar {
+  from { width: calc(var(--v, 50%) * .7); }
+  to { width: var(--v, 50%); }
+}
+@keyframes lp-scene-draw {
+  0% { stroke-dashoffset: 480; }
+  60%, 100% { stroke-dashoffset: 0; }
+}
+.scene {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px 16px;
+  background: linear-gradient(180deg, #0b1316, #081013);
+  color: #cfe0dc;
+  font-size: 12px;
+  overflow: hidden;
+}
+.scene-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.scene-top strong {
+  color: #eaf6f3;
+  font-size: 13px;
+}
+.scene-meta {
+  color: #7f938f;
+  font-size: 11px;
+}
+.scene-clock {
+  margin-left: auto;
+  font-style: normal;
+  color: #9cebd8;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.scene-live {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4ade80;
+  animation: lp-scene-pulse 2.2s infinite;
+}
+.scene-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.scene-kpis div {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, .07);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .02);
+}
+.scene-kpis span {
+  color: #7f938f;
+  font-size: 10px;
+  letter-spacing: .04em;
+}
+.scene-kpis b {
+  color: #eaf6f3;
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+.scene-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr);
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+}
+.scene-map {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, .07);
+  border-radius: 8px;
+  background: rgba(9, 20, 22, .7);
+}
+.scene-map svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.scene-map-grid {
+  fill: none;
+  stroke: rgba(114, 222, 196, .14);
+  stroke-width: 1;
+}
+.scene-node {
+  fill: #72dec4;
+  opacity: .85;
+}
+.scene-ping {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px;
+  border-radius: 50%;
+  background: rgba(114, 222, 196, .9);
+  animation: lp-scene-ping 2.6s infinite;
+}
+.scene-ping-slow {
+  animation-duration: 3.6s;
+  animation-delay: .8s;
+}
+.scene-rows {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+.scene-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  color: #a9bcb8;
+  font-size: 11px;
+}
+.scene-row i {
+  height: 5px;
+  width: var(--v, 50%);
+  border-radius: 999px;
+  background: linear-gradient(90deg, #72dec4, #5aa9ff);
+  animation: lp-scene-bar 5s ease-in-out infinite alternate;
+}
+.scene-row b {
+  color: #eaf6f3;
+  font-variant-numeric: tabular-nums;
+}
+.scene-spark {
+  height: 52px;
+  padding: 4px 6px;
+  border: 1px solid rgba(255, 255, 255, .07);
+  border-radius: 8px;
+  background: rgba(9, 20, 22, .7);
+}
+.scene-spark svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.scene-spark-line {
+  fill: none;
+  stroke: #5aa9ff;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 480;
+  stroke-dashoffset: 480;
+  animation: lp-scene-draw 6s linear infinite;
+}
+.scene-term {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 10px 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, .07);
+  border-radius: 8px;
+  background: rgba(6, 14, 16, .85);
+  color: #b9cbc7;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+.scene-term .ok { color: #4ade80; }
+.scene-term .cmd { color: #9cebd8; }
+.scene-chat {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+.scene-msg {
+  max-width: 88%;
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.scene-msg-user {
+  justify-self: end;
+  border: 1px solid rgba(90, 169, 255, .28);
+  background: rgba(90, 169, 255, .16);
+  color: #eaf6f3;
+}
+.scene-msg-ai {
+  justify-self: start;
+  min-height: 52px;
+  border: 1px solid rgba(255, 255, 255, .08);
+  background: rgba(255, 255, 255, .04);
+  color: #cfe0dc;
+}
+.scene-approve {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-self: start;
+  padding: 8px 12px;
+  border: 1px dashed rgba(232, 185, 104, .5);
+  border-radius: 10px;
+  background: rgba(232, 185, 104, .1);
+  color: #e8b968;
+  font-size: 11px;
+}
+.scene-approve b {
+  color: #f6e3bd;
+  font-size: 12px;
+}
+.scene-approve i {
+  font-style: normal;
+  color: #9fb0ac;
+}
+.scene-approve.is-approved {
+  border-color: rgba(74, 222, 128, .55);
+  background: rgba(74, 222, 128, .12);
+  color: #4ade80;
+}
+@media (max-width: 720px) {
+  .scene {
+    padding: 10px 10px 12px;
+    gap: 8px;
+  }
+  .scene-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .scene-split {
+    grid-template-columns: 1fr;
+  }
+  .scene-spark {
+    display: none;
+  }
+  .scene-term {
+    font-size: 10.5px;
+  }
+  .scene-msg {
+    max-width: 100%;
+  }
+}
+/* one page surface for every section */
+body {
+  background-color: #090d0f;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, .026) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, .026) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+#product::before,
+#features::before,
+#deploy::before,
+#security,
+.band,
+.footer {
+  background-color: transparent;
+  background-image: none;
+}
+#security,
+.band {
+  border-top: 1px solid rgba(255, 255, 255, .06);
+  border-bottom: 1px solid rgba(255, 255, 255, .06);
+}
+.section,
+.workflow-section,
+.deploy-section-modern {
+  padding-top: 88px;
+  padding-bottom: 88px;
+}
+@media (max-width: 720px) {
+  .section,
+  .workflow-section,
+  .deploy-section-modern {
+    padding-top: 56px;
+    padding-bottom: 56px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .scene-live,
+  .scene-ping,
+  .scene-row i,
+  .scene-spark-line {
+    animation: none;
+  }
+}
 @keyframes lp-cursor {
   0%, 49% { opacity: 1; }
   50%, 100% { opacity: 0; }
@@ -2736,6 +3095,149 @@ const landingDynamicScript = `<script id="colipas-landing-dynamic">
   var root = document.documentElement;
   var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   root.classList.add('lp-dynamic');
+
+  // Live product scenes: keep the three tour panels moving with scripted data
+  // instead of static screenshots.
+  var sceneTerm = document.querySelector('[data-scene-term]');
+  var sceneAiText = document.querySelector('[data-scene-ai-text]');
+  var sceneApprove = document.querySelector('[data-scene-approve]');
+  var sceneClock = document.querySelector('[data-scene-clock]');
+  var sceneRtt = document.querySelector('[data-scene-rtt]');
+  var sceneFirst = document.querySelector('[data-scene-first]');
+  var sceneCounters = Array.prototype.slice.call(document.querySelectorAll('[data-scene-count]'));
+  var sceneTimers = [];
+
+  function sceneLater(fn, ms) {
+    sceneTimers.push(window.setTimeout(fn, ms));
+  }
+
+  function pad2(value) {
+    return value < 10 ? '0' + value : String(value);
+  }
+
+  function animateCounters() {
+    sceneCounters.forEach(function (node) {
+      var target = Number(node.getAttribute('data-scene-count')) || 0;
+      var suffix = node.getAttribute('data-scene-suffix') || '';
+      if (reduceMotion) {
+        node.textContent = target + suffix;
+        return;
+      }
+      var startedAt = performance.now();
+      var step = function (now) {
+        var progress = Math.min(1, (now - startedAt) / 900);
+        node.textContent = Math.round(target * progress) + suffix;
+        if (progress < 1) {
+          window.requestAnimationFrame(step);
+        }
+      };
+      window.requestAnimationFrame(step);
+    });
+  }
+
+  function tickSceneClock() {
+    if (!sceneClock) {
+      return;
+    }
+    var now = new Date();
+    sceneClock.textContent = pad2(now.getHours()) + ':' + pad2(now.getMinutes()) + ':' + pad2(now.getSeconds());
+  }
+
+  var terminalScript = [
+    '$ ssh operator@hk-prod-01',
+    'Connected · PTY ready · 18ms',
+    '$ uptime && df -h /',
+    ' 14:22:07 up 12 days,  load average 0.42',
+    ' /dev/vda1  79G  41G  38G  52% /',
+    '$ systemctl status nginx --no-pager',
+    ' nginx.service - active (running)'
+  ];
+
+  function playTerminalScene() {
+    if (!sceneTerm) {
+      return;
+    }
+    var lines = [];
+    var index = 0;
+    sceneTerm.innerHTML = '';
+    var push = function () {
+      if (index >= terminalScript.length) {
+        sceneLater(function () {
+          sceneTerm.innerHTML = '';
+          playTerminalScene();
+        }, 2600);
+        return;
+      }
+      var line = terminalScript[index];
+      index += 1;
+      var isCommand = line.indexOf('$') === 0;
+      var isOk = line.indexOf('active') >= 0;
+      lines.push(isCommand ? '<span class="cmd">' + line + '</span>' : isOk ? '<span class="ok">' + line + '</span>' : line);
+      sceneTerm.innerHTML = lines.join('\\n');
+      sceneLater(push, isCommand ? 620 : 520);
+    };
+    push();
+  }
+
+  var aiAnswer = '读取 hk-prod-01 最近 6 小时指标：CPU 峰值 82%，来自 2 次备份任务，内存稳定。建议先跑只读诊断确认负载来源，再决定是否扩容。';
+
+  function playAiScene() {
+    if (!sceneAiText) {
+      return;
+    }
+    sceneAiText.textContent = '';
+    if (sceneApprove) {
+      sceneApprove.classList.remove('is-approved');
+    }
+    if (reduceMotion) {
+      sceneAiText.textContent = aiAnswer;
+      if (sceneApprove) {
+        sceneApprove.classList.add('is-approved');
+      }
+      return;
+    }
+    var index = 0;
+    var type = function () {
+      index += 2;
+      sceneAiText.textContent = aiAnswer.slice(0, index);
+      if (index < aiAnswer.length) {
+        sceneLater(type, 26);
+        return;
+      }
+      sceneLater(function () {
+        if (sceneApprove) {
+          sceneApprove.classList.add('is-approved');
+        }
+        sceneLater(playAiScene, 4200);
+      }, 1200);
+    };
+    type();
+  }
+
+  function jitterSceneLatency() {
+    if (sceneRtt) {
+      sceneRtt.textContent = String(14 + Math.floor(Math.random() * 9));
+    }
+    if (sceneFirst) {
+      sceneFirst.textContent = String(38 + Math.floor(Math.random() * 16));
+    }
+  }
+
+  tickSceneClock();
+  jitterSceneLatency();
+  animateCounters();
+  if (reduceMotion) {
+    if (sceneTerm) {
+      sceneTerm.innerHTML = terminalScript.map(function (line) {
+        return line.indexOf('$') === 0 ? '<span class="cmd">' + line + '</span>' : line;
+      }).join('\\n');
+    }
+  } else {
+    window.setInterval(tickSceneClock, 1000);
+    window.setInterval(jitterSceneLatency, 2200);
+    playTerminalScene();
+    playAiScene();
+  }
 
   if (!reduceMotion && 'IntersectionObserver' in window) {
     var targets = document.querySelectorAll('#product .position-card, #product .workflow-stage, #features .feature-card, #deploy .deploy-card');

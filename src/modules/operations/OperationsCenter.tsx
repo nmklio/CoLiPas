@@ -44,6 +44,7 @@ interface OperationsCenterProps {
   onTaskFinished?: () => Promise<void> | void;
   onAuditTraceOpen?: (correlationId: string) => void;
   releaseFocusAnchor?: string;
+  onQueueViewOpen?: () => void;
 }
 
 export interface OperationsDraft {
@@ -588,7 +589,7 @@ const preflightCopyByLanguage: Record<string, PreflightCopy> = {
   },
 };
 
-export function OperationsCenter({ events, servers, draft, onDraftPreflight, onTaskFinished, onAuditTraceOpen, releaseFocusAnchor }: OperationsCenterProps) {
+export function OperationsCenter({ events, servers, draft, onDraftPreflight, onTaskFinished, onAuditTraceOpen, releaseFocusAnchor, onQueueViewOpen }: OperationsCenterProps) {
   const { language, t } = useI18n();
   const copy = copyByLanguage[language] ?? copyByLanguage.zh;
   const preflightCopy = preflightCopyByLanguage[language] ?? preflightCopyByLanguage.zh;
@@ -1421,6 +1422,36 @@ export function OperationsCenter({ events, servers, draft, onDraftPreflight, onT
               </div>
             ))}
             {servers.length === 0 && <div className="quiet-state">{copy.noServers}</div>}
+          </div>
+
+          <div className="ops-queue-strip" data-ops-queue-strip="true">
+            <div className="ops-queue-strip-head">
+              <strong>{copy.queue}</strong>
+              <span>{tasks.length}</span>
+              {onQueueViewOpen && (
+                <button type="button" data-ops-queue-strip-open="true" onClick={onQueueViewOpen}>
+                  {t('ops.queueStripOpen')}
+                </button>
+              )}
+            </div>
+            <div className="ops-queue-strip-list">
+              {tasks.length === 0 ? (
+                <span className="quiet-state">{copy.noTasks}</span>
+              ) : (
+                tasks.slice(0, 3).map((task) => (
+                  <button
+                    key={`strip-${task.id}`}
+                    type="button"
+                    className={`ops-queue-strip-item ${task.status}`}
+                    onClick={() => setActiveTaskId(task.id)}
+                  >
+                    <strong>{taskMeta[task.type].label}</strong>
+                    <small>{targetSummary(task, copy)}</small>
+                    <b>{statusText(task.status, copy)}</b>
+                  </button>
+                ))
+              )}
+            </div>
           </div>
         </div>
 

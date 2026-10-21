@@ -560,6 +560,7 @@ const zh = {
   'ops.repairTitle': '执行修复动作',
   'ops.repairDesc': '开关机、重启、清理脚本和自定义 SSH 命令需要二次确认',
   'ops.eventQueue': '事件队列',
+  'ops.queueStripOpen': '查看任务队列',
 
   'api.eyebrow': '自定义接口',
   'api.title': '自定义 API 接入',
@@ -1212,6 +1213,7 @@ const en: typeof zh = {
   'ops.repairTitle': 'Execute remediation',
   'ops.repairDesc': 'Power actions, reboot, cleanup scripts, and custom SSH commands require confirmation.',
   'ops.eventQueue': 'Event queue',
+  'ops.queueStripOpen': 'Open task queue',
   'api.eyebrow': 'Custom API',
   'api.title': 'Custom API integration',
   'api.test': 'Test call',
@@ -1861,6 +1863,7 @@ const ja: typeof zh = {
   'ops.repairTitle': '修復アクションを実行',
   'ops.repairDesc': '起動停止、再起動、クリーンアップスクリプト、カスタム SSH コマンドには確認が必要です。',
   'ops.eventQueue': 'イベントキュー',
+  'ops.queueStripOpen': 'タスクキューを開く',
   'api.eyebrow': 'カスタム API',
   'api.title': 'カスタム API 連携',
   'api.test': 'テスト呼び出し',

@@ -406,35 +406,37 @@ async function assertNoBadBoxes(page, pageName, viewportName) {
 async function assertLandingProductStage(page) {
   await page.waitForFunction(() => {
     const scenes = Array.from(document.querySelectorAll('.product-preview [data-tour-scene]'));
-    return scenes.length === 3 && scenes.every((scene) => scene instanceof HTMLImageElement && scene.complete && scene.naturalWidth > 0);
+    return scenes.length === 3
+      && scenes.every((scene) => scene instanceof HTMLElement && scene.getBoundingClientRect().height > 120 && scene.children.length >= 3);
   }, undefined, { timeout: 15000 });
 
   const stage = await page.evaluate(() => {
     const hero = document.querySelector('.hero');
     const heading = hero?.querySelector('h1');
     const preview = hero?.querySelector('.product-preview');
-    const images = preview ? Array.from(preview.querySelectorAll('[data-tour-scene]')) : [];
-    const image = preview?.querySelector('[data-tour-scene].is-active');
+    const scenes = preview ? Array.from(preview.querySelectorAll('[data-tour-scene]')) : [];
+    const active = preview?.querySelector('[data-tour-scene].is-active');
     const primary = hero?.querySelector('.hero-primary');
     const securityItem = document.querySelector('.security-list > div');
-    if (!(hero instanceof HTMLElement) || !(heading instanceof HTMLElement) || !(preview instanceof HTMLElement) || !(image instanceof HTMLImageElement)) {
+    if (!(hero instanceof HTMLElement) || !(heading instanceof HTMLElement) || !(preview instanceof HTMLElement) || !(active instanceof HTMLElement)) {
       return null;
     }
 
     const heroStyle = window.getComputedStyle(hero, '::before');
     const headingStyle = window.getComputedStyle(heading);
     const previewBox = preview.getBoundingClientRect();
-    const imageBox = image.getBoundingClientRect();
+    const activeBox = active.getBoundingClientRect();
     const securityStyle = securityItem instanceof HTMLElement ? window.getComputedStyle(securityItem) : null;
     return {
       heroBackground: heroStyle.backgroundColor,
       headingAlign: headingStyle.textAlign,
       previewWidth: Math.round(previewBox.width),
-      imageTop: Math.round(imageBox.top),
-      imageBottom: Math.round(imageBox.bottom),
-      sceneCount: images.length,
-      sceneDimensions: images.map((scene) => scene instanceof HTMLImageElement ? [scene.naturalWidth, scene.naturalHeight] : [0, 0]),
-      activeScene: image.getAttribute('data-tour-scene'),
+      imageTop: Math.round(activeBox.top),
+      imageBottom: Math.round(activeBox.bottom),
+      sceneCount: scenes.length,
+      sceneHeights: scenes.map((scene) => Math.round(scene.getBoundingClientRect().height)),
+      sceneAnimated: scenes.map((scene) => scene.querySelectorAll('.scene-live, .scene-ping, .scene-row i, .scene-spark-line, .scene-approve').length),
+      activeScene: active.getAttribute('data-tour-scene'),
       viewportWidth: window.innerWidth,
       viewportHeight: window.innerHeight,
       primaryHref: primary instanceof HTMLAnchorElement ? primary.getAttribute('href') : '',
@@ -458,8 +460,8 @@ async function assertLandingProductStage(page) {
   if (stage.imageTop >= stage.viewportHeight || stage.imageBottom <= 0) {
     throw new Error(`landing product preview is not hinted in the first viewport: ${JSON.stringify(stage)}`);
   }
-  if (stage.sceneCount !== 3 || stage.sceneDimensions.some(([width, height]) => width < 1200 || height < 700)) {
-    throw new Error(`landing product-tour assets did not load at inspection quality: ${JSON.stringify(stage.sceneDimensions)}`);
+  if (stage.sceneCount !== 3 || stage.sceneHeights.some((height) => height < 200) || stage.sceneAnimated.some((count) => count < 1)) {
+    throw new Error(`landing live product scenes are incomplete: ${JSON.stringify({ heights: stage.sceneHeights, animated: stage.sceneAnimated })}`);
   }
   if (stage.activeScene !== 'overview') {
     throw new Error(`landing product tour must start on overview, got ${stage.activeScene}`);

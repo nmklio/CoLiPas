@@ -156,6 +156,39 @@ const sections: Array<{ id: SectionId; labelKey: string; icon: typeof LayoutDash
   ['overview', 'servers', 'operations', 'security'] as const
 ).map((id) => ({ id, ...sectionMeta[id] }));
 
+const moduleViewStorageKey = 'colipas.moduleViews.v1';
+type ModuleViewState = { servers?: string; operations?: string; security?: string };
+
+function readModuleViewState(): ModuleViewState {
+  if (typeof window === 'undefined') {
+    return {};
+  }
+  try {
+    const raw = window.localStorage.getItem(moduleViewStorageKey);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === 'object' ? (parsed as ModuleViewState) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeModuleView(module: keyof ModuleViewState, view: string) {
+  try {
+    const next = { ...readModuleViewState(), [module]: view };
+    window.localStorage.setItem(moduleViewStorageKey, JSON.stringify(next));
+  } catch {
+    // Storage can be unavailable in private mode; the view still works in-memory.
+  }
+}
+
+function isOperationsView(value: unknown): value is OperationsView {
+  return value === 'orchestrate'
+    || value === 'maintenance'
+    || value === 'queue'
+    || value === 'preflight'
+    || value === 'tools';
+}
+
 const themeOptions: Array<{ id: ThemePreference; labelKey: string; shortLabelKey: string }> = [
   { id: 'light', labelKey: 'app.themeLightDetail', shortLabelKey: 'app.themeLight' },
   { id: 'dark', labelKey: 'app.themeDarkDetail', shortLabelKey: 'app.themeDark' },
@@ -496,41 +529,53 @@ export function App() {
     window.addEventListener('hashchange', syncTraceView);
     return () => window.removeEventListener('hashchange', syncTraceView);
   }, []);
+  // Module views are remembered per browser so re-entering a module returns to
+  // the surface the operator last used; deep links still win over the memory.
+  const storedModuleViews = useMemo(() => readModuleViewState(), []);
   const [securityView, setSecurityView] = useState<'overview' | 'diagnose' | 'audit'>(() => (
-    window.location.hash.includes('trace=') || window.location.search.includes('trace=') ? 'audit' : 'overview'
+    window.location.hash.includes('trace=') || window.location.search.includes('trace=')
+      ? 'audit'
+      : storedModuleViews.security === 'diagnose' || storedModuleViews.security === 'audit' ? storedModuleViews.security : 'overview'
   ));
   // History-based navigation does not fire hashchange, so read the live URL at render.
   const [securityTraceDismissed, setSecurityTraceDismissed] = useState(false);
   const securityTraceActive = /^#security\?trace=/.test(window.location.hash) && !securityTraceDismissed;
-  // Entering the security module always starts on its overview view; only an
-  // explicit tab click or a trace deep link changes that.
+  // Entering the security module restores the remembered view; a trace deep link
+  // still pins the audit view until the operator picks a tab.
   useEffect(() => {
     if (activeSection === 'security') {
-      setSecurityView('overview');
+      const stored = readModuleViewState().security;
+      setSecurityView(stored === 'diagnose' || stored === 'audit' ? stored : 'overview');
     }
   }, [activeSection]);
   const [operatorUtilityOpen, setOperatorUtilityOpen] = useState(false);
   // The operations module owns orchestration plus the low-frequency tools that
   // used to sit in the first-level navigation (custom API lab).
-  const [operationsView, setOperationsView] = useState<OperationsView>('orchestrate');
+  const [operationsView, setOperationsView] = useState<OperationsView>(() => (
+    isOperationsView(storedModuleViews.operations) ? storedModuleViews.operations : 'orchestrate'
+  ));
   const operationsViewRequestRef = useRef<OperationsView | null>(null);
   useEffect(() => {
     if (activeSection === 'operations') {
-      setOperationsView(operationsViewRequestRef.current ?? 'orchestrate');
+      const stored = readModuleViewState().operations;
+      setOperationsView(operationsViewRequestRef.current ?? (isOperationsView(stored) ? stored : 'orchestrate'));
       operationsViewRequestRef.current = null;
     }
   }, [activeSection]);
   // The resources module carries three views: the inventory itself, fleet
-  // telemetry/history, and the resource alert policy. Entering it starts on the
-  // inventory and nothing is persisted.
-  const [serversView, setServersView] = useState<'list' | 'history' | 'alerts'>('list');
+  // telemetry/history, and the resource alert policy.
+  const [serversView, setServersView] = useState<'list' | 'history' | 'alerts'>(() => (
+    storedModuleViews.servers === 'history' || storedModuleViews.servers === 'alerts' ? storedModuleViews.servers : 'list'
+  ));
   // Cross-module references may request a specific resources view; the reset
   // below must honour that request instead of forcing the inventory view.
   const serversViewRequestRef = useRef<'list' | 'history' | 'alerts' | null>(null);
   const [metricHistoryFocusId, setMetricHistoryFocusId] = useState('');
   useEffect(() => {
     if (activeSection === 'servers') {
-      setServersView(serversViewRequestRef.current ?? 'list');
+      const stored = readModuleViewState().servers;
+      const remembered = stored === 'history' || stored === 'alerts' ? stored : 'list';
+      setServersView(serversViewRequestRef.current ?? remembered);
       serversViewRequestRef.current = null;
     }
   }, [activeSection]);
@@ -1242,6 +1287,7 @@ export function App() {
       keywords: `api custom tools integration whitelist ${t('app.operationsViewTools')} ${t('nav.api')}`,
       run: () => {
         operationsViewRequestRef.current = 'tools';
+        writeModuleView('operations', 'tools');
         navigateToSection('operations');
       },
     },
@@ -2256,7 +2302,10 @@ export function App() {
                   aria-pressed={operationsView === view.id}
                   className={operationsView === view.id ? 'active' : undefined}
                   data-operations-view-tab={view.id}
-                  onClick={() => setOperationsView(view.id)}
+                  onClick={() => {
+                    setOperationsView(view.id);
+                    writeModuleView('operations', view.id);
+                  }}
                 >
                   {t(view.key)}
                 </button>
@@ -2276,7 +2325,10 @@ export function App() {
                   aria-pressed={serversView === view.id}
                   className={serversView === view.id ? 'active' : undefined}
                   data-servers-view-tab={view.id}
-                  onClick={() => setServersView(view.id)}
+                  onClick={() => {
+                    setServersView(view.id);
+                    writeModuleView('servers', view.id);
+                  }}
                 >
                   {t(view.key)}
                 </button>
@@ -2299,6 +2351,7 @@ export function App() {
                   onClick={() => {
                     setSecurityTraceDismissed(true);
                     setSecurityView(view.id);
+                    writeModuleView('security', view.id);
                   }}
                 >
                   {t(view.key)}
@@ -2440,6 +2493,7 @@ export function App() {
                 opsPreflightSnapshot={overviewPreflightSnapshot}
                 onResourceAlertsOpen={() => {
                   serversViewRequestRef.current = 'alerts';
+                  writeModuleView('servers', 'alerts');
                   navigateToSection('servers');
                 }}
                 onRegionServersOpen={openServersForRegion}
@@ -2506,6 +2560,10 @@ export function App() {
                 }}
                 onAuditTraceOpen={openSecurityTrace}
                 releaseFocusAnchor={activeReleaseFixAnchor === 'operations-builder' ? activeReleaseFixAnchor : undefined}
+                onQueueViewOpen={() => {
+                  setOperationsView('queue');
+                  writeModuleView('operations', 'queue');
+                }}
               />
             </Suspense>
           )}

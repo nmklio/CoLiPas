@@ -818,3 +818,90 @@ main[data-module='operations'][data-operations-view='queue'] .ops-queue-panel [d
 main[data-module='operations'][data-operations-view='preflight'] .ops-queue-panel [data-ops-view-panel]:not([data-ops-view-panel='preflight']) {
   display: none;
 }
+/* --- operations: read-only queue strip in the builder view ---------------- */
+
+.ops-queue-strip {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--panel);
+}
+
+.ops-queue-strip-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.ops-queue-strip-head strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.ops-queue-strip-head button {
+  margin-left: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-chip);
+  padding: 2px 8px;
+  background: transparent;
+  color: var(--brand);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.ops-queue-strip-head button:hover,
+.ops-queue-strip-head button:focus-visible {
+  border-color: var(--brand);
+  outline: none;
+}
+
+.ops-queue-strip-list {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.ops-queue-strip-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--r-control);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ops-queue-strip-item strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.ops-queue-strip-item small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.ops-queue-strip-item b {
+  color: var(--brand);
+  font-size: 11px;
+}
+
+.ops-queue-strip-item.running b { color: var(--status-warn); }
+.ops-queue-strip-item.failed b { color: var(--status-danger); }
+.ops-queue-strip-item.success b { color: var(--status-ok); }
+
+.ops-queue-strip-item:hover,
+.ops-queue-strip-item:focus-visible {
+  border-color: var(--line);
+  outline: none;
+}
