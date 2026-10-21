@@ -426,6 +426,8 @@ async function assertLandingProductStage(page) {
     const headingStyle = window.getComputedStyle(heading);
     const previewBox = preview.getBoundingClientRect();
     const activeBox = active.getBoundingClientRect();
+    const overview = preview.querySelector('[data-tour-scene="overview"]');
+    const overviewMap = overview?.querySelector('.scene-map');
     const securityStyle = securityItem instanceof HTMLElement ? window.getComputedStyle(securityItem) : null;
     return {
       heroBackground: heroStyle.backgroundColor,
@@ -435,6 +437,8 @@ async function assertLandingProductStage(page) {
       imageBottom: Math.round(activeBox.bottom),
       sceneCount: scenes.length,
       sceneHeights: scenes.map((scene) => Math.round(scene.getBoundingClientRect().height)),
+      overviewClip: overview instanceof HTMLElement ? overview.scrollHeight - overview.clientHeight : -1,
+      mapHeight: Math.round(overviewMap?.getBoundingClientRect().height ?? 0),
       sceneAnimated: scenes.map((scene) => scene.querySelectorAll('.scene-live, .scene-ping, .scene-row i, .scene-spark-line, .scene-approve').length),
       activeScene: active.getAttribute('data-tour-scene'),
       viewportWidth: window.innerWidth,
@@ -462,6 +466,12 @@ async function assertLandingProductStage(page) {
   }
   if (stage.sceneCount !== 3 || stage.sceneHeights.some((height) => height < 200) || stage.sceneAnimated.some((count) => count < 1)) {
     throw new Error(`landing live product scenes are incomplete: ${JSON.stringify({ heights: stage.sceneHeights, animated: stage.sceneAnimated })}`);
+  }
+  if (stage.overviewClip > 4) {
+    throw new Error(`landing overview scene is clipped by ${stage.overviewClip}px; the KPI row and the map must fit the stage`);
+  }
+  if (stage.mapHeight < 110) {
+    throw new Error(`landing overview map collapsed to ${stage.mapHeight}px at ${stage.viewportWidth}px viewport`);
   }
   if (stage.activeScene !== 'overview') {
     throw new Error(`landing product tour must start on overview, got ${stage.activeScene}`);

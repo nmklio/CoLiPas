@@ -2916,11 +2916,32 @@ replaceOnce('</style>', `/* colipas landing live release ui v1 */
     padding: 10px 10px 12px;
     gap: 8px;
   }
+  /* A 16:10 stage collapses the map to a ~50px strip on phones: the KPI row and
+     the fixed 232px split do not shrink with the width. Give the stage a taller
+     ratio, put the four KPIs on one line and keep the map at 150px. */
+  .preview-stage {
+    aspect-ratio: 4 / 3;
+  }
   .scene-kpis {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .scene-kpis div {
+    padding: 5px 6px;
+  }
+  .scene-kpis span {
+    font-size: 9px;
+    white-space: nowrap;
+  }
+  .scene-kpis b {
+    font-size: 14px;
   }
   .scene-split {
     grid-template-columns: 1fr;
+    height: 150px;
+  }
+  .scene-rows {
+    display: none;
   }
   .scene-spark {
     display: none;
@@ -2930,6 +2951,11 @@ replaceOnce('</style>', `/* colipas landing live release ui v1 */
   }
   .scene-msg {
     max-width: 100%;
+  }
+}
+@media (max-width: 360px) {
+  .scene-split {
+    height: 118px;
   }
 }
 /* one page surface for every section */
