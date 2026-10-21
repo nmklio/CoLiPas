@@ -298,14 +298,14 @@ const landingHero = `<section class="hero wrap">
                 <g class="scene-node-group" data-scene-node="hk">
                   <circle class="scene-node-halo" cx="258" cy="63" r="9" />
                   <circle class="scene-node" cx="258" cy="63" r="3.2" />
-                  <text class="scene-node-label" x="266" y="58">HK</text>
-                  <text class="scene-node-value" x="266" y="70">42%</text>
+                  <text class="scene-node-label" x="266" y="56">HK</text>
+                  <text class="scene-node-value" x="266" y="67">42%</text>
                 </g>
                 <g class="scene-node-group" data-scene-node="sg">
                   <circle class="scene-node-halo" cx="249" cy="81" r="9" />
                   <circle class="scene-node" cx="249" cy="81" r="3.2" />
-                  <text class="scene-node-label" x="257" y="76">SG</text>
-                  <text class="scene-node-value" x="257" y="88">67%</text>
+                  <text class="scene-node-label" x="238" y="94">SG</text>
+                  <text class="scene-node-value" x="238" y="105">67%</text>
                 </g>
                 <g class="scene-node-group" data-scene-node="us">
                   <circle class="scene-node-halo" cx="55" cy="50" r="9" />
@@ -4347,6 +4347,7 @@ SVG
             <p class="check-line"><span>✓</span> 低频工具进二级视图：自定义 API 测试从一级导航移到「运维 → 工具」，一级导航不再承载工具类入口。</p>
             <p class="check-line"><span>✓</span> 运维页拆成编排 / 维护窗口 / 任务队列 / 预检 / 工具五个视图，一次只展开一个，构建器、值班窗口与预检证据不再挤在同一屏。</p>
             <p class="check-line"><span>✓</span> AI 助手以右下角常驻 dock 提供，不占一级导航；需要完整工作区时用命令面板或 <code>#ai</code> 深链打开。</p>
+            <p class="check-line"><span>✓</span> 资源、运维、安全三个模块会记住上次停留的视图（浏览器本地），刷新或重新进入时恢复；trace 等深链优先于记忆。</p>
             <p class="check-line"><span>✓</span> 顶栏只保留一个运行状态 chip，具体计数交给收件箱角标；修复顺序合并进上线检查清单，不再复制第二份队列。</p>
           </div>
         </div>
