@@ -9874,10 +9874,12 @@ async function assertResourceAlertPolicyGuards() {
 
   const resourceViewBrowserCoverage = [
     'async function assertResourceViews',
-    'ok browser e2e covers resource views, telemetry handoff, the overview alert reference, and view memory',
+    'ok browser e2e covers resource views, telemetry handoff, the overview alert reference, view memory, and tablist keyboard navigation',
     'data-servers-view-tab="history"',
     'data-fleet-telemetry-summary="true"',
     'data-resource-alerts-link="true"',
+    '.module-subnav[role="tablist"]',
+    "press('ArrowLeft')",
   ];
   const resourceViewBrowserSource = fs.readFileSync(new URL('../scripts/browser-e2e.mjs', import.meta.url), 'utf8');
   const missingResourceViewCoverage = resourceViewBrowserCoverage.filter((fragment) => !resourceViewBrowserSource.includes(fragment));
@@ -9924,6 +9926,25 @@ async function assertResourceAlertPolicyGuards() {
     if (!appSource.includes(fragment)) {
       throw new Error(`Module view memory is incomplete: ${fragment}`);
     }
+  }
+  for (const fragment of [
+    'role="tablist"',
+    'role="tab"',
+    'aria-selected={serversView === view.id}',
+    'aria-selected={operationsView === view.id}',
+    'aria-selected={securityActiveView === view.id}',
+    'function subnavKeyboardTarget',
+    'nextTab?.focus()',
+  ]) {
+    if (!appSource.includes(fragment)) {
+      throw new Error(`Module view tablist semantics are incomplete: ${fragment}`);
+    }
+  }
+  if ((appSource.match(/role="tablist"/g) ?? []).length !== 3) {
+    throw new Error('Each module view switcher must expose exactly one tablist');
+  }
+  if (/aria-pressed=\{(servers|operations|security)View === view\.id\}/.test(appSource)) {
+    throw new Error('Module view tabs must use aria-selected instead of aria-pressed');
   }
   const queueStripKeyCount = (i18nSource.match(/ops\.queueStripOpen/g) ?? []).length;
   if (queueStripKeyCount < 3) {

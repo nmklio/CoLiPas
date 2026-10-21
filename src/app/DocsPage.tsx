@@ -525,7 +525,7 @@ export function DocsPage({ onLogin }: DocsPageProps) {
                 <p><CheckCircle2 size={16} /> 资源页拆成清单 / 监控与历史 / 告警三个视图：清单保留服务器表格，监控与历史列出全量遥测并直达单机历史曲线，告警承载资源告警策略。</p>
                 <p><CheckCircle2 size={16} /> 上线向导只在概览页出现；其它模块通过顶栏“待办 N 项”入口回到概览，不再重复渲染同一份状态。</p>
                 <p><CheckCircle2 size={16} /> 顶栏只保留一个运行状态 chip，具体计数交给收件箱角标；修复顺序直接标在检查清单条目上，不再额外复制一份修复队列。</p>
-                <p><CheckCircle2 size={16} /> 进入任一模块都会回到该模块的首个视图，视图选择不做持久化，避免“上次停在哪”与深链冲突。</p>
+                <p><CheckCircle2 size={16} /> 模块子视图按模块记忆最近一次选择，深链和告警跳转会覆盖记忆；子导航是标准 tablist，方向键、Home、End 即可切换且始终只有一个 tab 在 Tab 序列里。</p>
               </div>
             </div>
             <div className="docs-data-card">

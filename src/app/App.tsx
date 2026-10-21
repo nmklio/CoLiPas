@@ -189,6 +189,25 @@ function isOperationsView(value: unknown): value is OperationsView {
     || value === 'tools';
 }
 
+type SubnavTabKeyEvent = { key: string; currentTarget: HTMLButtonElement; preventDefault(): void };
+
+function subnavKeyboardTarget(event: SubnavTabKeyEvent, index: number): HTMLButtonElement | null {
+  if (!/^(ArrowRight|ArrowLeft|ArrowUp|ArrowDown|Home|End)$/.test(event.key)) {
+    return null;
+  }
+  const tabs = event.currentTarget.parentElement;
+  if (!tabs) {
+    return null;
+  }
+  const count = tabs.children.length;
+  const offset = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? index - 1
+    : event.key === 'ArrowRight' || event.key === 'ArrowDown' ? index + 1
+    : event.key === 'Home' ? 0
+    : count - 1;
+  event.preventDefault();
+  return tabs.children[(offset + count) % count] as HTMLButtonElement;
+}
+
 const themeOptions: Array<{ id: ThemePreference; labelKey: string; shortLabelKey: string }> = [
   { id: 'light', labelKey: 'app.themeLightDetail', shortLabelKey: 'app.themeLight' },
   { id: 'dark', labelKey: 'app.themeDarkDetail', shortLabelKey: 'app.themeDark' },
@@ -540,6 +559,7 @@ export function App() {
   // History-based navigation does not fire hashchange, so read the live URL at render.
   const [securityTraceDismissed, setSecurityTraceDismissed] = useState(false);
   const securityTraceActive = /^#security\?trace=/.test(window.location.hash) && !securityTraceDismissed;
+  const securityActiveView = securityTraceActive ? 'audit' : securityView;
   // Entering the security module restores the remembered view; a trace deep link
   // still pins the audit view until the operator picks a tab.
   useEffect(() => {
@@ -2286,78 +2306,99 @@ export function App() {
           onClearReviewState={operationsInboxReview.clearReviewState}
         />
 
-        <main data-module={activeSection} data-security-view={activeSection === 'security' ? (securityTraceActive ? 'audit' : securityView) : undefined} data-servers-view={activeSection === 'servers' ? serversView : undefined} data-operations-view={activeSection === 'operations' ? operationsView : undefined}>
+        <main data-module={activeSection} data-security-view={activeSection === 'security' ? securityActiveView : undefined} data-servers-view={activeSection === 'servers' ? serversView : undefined} data-operations-view={activeSection === 'operations' ? operationsView : undefined}>
           {activeSection === 'operations' && (
-            <nav className="module-subnav" aria-label={t('app.operationsViews')}>
+            <div className="module-subnav" role="tablist" aria-label={t('app.operationsViews')}>
               {([
                 { id: 'orchestrate', key: 'app.operationsViewOrchestrate' },
                 { id: 'maintenance', key: 'app.operationsViewMaintenance' },
                 { id: 'queue', key: 'app.operationsViewQueue' },
                 { id: 'preflight', key: 'app.operationsViewPreflight' },
                 { id: 'tools', key: 'app.operationsViewTools' },
-              ] as const).map((view) => (
+              ] as const).map((view, index) => (
                 <button
                   key={view.id}
                   type="button"
-                  aria-pressed={operationsView === view.id}
+                  role="tab"
+                  aria-selected={operationsView === view.id}
+                  tabIndex={operationsView === view.id ? 0 : -1}
                   className={operationsView === view.id ? 'active' : undefined}
                   data-operations-view-tab={view.id}
                   onClick={() => {
                     setOperationsView(view.id);
                     writeModuleView('operations', view.id);
                   }}
+                  onKeyDown={(event) => {
+                    const nextTab = subnavKeyboardTarget(event, index);
+                    nextTab?.focus();
+                    nextTab?.click();
+                  }}
                 >
                   {t(view.key)}
                 </button>
               ))}
-            </nav>
+            </div>
           )}
           {activeSection === 'servers' && (
-            <nav className="module-subnav" aria-label={t('app.serversViews')}>
+            <div className="module-subnav" role="tablist" aria-label={t('app.serversViews')}>
               {([
                 { id: 'list', key: 'app.serversViewList' },
                 { id: 'history', key: 'app.serversViewHistory' },
                 { id: 'alerts', key: 'app.serversViewAlerts' },
-              ] as const).map((view) => (
+              ] as const).map((view, index) => (
                 <button
                   key={view.id}
                   type="button"
-                  aria-pressed={serversView === view.id}
+                  role="tab"
+                  aria-selected={serversView === view.id}
+                  tabIndex={serversView === view.id ? 0 : -1}
                   className={serversView === view.id ? 'active' : undefined}
                   data-servers-view-tab={view.id}
                   onClick={() => {
                     setServersView(view.id);
                     writeModuleView('servers', view.id);
                   }}
+                  onKeyDown={(event) => {
+                    const nextTab = subnavKeyboardTarget(event, index);
+                    nextTab?.focus();
+                    nextTab?.click();
+                  }}
                 >
                   {t(view.key)}
                 </button>
               ))}
-            </nav>
+            </div>
           )}
           {activeSection === 'security' && (
-            <nav className="module-subnav" aria-label={t('app.securityViews')}>
+            <div className="module-subnav" role="tablist" aria-label={t('app.securityViews')}>
               {([
                 { id: 'overview', key: 'app.securityViewOverview' },
                 { id: 'diagnose', key: 'app.securityViewDiagnose' },
                 { id: 'audit', key: 'app.securityViewAudit' },
-              ] as const).map((view) => (
+              ] as const).map((view, index) => (
                 <button
                   key={view.id}
                   type="button"
-                  aria-pressed={securityView === view.id}
-                  className={securityView === view.id ? 'active' : undefined}
+                  role="tab"
+                  aria-selected={securityActiveView === view.id}
+                  tabIndex={securityActiveView === view.id ? 0 : -1}
+                  className={securityActiveView === view.id ? 'active' : undefined}
                   data-security-view-tab={view.id}
                   onClick={() => {
                     setSecurityTraceDismissed(true);
                     setSecurityView(view.id);
                     writeModuleView('security', view.id);
                   }}
+                  onKeyDown={(event) => {
+                    const nextTab = subnavKeyboardTarget(event, index);
+                    nextTab?.focus();
+                    nextTab?.click();
+                  }}
                 >
                   {t(view.key)}
                 </button>
               ))}
-            </nav>
+            </div>
           )}
           {launchGuideOpen && activeSection === 'overview' && (
             <article

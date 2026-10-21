@@ -333,7 +333,7 @@ async function assertOperationsInbox(targetPage) {
 async function openServersView(targetPage, view) {
   const tab = targetPage.locator(`[data-servers-view-tab="${view}"]`);
   await tab.waitFor({ timeout: 15000 });
-  if (await tab.getAttribute('aria-pressed') !== 'true') {
+  if (await tab.getAttribute('aria-selected') !== 'true') {
     await tab.click();
   }
   await targetPage.locator(`main[data-module='servers'][data-servers-view='${view}']`).waitFor({ timeout: 15000 });
@@ -532,7 +532,7 @@ async function assertResourceAlertPolicy(targetPage) {
 async function openOperationsView(targetPage, view) {
   const tab = targetPage.locator(`[data-operations-view-tab="${view}"]`);
   await tab.waitFor({ timeout: 15000 });
-  if (await tab.getAttribute('aria-pressed') !== 'true') {
+  if (await tab.getAttribute('aria-selected') !== 'true') {
     await tab.click();
   }
   await targetPage.locator(`main[data-module='operations'][data-operations-view='${view}']`).waitFor({ timeout: 15000 });
@@ -546,6 +546,12 @@ async function assertResourceViews(targetPage) {
   const tabs = targetPage.locator('[data-servers-view-tab]');
   if (await tabs.count() !== 3) {
     throw new Error(`Resources module should expose three views, got ${await tabs.count()}`);
+  }
+  if (await targetPage.locator('.module-subnav[role="tablist"]').count() !== 1) {
+    throw new Error('Resources module should expose its views as a tablist');
+  }
+  if (await targetPage.locator('[data-servers-view-tab][tabindex="0"]').count() !== 1) {
+    throw new Error('Resources tablist should keep exactly one tab in the tab order');
   }
   if (await targetPage.locator("main[data-module='servers'][data-servers-view='list']").count() !== 1) {
     throw new Error('Resources module should open on its inventory view');
@@ -594,7 +600,28 @@ async function assertResourceViews(targetPage) {
   await targetPage.locator("main[data-module='servers'][data-servers-view='alerts']").waitFor({ timeout: 15000 });
   await targetPage.locator('[data-servers-view-tab="list"]').click();
   await targetPage.locator("main[data-module='servers'][data-servers-view='list']").waitFor({ timeout: 10000 });
-  console.log('ok browser e2e covers resource views, telemetry handoff, the overview alert reference, and view memory');
+
+  await targetPage.locator('[data-servers-view-tab="list"]').focus();
+  await targetPage.keyboard.press('ArrowRight');
+  await targetPage.locator("main[data-module='servers'][data-servers-view='history']").waitFor({ timeout: 10000 });
+  if (await targetPage.locator('[data-servers-view-tab="history"]').getAttribute('aria-selected') !== 'true') {
+    throw new Error('ArrowRight should select the next resources tab');
+  }
+  if (await targetPage.evaluate(() => document.activeElement?.getAttribute('data-servers-view-tab')) !== 'history') {
+    throw new Error('ArrowRight should move focus with the resources tab selection');
+  }
+  await targetPage.keyboard.press('End');
+  await targetPage.locator("main[data-module='servers'][data-servers-view='alerts']").waitFor({ timeout: 10000 });
+  await targetPage.keyboard.press('Home');
+  await targetPage.locator("main[data-module='servers'][data-servers-view='list']").waitFor({ timeout: 10000 });
+  await targetPage.locator('[data-servers-view-tab="list"]').press('ArrowLeft');
+  await targetPage.locator("main[data-module='servers'][data-servers-view='alerts']").waitFor({ timeout: 10000 });
+  await targetPage.locator('[data-servers-view-tab="alerts"]').press('Home');
+  await targetPage.locator("main[data-module='servers'][data-servers-view='list']").waitFor({ timeout: 10000 });
+  if (await targetPage.locator('[data-servers-view-tab][tabindex="0"]').count() !== 1) {
+    throw new Error('Keyboard navigation should leave exactly one tab in the tab order');
+  }
+  console.log('ok browser e2e covers resource views, telemetry handoff, the overview alert reference, view memory, and tablist keyboard navigation');
 }
 
 async function assertResourceAlertPolicyReadiness(targetPage) {
@@ -4888,7 +4915,7 @@ async function assertMobileSection(targetPage, navName, expectedHashPattern, sel
   if (tabSelector) {
     const tab = targetPage.locator(tabSelector);
     await tab.waitFor({ timeout: 10000 });
-    if (await tab.getAttribute('aria-pressed') !== 'true') {
+    if (await tab.getAttribute('aria-selected') !== 'true') {
       await tab.click();
     }
     await targetPage.locator('.module-section').first().waitFor({ timeout: 10000 });
