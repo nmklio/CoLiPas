@@ -2737,8 +2737,8 @@ replaceOnce('</style>', `/* colipas landing live release ui v1 */
   to { stroke-dashoffset: -20; }
 }
 @keyframes lp-scene-halo {
-  0%, 100% { opacity: .5; transform: scale(.9); }
-  50% { opacity: 1; transform: scale(1.15); }
+  0%, 100% { opacity: .45; r: 7.5px; }
+  50% { opacity: 1; r: 11px; }
 }
 .scene-map-land {
   fill: rgba(114, 222, 196, .08);
@@ -2970,6 +2970,8 @@ body {
 }
 @media (prefers-reduced-motion: reduce) {
   .scene-live,
+  .scene-node-halo,
+  .scene-arc,
   .scene-ping,
   .scene-row i,
   .scene-spark-line {

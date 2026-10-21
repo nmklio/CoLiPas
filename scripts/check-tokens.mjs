@@ -389,7 +389,7 @@ for (const [label, foregroundToken, backgroundToken, minimum] of contrastPairs) 
 // 5. Literal-colour ratchet
 // ---------------------------------------------------------------------------
 
-const literalBudget = 1886;
+const literalBudget = 1884;
 const literalCount = (globalCss.match(/#[0-9a-f]{3,8}\b/gi) ?? []).length;
 check(
   literalCount <= literalBudget,

@@ -4728,6 +4728,21 @@ async function assertMobileConsoleAndMap() {
     await mobilePage.waitForFunction(() => document.querySelectorAll('.map-country.active').length > 0, undefined, { timeout: 10000 });
     await assertElementWithinViewport(mobilePage, '.cloud-map', 'mobile overview map');
 
+    const liveNodes = await mobilePage.locator('.map-live-node').count();
+    if (liveNodes < 1) {
+      throw new Error('Overview map should plot at least one live region node');
+    }
+    if (liveNodes > 1 && await mobilePage.locator('.map-live-arc').count() < 1) {
+      throw new Error('Overview map should link its regions with live arcs');
+    }
+    const haloTransform = await mobilePage.evaluate(() => {
+      const halo = document.querySelector('.map-live-halo');
+      return halo ? getComputedStyle(halo).transform : 'none';
+    });
+    if (haloTransform !== 'none') {
+      throw new Error(`Live map halos must pulse their radius instead of drifting via transform, got ${haloTransform}`);
+    }
+
     await mobilePage.getByRole('button', { name: /zoom in/i }).click();
     await mobilePage.waitForFunction(() => document.querySelector('.cloud-map')?.classList.contains('is-zoomed'), undefined, { timeout: 5000 });
     await mobilePage.locator('.map-country.active').first().click({ force: true });

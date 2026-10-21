@@ -120,6 +120,19 @@ interface MapCountryAssets {
   ids: Set<string>;
 }
 
+interface MapLiveNode {
+  region: string;
+  total: number;
+  warn: boolean;
+  x: number;
+  y: number;
+}
+
+interface MapLiveLayer {
+  nodes: MapLiveNode[];
+  arcs: string[];
+}
+
 const MAP_WIDTH = 1000;
 const MAP_HEIGHT = 520;
 const tooltipServerNameLimit = 6;
@@ -258,6 +271,7 @@ export function MonitoringOverview({
   const mapRegions = useMemo(() => (regions.length ? regions : []), [regions]);
   const activeCountryIds = useMemo(() => new Set(mapRegions.flatMap((region) => region.countryIds)), [mapRegions]);
   const regionsByCountryId = useMemo(() => buildCountryRegionMap(mapRegions), [mapRegions]);
+  const mapLiveLayer = useMemo(() => buildMapLiveLayer(mapRegions), [mapRegions]);
   const mapAssetsReady = mapCountryAssets.shapes.length > 0;
   const healthBaseline = useMemo(() => buildHealthBaselineSummary(servers, events, t), [events, servers, t]);
   const healthTrend = useHealthBaselineTrend(healthBaseline, t);
@@ -533,6 +547,14 @@ export function MonitoringOverview({
                   </filter>
                 </defs>
                 <rect className="map-ocean" width={MAP_WIDTH} height={MAP_HEIGHT} rx="10" />
+                <g className="map-graticule" aria-hidden="true">
+                  {[104, 208, 312, 416].map((y) => (
+                    <line key={`lat-${y}`} x1={0} y1={y} x2={MAP_WIDTH} y2={y} />
+                  ))}
+                  {[200, 400, 600, 800].map((x) => (
+                    <line key={`lng-${x}`} x1={x} y1={0} x2={x} y2={MAP_HEIGHT} />
+                  ))}
+                </g>
                 <g className="map-countries">
                   {mapCountryAssets.shapes.map((country) => {
                     const id = country.id;
@@ -592,6 +614,17 @@ export function MonitoringOverview({
                       />
                     );
                   })}
+                </g>
+                <g className="map-live" aria-hidden="true">
+                  {mapLiveLayer.arcs.map((arc) => (
+                    <path key={arc} className="map-live-arc" d={arc} />
+                  ))}
+                  {mapLiveLayer.nodes.map((node) => (
+                    <g key={node.region} className={node.warn ? 'map-live-node warn' : 'map-live-node'}>
+                      <circle className="map-live-halo" cx={node.x} cy={node.y} r={12} />
+                      <circle className="map-live-core" cx={node.x} cy={node.y} r={4.6} />
+                    </g>
+                  ))}
                 </g>
               </svg>
             </div>
@@ -1538,6 +1571,36 @@ function projectRegion(location: RegionLocation): { x: number; y: number } {
   };
 }
 
+/**
+ * The live layer plots each region as a pulsing node and links the busiest
+ * region to the rest, so the map reads as traffic instead of a flat choropleth.
+ * Arcs bend away from the straight line to stay readable when regions cluster.
+ */
+function buildMapLiveLayer(regions: RegionNode[]): MapLiveLayer {
+  const nodes = regions.slice(0, 8).map((region) => ({
+    region: region.region,
+    total: region.total,
+    warn: region.warning > 0,
+    x: (region.x / 100) * MAP_WIDTH,
+    y: (region.y / 100) * MAP_HEIGHT,
+  }));
+  const hub = nodes.reduce<MapLiveNode | null>(
+    (busiest, node) => (!busiest || node.total > busiest.total ? node : busiest),
+    null,
+  );
+  const arcs = hub
+    ? nodes
+      .filter((node) => node !== hub)
+      .map((node) => {
+        const controlX = (hub.x + node.x) / 2;
+        const controlY = (hub.y + node.y) / 2 - Math.hypot(node.x - hub.x, node.y - hub.y) * 0.18;
+        return `M${hub.x.toFixed(1)} ${hub.y.toFixed(1)} Q${controlX.toFixed(1)} ${controlY.toFixed(1)} ${node.x.toFixed(1)} ${node.y.toFixed(1)}`;
+      })
+    : [];
+
+  return { nodes, arcs };
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
@@ -1555,17 +1618,19 @@ function loadMapCountryAssets() {
           atlas as never,
           atlas.objects.countries as never,
         ) as unknown as FeatureCollection<Geometry, { name?: string }>;
-        const shapes: MapCountryShape[] = countries.features.map((country) => {
-          const typedCountry = country as Feature<Geometry, { name?: string }>;
-          const centroid = mapPath.centroid(typedCountry);
+        const shapes: MapCountryShape[] = countries.features
+          .filter((country) => normalizeCountryId(country.id) !== '010')
+          .map((country) => {
+            const typedCountry = country as Feature<Geometry, { name?: string }>;
+            const centroid = mapPath.centroid(typedCountry);
 
-          return {
-            id: normalizeCountryId(country.id),
-            path: mapPath(typedCountry) ?? '',
-            name: typedCountry.properties?.name ?? '',
-            centroid: [centroid[0], centroid[1]],
-          };
-        });
+            return {
+              id: normalizeCountryId(country.id),
+              path: mapPath(typedCountry) ?? '',
+              name: typedCountry.properties?.name ?? '',
+              centroid: [centroid[0], centroid[1]],
+            };
+          });
 
         return {
           shapes,

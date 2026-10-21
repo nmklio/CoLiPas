@@ -140,7 +140,7 @@ for (const file of clientFiles) {
 // silent habit.
 // ---------------------------------------------------------------------------
 const lineBudgets = new Map([
-  ['src/styles/global.css', 25064],
+  ['src/styles/global.css', 25057],
   ['src/styles/tokens.css', 219],
   // The dark layer holds three things: chrome overrides, the light workspace
   // island (28 variables, mirrored from tokens.css and asserted by

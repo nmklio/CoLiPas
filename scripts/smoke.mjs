@@ -6761,7 +6761,7 @@ function assertOverviewMapInteractionGuards() {
     'const mapAssetsReady = mapCountryAssets.shapes.length > 0',
     'loadMapCountryAssets()',
     "import('world-atlas/countries-110m.json')",
-    'const shapes: MapCountryShape[] = countries.features.map',
+    'const shapes: MapCountryShape[] = countries.features',
     "path: mapPath(typedCountry) ?? ''",
     'centroid: [centroid[0], centroid[1]]',
     '{mapCountryAssets.shapes.map((country) =>',
@@ -6991,6 +6991,11 @@ function assertOverviewMapInteractionGuards() {
     '.region-row:focus-visible',
     '.map-country.active:focus-visible',
     'drop-shadow(0 0 6px rgba(15, 118, 110, 0.42))',
+    '.map-graticule line',
+    '.map-live-arc',
+    '.map-live-node.warn .map-live-core',
+    '@keyframes map-live-pulse',
+    'r: 15px',
   ];
   const missingCss = cssFragments.filter((fragment) => !globalCss.includes(fragment));
   if (missingCss.length) {
@@ -6998,6 +7003,26 @@ function assertOverviewMapInteractionGuards() {
   }
   if (globalCss.includes('--map-tooltip-scale')) {
     throw new Error('Overview map CSS must not counter-scale tooltip content');
+  }
+  if (globalCss.includes('.map-detail')) {
+    throw new Error('Overview map CSS must not ship the unused .map-detail card');
+  }
+  for (const fragment of ['buildMapLiveLayer', 'mapLiveLayer', 'className="map-live-arc"', 'className="map-live-halo"']) {
+    if (!overviewSource.includes(fragment)) {
+      throw new Error(`Overview map live layer is incomplete: ${fragment}`);
+    }
+  }
+  const landingPageSource = fs.readFileSync(new URL('../deploy/server-update.sh', import.meta.url), 'utf8');
+  const haloKeyframeStart = landingPageSource.indexOf('@keyframes lp-scene-halo');
+  const haloKeyframes = landingPageSource.slice(haloKeyframeStart, haloKeyframeStart + 160);
+  if (haloKeyframeStart < 0 || !haloKeyframes.includes('r: 11px')) {
+    throw new Error('Landing map halos must pulse their radius so the nodes stay centred');
+  }
+  if (haloKeyframes.includes('transform')) {
+    throw new Error('Landing map halos must not animate transform; scaling around the viewBox origin makes the dots drift');
+  }
+  if (!landingPageSource.includes('.scene-node-halo,')) {
+    throw new Error('Landing map halos must stop animating under prefers-reduced-motion');
   }
 
   console.log('ok overview map guards drag clicks, pan bounds, and responsive tooltip');
