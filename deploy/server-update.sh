@@ -284,11 +284,18 @@ const landingHero = `<section class="hero wrap">
             <div class="scene-map">
               <svg viewBox="0 0 320 170" aria-hidden="true" preserveAspectRatio="none">
                 <path class="scene-map-grid" d="M0 42h320M0 85h320M0 128h320M80 0v170M160 0v170M240 0v170" />
+                <path class="scene-map-land" d="M28 58c14-10 34-12 48-4 10 6 8 16 20 20 10 4 16-6 26-4 12 2 12 14 4 20-10 8-28 6-40 12-14 6-30 8-42 2-12-6-16-20-16-30 0-6 0-12 0-16Z" />
+                <path class="scene-map-land" d="M196 40c16-8 40-6 56 4 10 6 16 18 12 28-4 12-20 14-32 18-14 4-30 2-38-8-8-10-6-26 2-42Z" />
+                <path class="scene-map-land" d="M118 96c10-4 22 0 26 10 4 10-4 20-14 22-10 2-20-6-20-16 0-6 2-12 8-16Z" />
                 <circle class="scene-node" cx="238" cy="62" r="3.4" />
                 <circle class="scene-node" cx="176" cy="88" r="3" />
                 <circle class="scene-node" cx="252" cy="104" r="2.6" />
                 <circle class="scene-node" cx="96" cy="72" r="2.6" />
               </svg>
+              <span class="scene-tag" style="left:70%;top:28%">HK</span>
+              <span class="scene-tag" style="left:46%;top:46%">SG</span>
+              <span class="scene-tag" style="left:74%;top:60%">US</span>
+              <span class="scene-tag" style="left:22%;top:36%">JP</span>
               <span class="scene-ping" style="left:74%;top:36%"></span>
               <span class="scene-ping scene-ping-slow" style="left:55%;top:52%"></span>
               <span class="scene-ping" style="left:30%;top:42%"></span>
@@ -298,6 +305,12 @@ const landingHero = `<section class="hero wrap">
               <div class="scene-row"><span>sg-edge-02</span><i style="--v:67%"></i><b>67%</b></div>
               <div class="scene-row"><span>us-core-03</span><i style="--v:28%"></i><b>28%</b></div>
               <div class="scene-row"><span>jp-lab-04</span><i style="--v:55%"></i><b>55%</b></div>
+              <div class="scene-row"><span>hk-edge-05</span><i style="--v:34%"></i><b>34%</b></div>
+              <div class="scene-row"><span>de-cdn-06</span><i style="--v:61%"></i><b>61%</b></div>
+              <div class="scene-events">
+                <div><b>P1</b><span>hk-prod-01 CPU 82% 持续 5 分钟</span></div>
+                <div><b>P2</b><span>sg-edge-02 SSH 握手 210ms</span></div>
+              </div>
             </div>
           </div>
           <div class="scene-spark" aria-hidden="true">
@@ -2607,10 +2620,10 @@ replaceOnce('</style>', `/* colipas landing live release ui v1 */
 }
 .scene-split {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr);
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr);
   gap: 10px;
-  flex: 1;
-  min-height: 0;
+  flex: 0 0 auto;
+  height: 232px;
 }
 .scene-map {
   position: relative;
@@ -2626,8 +2639,21 @@ replaceOnce('</style>', `/* colipas landing live release ui v1 */
 }
 .scene-map-grid {
   fill: none;
-  stroke: rgba(114, 222, 196, .14);
+  stroke: rgba(114, 222, 196, .12);
   stroke-width: 1;
+}
+.scene-map-land {
+  fill: rgba(114, 222, 196, .08);
+  stroke: rgba(114, 222, 196, .22);
+  stroke-width: 1;
+}
+.scene-tag {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  color: #9cebd8;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .06em;
 }
 .scene-node {
   fill: #72dec4;
@@ -2670,8 +2696,36 @@ replaceOnce('</style>', `/* colipas landing live release ui v1 */
   color: #eaf6f3;
   font-variant-numeric: tabular-nums;
 }
+.scene-events {
+  display: grid;
+  gap: 4px;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(255, 255, 255, .08);
+}
+.scene-events div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: #9fb0ac;
+}
+.scene-events b {
+  flex: 0 0 auto;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: rgba(232, 185, 104, .16);
+  color: #e8b968;
+  font-size: 9px;
+}
+.scene-events span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .scene-spark {
-  height: 52px;
+  flex: 1;
+  min-height: 64px;
   padding: 4px 6px;
   border: 1px solid rgba(255, 255, 255, .07);
   border-radius: 8px;
