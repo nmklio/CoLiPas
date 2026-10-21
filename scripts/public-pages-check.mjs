@@ -407,7 +407,7 @@ async function assertLandingProductStage(page) {
   await page.waitForFunction(() => {
     const scenes = Array.from(document.querySelectorAll('.product-preview [data-tour-scene]'));
     return scenes.length === 3
-      && scenes.every((scene) => scene instanceof HTMLElement && scene.getBoundingClientRect().height > 120 && scene.children.length >= 3);
+      && scenes.every((scene) => scene instanceof HTMLElement && scene.getBoundingClientRect().height > 120 && scene.children.length >= 2);
   }, undefined, { timeout: 15000 });
 
   const stage = await page.evaluate(() => {

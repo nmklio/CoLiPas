@@ -6168,6 +6168,7 @@ function assertLandingPatchIdempotence() {
       || (second.match(/id="colipas-landing-dynamic"/g) ?? []).length !== 1
       || !second.includes('data-live-release')
       || (second.match(/class="capability-ticker"/g) ?? []).length !== 1
+      || /<script id="colipas-landing-dynamic">[\s\S]*?<\/html>[\s\S]*?<\/script>/.test(second)
     ) {
       throw new Error('Landing page patch fixture did not produce the dynamic product tour, live release strip, and redesigned dark sections');
     }

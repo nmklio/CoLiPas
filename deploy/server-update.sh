@@ -3105,6 +3105,9 @@ const landingDynamicScript = `<script id="colipas-landing-dynamic">
   var sceneRtt = document.querySelector('[data-scene-rtt]');
   var sceneFirst = document.querySelector('[data-scene-first]');
   var sceneCounters = Array.prototype.slice.call(document.querySelectorAll('[data-scene-count]'));
+  // A literal dollar followed by a quote would be expanded by String.replace
+  // in the deploy patch, so the prompt marker is built from its code point.
+  var dollarChar = String.fromCharCode(36);
   var sceneTimers = [];
 
   function sceneLater(fn, ms) {
@@ -3170,7 +3173,7 @@ const landingDynamicScript = `<script id="colipas-landing-dynamic">
       }
       var line = terminalScript[index];
       index += 1;
-      var isCommand = line.indexOf('$') === 0;
+      var isCommand = line.charAt(0) === dollarChar;
       var isOk = line.indexOf('active') >= 0;
       lines.push(isCommand ? '<span class="cmd">' + line + '</span>' : isOk ? '<span class="ok">' + line + '</span>' : line);
       sceneTerm.innerHTML = lines.join('\\n');
@@ -3229,7 +3232,7 @@ const landingDynamicScript = `<script id="colipas-landing-dynamic">
   if (reduceMotion) {
     if (sceneTerm) {
       sceneTerm.innerHTML = terminalScript.map(function (line) {
-        return line.indexOf('$') === 0 ? '<span class="cmd">' + line + '</span>' : line;
+        return line.charAt(0) === dollarChar ? '<span class="cmd">' + line + '</span>' : line;
       }).join('\\n');
     }
   } else {
