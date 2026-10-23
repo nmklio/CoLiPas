@@ -341,8 +341,21 @@ const landingHero = `<section class="hero wrap">
           </div>
           <div class="scene-spark" aria-hidden="true">
             <svg viewBox="0 0 300 54" preserveAspectRatio="none">
-              <path class="scene-spark-line" d="M0 40 L26 34 L52 44 L78 28 L104 36 L130 22 L156 30 L182 18 L208 26 L234 14 L260 22 L286 10 L300 16" />
+              <defs>
+                <linearGradient id="scene-spark-stroke" x1="0" y1="0" x2="300" y2="0" gradientUnits="userSpaceOnUse">
+                  <stop offset="0" stop-color="#38bdf8"/>
+                  <stop offset="1" stop-color="#60a5fa"/>
+                </linearGradient>
+                <linearGradient id="scene-spark-fill" x1="0" y1="0" x2="0" y2="54" gradientUnits="userSpaceOnUse">
+                  <stop offset="0" stop-color="#38bdf8" stop-opacity=".26"/>
+                  <stop offset="1" stop-color="#38bdf8" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <path class="scene-spark-area" d="M0 40 C4.3 39 17.3 33.3 26 34 C34.7 34.7 43.3 45 52 44 C60.7 43 69.3 29.3 78 28 C86.7 26.7 95.3 37 104 36 C112.7 35 121.3 23 130 22 C138.7 21 147.3 30.7 156 30 C164.7 29.3 173.3 18.7 182 18 C190.7 17.3 199.3 26.7 208 26 C216.7 25.3 225.3 14.7 234 14 C242.7 13.3 251.3 22.7 260 22 C268.7 21.3 279.3 11 286 10 C292.7 9 297.7 15 300 16 L300 54 L0 54 Z"/>
+              <path class="scene-spark-line" d="M0 40 C4.3 39 17.3 33.3 26 34 C34.7 34.7 43.3 45 52 44 C60.7 43 69.3 29.3 78 28 C86.7 26.7 95.3 37 104 36 C112.7 35 121.3 23 130 22 C138.7 21 147.3 30.7 156 30 C164.7 29.3 173.3 18.7 182 18 C190.7 17.3 199.3 26.7 208 26 C216.7 25.3 225.3 14.7 234 14 C242.7 13.3 251.3 22.7 260 22 C268.7 21.3 279.3 11 286 10 C292.7 9 297.7 15 300 16"/>
+              <path class="scene-spark-baseline" d="M0 53 H300"/>
             </svg>
+            <i class="scene-spark-dot"></i>
           </div>
         </div>
         <div id="tour-scene-terminal" class="preview-scene scene scene-terminal" data-tour-scene="terminal" data-scene="terminal" role="tabpanel" aria-labelledby="tour-tab-terminal" aria-hidden="true">
@@ -2580,10 +2593,6 @@ replaceOnce('</style>', `/* colipas landing live release ui v1 */
   from { width: calc(var(--v, 50%) * .7); }
   to { width: var(--v, 50%); }
 }
-@keyframes lp-scene-draw {
-  0% { stroke-dashoffset: 480; }
-  60%, 100% { stroke-dashoffset: 0; }
-}
 .scene {
   display: flex;
   flex-direction: column;
@@ -2822,26 +2831,53 @@ replaceOnce('</style>', `/* colipas landing live release ui v1 */
   white-space: nowrap;
 }
 .scene-spark {
+  position: relative;
   flex: 1;
   min-height: 64px;
-  padding: 4px 6px;
+  padding: 4px 0 0;
+  overflow: hidden;
   border: 1px solid rgba(255, 255, 255, .07);
   border-radius: 8px;
-  background: rgba(9, 20, 22, .7);
+  background:
+    linear-gradient(180deg, rgba(56, 189, 248, .08), rgba(9, 20, 22, 0) 62%),
+    rgba(9, 20, 22, .7);
 }
 .scene-spark svg {
   display: block;
   width: 100%;
   height: 100%;
 }
+.scene-spark-area {
+  fill: url(#scene-spark-fill);
+}
+.scene-spark-baseline {
+  fill: none;
+  stroke: rgba(255, 255, 255, .08);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
 .scene-spark-line {
   fill: none;
-  stroke: #5aa9ff;
-  stroke-width: 2;
+  stroke: url(#scene-spark-stroke);
+  stroke-width: 2.4;
   stroke-linecap: round;
-  stroke-dasharray: 480;
-  stroke-dashoffset: 480;
-  animation: lp-scene-draw 6s linear infinite;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.scene-spark-dot {
+  position: absolute;
+  top: calc(30% - 4px);
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #e0f2fe;
+  filter: drop-shadow(0 0 6px rgba(56, 189, 248, .85));
+  animation: lp-spark-dot 2.8s ease-out infinite;
+}
+@keyframes lp-spark-dot {
+  0% { box-shadow: 0 0 0 0 rgba(56, 189, 248, .5); }
+  70%, 100% { box-shadow: 0 0 0 9px rgba(56, 189, 248, 0); }
 }
 .scene-term {
   flex: 1;
@@ -3000,7 +3036,8 @@ body {
   .scene-arc,
   .scene-ping,
   .scene-row i,
-  .scene-spark-line {
+  .scene-spark-line,
+  .scene-spark-dot {
     animation: none;
   }
 }

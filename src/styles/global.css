@@ -4476,11 +4476,11 @@ main {
   overflow: visible;
 }
 
-.health-baseline-trend polygon {
+.health-baseline-trend .health-trend-area {
   fill: rgba(20, 184, 166, 0.12);
 }
 
-.health-baseline-trend polyline {
+.health-baseline-trend .health-trend-line {
   fill: none;
   stroke: #0f766e;
   stroke-width: 3;
@@ -4495,23 +4495,23 @@ main {
   line-height: 1.35;
 }
 
-.health-baseline-trend.up polyline {
+.health-baseline-trend.up .health-trend-line {
   stroke: #16a34a;
 }
 
-.health-baseline-trend.down polyline {
+.health-baseline-trend.down .health-trend-line {
   stroke: #dc2626;
 }
 
-.health-baseline-trend.down polygon {
+.health-baseline-trend.down .health-trend-area {
   fill: rgba(248, 113, 113, 0.13);
 }
 
-.health-baseline-trend.flat polyline {
+.health-baseline-trend.flat .health-trend-line {
   stroke: #2563eb;
 }
 
-.health-baseline-trend.new polyline {
+.health-baseline-trend.new .health-trend-line {
   stroke-dasharray: 6 5;
 }
 

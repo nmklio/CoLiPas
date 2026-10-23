@@ -7013,6 +7013,12 @@ function assertOverviewMapInteractionGuards() {
       throw new Error(`Overview map live layer is incomplete: ${fragment}`);
     }
   }
+  if (!overviewSource.includes('className="health-trend-line"') || overviewSource.includes('<polyline')) {
+    throw new Error('Overview health trend must render a smoothed path instead of a jagged polyline');
+  }
+  if (!globalCss.includes('.health-baseline-trend .health-trend-line') || !globalCss.includes('.health-baseline-trend .health-trend-area')) {
+    throw new Error('Overview health trend path styles are missing');
+  }
   const landingPageSource = fs.readFileSync(new URL('../deploy/server-update.sh', import.meta.url), 'utf8');
   const haloKeyframeStart = landingPageSource.indexOf('@keyframes lp-scene-halo');
   const haloKeyframes = landingPageSource.slice(haloKeyframeStart, haloKeyframeStart + 160);

@@ -104,8 +104,8 @@ interface HealthBaselineTrend {
   delta: number;
   label: string;
   detail: string;
-  linePoints: string;
-  fillPoints: string;
+  linePath: string;
+  areaPath: string;
 }
 
 interface MapCountryShape {
@@ -430,8 +430,8 @@ export function MonitoringOverview({
           <span>{t('overview.healthTrendTitle')}</span>
           <strong>{healthTrend.label}</strong>
           <svg viewBox="0 0 100 44" role="img" aria-label={healthTrend.detail} focusable="false">
-            <polygon points={healthTrend.fillPoints} />
-            <polyline points={healthTrend.linePoints} />
+            <path className="health-trend-area" d={healthTrend.areaPath} />
+            <path className="health-trend-line" d={healthTrend.linePath} />
           </svg>
           <small>{healthTrend.detail}</small>
         </div>
@@ -1335,15 +1335,15 @@ function buildHealthBaselineTrend(
     delta: absoluteDelta,
     score: lastPoint.score,
   };
-  const linePoints = buildHealthTrendLinePoints(normalizedPoints);
+  const { linePath, areaPath } = buildHealthTrendPaths(normalizedPoints);
   return {
     points: normalizedPoints,
     direction,
     delta: rawDelta,
     label: t(`overview.healthTrendLabel.${direction}`, labelVars),
     detail: t(`overview.healthTrendDetail.${direction}`, detailVars),
-    linePoints,
-    fillPoints: `${linePoints} 100,42 0,42`,
+    linePath,
+    areaPath,
   };
 }
 
@@ -1354,19 +1354,30 @@ function formatSignedDelta(delta: number) {
   return `${delta}`;
 }
 
-function buildHealthTrendLinePoints(points: HealthTrendPoint[]) {
+function buildHealthTrendPaths(points: HealthTrendPoint[]) {
   const safePoints = points.length ? points : [{ score: 100, tone: 'good' as const, timestamp: 0 }];
-  if (safePoints.length === 1) {
-    const y = healthTrendScoreToY(safePoints[0].score);
-    return `0,${y} 100,${y}`;
+  const coordinates = safePoints.map((point, index) => ({
+    x: safePoints.length > 1 ? Math.round((index / (safePoints.length - 1)) * 100) : index * 100,
+    y: healthTrendScoreToY(point.score),
+  }));
+  if (coordinates.length === 1) {
+    coordinates.push({ x: 100, y: coordinates[0].y });
   }
 
-  return safePoints
-    .map((point, index) => {
-      const x = Math.round((index / (safePoints.length - 1)) * 100);
-      return `${x},${healthTrendScoreToY(point.score)}`;
-    })
-    .join(' ');
+  const round = (value: number) => Math.round(value * 10) / 10;
+  const linePath = coordinates.map((point, index) => {
+    if (index === 0) {
+      return `M${point.x} ${point.y}`;
+    }
+    const previous = coordinates[index - 1];
+    const before = coordinates[index - 2] ?? previous;
+    const after = coordinates[index + 1] ?? point;
+    const control1 = `${round(previous.x + (point.x - before.x) / 6)} ${round(previous.y + (point.y - before.y) / 6)}`;
+    const control2 = `${round(point.x - (after.x - previous.x) / 6)} ${round(point.y - (after.y - previous.y) / 6)}`;
+    return ` C${control1} ${control2} ${point.x} ${point.y}`;
+  }).join('');
+
+  return { linePath, areaPath: `${linePath} L100 42 L0 42 Z` };
 }
 
 function healthTrendScoreToY(score: number) {
