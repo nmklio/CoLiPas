@@ -3032,7 +3032,6 @@ body {
 }
 @media (prefers-reduced-motion: reduce) {
   .scene-live,
-  .scene-node-halo,
   .scene-arc,
   .scene-ping,
   .scene-row i,
@@ -3040,6 +3039,15 @@ body {
   .scene-spark-dot {
     animation: none;
   }
+  /* Breathing is an opacity change, not movement, so the map stays alive
+     for visitors who ask the system to reduce motion. */
+  .scene-node-halo {
+    animation: lp-scene-halo-soft 3.4s ease-in-out infinite;
+  }
+}
+@keyframes lp-scene-halo-soft {
+  0%, 100% { opacity: .4; }
+  50% { opacity: .95; }
 }
 @keyframes lp-cursor {
   0%, 49% { opacity: 1; }
@@ -3339,10 +3347,6 @@ const landingDynamicScript = `<script id="colipas-landing-dynamic">
     sceneCounters.forEach(function (node) {
       var target = Number(node.getAttribute('data-scene-count')) || 0;
       var suffix = node.getAttribute('data-scene-suffix') || '';
-      if (reduceMotion) {
-        node.textContent = target + suffix;
-        return;
-      }
       var startedAt = performance.now();
       var step = function (now) {
         var progress = Math.min(1, (now - startedAt) / 900);
@@ -3409,13 +3413,6 @@ const landingDynamicScript = `<script id="colipas-landing-dynamic">
     if (sceneApprove) {
       sceneApprove.classList.remove('is-approved');
     }
-    if (reduceMotion) {
-      sceneAiText.textContent = aiAnswer;
-      if (sceneApprove) {
-        sceneApprove.classList.add('is-approved');
-      }
-      return;
-    }
     var index = 0;
     var type = function () {
       index += 2;
@@ -3455,9 +3452,8 @@ const landingDynamicScript = `<script id="colipas-landing-dynamic">
         return line.charAt(0) === dollarChar ? '<span class="cmd">' + line + '</span>' : line;
       }).join('\\n');
     }
-  } else {
-    playTerminalScene();
   }
+  playTerminalScene();
 
   if (!reduceMotion && 'IntersectionObserver' in window) {
     var targets = document.querySelectorAll('#product .position-card, #product .workflow-stage, #features .feature-card, #deploy .deploy-card');

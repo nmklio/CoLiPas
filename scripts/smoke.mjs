@@ -7028,8 +7028,8 @@ function assertOverviewMapInteractionGuards() {
   if (haloKeyframes.includes('transform')) {
     throw new Error('Landing map halos must not animate transform; scaling around the viewBox origin makes the dots drift');
   }
-  if (!landingPageSource.includes('.scene-node-halo,')) {
-    throw new Error('Landing map halos must stop animating under prefers-reduced-motion');
+  if (!landingPageSource.includes('@keyframes lp-scene-halo-soft') || !landingPageSource.includes('animation: lp-scene-halo-soft 3.4s ease-in-out infinite')) {
+    throw new Error('Landing map halos must fall back to an opacity-only pulse under prefers-reduced-motion');
   }
 
   console.log('ok overview map guards drag clicks, pan bounds, and responsive tooltip');
