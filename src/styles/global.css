@@ -15135,7 +15135,7 @@ pre {
   bottom: 22px;
   z-index: 46;
   width: min(448px, calc(100vw - 288px));
-  height: min(660px, calc(100vh - 88px));
+  height: min(760px, calc(100vh - 88px));
   min-height: 520px;
   margin: 0;
   border: 1px solid #d5e2e6;
@@ -15690,7 +15690,7 @@ pre {
 .ai-empty-panel.ai-empty-guidance {
   display: grid;
   grid-template-rows: auto auto;
-  align-content: center;
+  align-content: safe center;
   align-items: stretch;
   justify-content: stretch;
   gap: 18px;

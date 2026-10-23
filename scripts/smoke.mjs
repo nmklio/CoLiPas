@@ -5470,7 +5470,7 @@ function assertCustomApiSecretNotPersisted() {
     '.api-integration-row b',
     'grid-template-columns: minmax(0, 1fr)',
     'width: min(448px, calc(100vw - 288px))',
-    'height: min(660px, calc(100vh - 88px))',
+    'height: min(760px, calc(100vh - 88px))',
   ];
   for (const fragment of requiredStyleFragments) {
     if (!globalStyleSource.includes(fragment)) {
