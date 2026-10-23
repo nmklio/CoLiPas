@@ -2376,8 +2376,8 @@ body {
   html { scroll-behavior: auto; }
   .hero-copy,
   .product-preview,
-  .preview-scene,
-  .preview-progress i { animation: none; transition: none; }
+  .preview-scene { animation: none; transition: none; }
+  .preview-progress { display: none; }
   .feature-card,
   .button { transition: none; }
 }
@@ -3224,7 +3224,7 @@ const landingProductTourScript = `<script id="colipas-product-tour">
     if (title) title.textContent = titles[tabs[current].getAttribute('data-tour-tab')] || '';
     tour.classList.remove('is-cycling');
     void tour.offsetWidth;
-    if (!reduceMotion) tour.classList.add('is-cycling');
+    tour.classList.add('is-cycling');
     if (moveFocus) tabs[current].focus();
   }
 
@@ -3236,7 +3236,7 @@ const landingProductTourScript = `<script id="colipas-product-tour">
 
   function schedule() {
     stop();
-    if (!tour || reduceMotion || document.hidden || tour.matches(':hover') || tour.contains(document.activeElement)) return;
+    if (!tour || document.hidden || tour.matches(':hover') || tour.contains(document.activeElement)) return;
     tour.classList.add('is-cycling');
     timer = window.setTimeout(function () {
       activate(current + 1, false);
@@ -3446,6 +3446,9 @@ const landingDynamicScript = `<script id="colipas-landing-dynamic">
   tickSceneClock();
   jitterSceneLatency();
   animateCounters();
+  window.setInterval(tickSceneClock, 1000);
+  window.setInterval(jitterSceneLatency, 2200);
+  playAiScene();
   if (reduceMotion) {
     if (sceneTerm) {
       sceneTerm.innerHTML = terminalScript.map(function (line) {
@@ -3453,10 +3456,7 @@ const landingDynamicScript = `<script id="colipas-landing-dynamic">
       }).join('\\n');
     }
   } else {
-    window.setInterval(tickSceneClock, 1000);
-    window.setInterval(jitterSceneLatency, 2200);
     playTerminalScene();
-    playAiScene();
   }
 
   if (!reduceMotion && 'IntersectionObserver' in window) {
