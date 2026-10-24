@@ -221,7 +221,9 @@ function replacePositionCard(title, kind, description) {
 
 replaceAll(/\/\* colipas landing balanced ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\/style>)/g, '');
 replaceAll(/\/\* colipas landing live release ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\/style>)/g, '');
+replaceAll(/\/\* colipas landing dynamic globe ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\/style>)/g, '');
 replaceAll(/\s*<script id="colipas-landing-dynamic">[\s\S]*?<\/script>\s*/g, '\n');
+replaceAll(/\s*<script id="colipas-landing-globe">[\s\S]*?<\/script>\s*/g, '\n');
 replaceAll(/<title>[\s\S]*?<\/title>/g, '<title>CoLiPas云服务器管理面板</title>');
 replaceAll(/\s*<link\s+rel="icon"[^>]*>\s*/g, '\n');
 replaceOnce(/<title>CoLiPas云服务器管理面板<\/title>/, '<title>CoLiPas云服务器管理面板</title>\n<link rel="icon" type="image/svg+xml" href="/colipas-icon.svg?v=20261021-brand4">');
@@ -239,6 +241,7 @@ if (!html.includes('https://github.com/nmklio/CoLiPas')) {
 }
 
 const landingHero = `<section class="hero wrap">
+    <div class="hero-globe-scene" aria-hidden="true"><canvas class="hero-globe"></canvas></div>
     <div class="hero-copy">
       <p class="pill">自托管控制面 · SSH 实时终端 · AI 运维</p>
       <h1><span class="hero-title-main">CoLiPas</span><span class="hero-title-accent">云服务器管理面板</span></h1>
@@ -3201,6 +3204,40 @@ body {
   }
 }
 </style>`);
+replaceOnce('</style>', `/* colipas landing dynamic globe ui v1 */
+.hero {
+  position: relative;
+}
+.hero .hero-copy,
+.hero .product-preview {
+  position: relative;
+  z-index: 1;
+}
+.hero-globe-scene {
+  position: absolute;
+  top: -128px;
+  right: -150px;
+  z-index: 0;
+  width: min(640px, 54vw);
+  aspect-ratio: 1;
+  pointer-events: none;
+  -webkit-mask-image: radial-gradient(closest-side, #000 58%, transparent 97%);
+  mask-image: radial-gradient(closest-side, #000 58%, transparent 97%);
+}
+.hero-globe {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+@media (max-width: 720px) {
+  .hero-globe-scene {
+    top: -190px;
+    right: -200px;
+    width: 430px;
+    opacity: .82;
+  }
+}
+</style>`);
 
 replaceAll(/\s*<script id="colipas-product-tour">[\s\S]*?<\/script>\s*/g, '\n');
 const landingProductTourScript = `<script id="colipas-product-tour">
@@ -3676,6 +3713,202 @@ const landingDynamicScript = `<script id="colipas-landing-dynamic">
 </script>`;
 if (!html.includes('id="colipas-landing-dynamic"')) {
   replaceOnce(/\s*<\/body>/, `\n${landingDynamicScript}\n</body>`);
+}
+
+const landingGlobeScript = `<script id="colipas-landing-globe">
+(function () {
+  var scene = document.querySelector('.hero-globe-scene');
+  var canvas = document.querySelector('.hero-globe');
+  if (!scene || !canvas || !canvas.getContext) { return; }
+  var ctx = canvas.getContext('2d');
+  var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var nodes = [
+    { name: 'HK', lat: 22.3, lng: 114.2 },
+    { name: 'SG', lat: 1.35, lng: 103.8 },
+    { name: 'JP', lat: 35.7, lng: 139.7 },
+    { name: 'US', lat: 37.0, lng: -96.0 },
+    { name: 'DE', lat: 50.1, lng: 8.7 }
+  ];
+  var links = [
+    [3, 0],
+    [0, 1],
+    [4, 3],
+    [2, 0]
+  ];
+
+  var DOT_COUNT = 640;
+  var dots = [];
+  for (var i = 0; i < DOT_COUNT; i += 1) {
+    var y = 1 - (i / (DOT_COUNT - 1)) * 2;
+    var r = Math.sqrt(Math.max(0, 1 - y * y));
+    var theta = i * 2.399963229728653;
+    dots.push({ x: Math.cos(theta) * r, y: y, z: Math.sin(theta) * r });
+  }
+
+  function toRad(deg) { return (deg * Math.PI) / 180; }
+  function nodeVector(node) {
+    var lat = toRad(node.lat);
+    var lng = toRad(node.lng);
+    return { x: Math.cos(lat) * Math.cos(lng), y: Math.sin(lat), z: Math.cos(lat) * Math.sin(lng) };
+  }
+  var nodeVectors = nodes.map(nodeVector);
+
+  var size = 0;
+  var dpr = 1;
+  function resize() {
+    var rect = scene.getBoundingClientRect();
+    var next = Math.max(1, Math.round(rect.width));
+    if (next === size && canvas.width === Math.round(next * dpr)) { return; }
+    size = next;
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = Math.round(size * dpr);
+    canvas.height = Math.round(size * dpr);
+  }
+
+  function rotate(vec, yaw, tilt) {
+    var x = vec.x * Math.cos(yaw) + vec.z * Math.sin(yaw);
+    var z = -vec.x * Math.sin(yaw) + vec.z * Math.cos(yaw);
+    var y = vec.y * Math.cos(tilt) - z * Math.sin(tilt);
+    z = vec.y * Math.sin(tilt) + z * Math.cos(tilt);
+    return { x: x, y: y, z: z };
+  }
+
+  function project(vec, radius, center) {
+    return {
+      x: center + vec.x * radius,
+      y: center - vec.y * radius,
+      z: vec.z
+    };
+  }
+
+  function draw(timeMs) {
+    resize();
+    var css = size;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, css, css);
+    var center = css / 2;
+    var radius = css * 0.4;
+    var yaw = timeMs * 0.00016;
+    var tilt = -0.32;
+    var t = timeMs * 0.001;
+
+    var glow = ctx.createRadialGradient(center, center, radius * 0.2, center, center, radius * 1.25);
+    glow.addColorStop(0, 'rgba(56, 189, 248, 0.10)');
+    glow.addColorStop(0.7, 'rgba(56, 189, 248, 0.05)');
+    glow.addColorStop(1, 'rgba(56, 189, 248, 0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, css, css);
+
+    for (var i = 0; i < dots.length; i += 1) {
+      var rotated = rotate(dots[i], yaw, tilt);
+      var point = project(rotated, radius, center);
+      var front = rotated.z > 0;
+      var shade = front ? 0.35 + rotated.z * 0.6 : 0.08 + Math.abs(rotated.z) * 0.06;
+      ctx.fillStyle = 'rgba(126, 231, 205, ' + shade.toFixed(3) + ')';
+      var dotSize = front ? 1.25 : 0.9;
+      ctx.fillRect(point.x - dotSize / 2, point.y - dotSize / 2, dotSize, dotSize);
+    }
+
+    var screen = [];
+    for (var n = 0; n < nodeVectors.length; n += 1) {
+      var rotatedNode = rotate(nodeVectors[n], yaw, tilt);
+      screen.push({ vec: rotatedNode, point: project(rotatedNode, radius, center) });
+    }
+
+    for (var l = 0; l < links.length; l += 1) {
+      var a = screen[links[l][0]];
+      var b = screen[links[l][1]];
+      if (!a || !b || a.vec.z < -0.05 || b.vec.z < -0.05) { continue; }
+      var mx = (a.point.x + b.point.x) / 2;
+      var my = (a.point.y + b.point.y) / 2;
+      var dx = mx - center;
+      var dy = my - center;
+      var dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      var lift = radius * 0.38;
+      var cx = mx + (dx / dist) * lift;
+      var cy = my + (dy / dist) * lift;
+      ctx.beginPath();
+      ctx.moveTo(a.point.x, a.point.y);
+      ctx.quadraticCurveTo(cx, cy, b.point.x, b.point.y);
+      ctx.strokeStyle = 'rgba(88, 180, 255, 0.28)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      var phase = (t * 0.22 + l * 0.27) % 1;
+      var inv = 1 - phase;
+      var px = inv * inv * a.point.x + 2 * inv * phase * cx + phase * phase * b.point.x;
+      var py = inv * inv * a.point.y + 2 * inv * phase * cy + phase * phase * b.point.y;
+      ctx.beginPath();
+      ctx.arc(px, py, 1.8, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(158, 232, 255, 0.95)';
+      ctx.fill();
+    }
+
+    for (var k = 0; k < screen.length; k += 1) {
+      var item = screen[k];
+      if (item.vec.z < 0.02) { continue; }
+      var pulse = 0.5 + 0.5 * Math.sin(t * 2.1 + k * 1.3);
+      ctx.beginPath();
+      ctx.arc(item.point.x, item.point.y, 5.5 + pulse * 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(114, 222, 196, ' + (0.10 + pulse * 0.14).toFixed(3) + ')';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(item.point.x, item.point.y, 2.6, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(190, 247, 232, 0.95)';
+      ctx.fill();
+    }
+  }
+
+  var running = false;
+  var frameHandle = 0;
+  var visible = true;
+  var pageVisible = !document.hidden;
+
+  function frame(now) {
+    if (!running) { return; }
+    draw(now);
+    frameHandle = window.requestAnimationFrame(frame);
+  }
+
+  function shouldRun() {
+    return !reduceMotion && visible && pageVisible;
+  }
+
+  function restart() {
+    var want = shouldRun();
+    if (want && !running) {
+      running = true;
+      frameHandle = window.requestAnimationFrame(frame);
+    } else if (!want && running) {
+      running = false;
+      window.cancelAnimationFrame(frameHandle);
+    }
+  }
+
+  resize();
+  draw(reduceMotion ? 4200 : performance.now());
+  if (!reduceMotion) {
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (entries) {
+        visible = entries[0].isIntersecting;
+        restart();
+      }, { rootMargin: '80px' }).observe(scene);
+    }
+    document.addEventListener('visibilitychange', function () {
+      pageVisible = !document.hidden;
+      restart();
+    });
+    window.addEventListener('resize', function () {
+      draw(performance.now());
+    });
+    restart();
+  }
+  scene.setAttribute('data-globe-state', reduceMotion ? 'static' : 'live');
+}());
+</script>`;
+if (!html.includes('id="colipas-landing-globe"')) {
+  replaceOnce(/\s*<\/body>/, `\n${landingGlobeScript}\n</body>`);
 }
 
 if (!html.includes('https://github.com/nmklio/CoLiPas')) {

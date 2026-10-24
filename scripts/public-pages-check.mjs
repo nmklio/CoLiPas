@@ -123,6 +123,7 @@ function buildLandingCheck() {
       await expectLink(page, /后台|登录|Admin|进入/i, '/admin/');
       await expectLocatorCount(page.locator('.hero .product-preview [data-tour-scene]'), 3, 'landing dynamic product-tour scenes');
       await expectLocatorCount(page.locator('.hero .product-preview [data-tour-tab]'), 3, 'landing dynamic product-tour tabs');
+      await expectLocatorCountAtLeast(page.locator('.hero .hero-globe-scene canvas.hero-globe'), 1, 'landing hero globe canvas');
       await expectLocatorCount(page.locator('.feature-card.feature-card-wide'), 2, 'landing primary capability cards');
       await assertLandingProductStage(page);
       await assertLandingProductTour(page);
