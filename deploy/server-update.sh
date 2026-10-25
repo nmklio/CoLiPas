@@ -3375,6 +3375,37 @@ replaceOnce('</style>', `/* colipas landing density ui v1 */
 .feature-grid {
   align-content: start;
 }
+@media (min-width: 721px) {
+  .feature-card,
+  #features .feature-card {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
+    gap: 3px 14px;
+    align-content: start;
+    padding: 15px 16px;
+  }
+  .feature-icon,
+  .feature-card-wide .feature-icon {
+    grid-column: 1;
+    grid-row: 1 / 4;
+    width: 38px;
+    height: 38px;
+  }
+  .feature-card h3 {
+    grid-column: 2;
+    margin-top: 0;
+    font-size: 15px;
+  }
+  .feature-card p {
+    grid-column: 2;
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+  .feature-card .tags {
+    grid-column: 2;
+  }
+}
 .workflow-stage {
   min-height: 0;
   padding: 22px 22px 20px;
