@@ -225,6 +225,7 @@ replaceAll(/\/\* colipas landing dynamic globe ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\
 replaceAll(/\/\* colipas landing hero split ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\/style>)/g, '');
 replaceAll(/\/\* colipas landing density ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\/style>)/g, '');
 replaceAll(/\/\* colipas landing light surface ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\/style>)/g, '');
+replaceAll(/\/\* colipas landing console dark ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\/style>)/g, '');
 replaceAll(/\s*<script id="colipas-landing-dynamic">[\s\S]*?<\/script>\s*/g, '\n');
 replaceAll(/\s*<script id="colipas-landing-globe">[\s\S]*?<\/script>\s*/g, '\n');
 replaceAll(/<title>[\s\S]*?<\/title>/g, '<title>CoLiPas云服务器管理面板</title>');
@@ -3216,14 +3217,12 @@ replaceOnce('</style>', `/* colipas landing dynamic globe ui v1 */
 }
 .hero-globe-scene {
   position: absolute;
-  top: -128px;
-  right: -150px;
+  top: 24px;
+  right: -110px;
   z-index: 0;
-  width: min(640px, 54vw);
+  width: min(560px, 46vw);
   aspect-ratio: 1;
   pointer-events: none;
-  -webkit-mask-image: radial-gradient(closest-side, #000 58%, transparent 97%);
-  mask-image: radial-gradient(closest-side, #000 58%, transparent 97%);
 }
 .hero-globe {
   display: block;
@@ -3232,10 +3231,10 @@ replaceOnce('</style>', `/* colipas landing dynamic globe ui v1 */
 }
 @media (max-width: 720px) {
   .hero-globe-scene {
-    top: -190px;
-    right: -200px;
-    width: 430px;
-    opacity: .82;
+    top: 40px;
+    right: -150px;
+    width: 360px;
+    opacity: .9;
   }
 }
 </style>`);
@@ -3296,9 +3295,9 @@ replaceOnce('</style>', `/* colipas landing hero split ui v2 */
     align-self: center;
   }
   .hero-globe-scene {
-    top: -110px;
-    right: -150px;
-    width: min(480px, 52vw);
+    top: 20px;
+    right: -120px;
+    width: min(440px, 46vw);
   }
 }
 @media (max-width: 720px) {
@@ -3306,10 +3305,10 @@ replaceOnce('</style>', `/* colipas landing hero split ui v2 */
     padding: 56px 0 44px;
   }
   .hero-globe-scene {
-    top: -168px;
-    right: -224px;
-    width: 400px;
-    opacity: .6;
+    top: 40px;
+    right: -140px;
+    width: 340px;
+    opacity: .85;
   }
 }
 /* Two-column hero: the demo card is narrow on wide screens, so key the scene
@@ -3429,169 +3428,175 @@ replaceOnce('</style>', `/* colipas landing density ui v1 */
   }
 }
 </style>`);
-replaceOnce('</style>', `/* colipas landing light surface ui v1 */
+replaceOnce('</style>', `/* colipas landing console dark ui v1 */
+.hero-globe-scene {
+  top: 24px;
+  right: -110px;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
 body {
-  color: #16201e;
-  background: #f5f7f6;
+  color: #dbe4ec;
+  background: #0a0e14;
 }
 .nav {
-  background: rgba(255, 255, 255, .92);
-  border-bottom: 1px solid #e2e8e6;
+  background: rgba(10, 14, 20, .92);
+  border-bottom: 1px solid #1e2937;
 }
 .nav .nav-links a,
 .nav-github,
 .nav .nav-action {
-  color: #33413e;
+  color: #c3cedb;
 }
 .hero::before {
-  background-color: #f5f7f6;
+  background-color: #0a0e14;
   background-image:
-    linear-gradient(rgba(15, 23, 42, .05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(15, 23, 42, .05) 1px, transparent 1px);
+    linear-gradient(rgba(148, 163, 184, .06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, .06) 1px, transparent 1px);
 }
 .hero::after {
   background:
-    radial-gradient(38% 44% at 22% 30%, rgba(114, 222, 196, .20), transparent 70%),
-    radial-gradient(34% 40% at 77% 26%, rgba(37, 99, 235, .10), transparent 72%),
-    radial-gradient(46% 50% at 50% 80%, rgba(232, 185, 104, .08), transparent 74%);
+    radial-gradient(38% 44% at 22% 30%, rgba(56, 189, 248, .10), transparent 70%),
+    radial-gradient(34% 40% at 77% 26%, rgba(114, 222, 196, .08), transparent 72%),
+    radial-gradient(46% 50% at 50% 80%, rgba(59, 130, 246, .06), transparent 74%);
 }
 .hero-copy h1,
 .hero h1 .hero-title-main {
-  color: #0f1a17;
+  color: #f4f6f8;
 }
 .hero h1 .hero-title-accent {
-  background-image: linear-gradient(100deg, #0f1a17 0%, #137c69 32%, #0f1a17 58%, #1d4ed8 100%);
+  background-image: linear-gradient(100deg, #f4f6f8 0%, #7ee7cd 32%, #f4f6f8 58%, #93c5fd 100%);
 }
 .hero-copy .lead,
 .section p,
 .workflow-heading p,
 .workflow-section p {
-  color: #46534f;
+  color: #94a3b8;
 }
 .pill {
-  color: #3f4d49;
-  border-color: #dbe3e0;
-  background: #ffffff;
+  color: #cbd5e1;
+  border-color: #2c3a4a;
+  background: #131b26;
 }
 .hero .hero-secondary {
-  color: #1c2a26;
-  border-color: #d3dcda;
-  background: #ffffff;
+  color: #dbe4ec;
+  border-color: #2c3a4a;
+  background: #131b26;
 }
 .hero .hero-secondary:hover {
-  border-color: #9cc9bc;
-  background: #f2faf7;
+  border-color: #3d5a70;
+  background: #18232f;
 }
 .live-release {
-  color: #26332f;
-  border-color: #dbe3e0;
-  background: #ffffff;
+  color: #cbd5e1;
+  border-color: #2c3a4a;
+  background: #131b26;
 }
 .live-release .live-commit {
-  color: #0f766e;
+  color: #7ee7cd;
 }
 .stats strong,
 .hero .stats strong {
-  color: #0f1a17;
+  color: #f4f6f8;
 }
 .stats span {
-  color: #5b6a66;
+  color: #8b98a9;
 }
 .workflow-heading h2,
 .deploy-heading-modern h2,
 #features h2,
 #deploy h2,
 #security h2,
-#product h2 {
-  color: #0f1a17;
+#product h2,
+.section h2,
+.workflow-section h2,
+.deploy-section-modern h2 {
+  color: #f4f6f8;
 }
 .workflow-heading .section-copy,
 .deploy-heading-modern .section-copy,
 #features .section-copy {
-  color: #46534f;
+  color: #94a3b8;
 }
 .workflow-shell {
-  background: #ffffff;
-  border: 1px solid #e2e8e6;
+  background: #101823;
+  border: 1px solid #263444;
+  border-radius: 16px;
 }
 .workflow-stage {
-  color: #1c2a26;
-  border-color: #e6ecea;
+  color: #dbe4ec;
+  border-color: #263444;
 }
 .workflow-stage h3,
 .workflow-stage strong {
-  color: #0f1a17;
+  color: #f4f6f8;
 }
 .workflow-stage p {
-  color: #4d5b57;
+  color: #94a3b8;
 }
 .workflow-handoff {
-  background: rgba(15, 23, 42, .03);
-  border-color: #e2e8e6;
-  color: #3d4a46;
-}
-.section h2,
-.workflow-section h2,
-.deploy-section-modern h2 {
-  color: #0f1a17;
+  background: rgba(148, 163, 184, .05);
+  border-color: #263444;
+  color: #aab6c5;
 }
 .feature-card,
 #features .feature-card,
 .feature-card.is-revealed,
 .feature-card-wide {
-  color: #1c2a26;
-  background: #ffffff;
-  border-color: #e2e8e6;
+  color: #dbe4ec;
+  background: #101823;
+  border-color: #263444;
+  border-radius: 16px;
 }
 .feature-card h3,
 .feature-card-wide h3 {
-  color: #0f1a17;
+  color: #f4f6f8;
 }
 .feature-card p {
-  color: #556360;
+  color: #94a3b8;
 }
 .feature-card .tags span {
-  color: #46534f;
-  border-color: #dbe3e0;
-  background: #f1f5f3;
+  color: #aab6c5;
+  border-color: #2c3a4a;
+  background: #17202c;
 }
 .feature-icon {
-  color: #137c69;
-  border-color: #cfe8df;
-  background: #edf8f4;
+  color: #7ee7cd;
+  border-color: #1f4d44;
+  background: rgba(19, 124, 105, .14);
 }
 .feature-card-wide .feature-icon {
-  color: #0f766e;
-  border-color: #cfe8df;
-  background: #edf8f4;
+  color: #7ee7cd;
+  border-color: #1f4d44;
+  background: rgba(19, 124, 105, .14);
 }
 .deploy-flow-modern {
-  background: #ffffff;
-  border: 1px solid #e2e8e6;
+  background: #101823;
+  border: 1px solid #263444;
+  border-radius: 16px;
 }
 .deploy-method,
 .deploy-method-primary {
-  background: #ffffff;
-  border-color: #e2e8e6;
-  color: #1c2a26;
+  background: #101823;
+  border-color: #263444;
+  border-radius: 16px;
+  color: #dbe4ec;
 }
 .deploy-method h3,
 .deploy-method strong {
-  color: #0f1a17;
+  color: #f4f6f8;
 }
 .deploy-method p {
-  color: #556360;
+  color: #94a3b8;
 }
 .capability-ticker {
-  color: #3d4a46;
-  border-color: #e2e8e6;
-  background: #ffffff;
+  color: #aab6c5;
+  border-color: #263444;
+  background: #101823;
+  border-radius: 12px;
 }
 #security {
   background-color: transparent;
-}
-.hero::before {
-  background-color: #f5f7f6;
 }
 #product.section::before,
 #features.section::before,
@@ -3601,14 +3606,14 @@ body {
   background: transparent;
 }
 .footer {
-  background: #ffffff;
-  border-top: 1px solid #e2e8e6;
-  color: #3d4a46;
+  background: #0d141d;
+  border-top: 1px solid #1e2937;
+  color: #aab6c5;
 }
 .footer a,
 .footer strong,
 .footer small {
-  color: #26332f;
+  color: #dbe4ec;
 }
 </style>`);
 
@@ -4167,18 +4172,23 @@ const landingGlobeScript = `<script id="colipas-landing-globe">
     var t = timeMs * 0.001;
 
     var glow = ctx.createRadialGradient(center, center, radius * 0.2, center, center, radius * 1.25);
-    glow.addColorStop(0, 'rgba(19, 124, 105, 0.12)');
-    glow.addColorStop(0.7, 'rgba(19, 124, 105, 0.06)');
-    glow.addColorStop(1, 'rgba(19, 124, 105, 0)');
+    glow.addColorStop(0, 'rgba(126, 231, 205, 0.10)');
+    glow.addColorStop(0.7, 'rgba(126, 231, 205, 0.05)');
+    glow.addColorStop(1, 'rgba(126, 231, 205, 0)');
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, css, css);
+    ctx.beginPath();
+    ctx.arc(center, center, radius + 6, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(126, 231, 205, 0.14)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
 
     for (var i = 0; i < dots.length; i += 1) {
       var rotated = rotate(dots[i], yaw, tilt);
       var point = project(rotated, radius, center);
       var front = rotated.z > 0;
       var shade = front ? 0.35 + rotated.z * 0.6 : 0.08 + Math.abs(rotated.z) * 0.06;
-      ctx.fillStyle = 'rgba(15, 118, 110, ' + shade.toFixed(3) + ')';
+      ctx.fillStyle = 'rgba(148, 222, 205, ' + shade.toFixed(3) + ')';
       var dotSize = front ? 1.25 : 0.9;
       ctx.fillRect(point.x - dotSize / 2, point.y - dotSize / 2, dotSize, dotSize);
     }
@@ -4204,7 +4214,7 @@ const landingGlobeScript = `<script id="colipas-landing-globe">
       ctx.beginPath();
       ctx.moveTo(a.point.x, a.point.y);
       ctx.quadraticCurveTo(cx, cy, b.point.x, b.point.y);
-      ctx.strokeStyle = 'rgba(37, 99, 235, 0.30)';
+      ctx.strokeStyle = 'rgba(125, 211, 252, 0.34)';
       ctx.lineWidth = 1;
       ctx.stroke();
 
@@ -4214,7 +4224,7 @@ const landingGlobeScript = `<script id="colipas-landing-globe">
       var py = inv * inv * a.point.y + 2 * inv * phase * cy + phase * phase * b.point.y;
       ctx.beginPath();
       ctx.arc(px, py, 1.8, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(29, 78, 216, 0.95)';
+      ctx.fillStyle = 'rgba(224, 242, 254, 0.95)';
       ctx.fill();
     }
 
@@ -4224,11 +4234,11 @@ const landingGlobeScript = `<script id="colipas-landing-globe">
       var pulse = 0.5 + 0.5 * Math.sin(t * 2.1 + k * 1.3);
       ctx.beginPath();
       ctx.arc(item.point.x, item.point.y, 5.5 + pulse * 3.5, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(19, 124, 105, ' + (0.12 + pulse * 0.16).toFixed(3) + ')';
+      ctx.fillStyle = 'rgba(126, 231, 205, ' + (0.12 + pulse * 0.16).toFixed(3) + ')';
       ctx.fill();
       ctx.beginPath();
       ctx.arc(item.point.x, item.point.y, 2.6, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(6, 95, 82, 0.95)';
+      ctx.fillStyle = 'rgba(236, 253, 250, 0.95)';
       ctx.fill();
     }
   }

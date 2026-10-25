@@ -453,8 +453,8 @@ async function assertLandingProductStage(page) {
   if (!stage) {
     throw new Error('landing immersive product stage is missing');
   }
-  if (!/^rgba?\((?:245|244|246),\s*(?:247|246|248),\s*(?:246|245|247)/.test(stage.heroBackground)) {
-    throw new Error(`landing hero must keep a quiet light product stage, got ${stage.heroBackground}`);
+  if (!/^rgba?\((?:10|9|11),\s*(?:14|13|15),\s*(?:20|19|21)/.test(stage.heroBackground)) {
+    throw new Error(`landing hero must keep the console-dark stage, got ${stage.heroBackground}`);
   }
   if (stage.headingAlign !== 'left') {
     throw new Error(`landing hero heading must anchor left of the globe column, got ${stage.headingAlign}`);
@@ -645,18 +645,13 @@ async function assertLandingThemeContinuity(page) {
   if (missing.length) {
     throw new Error(`landing theme surfaces are missing computed colors: ${missing.join(', ')}`);
   }
-  // Light surface system: page chrome stays on the paper scale (or transparent
-  // over it) while the console anchors stay dark.
+  // Console-dark surface system: page chrome sits on the deep slate scale
+  // (or transparent over it); console anchors may be darker still.
   const isTransparent = (channels) => channels.every((channel) => channel === 0);
-  const isPaper = (channels) => channels.every((channel) => channel >= 240) && channels.every((channel) => channel <= 255);
-  const isDark = (channels) => channels.every((channel) => channel <= 40);
+  const isDeepSlate = (channels) => channels.every((channel) => channel <= 40);
   for (const [name, channels] of Object.entries(theme.channels)) {
-    if (name === 'deployConsole') {
-      if (!isDark(channels)) {
-        throw new Error(`landing deploy console must stay a dark anchor, got ${theme.backgrounds[name]}`);
-      }
-    } else if (!isPaper(channels) && !isTransparent(channels)) {
-      throw new Error(`landing light surface ${name} drifted off the paper scale: ${theme.backgrounds[name]}`);
+    if (!isDeepSlate(channels) && !isTransparent(channels)) {
+      throw new Error(`landing console-dark surface ${name} drifted off the slate scale: ${theme.backgrounds[name]}`);
     }
   }
 }
