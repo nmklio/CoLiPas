@@ -453,8 +453,8 @@ async function assertLandingProductStage(page) {
   if (!stage) {
     throw new Error('landing immersive product stage is missing');
   }
-  if (!/^rgba?\((?:9|8|10),\s*(?:13|12|14),\s*(?:15|14|16)/.test(stage.heroBackground)) {
-    throw new Error(`landing hero must keep a quiet dark product stage, got ${stage.heroBackground}`);
+  if (!/^rgba?\((?:245|244|246),\s*(?:247|246|248),\s*(?:246|245|247)/.test(stage.heroBackground)) {
+    throw new Error(`landing hero must keep a quiet light product stage, got ${stage.heroBackground}`);
   }
   if (stage.headingAlign !== 'left') {
     throw new Error(`landing hero heading must anchor left of the globe column, got ${stage.headingAlign}`);
