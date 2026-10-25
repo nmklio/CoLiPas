@@ -3431,23 +3431,36 @@ replaceOnce('</style>', `/* colipas landing console dark ui v1 */
     display: grid;
     grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
     column-gap: 48px;
-    align-items: center;
-    padding: 56px 0 52px;
+    align-items: start;
+    padding: 40px 0 48px;
   }
   .hero-copy {
     grid-column: 1;
     width: 100%;
     max-width: 640px;
+    padding-top: 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    height: 100%;
+  }
+  .hero-copy .stats {
+    margin-top: auto;
+    padding-top: 30px;
   }
   .hero-copy h1 {
-    font-size: clamp(42px, 3.6vw, 60px);
+    font-size: clamp(42px, 3.4vw, 56px);
+    text-wrap: balance;
   }
   .hero .product-preview {
     grid-column: 2;
     width: 100%;
-    max-width: 660px;
+    max-width: 640px;
     justify-self: end;
-    align-self: center;
+    align-self: start;
+  }
+  .hero .product-preview .preview-terminal {
+    display: none;
   }
   .hero .capability-ticker {
     grid-column: 1 / -1;
