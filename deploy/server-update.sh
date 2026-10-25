@@ -3443,10 +3443,10 @@ replaceOnce('</style>', `/* colipas landing console dark ui v1 */
 @media (min-width: 1024px) {
   .hero.wrap {
     display: grid;
-    grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
-    grid-template-rows: auto auto auto;
+    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+    grid-template-rows: auto auto;
     column-gap: 48px;
-    row-gap: 34px;
+    row-gap: 30px;
     align-items: center;
     padding: 56px 0 52px;
   }
@@ -3459,23 +3459,26 @@ replaceOnce('</style>', `/* colipas landing console dark ui v1 */
   .hero-copy h1 {
     font-size: clamp(42px, 3.6vw, 60px);
   }
+  /* The globe and the demo panel share one cell: the sphere frames the
+     console, an even halo of dots and ring shows around all four edges. */
   .hero-globe-scene {
-    grid-column: 2;
-    grid-row: 1;
+    grid-area: 1 / 2;
     width: 100%;
-    max-width: 680px;
+    max-width: 700px;
     justify-self: center;
+    align-self: center;
   }
   .hero .product-preview {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    width: 100%;
-    max-width: 1040px;
+    grid-area: 1 / 2;
+    z-index: 1;
+    width: min(580px, 100%);
     justify-self: center;
+    align-self: center;
+    box-shadow: 0 24px 70px rgba(0, 0, 0, .55);
   }
   .hero .capability-ticker {
     grid-column: 1 / -1;
-    grid-row: 3;
+    grid-row: 2;
   }
 }
 @media (max-width: 1023px) {
@@ -4236,7 +4239,7 @@ const landingGlobeScript = `<script id="colipas-landing-globe">
     ctx.fillRect(0, 0, css, css);
     ctx.beginPath();
     ctx.arc(center, center, radius + 6, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(126, 231, 205, 0.30)';
+    ctx.strokeStyle = 'rgba(126, 231, 205, 0.45)';
     ctx.lineWidth = 1;
     ctx.stroke();
 
