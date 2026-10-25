@@ -149,7 +149,24 @@ try {
 
   const mapInteractionMs = await measure('map interaction', async () => {
     await page.locator('.cloud-map').scrollIntoViewIfNeeded();
-    await page.getByRole('button', { name: /zoom in/i }).click();
+    await page.waitForTimeout(250);
+    // Playwright's actionability loop can stall on slow runners here (the zoom
+    // row sits inside the transformed map layer). Scroll manually and dispatch
+    // a real mouse click at the button's centre instead of retrying forever.
+    const zoomPoint = await page.evaluate(() => {
+      const button = Array.from(document.querySelectorAll('.map-controls button'))
+        .find((candidate) => /zoom in/i.test(candidate.getAttribute('aria-label') ?? ''));
+      if (!button) {
+        return null;
+      }
+      button.scrollIntoView({ block: 'center', inline: 'center' });
+      const rect = button.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    });
+    if (!zoomPoint) {
+      throw new Error('map zoom control was not found');
+    }
+    await page.mouse.click(zoomPoint.x, zoomPoint.y);
     await page.waitForFunction(() => document.querySelector('.cloud-map')?.classList.contains('is-zoomed'), undefined, { timeout: 5000 });
     const activeCountry = page.locator('.map-country.active').first();
     if (await activeCountry.count()) {
