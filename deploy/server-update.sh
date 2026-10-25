@@ -3588,6 +3588,9 @@ body {
   border-color: #e2e8e6;
   background: #ffffff;
 }
+#security {
+  background-color: transparent;
+}
 .footer {
   background: #ffffff;
   border-top: 1px solid #e2e8e6;

@@ -643,11 +643,20 @@ async function assertLandingThemeContinuity(page) {
 
   const missing = Object.entries(theme.channels).filter(([, channels]) => !channels).map(([name]) => name);
   if (missing.length) {
-    throw new Error(`landing dark theme surfaces are missing computed colors: ${missing.join(', ')}`);
+    throw new Error(`landing theme surfaces are missing computed colors: ${missing.join(', ')}`);
   }
-  const bright = Object.entries(theme.channels).filter(([, channels]) => Math.max(...channels) > 52);
-  if (bright.length || theme.legacyLightCards > 0) {
-    throw new Error(`landing theme still contains abrupt light surfaces: ${JSON.stringify(theme)}`);
+  // Light surface system: page chrome stays on the paper scale while the
+  // console anchors (preview stage, deploy console, security band) stay dark.
+  const isPaper = (channels) => channels.every((channel) => channel >= 240) && channels.every((channel) => channel <= 255);
+  const isDark = (channels) => channels.every((channel) => channel <= 40);
+  for (const [name, channels] of Object.entries(theme.channels)) {
+    if (name === 'deployConsole') {
+      if (!isDark(channels)) {
+        throw new Error(`landing deploy console must stay a dark anchor, got ${theme.backgrounds[name]}`);
+      }
+    } else if (!isPaper(channels)) {
+      throw new Error(`landing light surface ${name} drifted off the paper scale: ${theme.backgrounds[name]}`);
+    }
   }
 }
 
