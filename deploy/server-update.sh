@@ -3443,33 +3443,35 @@ replaceOnce('</style>', `/* colipas landing console dark ui v1 */
 @media (min-width: 1024px) {
   .hero.wrap {
     display: grid;
-    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-    grid-template-rows: auto 1fr auto;
-    column-gap: 44px;
-    row-gap: 18px;
-    align-items: start;
+    grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+    grid-template-rows: auto auto auto;
+    column-gap: 48px;
+    row-gap: 34px;
+    align-items: center;
+    padding: 56px 0 52px;
   }
   .hero-copy {
     grid-column: 1;
-    grid-row: 1 / 3;
-    align-self: center;
+    grid-row: 1;
+    width: 100%;
+    max-width: 640px;
   }
   .hero-copy h1 {
-    font-size: clamp(44px, 3.9vw, 64px);
+    font-size: clamp(42px, 3.6vw, 60px);
   }
   .hero-globe-scene {
     grid-column: 2;
     grid-row: 1;
+    width: 100%;
+    max-width: 680px;
     justify-self: center;
-    width: min(340px, 30vw);
-    margin: 0 0 6px;
   }
   .hero .product-preview {
-    grid-column: 2;
+    grid-column: 1 / -1;
     grid-row: 2;
     width: 100%;
-    max-width: 660px;
-    justify-self: end;
+    max-width: 1040px;
+    justify-self: center;
   }
   .hero .capability-ticker {
     grid-column: 1 / -1;
@@ -3482,10 +3484,21 @@ replaceOnce('</style>', `/* colipas landing console dark ui v1 */
     width: min(300px, 74vw);
     margin: 22px auto 6px;
   }
+  .hero .product-preview {
+    order: 3;
+    max-width: 560px;
+  }
+  .hero .capability-ticker {
+    order: 4;
+  }
 }
 @media (max-width: 1023px) {
   .hero .product-preview {
+    order: 3;
     max-width: 560px;
+  }
+  .hero .capability-ticker {
+    order: 4;
   }
 }
 body {
