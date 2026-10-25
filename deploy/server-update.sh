@@ -3296,7 +3296,11 @@ replaceOnce('</style>', `/* colipas landing hero split ui v2 */
       font-size: 10px;
     }
     .scene-split {
+      grid-template-columns: minmax(0, 1fr);
       height: 230px;
+    }
+    .scene-rows {
+      display: none;
     }
   }
   @container (max-width: 560px) {
@@ -3393,7 +3397,7 @@ replaceOnce('</style>', `/* colipas landing console dark ui v1 */
 }
 /* The globe lives inside the overview scene now: the panel's own world view. */
 .scene .hero-globe-scene {
-  position: static;
+  position: relative;
   transform: none;
   width: 100%;
   height: 100%;
@@ -3407,10 +3411,13 @@ replaceOnce('</style>', `/* colipas landing console dark ui v1 */
 .scene .hero-globe-scene .hero-globe {
   flex: 1 1 auto;
   min-height: 0;
-  width: 100%;
+  width: auto;
   height: auto;
+  aspect-ratio: 1;
+  align-self: center;
 }
 .scene .hero-globe-scene .scene-map-legend {
+  position: static;
   flex: 0 0 auto;
 }
 @media (min-width: 1024px) {
@@ -4149,8 +4156,8 @@ const landingGlobeScript = `<script id="colipas-landing-globe">
   var size = 0;
   var dpr = 1;
   function resize() {
-    var rect = scene.getBoundingClientRect();
-    var next = Math.max(1, Math.round(Math.min(rect.width, rect.height)));
+    var rect = canvas.getBoundingClientRect();
+    var next = Math.max(1, Math.round(Math.min(rect.width || 1, rect.height || 1)));
     if (next === size && canvas.width === Math.round(next * dpr)) { return; }
     size = next;
     dpr = Math.min(2, window.devicePixelRatio || 1);
