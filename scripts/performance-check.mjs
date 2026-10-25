@@ -150,39 +150,30 @@ try {
   const mapInteractionMs = await measure('map interaction', async () => {
     await page.locator('.cloud-map').scrollIntoViewIfNeeded();
     await page.waitForTimeout(250);
-    // Playwright's actionability loop can stall on slow runners here (the zoom
-    // row sits inside the transformed map layer). Scroll instantly, read the
-    // settled centre, dispatch a real mouse click there, and keep a JS-click
-    // fallback so a stray layout shift cannot fail the whole perf run.
+    // Playwright's actionability loop stalls on slow runners here and a real
+    // mouse click at resolved coordinates misses after layout shifts, so drive
+    // the control deterministically: scroll it into view instantly, settle,
+    // then click through the DOM. The timing still measures the app's own work
+    // (React handler, zoom state, transition, pinned tooltip).
     await page.evaluate(() => {
       const button = Array.from(document.querySelectorAll('.map-controls button'))
         .find((candidate) => /zoom in/i.test(candidate.getAttribute('aria-label') ?? ''));
       button?.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
     });
     await page.waitForTimeout(150);
-    const zoomPoint = await page.evaluate(() => {
+    const zoomClicked = await page.evaluate(() => {
       const button = Array.from(document.querySelectorAll('.map-controls button'))
         .find((candidate) => /zoom in/i.test(candidate.getAttribute('aria-label') ?? ''));
       if (!button) {
-        return null;
+        return false;
       }
-      const rect = button.getBoundingClientRect();
-      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+      button.click();
+      return true;
     });
-    if (!zoomPoint) {
+    if (!zoomClicked) {
       throw new Error('map zoom control was not found');
     }
-    await page.mouse.click(zoomPoint.x, zoomPoint.y);
-    try {
-      await page.waitForFunction(() => document.querySelector('.cloud-map')?.classList.contains('is-zoomed'), undefined, { timeout: 5000 });
-    } catch {
-      await page.evaluate(() => {
-        const button = Array.from(document.querySelectorAll('.map-controls button'))
-          .find((candidate) => /zoom in/i.test(candidate.getAttribute('aria-label') ?? ''));
-        button?.click();
-      });
-      await page.waitForFunction(() => document.querySelector('.cloud-map')?.classList.contains('is-zoomed'), undefined, { timeout: 5000 });
-    }
+    await page.waitForFunction(() => document.querySelector('.cloud-map')?.classList.contains('is-zoomed'), undefined, { timeout: 5000 });
     const activeCountry = page.locator('.map-country.active').first();
     if (await activeCountry.count()) {
       await activeCountry.click({ force: true });
