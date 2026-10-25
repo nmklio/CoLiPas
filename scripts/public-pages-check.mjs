@@ -456,8 +456,8 @@ async function assertLandingProductStage(page) {
   if (!/^rgba?\((?:9|8|10),\s*(?:13|12|14),\s*(?:15|14|16)/.test(stage.heroBackground)) {
     throw new Error(`landing hero must keep a quiet dark product stage, got ${stage.heroBackground}`);
   }
-  if (stage.headingAlign !== 'center') {
-    throw new Error(`landing hero heading must be centered, got ${stage.headingAlign}`);
+  if (stage.headingAlign !== 'left') {
+    throw new Error(`landing hero heading must anchor left of the globe column, got ${stage.headingAlign}`);
   }
   if (stage.previewWidth < stage.viewportWidth * (stage.viewportWidth <= 640 ? 0.9 : 0.62)) {
     throw new Error(`landing product preview is undersized: ${stage.previewWidth}px in ${stage.viewportWidth}px viewport`);

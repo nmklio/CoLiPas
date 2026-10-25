@@ -5273,7 +5273,7 @@ main {
 
 .monitor-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(310px, 0.65fr);
+  grid-template-columns: minmax(0, 1.25fr) minmax(330px, 0.75fr);
   gap: 12px;
   align-items: start;
 }
@@ -5423,14 +5423,14 @@ main {
 }
 
 .map-ocean {
-  fill: rgba(245, 252, 251, 0.98);
-  stroke: rgba(15, 141, 128, 0.16);
+  fill: rgba(228, 243, 240, 1);
+  stroke: rgba(15, 141, 128, 0.32);
   stroke-width: 0.8;
   vector-effect: non-scaling-stroke;
 }
 
 .map-country {
-  fill: #b7cdd0;
+  fill: #a6c3c8;
   stroke: rgba(255, 255, 255, 0.9);
   stroke-width: 0.6;
   vector-effect: non-scaling-stroke;
@@ -5459,7 +5459,7 @@ main {
 }
 
 .map-graticule line {
-  stroke: rgba(15, 141, 128, 0.14);
+  stroke: rgba(15, 141, 128, 0.26);
   stroke-width: 0.8;
   vector-effect: non-scaling-stroke;
 }
@@ -6550,7 +6550,7 @@ main {
 .status-pill.stopped,
 .status-pill.unconnected,
 .status-pill.disconnected {
-  background: #fbe9e9;
+  background: #fdf2f3;
   color: var(--red);
 }
 
@@ -14459,7 +14459,7 @@ td span,
 }
 
 .ops-task-item.failed b {
-  background: #fbe9e9;
+  background: #fdf2f3;
   color: var(--red);
 }
 
@@ -14564,7 +14564,7 @@ td span,
 }
 
 .ops-status.failed {
-  background: #fbe9e9;
+  background: #fdf2f3;
   color: var(--red);
 }
 
@@ -14956,7 +14956,7 @@ pre {
 }
 
 .error-box {
-  background: #fbe9e9;
+  background: #fdf2f3;
   color: var(--red);
 }
 
@@ -15012,7 +15012,7 @@ pre {
 
 .api-result.error {
   border-color: #f0c4c4;
-  background: #fbe9e9;
+  background: #fdf2f3;
   color: var(--red);
 }
 
@@ -22531,7 +22531,7 @@ pre {
 }
 
 .security-audit-row.failed b {
-  background: #fbe9e9;
+  background: #fdf2f3;
   color: var(--red);
 }
 
@@ -22662,7 +22662,7 @@ pre {
 }
 
 .security-audit-trace.failed .security-audit-trace-head b {
-  background: #fbe9e9;
+  background: #fdf2f3;
   color: var(--red);
 }
 
