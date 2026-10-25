@@ -3430,10 +3430,18 @@ replaceOnce('</style>', `/* colipas landing density ui v1 */
 </style>`);
 replaceOnce('</style>', `/* colipas landing console dark ui v1 */
 .hero-globe-scene {
-  top: 24px;
-  right: -110px;
+  top: 46%;
+  right: 50%;
+  transform: translate(50%, -50%);
+  width: min(760px, 70vw);
+  opacity: .38;
   -webkit-mask-image: none;
   mask-image: none;
+}
+@media (max-width: 1023px) {
+  .hero .product-preview {
+    max-width: 560px;
+  }
 }
 body {
   color: #dbe4ec;
@@ -4179,7 +4187,7 @@ const landingGlobeScript = `<script id="colipas-landing-globe">
     ctx.fillRect(0, 0, css, css);
     ctx.beginPath();
     ctx.arc(center, center, radius + 6, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(126, 231, 205, 0.14)';
+    ctx.strokeStyle = 'rgba(126, 231, 205, 0.30)';
     ctx.lineWidth = 1;
     ctx.stroke();
 
