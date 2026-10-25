@@ -459,7 +459,7 @@ async function assertLandingProductStage(page) {
   if (stage.headingAlign !== 'left') {
     throw new Error(`landing hero heading must anchor left of the globe column, got ${stage.headingAlign}`);
   }
-  if (stage.previewWidth < stage.viewportWidth * (stage.viewportWidth <= 640 ? 0.9 : 0.62)) {
+  if (stage.previewWidth < stage.viewportWidth * (stage.viewportWidth <= 640 ? 0.9 : 0.4)) {
     throw new Error(`landing product preview is undersized: ${stage.previewWidth}px in ${stage.viewportWidth}px viewport`);
   }
   if (stage.imageTop >= stage.viewportHeight || stage.imageBottom <= 0) {
