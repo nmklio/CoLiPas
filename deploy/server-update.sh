@@ -3039,8 +3039,7 @@ body {
   .scene-arc,
   .scene-ping,
   .scene-row i,
-  .scene-spark-line,
-  .scene-spark-dot {
+  .scene-spark-line {
     animation: none;
   }
   /* Breathing is an opacity change, not movement, so the map stays alive
@@ -3921,7 +3920,7 @@ const landingGlobeScript = `<script id="colipas-landing-globe">
   }
 
   function shouldRun() {
-    return !reduceMotion && visible && pageVisible;
+    return visible && pageVisible;
   }
 
   function restart() {
@@ -3936,24 +3935,22 @@ const landingGlobeScript = `<script id="colipas-landing-globe">
   }
 
   resize();
-  draw(reduceMotion ? 4200 : performance.now());
-  if (!reduceMotion) {
-    if ('IntersectionObserver' in window) {
-      new IntersectionObserver(function (entries) {
-        visible = entries[0].isIntersecting;
-        restart();
-      }, { rootMargin: '80px' }).observe(scene);
-    }
-    document.addEventListener('visibilitychange', function () {
-      pageVisible = !document.hidden;
+  draw(performance.now());
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(function (entries) {
+      visible = entries[0].isIntersecting;
       restart();
-    });
-    window.addEventListener('resize', function () {
-      draw(performance.now());
-    });
-    restart();
+    }, { rootMargin: '80px' }).observe(scene);
   }
-  scene.setAttribute('data-globe-state', reduceMotion ? 'static' : 'live');
+  document.addEventListener('visibilitychange', function () {
+    pageVisible = !document.hidden;
+    restart();
+  });
+  window.addEventListener('resize', function () {
+    draw(performance.now());
+  });
+  restart();
+  scene.setAttribute('data-globe-state', 'live');
 }());
 </script>`;
 if (!html.includes('id="colipas-landing-globe"')) {
