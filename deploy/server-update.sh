@@ -222,6 +222,7 @@ function replacePositionCard(title, kind, description) {
 replaceAll(/\/\* colipas landing balanced ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\/style>)/g, '');
 replaceAll(/\/\* colipas landing live release ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\/style>)/g, '');
 replaceAll(/\/\* colipas landing dynamic globe ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\/style>)/g, '');
+replaceAll(/\/\* colipas landing hero split ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\/style>)/g, '');
 replaceAll(/\s*<script id="colipas-landing-dynamic">[\s\S]*?<\/script>\s*/g, '\n');
 replaceAll(/\s*<script id="colipas-landing-globe">[\s\S]*?<\/script>\s*/g, '\n');
 replaceAll(/<title>[\s\S]*?<\/title>/g, '<title>CoLiPas云服务器管理面板</title>');
@@ -3235,6 +3236,54 @@ replaceOnce('</style>', `/* colipas landing dynamic globe ui v1 */
     right: -200px;
     width: 430px;
     opacity: .82;
+  }
+}
+</style>`);
+replaceOnce('</style>', `/* colipas landing hero split ui v1 */
+.hero {
+  align-items: stretch;
+  text-align: left;
+  padding: 84px 0 64px;
+}
+.hero .product-preview,
+.hero .capability-ticker {
+  align-self: center;
+}
+.hero-copy {
+  width: min(620px, 100%);
+  justify-items: start;
+  text-align: left;
+}
+.hero-copy h1,
+.hero-copy .lead {
+  text-align: left;
+}
+.hero .hero-buttons {
+  justify-content: flex-start;
+}
+.hero .hero-copy .stats {
+  justify-content: start;
+  text-align: left;
+}
+.hero .live-release {
+  justify-content: flex-start;
+}
+@media (max-width: 1180px) {
+  .hero-globe-scene {
+    top: -96px;
+    right: -128px;
+    width: min(500px, 52vw);
+  }
+}
+@media (max-width: 720px) {
+  .hero {
+    padding: 56px 0 44px;
+  }
+  .hero-globe-scene {
+    top: -168px;
+    right: -224px;
+    width: 400px;
+    opacity: .6;
   }
 }
 </style>`);
