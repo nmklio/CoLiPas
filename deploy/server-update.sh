@@ -3480,21 +3480,12 @@ replaceOnce('</style>', `/* colipas landing console dark ui v1 */
 }
 @media (max-width: 1023px) {
   .hero-globe-scene {
-    order: 2;
+    order: 3;
     width: min(300px, 74vw);
     margin: 22px auto 6px;
   }
   .hero .product-preview {
-    order: 3;
-    max-width: 560px;
-  }
-  .hero .capability-ticker {
-    order: 4;
-  }
-}
-@media (max-width: 1023px) {
-  .hero .product-preview {
-    order: 3;
+    order: 2;
     max-width: 560px;
   }
   .hero .capability-ticker {
