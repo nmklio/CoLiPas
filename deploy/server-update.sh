@@ -223,6 +223,7 @@ replaceAll(/\/\* colipas landing balanced ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\/styl
 replaceAll(/\/\* colipas landing live release ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\/style>)/g, '');
 replaceAll(/\/\* colipas landing dynamic globe ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\/style>)/g, '');
 replaceAll(/\/\* colipas landing hero split ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\/style>)/g, '');
+replaceAll(/\/\* colipas landing density ui(?: v[0-9]+)? \*\/[\s\S]*?(?=<\/style>)/g, '');
 replaceAll(/\s*<script id="colipas-landing-dynamic">[\s\S]*?<\/script>\s*/g, '\n');
 replaceAll(/\s*<script id="colipas-landing-globe">[\s\S]*?<\/script>\s*/g, '\n');
 replaceAll(/<title>[\s\S]*?<\/title>/g, '<title>CoLiPas云服务器管理面板</title>');
@@ -3347,6 +3348,53 @@ replaceOnce('</style>', `/* colipas landing hero split ui v2 */
     .scene-spark {
       display: none;
     }
+  }
+}
+</style>`);
+replaceOnce('</style>', `/* colipas landing density ui v1 */
+.section,
+.workflow-section {
+  padding-top: 60px;
+  padding-bottom: 56px;
+}
+.deploy-section-modern {
+  padding-top: 64px;
+  padding-bottom: 64px;
+}
+.band {
+  padding: 56px 0;
+}
+.hero.wrap {
+  padding-bottom: 40px;
+}
+.feature-card,
+#features .feature-card {
+  min-height: 0;
+  padding: 18px;
+}
+.feature-grid {
+  align-content: start;
+}
+.workflow-stage {
+  min-height: 0;
+  padding: 22px 22px 20px;
+}
+.deploy-card,
+.deploy-console {
+  min-height: 0;
+}
+@media (max-width: 720px) {
+  .section,
+  .workflow-section,
+  .deploy-section-modern {
+    padding-top: 44px;
+    padding-bottom: 40px;
+  }
+  .band {
+    padding: 44px 0;
+  }
+  .workflow-stage {
+    min-height: 0;
   }
 }
 </style>`);
