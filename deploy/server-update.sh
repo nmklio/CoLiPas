@@ -3429,14 +3429,59 @@ replaceOnce('</style>', `/* colipas landing density ui v1 */
 }
 </style>`);
 replaceOnce('</style>', `/* colipas landing console dark ui v1 */
+.hero.wrap {
+  width: min(1440px, 94vw);
+}
 .hero-globe-scene {
-  top: 46%;
-  right: 50%;
-  transform: translate(50%, -50%);
-  width: min(760px, 70vw);
-  opacity: .38;
+  position: static;
+  transform: none;
+  width: min(320px, 72vw);
+  opacity: 1;
   -webkit-mask-image: none;
   mask-image: none;
+}
+@media (min-width: 1024px) {
+  .hero.wrap {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    grid-template-rows: auto 1fr auto;
+    column-gap: 44px;
+    row-gap: 18px;
+    align-items: start;
+  }
+  .hero-copy {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    align-self: center;
+  }
+  .hero-copy h1 {
+    font-size: clamp(44px, 3.9vw, 64px);
+  }
+  .hero-globe-scene {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: center;
+    width: min(340px, 30vw);
+    margin: 0 0 6px;
+  }
+  .hero .product-preview {
+    grid-column: 2;
+    grid-row: 2;
+    width: 100%;
+    max-width: 660px;
+    justify-self: end;
+  }
+  .hero .capability-ticker {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+}
+@media (max-width: 1023px) {
+  .hero-globe-scene {
+    order: 2;
+    width: min(300px, 74vw);
+    margin: 22px auto 6px;
+  }
 }
 @media (max-width: 1023px) {
   .hero .product-preview {
