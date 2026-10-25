@@ -3398,6 +3398,12 @@ replaceOnce('</style>', `/* colipas landing console dark ui v1 */
 /* The globe lives inside the overview scene now: the panel's own world view. */
 .scene .hero-globe-scene {
   position: relative;
+  inset: auto;
+  top: auto;
+  right: auto;
+  bottom: auto;
+  left: auto;
+  margin: 0;
   transform: none;
   width: 100%;
   height: 100%;
