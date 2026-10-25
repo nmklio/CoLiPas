@@ -3311,6 +3311,44 @@ replaceOnce('</style>', `/* colipas landing hero split ui v2 */
     opacity: .6;
   }
 }
+/* Two-column hero: the demo card is narrow on wide screens, so key the scene
+   layout off the card, not the viewport. Mid-width keeps every block (2x2 KPIs,
+   map, spark) inside a 4/3 stage; narrow cards drop the spark like phones. */
+@media (min-width: 721px) {
+  .product-preview {
+    container-type: inline-size;
+  }
+  @container (max-width: 760px) {
+    .preview-stage {
+      aspect-ratio: 4 / 3;
+    }
+    .scene {
+      padding: 12px 12px 14px;
+      gap: 8px;
+    }
+    .scene-kpis {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+    }
+    .scene-kpis div {
+      padding: 6px 8px;
+    }
+    .scene-kpis span {
+      font-size: 10px;
+    }
+    .scene-split {
+      height: 180px;
+    }
+  }
+  @container (max-width: 560px) {
+    .scene-split {
+      height: 150px;
+    }
+    .scene-spark {
+      display: none;
+    }
+  }
+}
 </style>`);
 
 replaceAll(/\s*<script id="colipas-product-tour">[\s\S]*?<\/script>\s*/g, '\n');
